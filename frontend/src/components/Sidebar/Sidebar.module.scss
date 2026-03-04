@@ -1,0 +1,221 @@
+/* ============================================================
+   Sidebar - SCSS Module  (rebuilt with collapsible sections)
+   ============================================================ */
+
+.sidebar {
+  width: 248px;
+  min-width: 248px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
+  border-right: 1px solid rgba(255, 255, 255, 0.22);
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 120;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.16);
+
+  [data-theme='dark'] & {
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.55));
+    border-right: 1px solid rgba(148, 163, 184, 0.24);
+  }
+}
+
+/* ---------- Brand ---------- */
+.brand {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.brandLink {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.brandLogo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: #0b111d;
+  font-weight: 800;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.brandText {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--color-text);
+}
+
+/* ---------- Navigation ---------- */
+.nav {
+  flex: 1;
+  padding: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* ---------- Collapsible Section ---------- */
+.section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.6rem 1.1rem 0.6rem 1.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color 0.15s;
+  background: transparent;
+
+  &:hover {
+    color: var(--color-primary);
+  }
+}
+
+.sectionLabel {
+  flex: 1;
+  text-align: left;
+}
+
+.chevron {
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s;
+  color: var(--color-muted);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.sectionItems {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0.4rem;
+}
+
+/* ---------- Nav Link ---------- */
+.link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 1.25rem 0.5rem 1.5rem;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.12s, color 0.12s;
+  opacity: 0.8;
+  white-space: nowrap;
+  border-radius: 10px;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    opacity: 1;
+  }
+}
+
+.active {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--color-primary);
+  opacity: 1;
+  font-weight: 600;
+
+  &:hover {
+    background-color: rgba(16, 185, 129, 0.15);
+  }
+}
+
+.linkIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.active .linkIcon {
+  opacity: 1;
+}
+
+.linkLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* ---------- Sidebar Footer ---------- */
+.sidebarFooter {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.version {
+  font-size: 0.68rem;
+  color: var(--color-muted);
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Mobile overlay ---------- */
+.overlay {
+  display: none;
+  backdrop-filter: blur(4px);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+  }
+
+  .open {
+    transform: translateX(0);
+  }
+
+  .overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.15), transparent 35%),
+                radial-gradient(circle at 70% 10%, rgba(139, 92, 246, 0.18), transparent 35%),
+                rgba(0, 0, 0, 0.55);
+    z-index: 999;
+  }
+}

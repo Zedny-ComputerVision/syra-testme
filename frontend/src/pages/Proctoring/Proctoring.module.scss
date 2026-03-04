@@ -1,0 +1,296 @@
+.page {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1rem;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* ---- Exam Pane ---- */
+.examPane {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  overflow-y: auto;
+  gap: 1rem;
+}
+
+.examHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.18), rgba(16, 185, 129, 0.08));
+}
+
+.examTitle {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.timer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.14);
+  padding: 0.45rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.1);
+}
+
+.timerDanger {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.4);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.badgeHigh {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+
+.badgeMedium {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+
+/* ---- Question Navigation ---- */
+.questionNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.qNum {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+}
+
+.qNumActive {
+  background: var(--color-primary);
+  color: #0b111d;
+  border-color: var(--color-primary);
+}
+
+.qNumAnswered {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-primary);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* ---- Question Card ---- */
+.questionCard {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  padding: 1.4rem;
+  flex: 1;
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.16), rgba(16, 185, 129, 0.06));
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
+}
+
+.qLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+}
+
+.qText {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  font-size: 0.92rem;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.08);
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+
+  input[type='radio'] {
+    accent-color: var(--color-primary);
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.optionSelected {
+  border-color: var(--color-primary);
+  background: linear-gradient(120deg, rgba(16, 185, 129, 0.14), rgba(139, 92, 246, 0.08));
+  box-shadow: 0 12px 26px rgba(16, 185, 129, 0.18);
+}
+
+.textAnswer {
+  width: 100%;
+  min-height: 120px;
+  padding: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  color: var(--color-text);
+  font-size: 0.92rem;
+  resize: vertical;
+  outline: none;
+  margin-bottom: 1rem;
+
+  &:focus {
+    border-color: var(--color-primary);
+  }
+}
+
+/* ---- Actions ---- */
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.btnNav {
+  padding: 0.65rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.btnSubmit {
+  padding: 0.7rem 1.5rem;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  color: #0b111d;
+  font-size: 0.93rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 14px 32px rgba(16, 185, 129, 0.28);
+
+  &:hover {
+    opacity: 0.92;
+    box-shadow: 0 18px 40px rgba(16, 185, 129, 0.32);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+/* ---- Proctor Pane ---- */
+.proctorPane {
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+  border-radius: 0 0 0 18px;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.1);
+
+  [data-theme='dark'] & {
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.7));
+    border-color: rgba(148, 163, 184, 0.18);
+  }
+}
+
+@media (max-width: 900px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .proctorPane {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 220px;
+    height: auto;
+    max-height: 320px;
+    border-radius: 16px 0 0 0;
+    z-index: 50;
+  }
+
+  .examPane {
+    padding: 1rem;
+  }
+}

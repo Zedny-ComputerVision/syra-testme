@@ -1,0 +1,134 @@
+.page {
+  padding: 1.5rem;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  margin-top: 1.5rem;
+}
+
+.title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.4rem;
+}
+
+.description {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin: 0 0 1.25rem;
+  line-height: 1.5;
+}
+
+/* ---- Details Grid ---- */
+.detailsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1.5rem;
+}
+
+.detailItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 0.8rem;
+  border-radius: 8px;
+}
+
+.detailLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detailValue {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* ---- Proctoring Note ---- */
+.proctoringNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  line-height: 1.45;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+    color: #fbbf24;
+  }
+}
+
+/* ---- Instructions ---- */
+.instructions {
+  margin-bottom: 1.5rem;
+
+  h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 0.6rem;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  li {
+    font-size: 0.88rem;
+    color: var(--color-muted);
+    line-height: 1.45;
+  }
+}
+
+/* ---- Button ---- */
+.btn {
+  width: 100%;
+  padding: 0.85rem;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: #0b111d;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}

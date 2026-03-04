@@ -1,0 +1,138 @@
+.page { padding: 1.5rem; }
+
+.tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1.25rem;
+}
+
+.tab {
+  padding: 0.65rem 1.1rem;
+  border: none; background: transparent;
+  color: var(--color-muted); font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
+  &:hover { color: var(--color-text); }
+}
+
+.tabActive {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.filterRow {
+  display: flex; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;
+}
+
+.filterSelect {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: rgba(0,0,0,0.12); color: var(--color-text);
+  font-size: 0.85rem; outline: none; appearance: none; min-width: 200px;
+  &:focus { border-color: var(--color-primary); }
+}
+
+.statusFilters {
+  display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem;
+}
+
+.statusBtn {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-border); border-radius: 20px;
+  background: transparent; color: var(--color-muted);
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  transition: all 0.15s;
+  &:hover { border-color: var(--color-primary); color: var(--color-text); }
+}
+
+.statusBtnActive {
+  border-color: var(--color-primary);
+  background: rgba(16,185,129,0.08);
+  color: var(--color-primary);
+}
+
+.statusCount {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(0,0,0,0.15); font-size: 0.7rem; font-weight: 700;
+}
+
+.tableWrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius); overflow-x: auto;
+}
+
+.table { width: 100%; border-collapse: collapse; min-width: 600px; }
+
+.table th {
+  padding: 0.7rem 0.85rem;
+  text-align: left; font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--color-muted); border-bottom: 1px solid var(--color-border);
+  background: rgba(0,0,0,0.08);
+}
+
+.table td {
+  padding: 0.7rem 0.85rem;
+  font-size: 0.88rem; color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table tbody tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px;
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+}
+
+.badgePass { background: rgba(16,185,129,0.12); color: #10b981; }
+.badgeFail { background: rgba(239,68,68,0.12); color: #ef4444; }
+.badgePending { background: rgba(59,130,246,0.12); color: #3b82f6; }
+
+.severityHigh {
+  display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px;
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  background: rgba(239,68,68,0.12); color: #ef4444;
+}
+
+.actionBtn {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--color-border); border-radius: 5px;
+  background: transparent; color: var(--color-muted);
+  font-size: 0.75rem; cursor: pointer;
+  &:hover { border-color: var(--color-primary); color: var(--color-text); }
+}
+
+.emptyState {
+  text-align: center; padding: 4rem 1rem;
+}
+
+.emptyIcon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.emptyText { font-size: 0.92rem; color: var(--color-muted); }
+.empty { text-align: center; padding: 3rem; color: var(--color-muted); }
+
+.label { display: block; font-size: 0.8rem; color: var(--color-muted); margin-bottom: 0.2rem; }
+
+.importBox {
+  padding: 1.25rem;
+  background: var(--color-surface);
+}
+
+.importHint {
+  font-size: 0.82rem; color: var(--color-muted);
+  margin-top: 0.4rem; line-height: 1.5;
+  code { background: rgba(0,0,0,0.12); padding: 0.1rem 0.3rem; border-radius: 4px; font-family: monospace; }
+}
+
+.importMsg {
+  margin: 0.75rem 1.25rem;
+  font-size: 0.85rem;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.sectionTitle {
+  font-weight: 700; font-size: 0.9rem;
+  color: var(--color-text); margin-bottom: 0.5rem;
+}

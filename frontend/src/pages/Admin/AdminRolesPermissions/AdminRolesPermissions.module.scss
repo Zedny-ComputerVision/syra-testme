@@ -1,0 +1,56 @@
+.page {
+  padding: 1.5rem;
+}
+
+.matrixWrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.matrix { width: 100%; border-collapse: collapse; min-width: 500px; }
+
+.matrix th {
+  padding: 0.75rem 1rem; text-align: center;
+  font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.matrix th:first-child { text-align: left; }
+
+.matrix td {
+  padding: 0.65rem 1rem; font-size: 0.85rem; color: var(--color-text);
+  border-bottom: 1px solid var(--color-border); text-align: center;
+}
+
+.matrix td:first-child { text-align: left; font-weight: 600; }
+.matrix tbody tr:last-child td { border-bottom: none; }
+
+.checkmark { color: var(--color-primary); font-size: 1.1rem; }
+.dash { color: var(--color-muted); font-size: 0.9rem; }
+
+.legend {
+  margin-top: 1rem; padding: 1rem;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.legendTitle { font-size: 0.85rem; font-weight: 700; color: var(--color-text); margin-bottom: 0.5rem; }
+.legendItems { display: flex; flex-wrap: wrap; gap: 1rem; }
+
+.legendItem {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.82rem; color: var(--color-muted);
+}
+
+.roleBadge {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+}
+
+.roleAdmin { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.roleInstructor { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.roleLearner { background: rgba(16, 185, 129, 0.15); color: #10b981; }

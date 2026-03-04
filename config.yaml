@@ -1,0 +1,24 @@
+# AI proctoring detection thresholds
+face_detection:
+  interval_ms: 1000
+  min_confidence: 0.5
+multi_face:
+  interval_ms: 1000
+  max_faces: 1
+eye_tracking:
+  interval_ms: 1000
+  max_deviation: 0.35
+mouth_detection:
+  interval_ms: 1000
+  talking_threshold: 0.6
+object_detection:
+  interval_ms: 1000
+  model_path: yolov8n.pt
+  forbidden_labels: ["cell phone", "book", "laptop", "person"]
+audio_detection:
+  vad_threshold: 0.6
+  chunk_ms: 500
+cooldowns:
+  low_ms: 15000
+  medium_ms: 10000
+  high_ms: 5000

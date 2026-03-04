@@ -1,0 +1,9 @@
+.page { display: flex; flex-direction: column; gap: 1rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; padding: 1rem 1.1rem; }
+.title { font-weight: 700; }
+.sub { color: var(--color-muted); margin: 0.25rem 0 0.6rem; }
+.colsLabel { font-size: 0.8rem; font-weight: 600; color: var(--color-muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.35rem 0 0.7rem; }
+.chip { background: var(--color-border); padding: 0.25rem 0.45rem; border-radius: 8px; font-size: 0.78rem; }
+.btn { padding: 0.55rem 0.8rem; border-radius: 10px; border: 1px solid var(--color-primary); background: var(--color-primary); color: #0b111d; font-weight: 700; cursor: pointer; }

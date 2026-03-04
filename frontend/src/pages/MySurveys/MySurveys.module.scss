@@ -1,0 +1,11 @@
+.page { padding: 1.5rem; }
+.title { font-size: 1.2rem; font-weight: 700; color: var(--color-text); margin-bottom: 1rem; }
+.list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; padding: 1rem 1.1rem; }
+.cardTitle { font-weight: 700; }
+.cardSub { color: var(--color-muted); font-size: 0.9rem; }
+.questions { margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.question { display: flex; flex-direction: column; gap: 0.25rem; }
+.qText { font-weight: 600; }
+.input { border: 1px solid var(--color-border); border-radius: 8px; padding: 0.45rem 0.55rem; background: var(--color-bg); color: var(--color-text); }
+.btn { margin-top: 0.75rem; border: 1px solid var(--color-primary); background: var(--color-primary); color: #0b111d; padding: 0.55rem 0.8rem; border-radius: 10px; cursor: pointer; font-weight: 700; }

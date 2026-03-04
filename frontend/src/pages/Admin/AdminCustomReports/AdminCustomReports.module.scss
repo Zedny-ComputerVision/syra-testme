@@ -1,0 +1,11 @@
+.page { display: flex; flex-direction: column; gap: 1rem; }
+.controls { display: flex; gap: 0.7rem; align-items: center; }
+.label { font-weight: 600; color: var(--color-muted); }
+.select { border: 1px solid var(--color-border); border-radius: 8px; padding: 0.45rem 0.6rem; background: var(--color-bg); color: var(--color-text); }
+.panel { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; padding: 1rem 1.2rem; }
+.panelHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.7rem; }
+.panelTitle { font-weight: 700; }
+.muted { color: var(--color-muted); font-size: 0.9rem; }
+.columns { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.colChip { display: flex; align-items: center; gap: 0.3rem; border: 1px solid var(--color-border); border-radius: 10px; padding: 0.35rem 0.55rem; background: var(--color-bg); }
+.btnPrimary { border: 1px solid var(--color-primary); background: var(--color-primary); color: #0b111d; border-radius: 10px; padding: 0.55rem 0.8rem; font-weight: 700; cursor: pointer; }

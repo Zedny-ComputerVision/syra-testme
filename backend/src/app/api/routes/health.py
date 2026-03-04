@@ -1,0 +1,21 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from ..deps import get_db_dep
+
+router = APIRouter()
+
+
+@router.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@router.get("/health/db")
+def health_db(db: Session = Depends(get_db_dep)):
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}

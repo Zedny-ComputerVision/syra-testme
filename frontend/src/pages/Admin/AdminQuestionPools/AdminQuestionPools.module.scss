@@ -1,0 +1,97 @@
+.page {
+  padding: 1.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.cardTitle { font-size: 1rem; font-weight: 700; color: var(--color-text); }
+.cardMeta { font-size: 0.78rem; color: var(--color-muted); margin-bottom: 0.5rem; }
+
+.questionList { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.75rem; }
+
+.questionItem {
+  padding: 0.5rem 0.65rem;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--color-text);
+}
+
+.actionBtns { display: flex; gap: 0.3rem; }
+
+.actionBtn {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-border); border-radius: 6px;
+  background: transparent; color: var(--color-muted);
+  font-size: 0.75rem; cursor: pointer;
+  &:hover { border-color: var(--color-primary); color: var(--color-text); }
+}
+
+.expandBtn {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--color-border); border-radius: 6px;
+  background: transparent; color: var(--color-muted);
+  font-size: 0.78rem; cursor: pointer; width: 100%; margin-top: 0.5rem;
+  &:hover { border-color: var(--color-primary); color: var(--color-text); }
+}
+
+.empty { text-align: center; padding: 3rem; color: var(--color-muted); }
+
+.modalOverlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+
+.modal {
+  background: var(--color-bg); border: 1px solid var(--color-border);
+  border-radius: var(--radius); padding: 1.5rem;
+  min-width: 380px; max-width: 90vw;
+}
+
+.modalTitle { font-size: 1.1rem; font-weight: 700; color: var(--color-text); margin: 0 0 1rem; }
+.formGroup { margin-bottom: 1rem; }
+.label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--color-muted); margin-bottom: 0.3rem; }
+
+.input {
+  width: 100%; padding: 0.6rem 0.85rem;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15); color: var(--color-text);
+  font-size: 0.88rem; outline: none;
+  &:focus { border-color: var(--color-primary); }
+}
+
+.modalActions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
+
+.btnPrimary {
+  padding: 0.6rem 1.1rem; border: none; border-radius: 8px;
+  background: var(--color-primary); color: #0b111d;
+  font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  &:hover { opacity: 0.9; }
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
+}
+
+.btnCancel {
+  padding: 0.6rem 1.1rem;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: transparent; color: var(--color-text);
+  font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}

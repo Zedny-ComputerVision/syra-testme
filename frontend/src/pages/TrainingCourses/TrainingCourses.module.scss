@@ -1,0 +1,12 @@
+.page { padding: 1.5rem; }
+.title { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; color: var(--color-text); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; padding: 1rem 1.1rem; }
+.courseTitle { font-weight: 700; }
+.courseSub { color: var(--color-muted); font-size: 0.9rem; }
+.modules { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.module { border: 1px dashed var(--color-border); border-radius: 10px; padding: 0.6rem 0.7rem; }
+.moduleTitle { font-weight: 600; margin-bottom: 0.4rem; }
+.exams { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.examBtn { border: 1px solid var(--color-primary); background: var(--color-primary); color: #0b111d; border-radius: 8px; padding: 0.4rem 0.7rem; cursor: pointer; }
+.empty { color: var(--color-muted); font-size: 0.85rem; }

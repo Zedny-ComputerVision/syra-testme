@@ -1,0 +1,198 @@
+import React, { useState, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import useAuth from '../../hooks/useAuth'
+import styles from './Sidebar.module.scss'
+
+/* ─── Icons (SVG inline for zero-dependency) ─── */
+const Icon = ({ d, size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+)
+
+const ICONS = {
+  home:        'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10',
+  exams:       'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2 M9 5a2 2 0 002 2h2a2 2 0 002-2 M9 5a2 2 0 012-2h2a2 2 0 012 2',
+  attempts:    'M9 11l3 3L22 4 M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11',
+  schedule:    'M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01',
+  profile:     'M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2 M12 3a4 4 0 110 8 4 4 0 010-8z',
+  dashboard:   'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z',
+  newTest:     'M12 5v14 M5 12h14',
+  manageTests: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8',
+  templates:   'M4 4h16v16H4z M4 9h16 M9 9v11',
+  pools:       'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z',
+  grading:     'M18 20V10 M12 20V4 M6 20v-6',
+  categories:  'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z M7 7h.01',
+  certificates:'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  sessions:    'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75 M9 7a4 4 0 110 8 4 4 0 010-8z',
+  candidates:  'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 3a4 4 0 110 8 4 4 0 010-8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75',
+  users:       'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 3a4 4 0 110 8 4 4 0 010-8z',
+  groups:      'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75 M9 3a4 4 0 110 8 4 4 0 010-8z',
+  roles:       'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  analysis:    'M2 20h.01 M7 20v-4 M12 20V10 M17 20V4 M22 20v-8',
+  reports:     'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M12 18v-6 M9 15h6',
+  settings:    'M12 15a3 3 0 110-6 3 3 0 010 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z',
+  chevron:     'M6 9l6 6 6-6',
+}
+
+function NavLink({ to, icon, label, active }) {
+  return (
+    <Link to={to} className={`${styles.link} ${active ? styles.active : ''}`}>
+      <span className={styles.linkIcon}><Icon d={ICONS[icon] || ICONS.home} /></span>
+      <span className={styles.linkLabel}>{label}</span>
+    </Link>
+  )
+}
+
+function Section({ label, icon, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className={styles.section}>
+      <button className={styles.sectionHeader} onClick={() => setOpen(o => !o)}>
+        <span className={styles.sectionLabel}>{label}</span>
+        <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}>
+          <Icon d={ICONS.chevron} size={14} />
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="items"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className={styles.sectionItems}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+export default function Sidebar({ mobileOpen = false, onClose }) {
+  const { user } = useAuth()
+  const location = useLocation()
+  const role = user?.role
+  const isAdmin = role === 'ADMIN' || role === 'INSTRUCTOR'
+  const isSuperAdmin = role === 'ADMIN'
+
+  useEffect(() => {
+    if (mobileOpen && onClose) onClose()
+  }, [location.pathname])
+
+  function isActive(path) {
+    if (path === '/') return location.pathname === '/'
+    return location.pathname.startsWith(path)
+  }
+
+  return (
+    <>
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            className={styles.overlay}
+            onClick={onClose}
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.aside
+        className={`${styles.sidebar} glass ${mobileOpen ? styles.open : ''}`}
+        role="navigation"
+        aria-label="Main navigation"
+        initial={{ x: -20, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 120, damping: 14 }}
+      >
+        {/* Brand */}
+        <div className={styles.brand}>
+          <Link to="/" className={styles.brandLink}>
+            <span className={styles.brandLogo}>S</span>
+            <span className={styles.brandText}>SYRA LMS</span>
+          </Link>
+        </div>
+
+        <nav className={styles.nav}>
+          {/* ── HOME ── */}
+          <Section label="Home" defaultOpen>
+            <NavLink to="/" icon="home" label="Dashboard" active={isActive('/')} />
+          </Section>
+
+          {/* ── MY LEARNING ── */}
+          <Section label="My Learning" defaultOpen>
+            <NavLink to="/exams" icon="exams" label="My Exams" active={isActive('/exams')} />
+            <NavLink to="/schedule" icon="schedule" label="My Schedule" active={isActive('/schedule')} />
+            <NavLink to="/attempts" icon="attempts" label="My Attempts" active={isActive('/attempts')} />
+            <NavLink to="/profile" icon="profile" label="Profile" active={isActive('/profile')} />
+            <NavLink to="/training" icon="exams" label="Training" active={isActive('/training')} />
+            <NavLink to="/surveys" icon="exams" label="Surveys" active={isActive('/surveys')} />
+          </Section>
+
+          {/* ── TESTS (admin/instructor) ── */}
+          {isAdmin && (
+            <Section label="Tests" defaultOpen>
+              <NavLink to="/admin/exams/new" icon="newTest" label="New Test" active={isActive('/admin/exams/new')} />
+              <NavLink to="/admin/exams" icon="manageTests" label="Manage Tests" active={location.pathname === '/admin/exams'} />
+              <NavLink to="/admin/templates" icon="templates" label="Test Templates" active={isActive('/admin/templates')} />
+              <NavLink to="/admin/question-pools" icon="pools" label="Question Pools" active={isActive('/admin/question-pools')} />
+              <NavLink to="/admin/grading-scales" icon="grading" label="Grading Scales" active={isActive('/admin/grading-scales')} />
+              <NavLink to="/admin/categories" icon="categories" label="Categories" active={isActive('/admin/categories')} />
+              <NavLink to="/admin/certificates" icon="certificates" label="Certificates" active={isActive('/admin/certificates')} />
+              <NavLink to="/admin/courses" icon="manageTests" label="Courses" active={isActive('/admin/courses')} />
+              <NavLink to="/admin/surveys" icon="analysis" label="Surveys" active={isActive('/admin/surveys')} />
+            </Section>
+          )}
+
+          {/* ── TESTING CENTER ── */}
+          {isAdmin && (
+            <Section label="Testing Center" defaultOpen>
+              <NavLink to="/admin/sessions" icon="sessions" label="Testing Sessions" active={isActive('/admin/sessions')} />
+              <NavLink to="/admin/candidates" icon="candidates" label="Candidates" active={isActive('/admin/candidates')} />
+            </Section>
+          )}
+
+          {/* ── USERS ── */}
+          {isSuperAdmin && (
+            <Section label="Users">
+              <NavLink to="/admin/users" icon="users" label="User Profiles" active={isActive('/admin/users')} />
+              <NavLink to="/admin/roles" icon="roles" label="Roles & Permissions" active={isActive('/admin/roles')} />
+              <NavLink to="/admin/user-groups" icon="groups" label="User Groups" active={isActive('/admin/user-groups')} />
+            </Section>
+          )}
+
+          {/* ── REPORTING ── */}
+          {isAdmin && (
+            <Section label="Reporting">
+              <NavLink to="/admin/attempt-analysis" icon="analysis" label="Attempt Analysis" active={isActive('/admin/attempt-analysis')} />
+              <NavLink to="/admin/report-builder" icon="reports" label="Report Builder" active={isActive('/admin/report-builder')} />
+              <NavLink to="/admin/reports" icon="reports" label="Schedules" active={isActive('/admin/reports')} />
+              <NavLink to="/admin/settings" icon="settings" label="Settings" active={isActive('/admin/settings')} />
+              <NavLink to="/admin/predefined-reports" icon="reports" label="Predefined Reports" active={isActive('/admin/predefined-reports')} />
+              <NavLink to="/admin/favorite-reports" icon="reports" label="Favorite Reports" active={isActive('/admin/favorite-reports')} />
+              <NavLink to="/admin/subscribers" icon="groups" label="Subscribers" active={isActive('/admin/subscribers')} />
+            </Section>
+          )}
+          {isAdmin && (
+            <Section label="System">
+              <NavLink to="/admin/integrations" icon="settings" label="Integrations" active={isActive('/admin/integrations')} />
+              <NavLink to="/admin/maintenance" icon="settings" label="Maintenance" active={isActive('/admin/maintenance')} />
+            </Section>
+          )}
+        </nav>
+
+        <div className={styles.sidebarFooter}>
+          <span className={styles.version}>SYRA LMS v1.0</span>
+        </div>
+      </motion.aside>
+    </>
+  )
+}

@@ -1,0 +1,112 @@
+.page {
+  padding: 1.5rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 1.5rem;
+}
+
+.heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.sub {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin: 0.3rem 0 0;
+}
+
+.error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+}
+
+.empty {
+  color: var(--color-muted);
+  font-size: 0.95rem;
+}
+
+/* ---- Grid ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  }
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.cardTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 6px;
+}
+
+.badgeMcq {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+}
+
+.badgeText {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.course {
+  font-size: 0.82rem;
+  color: var(--color-muted);
+  margin: 0 0 0.6rem;
+}
+
+.cardMeta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+.metaItem {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
