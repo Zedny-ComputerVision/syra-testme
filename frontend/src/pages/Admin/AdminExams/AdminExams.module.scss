@@ -56,6 +56,21 @@
 
 .table tbody tr:last-child td { border-bottom: none; }
 
+.nameLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.nameLink:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
 .badge {
   display: inline-block;
   padding: 0.15rem 0.5rem;

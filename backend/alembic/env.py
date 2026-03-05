@@ -9,6 +9,7 @@ from src.app.models import (  # noqa: F401 - import all models to register metad
     Attempt, AttemptAnswer, Schedule, ProctoringEvent, Notification, AuditLog,
     Survey, SurveyResponse, UserGroup, ExamTemplate, ReportSchedule, SystemSettings,
 )
+from src.app.modules.tests.models import Test, TestSettings  # noqa: F401
 from src.app.core.config import get_settings
 
 config = context.config

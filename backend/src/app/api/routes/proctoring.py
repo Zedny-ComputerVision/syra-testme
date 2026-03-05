@@ -1,7 +1,11 @@
 import base64
+import json
 from datetime import datetime, timezone
+from pathlib import Path
+import shutil
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from starlette.websockets import WebSocketState
 from sqlalchemy import select
@@ -9,17 +13,17 @@ from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user, get_db_dep, require_role
 from ...core.security import verify_token
-from ...models import Attempt, ProctoringEvent, SeverityEnum, RoleEnum, AttemptStatus
+from ...models import Attempt, ProctoringEvent, SeverityEnum, RoleEnum, AttemptStatus, SystemSettings
 from ...schemas import ProctoringEventRead, Message
 from ...detection.orchestrator import ProctoringOrchestrator
 from ...reporting.report_generator import generate_html_report
 from ...services.integrations import send_proctoring_integration_event
-from ...api.routes.admin_settings import get_db_dep
-from sqlalchemy import select
-from ...models import SystemSettings, ExamStatus
-from fastapi import Body
 
 router = APIRouter()
+BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
+EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
+VIDEO_DIR = BASE_STORAGE_DIR / "videos"
+VIDEO_CHUNKS_DIR = BASE_STORAGE_DIR / "video_chunks"
 
 SEVERITY_MAP = {
     "HIGH": SeverityEnum.HIGH,
@@ -30,14 +34,21 @@ SEVERITY_MAP = {
 
 def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -> str | None:
     """Save screenshot evidence for HIGH severity events."""
-    from pathlib import Path
-    evidence_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "evidence"
-    evidence_dir.mkdir(parents=True, exist_ok=True)
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     filename = f"{attempt_id}_{event_type}_{ts}.jpg"
-    filepath = evidence_dir / filename
+    filepath = EVIDENCE_DIR / filename
     filepath.write_bytes(frame_bytes)
     return str(filepath)
+
+
+def _attempt_or_forbidden(attempt_id: str, db: Session, current):
+    attempt = db.get(Attempt, attempt_id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return attempt
 
 
 @router.post("/{attempt_id}/ping", response_model=Message)
@@ -47,11 +58,7 @@ async def proctoring_ping(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt = db.get(Attempt, attempt_id)
-    if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
-    if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _attempt_or_forbidden(attempt_id, db, current)
     focus = payload.get("focus", True)
     visibility = payload.get("visibility", "visible")
     blurs = payload.get("blurs", 0)
@@ -72,6 +79,174 @@ async def proctoring_ping(
         db.add(ev)
     db.commit()
     return Message(detail="ok")
+
+
+@router.post("/{attempt_id}/video/start")
+async def start_video_capture(
+    attempt_id: str,
+    payload: dict = Body(default={}),
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+    mime_type = (payload or {}).get("mime_type") or "video/webm"
+    session_id = uuid4().hex
+    chunk_dir = VIDEO_CHUNKS_DIR / attempt_id / session_id
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "attempt_id": attempt_id,
+        "session_id": session_id,
+        "mime_type": mime_type,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (chunk_dir / "meta.json").write_text(json.dumps(meta))
+    return {"detail": "started", "session_id": session_id}
+
+
+@router.post("/{attempt_id}/video/chunk", response_model=Message)
+async def upload_video_chunk(
+    attempt_id: str,
+    session_id: str = Form(...),
+    chunk_index: int = Form(..., ge=0),
+    chunk: UploadFile = File(...),
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+    chunk_dir = VIDEO_CHUNKS_DIR / attempt_id / session_id
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    content = await chunk.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty chunk")
+    part_path = chunk_dir / f"{chunk_index:08d}.part"
+    part_path.write_bytes(content)
+    return Message(detail="chunk saved")
+
+
+@router.post("/{attempt_id}/video/finalize")
+async def finalize_video_capture(
+    attempt_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+    session_id = payload.get("session_id")
+    extension = (payload.get("extension") or "webm").replace(".", "").lower()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    if extension not in {"webm", "mp4", "mkv"}:
+        raise HTTPException(status_code=400, detail="Unsupported extension")
+
+    chunk_dir = VIDEO_CHUNKS_DIR / attempt_id / session_id
+    if not chunk_dir.exists():
+        raise HTTPException(status_code=404, detail="Video session not found")
+
+    parts = sorted(chunk_dir.glob("*.part"))
+    if not parts:
+        raise HTTPException(status_code=404, detail="No chunks uploaded")
+
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{attempt_id}_{session_id}.{extension}"
+    output_path = VIDEO_DIR / filename
+    with output_path.open("wb") as out:
+        for part in parts:
+            out.write(part.read_bytes())
+
+    file_info = {
+        "name": filename,
+        "url": f"/videos/{filename}",
+        "size": output_path.stat().st_size,
+    }
+
+    event = ProctoringEvent(
+        attempt_id=attempt_id,
+        event_type="VIDEO_SAVED",
+        severity=SeverityEnum.LOW,
+        detail="Proctoring video saved",
+        meta=file_info,
+        occurred_at=datetime.now(timezone.utc),
+    )
+    db.add(event)
+    db.commit()
+
+    try:
+        shutil.rmtree(chunk_dir)
+        parent = chunk_dir.parent
+        if parent.exists() and not any(parent.iterdir()):
+            parent.rmdir()
+    except Exception:
+        pass
+
+    return {"detail": "video finalized", "file": file_info}
+
+
+@router.post("/{attempt_id}/pause", response_model=Message)
+async def pause_attempt(
+    attempt_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
+    attempt = _attempt_or_forbidden(attempt_id, db, current)
+    if attempt.status != AttemptStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="Only in-progress attempts can be paused")
+
+    event = ProctoringEvent(
+        attempt_id=attempt_id,
+        event_type="ATTEMPT_PAUSED",
+        severity=SeverityEnum.LOW,
+        detail=f"Attempt paused by {current.user_id}",
+        meta={"paused": True},
+        occurred_at=datetime.now(timezone.utc),
+    )
+    db.add(event)
+    db.commit()
+    return Message(detail="Attempt paused")
+
+
+@router.post("/{attempt_id}/resume", response_model=Message)
+async def resume_attempt(
+    attempt_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
+    attempt = _attempt_or_forbidden(attempt_id, db, current)
+    if attempt.status != AttemptStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="Only in-progress attempts can be resumed")
+
+    event = ProctoringEvent(
+        attempt_id=attempt_id,
+        event_type="ATTEMPT_RESUMED",
+        severity=SeverityEnum.LOW,
+        detail=f"Attempt resumed by {current.user_id}",
+        meta={"paused": False},
+        occurred_at=datetime.now(timezone.utc),
+    )
+    db.add(event)
+    db.commit()
+    return Message(detail="Attempt resumed")
+
+
+@router.get("/{attempt_id}/videos")
+async def list_videos(
+    attempt_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    prefix = f"{attempt_id}_"
+    files = [p for p in VIDEO_DIR.glob(f"{prefix}*") if p.is_file()]
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    result = []
+    for f in files:
+        result.append({
+            "name": f.name,
+            "url": f"/videos/{f.name}",
+            "size": f.stat().st_size,
+            "created_at": datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).isoformat(),
+        })
+    return result
 
 
 @router.websocket("/{attempt_id}/ws")
@@ -249,11 +424,7 @@ async def list_events(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt = db.get(Attempt, attempt_id)
-    if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
-    if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _attempt_or_forbidden(attempt_id, db, current)
     events = db.scalars(
         select(ProctoringEvent)
         .where(ProctoringEvent.attempt_id == attempt_id)

@@ -2,8 +2,12 @@
 
 import cv2
 import numpy as np
-import mediapipe as mp
 from typing import Optional
+
+try:
+    import mediapipe as mp
+except Exception:  # pragma: no cover - optional dependency in lightweight envs
+    mp = None
 
 
 def _landmark_vector(landmarks) -> Optional[np.ndarray]:
@@ -27,7 +31,7 @@ def compute_face_signature(frame_bytes: bytes) -> Optional[list[float]]:
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if frame is None:
         return None
-    if not hasattr(mp, "solutions"):
+    if mp is None or not hasattr(mp, "solutions"):
         return None
     mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=True, refine_landmarks=True, max_num_faces=1)
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -52,7 +56,11 @@ class FaceVerifier:
         self.enabled = enabled and baseline is not None
         self.baseline = np.array(baseline, dtype=np.float32) if baseline is not None else None
         self.threshold = threshold
-        self._mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=False, refine_landmarks=True, max_num_faces=1) if hasattr(mp, "solutions") else None
+        self._mesh = (
+            mp.solutions.face_mesh.FaceMesh(static_image_mode=False, refine_landmarks=True, max_num_faces=1)
+            if mp is not None and hasattr(mp, "solutions")
+            else None
+        )
         self._mismatching = False
 
     def process(self, frame_bytes: bytes) -> dict | None:

@@ -2,7 +2,10 @@
 
 import cv2
 import numpy as np
-import mediapipe as mp
+try:
+    import mediapipe as mp
+except Exception:  # pragma: no cover - optional dependency in lightweight envs
+    mp = None
 from typing import Optional
 
 

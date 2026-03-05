@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { jwtDecode } from 'jwt-decode'
 import { login as loginApi } from '../../services/auth.service'
 import useAuth from '../../hooks/useAuth'
 import styles from './Login.module.scss'
@@ -19,7 +20,12 @@ export default function Login() {
     try {
       const { data } = await loginApi(email, password)
       login(data)
-      navigate('/')
+      const role = data?.access_token ? jwtDecode(data.access_token)?.role : null
+      if (role === 'ADMIN' || role === 'INSTRUCTOR') {
+        navigate('/admin/dashboard')
+      } else {
+        navigate('/')
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed')
     } finally {
@@ -61,7 +67,10 @@ export default function Login() {
         </button>
 
         <p className={styles.hint}>
-          Demo: <code>admin@example.com</code> / <code>Password123!</code>
+          Demo users:&nbsp;
+          <code>admin@example.com</code> / <code>Admin1234!</code>&nbsp;|&nbsp;
+          <code>student1@example.com</code> / <code>Student1234!</code>&nbsp;|&nbsp;
+          <code>instructor@example.com</code> / <code>Instructor1234!</code>
         </p>
       </form>
     </div>

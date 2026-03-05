@@ -6,7 +6,7 @@ import ViolationToast from '../../components/ViolationToast/ViolationToast'
 import useAuth from '../../hooks/useAuth'
 import { getAttempt, submitAnswer, submitAttempt } from '../../services/attempt.service'
 import { getExamQuestions, getExam } from '../../services/exam.service'
-import { proctoringPing } from '../../services/proctoring.service'
+import { finalizeProctoringVideo, proctoringPing, startProctoringVideo, uploadProctoringVideoChunk } from '../../services/proctoring.service'
 import styles from './Proctoring.module.scss'
 
 function useAutoSave(attemptId, delay = 2000) {
@@ -61,8 +61,15 @@ export default function Proctoring() {
   const [proctorCfg, setProctorCfg] = useState({})
   const [tabBlurs, setTabBlurs] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [cameraStream, setCameraStream] = useState(null)
+  const [recordingStatus, setRecordingStatus] = useState('idle')
 
   const { save, flush } = useAutoSave(attemptId)
+  const recorderRef = useRef(null)
+  const videoSessionIdRef = useRef(null)
+  const videoChunkIndexRef = useRef(0)
+  const videoMimeRef = useRef('video/webm')
+  const finalizingVideoRef = useRef(false)
 
   // Load attempt, exam, and questions
   useEffect(() => {
@@ -121,16 +128,95 @@ export default function Proctoring() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
+  useEffect(() => {
+    if (!attemptId || !cameraStream || !window.MediaRecorder) return
+    if (recorderRef.current) return
+    let cancelled = false
+
+    const startRecorder = async () => {
+      try {
+        const mimeType = pickRecorderMimeType()
+        videoMimeRef.current = mimeType
+        const { data } = await startProctoringVideo(attemptId, mimeType)
+        if (cancelled) return
+        videoSessionIdRef.current = data?.session_id
+        videoChunkIndexRef.current = 0
+        const recorder = new MediaRecorder(cameraStream, { mimeType })
+        recorder.ondataavailable = async (event) => {
+          if (!videoSessionIdRef.current || !event.data || event.data.size === 0) return
+          const currentIdx = videoChunkIndexRef.current++
+          try {
+            await uploadProctoringVideoChunk(attemptId, videoSessionIdRef.current, currentIdx, event.data)
+          } catch (e) {
+            console.error('Video chunk upload failed', e)
+            setRecordingStatus('failed')
+          }
+        }
+        recorder.onerror = () => setRecordingStatus('failed')
+        recorder.start(4000)
+        recorderRef.current = recorder
+        setRecordingStatus('recording')
+      } catch (e) {
+        console.error('Recorder start failed', e)
+        setRecordingStatus('failed')
+      }
+    }
+
+    startRecorder()
+    return () => {
+      cancelled = true
+    }
+  }, [attemptId, cameraStream])
+
   const handleAnswer = (questionId, answer) => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }))
     save(questionId, answer)
   }
+
+  const pickRecorderMimeType = () => {
+    const candidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+    ]
+    const supported = candidates.find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m))
+    return supported || 'video/webm'
+  }
+
+  const stopAndFinalizeRecording = useCallback(async () => {
+    const recorder = recorderRef.current
+    if (!recorder || !videoSessionIdRef.current) return
+    if (finalizingVideoRef.current) return
+    finalizingVideoRef.current = true
+    setRecordingStatus('saving')
+    if (recorder.state !== 'inactive') {
+      await new Promise((resolve) => {
+        const timeout = setTimeout(resolve, 3000)
+        recorder.addEventListener('stop', () => {
+          clearTimeout(timeout)
+          resolve()
+        }, { once: true })
+        recorder.stop()
+      })
+    }
+    const extension = videoMimeRef.current.includes('mp4') ? 'mp4' : 'webm'
+    try {
+      await finalizeProctoringVideo(attemptId, videoSessionIdRef.current, extension)
+      setRecordingStatus('saved')
+    } catch (e) {
+      console.error('Video finalize failed', e)
+      setRecordingStatus('failed')
+    } finally {
+      finalizingVideoRef.current = false
+    }
+  }, [attemptId])
 
   const handleSubmit = async () => {
     if (submitting) return
     setSubmitting(true)
     try {
       await flush()
+      await stopAndFinalizeRecording()
       await submitAttempt(attemptId)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {})
@@ -209,6 +295,20 @@ export default function Proctoring() {
     }, 10000)
     return () => clearInterval(interval)
   }, [attemptId, tabBlurs])
+
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      try {
+        const recorder = recorderRef.current
+        if (recorder && recorder.state !== 'inactive') recorder.stop()
+      } catch (_) {}
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      stopAndFinalizeRecording().catch(() => {})
+    }
+  }, [stopAndFinalizeRecording])
 
   if (loading) {
     return (
@@ -380,7 +480,10 @@ export default function Proctoring() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.25 }}
       >
-        <ProctorOverlay attemptId={attemptId} token={tokens?.access_token} config={proctorCfg} onViolation={handleViolation} />
+        <ProctorOverlay attemptId={attemptId} token={tokens?.access_token} config={proctorCfg} onViolation={handleViolation} onForcedSubmit={handleSubmit} onStreamReady={setCameraStream} />
+        <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', textAlign: 'center', marginTop: '0.5rem' }}>
+          Recording: {recordingStatus}
+        </div>
       </motion.div>
 
       {/* Violation Toast */}

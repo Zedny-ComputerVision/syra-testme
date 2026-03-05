@@ -1,5 +1,8 @@
 import logging
 from pathlib import Path
+from contextlib import asynccontextmanager
+import os
+import sys
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from slowapi.middleware import SlowAPIMiddleware
 import asyncio
 from datetime import datetime, timezone
-from croniter import croniter
 
 from .api.router import router as api_router
 from .core.config import get_settings
@@ -27,8 +29,10 @@ settings = get_settings()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/src/app -> backend
 EVIDENCE_DIR = BASE_DIR / "storage" / "evidence"
 REPORTS_DIR = BASE_DIR / "storage" / "reports"
+VIDEOS_DIR = BASE_DIR / "storage" / "videos"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Parse allowed CORS origins; fall back to explicit list so credentials work.
 _raw_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
@@ -58,6 +62,7 @@ TRAILING_RESOURCES = {
     "/api/audit-log",
     "/api/admin-settings",
     "/api/proctoring",
+    "/api/admin/tests",
 }
 
 
@@ -127,15 +132,15 @@ app.include_router(api_router, prefix="/api")
 
 app.mount("/evidence", StaticFiles(directory=str(EVIDENCE_DIR)), name="evidence")
 app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
+app.mount("/videos", StaticFiles(directory=str(VIDEOS_DIR)), name="videos")
 
 
-@app.on_event("startup")
-def on_startup():
+def _run_startup_initialization() -> None:
     try:
         Base.metadata.create_all(bind=session.engine)
         logger.info("Database tables created/verified (DB: %s)", settings.DATABASE_URL.split("@")[-1])
     except Exception as exc:
-        logger.error("DB startup error — check DATABASE_URL in .env: %s", exc)
+        logger.error("DB startup error - check DATABASE_URL in .env: %s", exc)
 
     # Lightweight column backfill for SQLite deployments (idempotent)
     if session.engine.dialect.name == "sqlite":
@@ -158,41 +163,80 @@ def on_startup():
         except Exception as exc:
             logger.warning("Schema backfill skipped: %s", exc)
 
-    # start background scheduler
-    async def schedule_loop():
-        while True:
-            try:
-                with SessionLocal() as db:
-                    schedules = db.scalars(select(ReportSchedule).where(ReportSchedule.is_active == True)).all()
-                    now = datetime.now(timezone.utc)
-                    for sched in schedules:
-                        if not sched.schedule_cron:
-                            continue
-                        base = sched.last_run_at or now
-                        try:
-                            itr = croniter(sched.schedule_cron, base)
-                            next_time = itr.get_next(datetime)
-                        except Exception:
-                            continue
-                        if next_time <= now:
-                            run_report_schedule(db, sched)
-            except Exception as exc:
-                logger.error("Report scheduler error: %s", exc)
-            await asyncio.sleep(60)
+    # Cross-db compatibility backfill for schedules.test_id used by tests scheduling.
+    try:
+        with session.engine.begin() as conn:
+            if session.engine.dialect.name == "postgresql":
+                cols = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'schedules'"
+                )).scalars().all()
+                if "test_id" not in cols:
+                    conn.execute(text("ALTER TABLE schedules ADD COLUMN test_id UUID"))
+                    logger.info("Added missing column schedules.test_id")
+            elif session.engine.dialect.name == "sqlite":
+                cols = [row[1] for row in conn.execute(text("PRAGMA table_info(schedules)")).all()]
+                if "test_id" not in cols:
+                    conn.execute(text("ALTER TABLE schedules ADD COLUMN test_id CHAR(36)"))
+                    logger.info("Added missing column schedules.test_id")
+    except Exception as exc:
+        logger.warning("Schedule schema backfill skipped: %s", exc)
 
-    async def purge_identity_loop():
-        while True:
-            try:
-                ident_dir = BASE_DIR / "storage" / "identity"
-                ident_dir.mkdir(parents=True, exist_ok=True)
-                cutoff = datetime.now(timezone.utc).timestamp() - 24 * 3600
-                for f in ident_dir.glob("*.bin"):
-                    if f.stat().st_mtime < cutoff:
-                        f.unlink(missing_ok=True)
-            except Exception as exc:
-                logger.error("Identity purge error: %s", exc)
-            await asyncio.sleep(3600)
 
-    asyncio.create_task(schedule_loop())
-    asyncio.create_task(purge_identity_loop())
+async def _schedule_loop():
+    from croniter import croniter
 
+    while True:
+        try:
+            with SessionLocal() as db:
+                schedules = db.scalars(
+                    select(ReportSchedule).where(ReportSchedule.is_active.is_(True))
+                ).all()
+                now = datetime.now(timezone.utc)
+                for sched in schedules:
+                    if not sched.schedule_cron:
+                        continue
+                    base = sched.last_run_at or now
+                    try:
+                        itr = croniter(sched.schedule_cron, base)
+                        next_time = itr.get_next(datetime)
+                    except Exception:
+                        continue
+                    if next_time <= now:
+                        run_report_schedule(db, sched)
+        except Exception as exc:
+            logger.error("Report scheduler error: %s", exc)
+        await asyncio.sleep(60)
+
+
+async def _purge_identity_loop():
+    while True:
+        try:
+            ident_dir = BASE_DIR / "storage" / "identity"
+            ident_dir.mkdir(parents=True, exist_ok=True)
+            cutoff = datetime.now(timezone.utc).timestamp() - 24 * 3600
+            for f in ident_dir.glob("*.bin"):
+                if f.stat().st_mtime < cutoff:
+                    f.unlink(missing_ok=True)
+        except Exception as exc:
+            logger.error("Identity purge error: %s", exc)
+        await asyncio.sleep(3600)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    _run_startup_initialization()
+    is_test_env = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+    background_tasks = [] if is_test_env else [
+        asyncio.create_task(_schedule_loop()),
+        asyncio.create_task(_purge_identity_loop()),
+    ]
+    try:
+        yield
+    finally:
+        for task in background_tasks:
+            task.cancel()
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+
+
+app.router.lifespan_context = lifespan

@@ -9,7 +9,9 @@ export default function AdminExams() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [deleteId, setDeleteId] = useState(null)
+  const [downloadMsg, setDownloadMsg] = useState('')
   const navigate = useNavigate()
+  const examRouteId = (exam) => exam?.id || exam?.exam_id || null
 
   const load = () => {
     setLoading(true)
@@ -51,15 +53,34 @@ export default function AdminExams() {
     }
   }
 
+  const handleDownloadExamReport = async (exam) => {
+    setDownloadMsg('')
+    try {
+      const { data } = await adminApi.generateExamReportPdf(exam.id)
+      const blob = new Blob([data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const safe = (exam.title || 'exam').replace(/[^a-z0-9]+/gi, '_').slice(0, 40)
+      a.download = `${safe}_report.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setDownloadMsg(err.response?.data?.detail || 'Report download failed')
+    }
+  }
+
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Exams" subtitle="Manage all exams">
+      <AdminPageHeader title="Tests" subtitle="Manage all tests">
         <button
           className={styles.actionBtn}
           style={{ background: 'var(--color-primary)', color: '#0b111d', border: 'none', padding: '0.6rem 1.1rem', fontWeight: 600, borderRadius: '8px' }}
           onClick={() => navigate('/admin/exams/new')}
         >
-          + New Exam
+          + New Test
         </button>
       </AdminPageHeader>
 
@@ -70,6 +91,7 @@ export default function AdminExams() {
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        {downloadMsg && <span className={styles.msg}>{downloadMsg}</span>}
       </div>
 
       <div className={styles.tableWrap}>
@@ -91,8 +113,21 @@ export default function AdminExams() {
             </thead>
             <tbody>
               {filtered.map(exam => (
-                <tr key={exam.id}>
-                  <td>{exam.title}</td>
+                <tr key={examRouteId(exam) || exam.title}>
+                  <td>
+                    <button
+                      type="button"
+                      className={styles.nameLink}
+                      disabled={!examRouteId(exam)}
+                      onClick={() => {
+                        const id = examRouteId(exam)
+                        if (!id) return
+                        navigate(`/admin/tests/${id}`)
+                      }}
+                    >
+                      {exam.title}
+                    </button>
+                  </td>
                   <td><span className={styles.typeBadge}>{exam.exam_type}</span></td>
                   <td>
                     <span className={`${styles.badge} ${exam.status === 'OPEN' ? styles.badgeOpen : styles.badgeClosed}`}>
@@ -103,7 +138,17 @@ export default function AdminExams() {
                   <td>{exam.time_limit_minutes ? `${exam.time_limit_minutes} min` : 'None'}</td>
                   <td>
                     <div className={styles.actionBtns}>
-                      <button className={styles.actionBtn} onClick={() => navigate(`/admin/exams/new?edit=${exam.id}`)}>Edit</button>
+                      <button
+                        className={styles.actionBtn}
+                        disabled={!examRouteId(exam)}
+                        onClick={() => {
+                          const id = examRouteId(exam)
+                          if (!id) return
+                          navigate(`/admin/tests/${id}`)
+                        }}
+                      >
+                        Edit
+                      </button>
                       <button
                         className={styles.actionBtn}
                         onClick={() => {
@@ -118,6 +163,9 @@ export default function AdminExams() {
                       </button>
                       <button className={styles.actionBtn} onClick={() => handleToggleStatus(exam)}>
                         {exam.status === 'OPEN' ? 'Close' : 'Open'}
+                      </button>
+                      <button className={styles.actionBtn} onClick={() => handleDownloadExamReport(exam)}>
+                        Download Report
                       </button>
                       <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={() => setDeleteId(exam.id)}>Delete</button>
                     </div>

@@ -66,6 +66,10 @@ export const adminApi = {
   importAttempts: (rows) => api.post('attempts/import', rows),
   getAttemptEvents: (attemptId) => api.get(`proctoring/${attemptId}/events`),
   generateReport: (attemptId) => api.post(`proctoring/${attemptId}/generate-report`, null, { responseType: 'text' }),
+  pauseAttempt: (attemptId) => api.post(`proctoring/${attemptId}/pause`),
+  resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
+  listAttemptVideos: (attemptId) => api.get(`proctoring/${attemptId}/videos`),
+  generateExamReportPdf: (examId) => api.get(`reports/exam/${examId}/pdf`, { responseType: 'blob' }),
   gradeAttempt: (id, score) => api.post(`attempts/${id}/submit`, null, { params: { score } }),
 
   // Dashboard

@@ -6,7 +6,6 @@ import base64
 from pathlib import Path
 import cv2
 import numpy as np
-import mediapipe as mp
 import io
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -14,11 +13,18 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from ...models import Attempt, AttemptAnswer, Exam, User, RoleEnum, AttemptStatus
+from ...core.config import get_settings
 from ...schemas import AttemptCreate, AttemptRead, AttemptAnswerBase, AttemptAnswerRead, Message
 from ..deps import get_current_user, get_db_dep, require_role
 from ...detection.face_verification import compute_face_signature
 
+try:
+    import mediapipe as mp
+except Exception:  # pragma: no cover - optional dependency
+    mp = None
+
 router = APIRouter()
+settings = get_settings()
 
 
 def _build_attempt_read(attempt: Attempt) -> AttemptRead:
@@ -76,10 +82,17 @@ def _face_present(image_bytes: bytes) -> bool:
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if frame is None:
         return False
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    detector = mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.6)
-    res = detector.process(rgb)
-    return bool(res.detections)
+    if mp is not None:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        detector = mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.6)
+        res = detector.process(rgb)
+        return bool(res.detections)
+    # Fallback when mediapipe is unavailable (e.g. lightweight CI/dev environments).
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    classifier = cv2.CascadeClassifier(cascade_path)
+    faces = classifier.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(40, 40))
+    return len(faces) > 0
 
 
 @router.post("/", response_model=AttemptRead)
@@ -87,8 +100,8 @@ async def create_attempt(body: AttemptCreate, db: Session = Depends(get_db_dep),
     exam = db.get(Exam, body.exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
-    if current.role == RoleEnum.LEARNER:
-        # count attempts
+    if current.role == RoleEnum.LEARNER and not settings.PRECHECK_ALLOW_TEST_BYPASS:
+        # count attempts only when not in bypass/dev mode
         count = db.scalar(select(func.count(Attempt.id)).where(Attempt.exam_id == body.exam_id, Attempt.user_id == current.id)) or 0
         if count >= exam.max_attempts:
             raise HTTPException(status_code=400, detail="Max attempts reached")
@@ -116,6 +129,20 @@ async def list_attempts(db: Session = Depends(get_db_dep), current=Depends(get_c
     return [_build_attempt_read(a) for a in attempts]
 
 
+@router.get("/{attempt_id}", response_model=AttemptRead)
+async def get_attempt(
+    attempt_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    attempt = db.get(Attempt, attempt_id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return _build_attempt_read(attempt)
+
+
 @router.post("/{attempt_id}/answers", response_model=AttemptAnswerRead)
 async def submit_answer(
     attempt_id: str,
@@ -133,6 +160,25 @@ async def submit_answer(
     db.commit()
     db.refresh(ans)
     return ans
+
+
+@router.get("/{attempt_id}/answers", response_model=list[AttemptAnswerRead])
+async def list_attempt_answers(
+    attempt_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    attempt = db.get(Attempt, attempt_id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    answers = db.scalars(
+        select(AttemptAnswer)
+        .where(AttemptAnswer.attempt_id == attempt_id)
+        .order_by(AttemptAnswer.id)
+    ).all()
+    return answers
 
 
 @router.post("/{attempt_id}/submit", response_model=AttemptRead)

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import Schedule, RoleEnum
+from ...models import Schedule, RoleEnum, Exam
+from ...modules.tests.models import Test
 from ...schemas import ScheduleBase, ScheduleRead, Message
 from ..deps import get_current_user, get_db_dep, require_role
 
@@ -13,9 +14,11 @@ router = APIRouter()
 
 def _build(schedule: Schedule) -> ScheduleRead:
     exam = schedule.exam
+    test = getattr(schedule, "test", None)
     return ScheduleRead(
         id=schedule.id,
         exam_id=schedule.exam_id,
+        test_id=schedule.test_id,
         user_id=schedule.user_id,
         scheduled_at=schedule.scheduled_at,
         access_mode=schedule.access_mode,
@@ -25,12 +28,22 @@ def _build(schedule: Schedule) -> ScheduleRead:
         exam_title=exam.title if exam else None,
         exam_type=exam.type if exam else None,
         exam_time_limit=exam.time_limit if exam else None,
+        test_name=test.name if test else None,
+        test_type=test.type.value if test else None,
+        test_time_limit=test.time_limit_minutes if test else None,
     )
 
 
 @router.post("/", response_model=ScheduleRead)
 async def create_schedule(body: ScheduleBase, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.exam_id == body.exam_id))
+    if body.exam_id and not db.get(Exam, body.exam_id):
+        raise HTTPException(status_code=404, detail="Exam not found")
+    if body.test_id and not db.get(Test, body.test_id):
+        raise HTTPException(status_code=404, detail="Test not found")
+    if body.exam_id:
+        existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.exam_id == body.exam_id))
+    else:
+        existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.test_id == body.test_id))
     if existing:
         raise HTTPException(status_code=409, detail="Schedule already exists")
     now = datetime.now(timezone.utc)

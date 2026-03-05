@@ -37,7 +37,7 @@ export default function SystemCheckPage() {
 
   // Lighting check (simple average brightness)
   useEffect(() => {
-    if (!videoRef.current) return
+    if (camera !== 'passed' || !videoRef.current) return
     const canvas = canvasRef.current || document.createElement('canvas')
     canvasRef.current = canvas
     let raf
@@ -63,7 +63,7 @@ export default function SystemCheckPage() {
     }
     raf = requestAnimationFrame(sample)
     return () => cancelAnimationFrame(raf)
-  }, [proctorCfg.lighting_min_score])
+  }, [camera, proctorCfg.lighting_min_score])
 
   // Mic check
   const checkMic = useCallback(async () => {

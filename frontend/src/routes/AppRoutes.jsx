@@ -45,6 +45,8 @@ import AdminCourses from '../pages/Admin/AdminCourses/AdminCourses'
 import AdminUserGroups from '../pages/Admin/AdminUserGroups/AdminUserGroups'
 import AdminSettings from '../pages/Admin/AdminSettings/AdminSettings'
 import AdminSurveys from '../pages/Admin/AdminSurveys/AdminSurveys'
+import AdminManageTestPage from '../pages/Admin/AdminManageTestPage/AdminManageTestPage'
+import AdminAttemptVideos from '../pages/Admin/AdminAttemptVideos/AdminAttemptVideos'
 import QuestionPoolDetail from '../pages/Admin/QuestionPoolDetail/QuestionPoolDetail'
 import TrainingCourses from '../pages/TrainingCourses/TrainingCourses'
 import MySurveys from '../pages/MySurveys/MySurveys'
@@ -185,6 +187,9 @@ const router = createBrowserRouter(
     { path: '/admin/dashboard', element: withAuth(<AdminDashboard />, ADMIN_ROLES) },
 
     // Tests
+    { path: '/admin/tests', element: withAuth(<AdminExams />, ADMIN_ROLES) },
+    { path: '/admin/tests/:id', element: withAuth(<AdminManageTestPage />, ADMIN_ROLES) },
+    { path: '/admin/attempts/:attemptId/videos', element: withAuth(<AdminAttemptVideos />, ADMIN_ROLES) },
     { path: '/admin/exams', element: withAuth(<AdminExams />, ADMIN_ROLES) },
     { path: '/admin/exams/new', element: withAuth(<AdminNewTestWizard />, ADMIN_ROLES) },
     { path: '/admin/exams/:id/edit', element: withAuth(<AdminNewTestWizard />, ADMIN_ROLES) },

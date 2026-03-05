@@ -23,8 +23,24 @@ class GeneratedQuestion(BaseModel):
 @router.post("/generate-questions", response_model=list[GeneratedQuestion])
 async def generate_questions(body: GenerateRequest):
     settings = get_settings()
+    # Offline-friendly fallback: if no OpenAI key, synthesize simple questions locally.
     if not settings.OPENAI_API_KEY:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY not configured on server")
+        fallback = []
+        for i in range(body.count):
+            if body.question_type.upper() == "MCQ":
+                opts = [f"Option {c}" for c in ["A", "B", "C", "D"]]
+                fallback.append(GeneratedQuestion(
+                    text=f"[Offline] {body.topic} sample question {i+1} ({body.difficulty or 'mixed'})",
+                    options=opts,
+                    correct_answer="A",
+                    explanation="Offline fallback – set OPENAI_API_KEY to enable AI generation.",
+                ))
+            else:
+                fallback.append(GeneratedQuestion(
+                    text=f"[Offline] {body.topic} prompt {i+1} ({body.difficulty or 'mixed'})",
+                    explanation="Offline fallback – set OPENAI_API_KEY to enable AI generation.",
+                ))
+        return fallback
 
     try:
         from openai import OpenAI

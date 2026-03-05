@@ -22,3 +22,14 @@ output/
 .playwright-cli/
 backend/storage/reports/
 backend/storage/evidence/
+backend/storage/videos/
+backend/storage/video_chunks/
+backend/storage/identity/
+youtestme-clone-main/
+backend/*.err
+frontend/*.err
+frontend/playwright-report/
+frontend/test-results/
+frontend/tmp-*.cjs
+tmp-*.js
+merge-*.cjs

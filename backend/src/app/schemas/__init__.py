@@ -65,8 +65,7 @@ class UserRead(UserBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserUpdate(BaseModel):
@@ -91,8 +90,7 @@ class CourseRead(CourseBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NodeBase(BaseModel):
@@ -110,8 +108,7 @@ class NodeRead(NodeBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CategoryBase(BaseModel):
@@ -123,8 +120,7 @@ class CategoryBase(BaseModel):
 class CategoryRead(CategoryBase):
     id: UUID
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GradingScaleBase(BaseModel):
@@ -148,8 +144,7 @@ class GradingScaleBase(BaseModel):
 class GradingScaleRead(GradingScaleBase):
     id: UUID
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class QuestionBase(BaseModel):
@@ -234,8 +229,7 @@ class QuestionRead(QuestionBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExamBase(BaseModel):
@@ -305,8 +299,7 @@ class AttemptRead(AttemptBase):
     user_name: Optional[str] = None
     user_student_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AttemptAnswerBase(BaseModel):
@@ -320,16 +313,22 @@ class AttemptAnswerRead(AttemptAnswerBase):
     is_correct: Optional[bool]
     points_earned: Optional[float]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScheduleBase(BaseModel):
-    exam_id: UUID
+    exam_id: Optional[UUID] = None
+    test_id: Optional[UUID] = None
     user_id: UUID
     scheduled_at: datetime
     access_mode: AccessMode = AccessMode.OPEN
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if not self.exam_id and not self.test_id:
+            raise ValueError("Either exam_id or test_id is required")
+        return self
 
 
 class ScheduleRead(ScheduleBase):
@@ -339,9 +338,11 @@ class ScheduleRead(ScheduleBase):
     exam_title: Optional[str] = None
     exam_type: Optional[ExamType] = None
     exam_time_limit: Optional[int] = None
+    test_name: Optional[str] = None
+    test_type: Optional[str] = None
+    test_time_limit: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class QuestionPoolBase(BaseModel):
@@ -357,8 +358,7 @@ class QuestionPoolRead(QuestionPoolBase):
     id: UUID
     created_by_id: Optional[UUID] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProctoringEventRead(BaseModel):
@@ -371,8 +371,7 @@ class ProctoringEventRead(BaseModel):
     meta: Optional[dict]
     occurred_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DashboardRead(BaseModel):
@@ -423,8 +422,7 @@ class NotificationRead(BaseModel):
     link: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuditLogRead(BaseModel):
@@ -437,8 +435,7 @@ class AuditLogRead(BaseModel):
     ip_address: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SurveyCreate(BaseModel):
@@ -457,8 +454,7 @@ class SurveyRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SurveyResponseCreate(BaseModel):
@@ -473,8 +469,7 @@ class SurveyResponseRead(BaseModel):
     answers: Optional[dict]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserGroupCreate(BaseModel):
@@ -491,8 +486,7 @@ class UserGroupRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExamTemplateCreate(BaseModel):
@@ -510,8 +504,7 @@ class ExamTemplateRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ReportScheduleCreate(BaseModel):
@@ -534,8 +527,7 @@ class ReportScheduleRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SystemSettingRead(BaseModel):
@@ -544,8 +536,7 @@ class SystemSettingRead(BaseModel):
     value: Optional[str]
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SystemSettingUpdate(BaseModel):

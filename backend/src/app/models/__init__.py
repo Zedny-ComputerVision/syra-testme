@@ -252,10 +252,12 @@ class Schedule(Base):
     __tablename__ = "schedules"
     __table_args__ = (
         UniqueConstraint("user_id", "exam_id", name="uq_schedule_user_exam"),
+        UniqueConstraint("user_id", "test_id", name="uq_schedule_user_test"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"))
+    exam_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), nullable=True)
+    test_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("tests.id", ondelete="CASCADE"), nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     access_mode: Mapped[AccessMode] = mapped_column(SAEnum(AccessMode), default=AccessMode.OPEN, nullable=False)
@@ -264,6 +266,7 @@ class Schedule(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     exam = relationship("Exam")
+    test = relationship("Test")
     user = relationship("User")
 
 
@@ -387,3 +390,7 @@ class SystemSettings(Base):
     key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     value: Mapped[str | None] = mapped_column(String(4096))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# Import test domain models so SQLAlchemy can resolve Schedule.test relationship.
+from ..modules.tests.models import Test, TestSettings  # noqa: E402,F401

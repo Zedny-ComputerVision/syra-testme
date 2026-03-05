@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_FORGOT: str = Field(default="5/minute")
     E2E_SEED_ENABLED: bool = False
     DEV_LOG_REQUESTS: bool = False
+    PRECHECK_ALLOW_TEST_BYPASS: bool = False
 
     @field_validator("SECRET_KEY")
     @classmethod

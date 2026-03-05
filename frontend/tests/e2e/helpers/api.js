@@ -1,29 +1,58 @@
 import { request } from '@playwright/test'
 
-const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api'
+const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
+let cachedAdminPassword = null
+let cachedAdminToken = null
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export async function ensureAdmin(context) {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com'
   const password = process.env.ADMIN_PASSWORD || 'Password123!'
+  const candidatePasswords = Array.from(new Set([
+    cachedAdminPassword,
+    'Admin1234!',
+    password,
+    'Password123!',
+    'ZednyAdmin12#',
+  ].filter(Boolean)))
   const base = await request.newContext({ baseURL: API_BASE })
+
+  if (cachedAdminToken && cachedAdminPassword) {
+    const me = await base.get('auth/me', { headers: { Authorization: `Bearer ${cachedAdminToken}` } })
+    if (me.ok()) {
+      return { token: cachedAdminToken, email: adminEmail, password: cachedAdminPassword }
+    }
+    cachedAdminToken = null
+  }
   // If seed endpoint is enabled, reset DB and seed fixtures
   try {
-    const seed = await base.post('/testing/reset-seed')
+    const seed = await base.post('testing/reset-seed')
     if (seed.ok()) {
       const seeded = await seed.json()
-      return { token: await loginToken(base, adminEmail, password), email: seeded.admin.email, password: seeded.admin.password }
+      const token = await loginToken(base, adminEmail, password)
+      cachedAdminToken = token
+      cachedAdminPassword = seeded.admin.password
+      return { token, email: seeded.admin.email, password: seeded.admin.password }
     }
   } catch (_) {
     // ignore if endpoint not enabled
   }
-  // Try login
-  let res = await base.post('/auth/login', { data: { email: adminEmail, password } })
-  if (res.ok()) {
-    const body = await res.json()
-    return { token: body.access_token, email: adminEmail, password }
+  // Try login with known admin password candidates.
+  for (const candidate of candidatePasswords) {
+    const res = await base.post('auth/login', { data: { email: adminEmail, password: candidate } })
+    if (res.status() === 429) {
+      await sleep(1500)
+      continue
+    }
+    if (res.ok()) {
+      const body = await res.json()
+      cachedAdminPassword = candidate
+      cachedAdminToken = body.access_token
+      return { token: body.access_token, email: adminEmail, password: candidate }
+    }
   }
   // Try setup (only allowed when no admins exist)
-  await base.post('/auth/setup', {
+  await base.post('auth/setup', {
     data: {
       email: adminEmail,
       password,
@@ -32,14 +61,24 @@ export async function ensureAdmin(context) {
       role: 'ADMIN',
     },
   })
-  res = await base.post('/auth/login', { data: { email: adminEmail, password } })
-  if (!res.ok()) throw new Error('Unable to create/login admin')
-  const body = await res.json()
-  return { token: body.access_token, email: adminEmail, password }
+  for (const candidate of candidatePasswords) {
+    const res = await base.post('auth/login', { data: { email: adminEmail, password: candidate } })
+    if (res.status() === 429) {
+      await sleep(1500)
+      continue
+    }
+    if (res.ok()) {
+      const body = await res.json()
+      cachedAdminPassword = candidate
+      cachedAdminToken = body.access_token
+      return { token: body.access_token, email: adminEmail, password: candidate }
+    }
+  }
+  throw new Error('Unable to create/login admin')
 }
 
 async function loginToken(base, email, password) {
-  const res = await base.post('/auth/login', { data: { email, password } })
+  const res = await base.post('auth/login', { data: { email, password } })
   const body = await res.json()
   return body.access_token
 }
@@ -53,7 +92,7 @@ export async function createLearner(context, adminToken, overrides = {}) {
   const email = overrides.email || `learner+${suffix}@example.com`
   const user_id = overrides.user_id || `LRN${suffix}`
   const password = overrides.password || 'Password123!'
-  const resp = await base.post('/users/', {
+  const resp = await base.post('users/', {
     data: {
       email,
       name: overrides.name || 'Learner Test',
@@ -74,10 +113,10 @@ export async function createCourseAndNode(adminToken) {
     extraHTTPHeaders: { Authorization: `Bearer ${adminToken}` },
   })
   const suffix = Math.random().toString(36).slice(2, 6)
-  const { data: course } = await base.post('/courses/', {
+  const { data: course } = await base.post('courses/', {
     data: { title: `E2E Course ${suffix}`, description: 'E2E course', status: 'DRAFT' },
   }).then(async r => ({ data: await r.json(), status: r.status() }))
-  const { data: node } = await base.post('/nodes/', {
+  const { data: node } = await base.post('nodes/', {
     data: { course_id: course.id, title: 'Module 1', order: 0 },
   }).then(async r => ({ data: await r.json(), status: r.status() }))
   return { course, node }

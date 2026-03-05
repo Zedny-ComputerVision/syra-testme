@@ -141,12 +141,12 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
           {isAdmin && (
             <Section label="Tests" defaultOpen>
               <NavLink to="/admin/exams/new" icon="newTest" label="New Test" active={isActive('/admin/exams/new')} />
-              <NavLink to="/admin/exams" icon="manageTests" label="Manage Tests" active={location.pathname === '/admin/exams'} />
+              <NavLink to="/admin/tests" icon="manageTests" label="Manage Tests" active={location.pathname.startsWith('/admin/tests')} />
               <NavLink to="/admin/templates" icon="templates" label="Test Templates" active={isActive('/admin/templates')} />
               <NavLink to="/admin/question-pools" icon="pools" label="Question Pools" active={isActive('/admin/question-pools')} />
               <NavLink to="/admin/grading-scales" icon="grading" label="Grading Scales" active={isActive('/admin/grading-scales')} />
               <NavLink to="/admin/categories" icon="categories" label="Categories" active={isActive('/admin/categories')} />
-              <NavLink to="/admin/certificates" icon="certificates" label="Certificates" active={isActive('/admin/certificates')} />
+              <NavLink to="/admin/certificates" icon="certificates" label="Manage Certificates" active={isActive('/admin/certificates')} />
               <NavLink to="/admin/courses" icon="manageTests" label="Courses" active={isActive('/admin/courses')} />
               <NavLink to="/admin/surveys" icon="analysis" label="Surveys" active={isActive('/admin/surveys')} />
             </Section>
@@ -162,7 +162,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
           {/* ── USERS ── */}
           {isSuperAdmin && (
-            <Section label="Users">
+            <Section label="Users" defaultOpen>
               <NavLink to="/admin/users" icon="users" label="User Profiles" active={isActive('/admin/users')} />
               <NavLink to="/admin/roles" icon="roles" label="Roles & Permissions" active={isActive('/admin/roles')} />
               <NavLink to="/admin/user-groups" icon="groups" label="User Groups" active={isActive('/admin/user-groups')} />
@@ -171,10 +171,10 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
           {/* ── REPORTING ── */}
           {isAdmin && (
-            <Section label="Reporting">
+            <Section label="Reporting" defaultOpen>
               <NavLink to="/admin/attempt-analysis" icon="analysis" label="Attempt Analysis" active={isActive('/admin/attempt-analysis')} />
               <NavLink to="/admin/report-builder" icon="reports" label="Report Builder" active={isActive('/admin/report-builder')} />
-              <NavLink to="/admin/reports" icon="reports" label="Schedules" active={isActive('/admin/reports')} />
+              <NavLink to="/admin/reports" icon="reports" label="Scheduled Reports" active={isActive('/admin/reports')} />
               <NavLink to="/admin/settings" icon="settings" label="Settings" active={isActive('/admin/settings')} />
               <NavLink to="/admin/predefined-reports" icon="reports" label="Predefined Reports" active={isActive('/admin/predefined-reports')} />
               <NavLink to="/admin/favorite-reports" icon="reports" label="Favorite Reports" active={isActive('/admin/favorite-reports')} />
@@ -182,7 +182,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
             </Section>
           )}
           {isAdmin && (
-            <Section label="System">
+            <Section label="System" defaultOpen>
               <NavLink to="/admin/integrations" icon="settings" label="Integrations" active={isActive('/admin/integrations')} />
               <NavLink to="/admin/maintenance" icon="settings" label="Maintenance" active={isActive('/admin/maintenance')} />
             </Section>

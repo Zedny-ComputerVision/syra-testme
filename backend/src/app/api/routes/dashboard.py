@@ -11,9 +11,11 @@ router = APIRouter()
 
 def _build_schedule_read(s: Schedule) -> ScheduleRead:
     exam = s.exam
+    test = getattr(s, "test", None)
     return ScheduleRead(
         id=s.id,
         exam_id=s.exam_id,
+        test_id=s.test_id,
         user_id=s.user_id,
         scheduled_at=s.scheduled_at,
         access_mode=s.access_mode,
@@ -23,6 +25,9 @@ def _build_schedule_read(s: Schedule) -> ScheduleRead:
         exam_title=exam.title if exam else None,
         exam_type=exam.type if exam else None,
         exam_time_limit=exam.time_limit if exam else None,
+        test_name=test.name if test else None,
+        test_type=test.type.value if test else None,
+        test_time_limit=test.time_limit_minutes if test else None,
     )
 
 
@@ -34,11 +39,8 @@ async def dashboard(db: Session = Depends(get_db_dep), current=Depends(get_curre
     in_progress = len([a for a in attempts if a.status == AttemptStatus.IN_PROGRESS]) if attempts else 0
     completed = len([a for a in attempts if a.status != AttemptStatus.IN_PROGRESS]) if attempts else 0
     best_score = max([a.score for a in attempts if a.score is not None], default=None)
-    avg_score = (
-        sum([a.score for a in attempts if a.score is not None]) / len([a for a in attempts if a.score is not None])
-        if attempts
-        else None
-    )
+    scored = [a.score for a in attempts if a.score is not None]
+    avg_score = sum(scored) / len(scored) if scored else None
     schedules_query = select(Schedule)
     if current.role == RoleEnum.LEARNER:
         schedules_query = schedules_query.where(Schedule.user_id == current.id)

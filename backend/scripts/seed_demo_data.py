@@ -93,7 +93,7 @@ def seed():
         # --- Exam with proctoring ---
         exam1 = Exam(
             node_id=node1.id, title="Programming Fundamentals Exam", type=ExamType.MCQ,
-            status=ExamStatus.OPEN, time_limit=30, max_attempts=2, passing_score=70.0,
+            status=ExamStatus.OPEN, time_limit=30, max_attempts=3, passing_score=70.0,
             category_id=cat_test.id, grading_scale_id=scale.id, created_by_id=instructor.id,
             proctoring_config={
                 "face_detection": True, "audio_detection": True, "object_detection": True,
@@ -109,7 +109,7 @@ def seed():
         )
         exam3 = Exam(
             node_id=node3.id, title="Algorithm Analysis", type=ExamType.TEXT,
-            status=ExamStatus.OPEN, time_limit=45, max_attempts=1, passing_score=50.0,
+            status=ExamStatus.OPEN, time_limit=45, max_attempts=3, passing_score=50.0,
             category_id=cat_test.id, created_by_id=instructor.id,
         )
         db.add_all([exam1, exam2, exam3])
@@ -118,26 +118,26 @@ def seed():
         # --- Questions for Exam 1 ---
         questions = [
             Question(exam_id=exam1.id, text="What is the output of print(2 ** 3)?", type=ExamType.MCQ,
-                     options=["6", "8", "9", "5"], correct_answer="1", points=2.0, order=1),
+                     options=["6", "8", "9", "5"], correct_answer="B", points=2.0, order=1),
             Question(exam_id=exam1.id, text="Which keyword is used to define a function in Python?", type=ExamType.MCQ,
-                     options=["func", "def", "function", "define"], correct_answer="1", points=2.0, order=2),
+                     options=["func", "def", "function", "define"], correct_answer="B", points=2.0, order=2),
             Question(exam_id=exam1.id, text="What data type is the result of: 10 / 3?", type=ExamType.MCQ,
-                     options=["int", "float", "str", "bool"], correct_answer="1", points=2.0, order=3),
+                     options=["int", "float", "str", "bool"], correct_answer="B", points=2.0, order=3),
             Question(exam_id=exam1.id, text="Which of these is a mutable data type?", type=ExamType.MCQ,
-                     options=["tuple", "string", "list", "int"], correct_answer="2", points=2.0, order=4),
+                     options=["tuple", "string", "list", "int"], correct_answer="C", points=2.0, order=4),
             Question(exam_id=exam1.id, text="What does the 'len()' function return?", type=ExamType.MCQ,
-                     options=["The type", "The length", "The sum", "The max"], correct_answer="1", points=2.0, order=5),
+                     options=["The type", "The length", "The sum", "The max"], correct_answer="B", points=2.0, order=5),
         ]
         db.add_all(questions)
 
         # --- Questions for Exam 2 ---
         q2_list = [
             Question(exam_id=exam2.id, text="What is the time complexity of binary search?", type=ExamType.MCQ,
-                     options=["O(n)", "O(log n)", "O(n²)", "O(1)"], correct_answer="1", points=1.0, order=1),
+                     options=["O(n)", "O(log n)", "O(n²)", "O(1)"], correct_answer="B", points=1.0, order=1),
             Question(exam_id=exam2.id, text="Which data structure uses FIFO?", type=ExamType.MCQ,
-                     options=["Stack", "Queue", "Tree", "Graph"], correct_answer="1", points=1.0, order=2),
+                     options=["Stack", "Queue", "Tree", "Graph"], correct_answer="B", points=1.0, order=2),
             Question(exam_id=exam2.id, text="A stack uses which principle?", type=ExamType.MCQ,
-                     options=["FIFO", "LIFO", "Random", "Priority"], correct_answer="1", points=1.0, order=3),
+                     options=["FIFO", "LIFO", "Random", "Priority"], correct_answer="B", points=1.0, order=3),
         ]
         db.add_all(q2_list)
 
@@ -147,7 +147,7 @@ def seed():
         db.flush()
         pool_q = Question(exam_id=exam1.id, text="What is recursion?", type=ExamType.MCQ,
                           options=["A loop", "A function calling itself", "A variable", "A class"],
-                          correct_answer="1", points=1.0, order=6, pool_id=pool.id)
+                          correct_answer="B", points=1.0, order=6, pool_id=pool.id)
         db.add(pool_q)
 
         # --- Schedules ---

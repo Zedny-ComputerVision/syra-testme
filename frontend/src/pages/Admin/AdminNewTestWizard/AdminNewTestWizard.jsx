@@ -109,6 +109,21 @@ export default function AdminNewTestWizard() {
     audio_chunk_ms: 3000,
     screenshot_interval_sec: 60,
   })
+  const [proctoringView, setProctoringView] = useState('candidate_monitoring')
+  const [proctoringSessionId, setProctoringSessionId] = useState('')
+  const [proctoringLoading, setProctoringLoading] = useState(false)
+  const [proctoringRows, setProctoringRows] = useState([])
+  const [proctoringSessions, setProctoringSessions] = useState([])
+  const [specialAccommodations, setSpecialAccommodations] = useState('')
+  const [specialRequests, setSpecialRequests] = useState('')
+  const [proctoringSearch, setProctoringSearch] = useState({
+    attemptId: '',
+    username: '',
+    sessionName: '',
+    status: '',
+    userGroup: '',
+    comment: '',
+  })
 
   /* ─── Step 3: Questions ─── */
   const [questions, setQuestions] = useState([])
@@ -120,7 +135,7 @@ export default function AdminNewTestWizard() {
 
   /* ─── Step 4: Grading ─── */
   const [passingScore, setPassingScore] = useState(60)
-  const [maxAttempts, setMaxAttempts] = useState(1)
+  const [maxAttempts, setMaxAttempts] = useState(3)
   const [gradingScaleId, setGradingScaleId] = useState('')
   const [gradingScales, setGradingScales] = useState([])
   const [negativeMarking, setNegativeMarking] = useState(false)
@@ -470,6 +485,62 @@ export default function AdminNewTestWizard() {
   const filteredUsers = users.filter(u =>
     !userSearch || u.user_id?.toLowerCase().includes(userSearch.toLowerCase()) || u.name?.toLowerCase().includes(userSearch.toLowerCase())
   )
+  const fmtDateTime = (v) => (v ? new Date(v).toLocaleString() : '-')
+
+  useEffect(() => {
+    if (step !== 2 || !examId) return
+    let cancelled = false
+    setProctoringLoading(true)
+    Promise.all([adminApi.attempts(), adminApi.schedules()])
+      .then(([attemptsRes, schedulesRes]) => {
+        if (cancelled) return
+        const attempts = (attemptsRes.data || []).filter((a) => String(a.exam_id) === String(examId))
+        const sessions = (schedulesRes.data || []).filter((s) => String(s.exam_id) === String(examId))
+        setProctoringSessions(sessions)
+
+        const schedulesByUser = new Map()
+        sessions.forEach((s) => schedulesByUser.set(String(s.user_id), s))
+
+        const rows = attempts.map((a) => {
+          const fallbackUser = users.find((u) => String(u.id) === String(a.user_id))
+          const session = schedulesByUser.get(String(a.user_id))
+          return {
+            id: String(a.id),
+            attemptId: String(a.id).slice(0, 8),
+            username: a.user?.user_id || fallbackUser?.user_id || fallbackUser?.name || String(a.user_id).slice(0, 8),
+            sessionName: session ? `Session ${String(session.id).slice(0, 6)}` : '-',
+            status: a.status || '-',
+            startedAt: a.started_at,
+            userGroup: '-',
+            comment: a.status === 'GRADED' ? 'Reviewed' : '',
+            proctorRate: '-',
+            sessionId: session?.id || '',
+          }
+        })
+        setProctoringRows(rows)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProctoringSessions([])
+          setProctoringRows([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setProctoringLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [step, examId, users])
+
+  const filteredProctoringRows = proctoringRows.filter((row) => {
+    if (proctoringSessionId && String(row.sessionId) !== String(proctoringSessionId)) return false
+    if (proctoringSearch.attemptId && !row.attemptId.toLowerCase().includes(proctoringSearch.attemptId.toLowerCase())) return false
+    if (proctoringSearch.username && !row.username.toLowerCase().includes(proctoringSearch.username.toLowerCase())) return false
+    if (proctoringSearch.sessionName && !row.sessionName.toLowerCase().includes(proctoringSearch.sessionName.toLowerCase())) return false
+    if (proctoringSearch.status && row.status !== proctoringSearch.status) return false
+    if (proctoringSearch.userGroup && !row.userGroup.toLowerCase().includes(proctoringSearch.userGroup.toLowerCase())) return false
+    if (proctoringSearch.comment && !row.comment.toLowerCase().includes(proctoringSearch.comment.toLowerCase())) return false
+    return true
+  })
 
   const renderStep = () => {
     switch (step) {
@@ -759,62 +830,161 @@ export default function AdminNewTestWizard() {
           </div>
 
           <div className={styles.sectionDivider}>Proctoring</div>
-          <div className={styles.presetRow}>
-            <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 15, mouth_open_threshold: 0.4, audio_rms_threshold: 0.1, max_face_absence_sec: 8, max_tab_blurs: 5, max_alerts_before_autosubmit: 8, frame_interval_ms: 4000, audio_chunk_ms: 4000, screenshot_interval_sec: 90 }))}>Lenient</button>
-            <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 12, mouth_open_threshold: 0.35, audio_rms_threshold: 0.08, max_face_absence_sec: 5, max_tab_blurs: 3, max_alerts_before_autosubmit: 5, frame_interval_ms: 3000, audio_chunk_ms: 3000, screenshot_interval_sec: 60 }))}>Standard</button>
-            <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 8, mouth_open_threshold: 0.25, audio_rms_threshold: 0.05, max_face_absence_sec: 3, max_tab_blurs: 1, max_alerts_before_autosubmit: 3, frame_interval_ms: 2000, audio_chunk_ms: 2000, screenshot_interval_sec: 30, screen_capture: true }))}>Strict</button>
-          </div>
-          <div className={styles.detectorsGrid}>
-            {DETECTORS.map(d => (
-              <div key={d.key} className={`${styles.detectorCard} ${proctoring[d.key] ? styles.detectorOn : ''}`} onClick={() => toggleDetector(d.key)}>
-                <div className={styles.detectorToggle}>
-                  <div className={`${styles.toggleTrack} ${proctoring[d.key] ? styles.toggleTrackOn : ''}`}>
-                    <div className={styles.toggleThumb} />
-                  </div>
+          <div className={styles.proctoringShell}>
+            <div className={styles.proctoringHead}>
+              <h4 className={styles.proctoringTitle}>Proctoring</h4>
+              <div className={styles.proctoringViews}>
+                <button type="button" className={`${styles.viewTab} ${proctoringView === 'candidate_monitoring' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('candidate_monitoring')}>Candidate monitoring</button>
+                <button type="button" className={`${styles.viewTab} ${proctoringView === 'special_accommodations' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('special_accommodations')}>Special accommodations</button>
+                <button type="button" className={`${styles.viewTab} ${proctoringView === 'special_requests' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('special_requests')}>Special requests</button>
+              </div>
+            </div>
+
+            <div className={styles.inputRow}>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Test</label>
+                <input className={styles.input} value={title || 'Untitled test'} readOnly />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Testing session</label>
+                <select className={styles.select} value={proctoringSessionId} onChange={(e) => setProctoringSessionId(e.target.value)}>
+                  <option value="">All testing sessions</option>
+                  {proctoringSessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {`Session ${String(s.id).slice(0, 6)} - ${fmtDateTime(s.scheduled_at)}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {proctoringView === 'candidate_monitoring' && (
+              <div className={styles.monitoringTableCard}>
+                <div className={styles.monitoringActions}>
+                  <button type="button" className={styles.btnSecondary}>Pause session</button>
+                  <button type="button" className={styles.btnSecondary}>Resume session</button>
+                  <button type="button" className={styles.btnPrimarySolid}>Open supervision mode</button>
+                  <button type="button" className={styles.btnSecondary}>Filter</button>
                 </div>
-                <div>
-                  <div className={styles.detectorName}>{d.label}</div>
-                  <div className={styles.detectorDesc}>{d.desc}</div>
+
+                <div className={styles.monitoringTableWrap}>
+                  <table className={styles.monitoringTable}>
+                    <thead>
+                      <tr>
+                        <th>Actions</th>
+                        <th>Attempt ID</th>
+                        <th>Username</th>
+                        <th>Testing session name</th>
+                        <th>Attempt status</th>
+                        <th>Test started</th>
+                        <th>User group</th>
+                        <th>Comment</th>
+                        <th>Proctor rate</th>
+                      </tr>
+                      <tr className={styles.monitoringSearchRow}>
+                        <th></th>
+                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.attemptId} onChange={(e) => setProctoringSearch((p) => ({ ...p, attemptId: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.username} onChange={(e) => setProctoringSearch((p) => ({ ...p, username: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.sessionName} onChange={(e) => setProctoringSearch((p) => ({ ...p, sessionName: e.target.value }))} /></th>
+                        <th>
+                          <select className={styles.tableFilter} value={proctoringSearch.status} onChange={(e) => setProctoringSearch((p) => ({ ...p, status: e.target.value }))}>
+                            <option value="">Select one</option>
+                            <option value="IN_PROGRESS">IN_PROGRESS</option>
+                            <option value="SUBMITTED">SUBMITTED</option>
+                            <option value="GRADED">GRADED</option>
+                          </select>
+                        </th>
+                        <th></th>
+                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.userGroup} onChange={(e) => setProctoringSearch((p) => ({ ...p, userGroup: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.comment} onChange={(e) => setProctoringSearch((p) => ({ ...p, comment: e.target.value }))} /></th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {proctoringLoading ? (
+                        <tr><td colSpan={9}>Loading attempts...</td></tr>
+                      ) : filteredProctoringRows.length === 0 ? (
+                        <tr><td colSpan={9}>There are no test attempts</td></tr>
+                      ) : (
+                        filteredProctoringRows.map((row) => (
+                          <tr key={row.id}>
+                            <td>
+                              <div className={styles.rowActionGroup}>
+                                <button type="button" className={styles.rowIconBtn} title="Pause attempt" aria-label="Pause attempt">
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M8 5v14M16 5v14" />
+                                  </svg>
+                                </button>
+                                <button type="button" className={styles.rowIconBtn} title="Open reports" aria-label="Open reports">
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+                                  </svg>
+                                </button>
+                                <button type="button" className={styles.rowIconBtn} title="Open video recordings" aria-label="Open video recordings">
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M23 7l-7 5 7 5V7z" />
+                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                            <td>{row.attemptId}</td>
+                            <td>{row.username}</td>
+                            <td>{row.sessionName}</td>
+                            <td>{row.status}</td>
+                            <td>{fmtDateTime(row.startedAt)}</td>
+                            <td>{row.userGroup}</td>
+                            <td>{row.comment || '-'}</td>
+                            <td>{row.proctorRate}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className={styles.monitoringFooter}>
+                  <span>Save displayed column set</span>
+                  <span>Rows: {filteredProctoringRows.length}</span>
                 </div>
               </div>
-            ))}
-          </div>
-          <div className={styles.thresholdGrid}>
-            <div>
-              <label className={styles.label}>Eye deviation (deg)</label>
-              <input className={styles.input} type="number" min={5} max={30} value={proctoring.eye_deviation_deg} onChange={e => setProctoring(p => ({ ...p, eye_deviation_deg: Number(e.target.value) }))} />
+            )}
+
+            {proctoringView === 'special_accommodations' && (
+              <div className={styles.proctoringNotes}>
+                <label className={styles.label}>Special accommodations</label>
+                <textarea className={styles.textarea} value={specialAccommodations} onChange={(e) => setSpecialAccommodations(e.target.value)} rows={4} />
+              </div>
+            )}
+
+            {proctoringView === 'special_requests' && (
+              <div className={styles.proctoringNotes}>
+                <label className={styles.label}>Special requests</label>
+                <textarea className={styles.textarea} value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={4} />
+              </div>
+            )}
+
+            <div className={styles.sectionDivider}>Proctoring controls</div>
+            <div className={styles.presetRow}>
+              <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 15, mouth_open_threshold: 0.4, audio_rms_threshold: 0.1, max_face_absence_sec: 8, max_tab_blurs: 5, max_alerts_before_autosubmit: 8, frame_interval_ms: 4000, audio_chunk_ms: 4000, screenshot_interval_sec: 90 }))}>Lenient</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 12, mouth_open_threshold: 0.35, audio_rms_threshold: 0.08, max_face_absence_sec: 5, max_tab_blurs: 3, max_alerts_before_autosubmit: 5, frame_interval_ms: 3000, audio_chunk_ms: 3000, screenshot_interval_sec: 60 }))}>Standard</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 8, mouth_open_threshold: 0.25, audio_rms_threshold: 0.05, max_face_absence_sec: 3, max_tab_blurs: 1, max_alerts_before_autosubmit: 3, frame_interval_ms: 2000, audio_chunk_ms: 2000, screenshot_interval_sec: 30, screen_capture: true }))}>Strict</button>
             </div>
-            <div>
-              <label className={styles.label}>Mouth open threshold</label>
-              <input className={styles.input} type="number" step="0.01" min={0.1} max={1} value={proctoring.mouth_open_threshold} onChange={e => setProctoring(p => ({ ...p, mouth_open_threshold: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className={styles.label}>Audio RMS threshold</label>
-              <input className={styles.input} type="number" step="0.01" min={0.01} max={1} value={proctoring.audio_rms_threshold} onChange={e => setProctoring(p => ({ ...p, audio_rms_threshold: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className={styles.label}>Max face absence (s)</label>
-              <input className={styles.input} type="number" min={1} max={30} value={proctoring.max_face_absence_sec} onChange={e => setProctoring(p => ({ ...p, max_face_absence_sec: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className={styles.label}>Max tab blurs</label>
-              <input className={styles.input} type="number" min={0} max={10} value={proctoring.max_tab_blurs} onChange={e => setProctoring(p => ({ ...p, max_tab_blurs: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className={styles.label}>Auto-submit after alerts</label>
-              <input className={styles.input} type="number" min={1} max={20} value={proctoring.max_alerts_before_autosubmit} onChange={e => setProctoring(p => ({ ...p, max_alerts_before_autosubmit: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className={styles.label}>Frame interval (ms)</label>
-              <input className={styles.input} type="number" min={1000} max={10000} value={proctoring.frame_interval_ms} onChange={e => setProctoring(p => ({ ...p, frame_interval_ms: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className={styles.label}>Audio chunk (ms)</label>
-              <input className={styles.input} type="number" min={1000} max={10000} value={proctoring.audio_chunk_ms} onChange={e => setProctoring(p => ({ ...p, audio_chunk_ms: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className={styles.label}>Screenshot interval (s)</label>
-              <input className={styles.input} type="number" min={15} max={300} value={proctoring.screenshot_interval_sec} onChange={e => setProctoring(p => ({ ...p, screenshot_interval_sec: Number(e.target.value) }))} />
+            <div className={styles.detectorsGrid}>
+              {DETECTORS.map(d => (
+                <div key={d.key} className={`${styles.detectorCard} ${proctoring[d.key] ? styles.detectorOn : ''}`} onClick={() => toggleDetector(d.key)}>
+                  <div className={styles.detectorToggle}>
+                    <div className={`${styles.toggleTrack} ${proctoring[d.key] ? styles.toggleTrackOn : ''}`}>
+                      <div className={styles.toggleThumb} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className={styles.detectorName}>{d.label}</div>
+                    <div className={styles.detectorDesc}>{d.desc}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

@@ -81,6 +81,8 @@ export function AuthProvider({ children }) {
    */
   const login = useCallback((payload) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    setUser(decodeUser(payload.access_token));
+    setLoading(false);
     setTokens(payload);
   }, []);
 
@@ -99,6 +101,7 @@ export function AuthProvider({ children }) {
    */
   const updateTokens = useCallback((newTokens) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newTokens));
+    setUser(decodeUser(newTokens.access_token));
     setTokens(newTokens);
   }, []);
 

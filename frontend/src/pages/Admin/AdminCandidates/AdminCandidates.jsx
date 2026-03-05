@@ -32,6 +32,7 @@ export default function AdminCandidates() {
   const [rescheduleNotes, setRescheduleNotes] = useState('')
   const [rescheduleMsg, setRescheduleMsg] = useState('')
   const [rescheduling, setRescheduling] = useState(false)
+  const [downloadMsg, setDownloadMsg] = useState('')
 
   // Import state
   const [csvRows, setCsvRows] = useState([])
@@ -122,6 +123,24 @@ export default function AdminCandidates() {
     } finally { setImporting(false) }
   }
 
+  const handleDownloadReport = async (attemptId) => {
+    setDownloadMsg('')
+    try {
+      const { data } = await adminApi.generateReport(attemptId)
+      const blob = new Blob([data], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `proctoring-report-${attemptId.slice(0, 8)}.html`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setDownloadMsg(e.response?.data?.detail || 'Report download failed')
+    }
+  }
+
   return (
     <div className={styles.page}>
       <AdminPageHeader title="Candidates" subtitle="Monitor test attempts and proctoring" />
@@ -139,6 +158,7 @@ export default function AdminCandidates() {
               <option value="">All Exams</option>
               {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
             </select>
+            {downloadMsg && <div className={styles.importMsg}>{downloadMsg}</div>}
           </div>
           <div className={styles.statusFilters}>
             {STATUS_FILTERS.map(f => (
@@ -184,6 +204,9 @@ export default function AdminCandidates() {
                       <td style={{ color: 'var(--color-muted)', fontSize: '0.82rem' }}>{getDuration(a)}</td>
                       <td>
                         <button className={styles.actionBtn} onClick={() => navigate(`/admin/attempt-analysis?id=${a.id}`)}>View</button>
+                        <button className={styles.actionBtn} onClick={() => handleDownloadReport(a.id)} style={{ marginLeft: '0.4rem' }}>
+                          Download Report
+                        </button>
                       </td>
                     </tr>
                   ))}

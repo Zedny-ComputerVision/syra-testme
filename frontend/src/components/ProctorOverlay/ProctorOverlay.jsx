@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import styles from './ProctorOverlay.module.scss'
 import { startAudioCapture, stopAudioCapture } from '../../utils/audioCapture'
 
-export default function ProctorOverlay({ attemptId, token, onViolation, config = {} }) {
+export default function ProctorOverlay({ attemptId, token, onViolation, onForcedSubmit, onStreamReady, config = {} }) {
   const [status, setStatus] = useState('disconnected')
   const [alerts, setAlerts] = useState([])
   const wsRef = useRef(null)
@@ -20,6 +20,7 @@ export default function ProctorOverlay({ attemptId, token, onViolation, config =
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
         streamRef.current = stream
+        onStreamReady?.(stream)
         if (videoRef.current) {
           videoRef.current.srcObject = stream
         }
@@ -30,9 +31,10 @@ export default function ProctorOverlay({ attemptId, token, onViolation, config =
     startCam()
     return () => {
       cancelled = true
+      onStreamReady?.(null)
       streamRef.current?.getTracks().forEach(t => t.stop())
     }
-  }, [])
+  }, [onStreamReady])
 
   // WebSocket connection + frame streaming
   useEffect(() => {
@@ -96,7 +98,8 @@ export default function ProctorOverlay({ attemptId, token, onViolation, config =
           onViolation?.(msg)
         } else if (msg.type === 'forced_submit') {
           onViolation?.({ severity: 'HIGH', event_type: 'FORCED_SUBMIT', detail: 'Exam auto-submitted due to violations' })
-          window.location.href = `/attempts/${attemptId}`
+          if (onForcedSubmit) onForcedSubmit()
+          else window.location.href = `/attempts/${attemptId}`
         }
       } catch (_) {}
     }

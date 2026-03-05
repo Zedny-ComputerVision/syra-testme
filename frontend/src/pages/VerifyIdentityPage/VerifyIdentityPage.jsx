@@ -14,6 +14,7 @@ export default function VerifyIdentityPage() {
   const streamRef = useRef(null)
   const [selfie, setSelfie] = useState(null)
   const [idPhoto, setIdPhoto] = useState(null)
+  const [idNumber, setIdNumber] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
@@ -87,7 +88,8 @@ export default function VerifyIdentityPage() {
         lighting_score: flags.lighting_score ?? lightingScore,
         mic_ok: flags.mic_ok ?? true,
         cam_ok: flags.cam_ok ?? true,
-        fs_ok: document.fullscreenElement != null || flags.fs_ok ?? true,
+        fs_ok: document.fullscreenElement != null || (flags.fs_ok ?? true),
+        id_text: idNumber || undefined,
       }
       const { data } = await precheckAttempt(attemptId, payload)
       setResult(data)
@@ -146,6 +148,16 @@ export default function VerifyIdentityPage() {
             <button className={styles.btnPrimary} onClick={confirm} disabled={submitting}>
               {submitting ? 'Verifying...' : 'Confirm & Continue'}
             </button>
+          </div>
+          <div className={styles.formRow}>
+            <label className={styles.label}>ID number (optional)</label>
+            <input
+              className={styles.input}
+              placeholder="e.g. passport / national ID"
+              value={idNumber}
+              onChange={e => setIdNumber(e.target.value)}
+            />
+            <p className={styles.helper}>If OCR misses your ID text, you can type it here.</p>
           </div>
           {result && (
             <div className={styles.resultBox}>
