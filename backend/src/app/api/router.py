@@ -59,10 +59,9 @@ router.include_router(reports.router, prefix="/reports", tags=["reports"])
 router.include_router(precheck.router, tags=["precheck"])
 try:
     from ..modules.tests.routes_admin import router as tests_router
-
-    router.include_router(tests_router, tags=["tests"])
-except Exception:
-    pass
+except Exception as exc:
+    raise RuntimeError("Failed to register admin tests router (/admin/tests)") from exc
+router.include_router(tests_router, tags=["tests"])
 router.include_router(health.router, tags=["health"])
 
 try:

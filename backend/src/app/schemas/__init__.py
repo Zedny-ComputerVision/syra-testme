@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, EmailStr, field_validator, model_validator
 from pydantic.config import ConfigDict
 
 from ..models import (
@@ -34,6 +34,12 @@ class RefreshRequest(BaseModel):
 
 class Message(BaseModel):
     detail: str
+
+
+class ReportScheduleRunResult(BaseModel):
+    detail: str
+    report_url: str
+    email_status: str
 
 
 class UserBase(BaseModel):
@@ -69,9 +75,32 @@ class UserRead(UserBase):
 
 
 class UserUpdate(BaseModel):
+    user_id: Optional[str] = None
     name: Optional[str] = None
+    email: Optional[EmailStr] = None
     role: Optional[RoleEnum] = None
     is_active: Optional[bool] = None
+
+
+class UserSelfUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
+class UserPreferenceUpdate(BaseModel):
+    value: Any = None
+
+
+class UserPreferenceRead(BaseModel):
+    key: str
+    value: Any = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminPasswordResetRequest(BaseModel):
+    new_password: str
 
 
 class CourseBase(BaseModel):
@@ -151,7 +180,10 @@ class QuestionBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     text: str
-    type: ExamType = Field(validation_alias="question_type")
+    type: ExamType = Field(
+        validation_alias=AliasChoices("question_type", "type"),
+        serialization_alias="question_type",
+    )
     options: Optional[list[str]] = None
     correct_answer: Optional[str] = None
     points: float = 1.0
@@ -255,6 +287,24 @@ class ExamCreate(ExamBase):
     questions: Optional[list[QuestionCreate]] = None
 
 
+class ExamUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    node_id: Optional[UUID] = None
+    title: Optional[str] = None
+    type: Optional[ExamType] = Field(default=None, alias="exam_type")
+    status: Optional[ExamStatus] = None
+    time_limit: Optional[int] = Field(default=None, alias="time_limit_minutes")
+    max_attempts: Optional[int] = None
+    passing_score: Optional[float] = None
+    proctoring_config: Optional[dict] = None
+    category_id: Optional[UUID] = None
+    grading_scale_id: Optional[UUID] = None
+    description: Optional[str] = None
+    settings: Optional[dict] = None
+    certificate: Optional[dict] = None
+
+
 class ExamRead(ExamBase):
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
@@ -284,12 +334,16 @@ class AttemptRead(AttemptBase):
     id: UUID
     user_id: UUID
     status: AttemptStatus
+    paused: bool = False
     score: Optional[float]
     started_at: Optional[datetime]
     submitted_at: Optional[datetime]
     identity_verified: bool
     created_at: datetime
     updated_at: datetime
+    test_title: Optional[str] = None
+    test_type: Optional[ExamType] = None
+    test_time_limit: Optional[int] = None
     exam_title: Optional[str] = None
     exam_type: Optional[ExamType] = None
     exam_time_limit: Optional[int] = None
@@ -304,16 +358,25 @@ class AttemptRead(AttemptBase):
 
 class AttemptAnswerBase(BaseModel):
     question_id: UUID
-    answer: Optional[str] = None
+    answer: Optional[str | list | dict] = None
 
 
 class AttemptAnswerRead(AttemptAnswerBase):
     id: UUID
     attempt_id: UUID
+    question_text: Optional[str] = None
     is_correct: Optional[bool]
     points_earned: Optional[float]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AttemptAnswerReviewUpdate(BaseModel):
+    points_earned: float
+
+
+class AttemptResolveRequest(AttemptBase):
+    pass
 
 
 class ScheduleBase(BaseModel):
@@ -335,6 +398,9 @@ class ScheduleRead(ScheduleBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    user_name: Optional[str] = None
+    user_student_id: Optional[str] = None
+    test_title: Optional[str] = None
     exam_title: Optional[str] = None
     exam_type: Optional[ExamType] = None
     exam_time_limit: Optional[int] = None
@@ -357,6 +423,7 @@ class QuestionPoolCreate(QuestionPoolBase):
 class QuestionPoolRead(QuestionPoolBase):
     id: UUID
     created_by_id: Optional[UUID] = None
+    question_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -372,6 +439,23 @@ class ProctoringEventRead(BaseModel):
     occurred_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProctoringRuleAlert(BaseModel):
+    event_type: str
+    severity: SeverityEnum
+    detail: str
+    action: str
+    rule_id: str
+    threshold: int
+    actual_count: int
+
+
+class ProctoringPingResponse(BaseModel):
+    detail: str
+    alerts: list[ProctoringRuleAlert] = Field(default_factory=list)
+    forced_submit: bool = False
+    submit_reason: Optional[str] = None
 
 
 class DashboardRead(BaseModel):
@@ -442,6 +526,13 @@ class SurveyCreate(BaseModel):
     title: str
     description: Optional[str] = None
     questions: Optional[list[dict]] = None
+
+
+class SurveyUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    questions: Optional[list[dict]] = None
+    is_active: Optional[bool] = None
 
 
 class SurveyRead(BaseModel):
@@ -528,6 +619,39 @@ class ReportScheduleRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ScheduleUpdate(BaseModel):
+    scheduled_at: Optional[datetime] = None
+    access_mode: Optional[AccessMode] = None
+    notes: Optional[str] = None
+
+
+class CustomReportExportRequest(BaseModel):
+    dataset: str
+    columns: list[str]
+    search: Optional[str] = None
+
+    @field_validator("columns")
+    @classmethod
+    def validate_columns(cls, v: list[str]):
+        cleaned = []
+        seen = set()
+        for raw in v or []:
+            column = str(raw or "").strip()
+            if not column or column in seen:
+                continue
+            seen.add(column)
+            cleaned.append(column)
+        if not cleaned:
+            raise ValueError("At least one column is required")
+        return cleaned
+
+
+class CustomReportPreview(BaseModel):
+    rows: list[dict[str, Any]]
+    total: int
+    available_columns: list[str]
 
 
 class SystemSettingRead(BaseModel):

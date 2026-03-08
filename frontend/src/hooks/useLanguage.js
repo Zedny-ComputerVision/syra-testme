@@ -5,13 +5,13 @@ const translations = {
     // Navigation
     home: 'Home',
     dashboard: 'Dashboard',
-    exams: 'Exams',
+    exams: 'Tests',
     attempts: 'Attempts',
     schedule: 'Schedule',
     profile: 'Profile',
 
     // Admin navigation
-    admin_exams: 'Admin Exams',
+    admin_exams: 'Admin Tests',
     categories: 'Categories',
     grading_scales: 'Grading Scales',
     question_pools: 'Question Pools',
@@ -60,12 +60,12 @@ const translations = {
     not_found: 'Page not found',
 
     // Exam related
-    exam_name: 'Exam Name',
+    exam_name: 'Test Name',
     duration: 'Duration',
     questions: 'Questions',
     total_marks: 'Total Marks',
-    start_exam: 'Start Exam',
-    end_exam: 'End Exam',
+    start_exam: 'Start Test',
+    end_exam: 'End Test',
     time_remaining: 'Time Remaining',
     question: 'Question',
     answer: 'Answer',

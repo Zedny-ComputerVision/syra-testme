@@ -10,8 +10,8 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
-  border-right: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 55%, transparent), color-mix(in srgb, var(--color-border) 40%, transparent));
+  border-right: 1px solid var(--color-border);
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 120;
@@ -30,7 +30,7 @@
 /* ---------- Brand ---------- */
 .brand {
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
@@ -50,7 +50,7 @@
   height: 34px;
   border-radius: 8px;
   background: var(--color-primary);
-  color: #0b111d;
+  color: var(--color-button-text);
   font-weight: 800;
   font-size: 1rem;
   flex-shrink: 0;
@@ -74,7 +74,7 @@
 
 /* ---------- Collapsible Section ---------- */
 .section {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-border);
   padding: 0;
 }
 
@@ -138,19 +138,19 @@
   border-radius: 10px;
 
   &:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: color-mix(in srgb, var(--color-primary) 8%, transparent);
     opacity: 1;
   }
 }
 
 .active {
-  background-color: rgba(16, 185, 129, 0.1);
+  background-color: var(--color-success-bg);
   color: var(--color-primary);
   opacity: 1;
   font-weight: 600;
 
   &:hover {
-    background-color: rgba(16, 185, 129, 0.15);
+    background-color: var(--color-success-bg);
   }
 }
 
@@ -213,7 +213,7 @@
     display: block;
     position: fixed;
     inset: 0;
-    background: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.15), transparent 35%),
+    background: radial-gradient(circle at 20% 20%, var(--color-success-bg), transparent 35%),
                 radial-gradient(circle at 70% 10%, rgba(139, 92, 246, 0.18), transparent 35%),
                 rgba(0, 0, 0, 0.55);
     z-index: 999;

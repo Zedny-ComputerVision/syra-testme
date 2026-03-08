@@ -6,9 +6,42 @@ from sqlalchemy.orm import Session
 
 from ...models import Course, CourseStatus, RoleEnum
 from ...schemas import CourseCreate, CourseRead, CourseBase, Message
-from ..deps import get_current_user, get_db_dep, require_role
+from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
+
+
+def _clean_required_text(value: str | None, field_name: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field_name} is required",
+        )
+    return text
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _ensure_unique_course_title(db: Session, title: str, existing_course_id=None):
+    courses = db.scalars(select(Course)).all()
+    normalized = title.strip().lower()
+    for course in courses:
+        if course.id == existing_course_id:
+            continue
+        if str(course.title or "").strip().lower() == normalized:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Course title exists")
+
+
+def _normalize_course_payload(body: CourseBase) -> dict:
+    return {
+        "title": _clean_required_text(body.title, "Course title"),
+        "description": _clean_optional_text(body.description),
+        "status": body.status,
+    }
 
 
 @router.get("/", response_model=list[CourseRead])
@@ -16,17 +49,21 @@ async def list_courses(db: Session = Depends(get_db_dep), current=Depends(get_cu
     query = select(Course)
     if current.role == RoleEnum.LEARNER:
         query = query.where(Course.status == CourseStatus.PUBLISHED)
-    courses = db.scalars(query).all()
+    else:
+        ensure_permission(db, current, "Edit Tests")
+    courses = db.scalars(query.order_by(Course.created_at.desc())).all()
     return courses
 
 
 @router.post("/", response_model=CourseRead)
-async def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+    payload = _normalize_course_payload(body)
+    _ensure_unique_course_title(db, payload["title"])
     now = datetime.now(timezone.utc)
     course = Course(
-        title=body.title,
-        description=body.description,
-        status=body.status,
+        title=payload["title"],
+        description=payload["description"],
+        status=payload["status"],
         created_by_id=current.id,
         created_at=now,
         updated_at=now,
@@ -39,22 +76,28 @@ async def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), c
 
 @router.get("/{course_id}", response_model=CourseRead)
 async def get_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    course = db.get(Course, course_id)
+    course_pk = parse_uuid_param(course_id, detail="Course not found")
+    course = db.get(Course, course_pk)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     if current.role == RoleEnum.LEARNER and course.status == CourseStatus.DRAFT:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    if current.role != RoleEnum.LEARNER:
+        ensure_permission(db, current, "Edit Tests")
     return course
 
 
 @router.put("/{course_id}", response_model=CourseRead)
-async def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    course = db.get(Course, course_id)
+async def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+    course_pk = parse_uuid_param(course_id, detail="Course not found")
+    course = db.get(Course, course_pk)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     if current.role == RoleEnum.INSTRUCTOR and course.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
-    for field, value in body.model_dump().items():
+    payload = _normalize_course_payload(body)
+    _ensure_unique_course_title(db, payload["title"], existing_course_id=course.id)
+    for field, value in payload.items():
         setattr(course, field, value)
     course.updated_at = datetime.now(timezone.utc)
     db.add(course)
@@ -64,8 +107,9 @@ async def update_course(course_id: str, body: CourseBase, db: Session = Depends(
 
 
 @router.delete("/{course_id}", response_model=Message)
-async def delete_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN))):
-    course = db.get(Course, course_id)
+async def delete_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
+    course_pk = parse_uuid_param(course_id, detail="Course not found")
+    course = db.get(Course, course_pk)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     db.delete(course)

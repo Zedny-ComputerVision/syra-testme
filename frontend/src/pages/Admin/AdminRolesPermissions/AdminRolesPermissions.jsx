@@ -1,69 +1,200 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import { adminApi } from '../../../services/admin.service'
+import { canonicalizePermissionRows, DEFAULT_PERMISSION_ROWS } from '../../../utils/permissions'
 import styles from './AdminRolesPermissions.module.scss'
 
-const PERMISSIONS = [
-  { feature: 'View Dashboard', admin: true, instructor: true, learner: true },
-  { feature: 'Manage Users', admin: true, instructor: false, learner: false },
-  { feature: 'Create Exams', admin: true, instructor: true, learner: false },
-  { feature: 'Edit Exams', admin: true, instructor: true, learner: false },
-  { feature: 'Delete Exams', admin: true, instructor: true, learner: false },
-  { feature: 'Manage Categories', admin: true, instructor: true, learner: false },
-  { feature: 'Manage Grading Scales', admin: true, instructor: true, learner: false },
-  { feature: 'Manage Question Pools', admin: true, instructor: true, learner: false },
-  { feature: 'Assign Schedules', admin: true, instructor: true, learner: false },
-  { feature: 'View Attempt Analysis', admin: true, instructor: true, learner: false },
-  { feature: 'Generate Reports', admin: true, instructor: true, learner: false },
-  { feature: 'Take Exams', admin: false, instructor: false, learner: true },
-  { feature: 'View Own Attempts', admin: true, instructor: true, learner: true },
-  { feature: 'View Own Schedule', admin: true, instructor: true, learner: true },
-  { feature: 'View Audit Log', admin: true, instructor: false, learner: false },
-  { feature: 'Manage Roles', admin: true, instructor: false, learner: false },
-  { feature: 'System Settings', admin: true, instructor: false, learner: false },
-]
+const DEFAULTS = DEFAULT_PERMISSION_ROWS
+const KEY = 'permissions_config'
+
+function serializeRows(rows) {
+  return JSON.stringify(canonicalizePermissionRows(rows))
+}
 
 export default function AdminRolesPermissions() {
+  const [permissions, setPermissions] = useState(DEFAULTS)
+  const [savedPermissions, setSavedPermissions] = useState(DEFAULTS)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setLoadError('')
+
+    adminApi.getSetting(KEY).then(({ data }) => {
+      if (cancelled) return
+      const raw = data?.value
+      if (!raw) {
+        setPermissions(DEFAULTS)
+        setSavedPermissions(DEFAULTS)
+        return
+      }
+      try {
+        const parsed = JSON.parse(raw)
+        const canonical = canonicalizePermissionRows(parsed)
+        setPermissions(canonical)
+        setSavedPermissions(canonical)
+      } catch {
+        setPermissions(DEFAULTS)
+        setSavedPermissions(DEFAULTS)
+        setLoadError('Stored permissions were invalid. Showing default values.')
+      }
+    }).catch(() => {
+      if (cancelled) return
+      setPermissions(DEFAULTS)
+      setSavedPermissions(DEFAULTS)
+      setLoadError('Failed to load permission settings. Showing defaults.')
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
+  const dirty = useMemo(
+    () => serializeRows(permissions) !== serializeRows(savedPermissions),
+    [permissions, savedPermissions],
+  )
+
+  const toggle = (idx, role) => {
+    setPermissions((prev) => prev.map((permission, index) => (
+      index === idx ? { ...permission, [role]: !permission[role] } : permission
+    )))
+  }
+
+  const handleSave = async () => {
+    const canonical = canonicalizePermissionRows(permissions)
+    setSaving(true)
+    setNotice('')
+    try {
+      await adminApi.updateSetting(KEY, JSON.stringify(canonical))
+      setPermissions(canonical)
+      setSavedPermissions(canonical)
+      setNotice('Permissions saved.')
+      setTimeout(() => setNotice(''), 3000)
+    } catch {
+      setNotice('Failed to save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleReset = () => {
+    setPermissions(DEFAULTS)
+    setNotice('Restored the default matrix. Save to apply it.')
+    setTimeout(() => setNotice(''), 3000)
+  }
+
+  const handleReload = () => {
+    setNotice('')
+    setReloadKey((current) => current + 1)
+  }
+
+  const noticeClassName = `${styles.alert} ${notice.includes('Failed') ? styles.alertError : styles.alertSuccess}`
+
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Roles & Permissions" subtitle="Role-based access control overview" />
+      <AdminPageHeader title="Roles & Permissions" subtitle="Configure role-based access control">
+        <div className={styles.actionGroup}>
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={loading || saving}
+            className={styles.secondaryButton}
+          >
+            Restore Defaults
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={loading || saving || !dirty}
+            className={styles.primaryButton}
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </AdminPageHeader>
 
-      <div className={styles.matrixWrap}>
-        <table className={styles.matrix}>
-          <thead>
-            <tr>
-              <th>Permission</th>
-              <th><span className={`${styles.roleBadge} ${styles.roleAdmin}`}>Admin</span></th>
-              <th><span className={`${styles.roleBadge} ${styles.roleInstructor}`}>Instructor</span></th>
-              <th><span className={`${styles.roleBadge} ${styles.roleLearner}`}>Learner</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {PERMISSIONS.map(p => (
-              <tr key={p.feature}>
-                <td>{p.feature}</td>
-                <td>{p.admin ? <span className={styles.checkmark}>&#10003;</span> : <span className={styles.dash}>-</span>}</td>
-                <td>{p.instructor ? <span className={styles.checkmark}>&#10003;</span> : <span className={styles.dash}>-</span>}</td>
-                <td>{p.learner ? <span className={styles.checkmark}>&#10003;</span> : <span className={styles.dash}>-</span>}</td>
+      {loadError && (
+        <div className={`${styles.alert} ${styles.alertWarning}`}>
+          <span>{loadError}</span>
+          <button
+            type="button"
+            className={styles.inlineButton}
+            onClick={handleReload}
+            disabled={loading || saving}
+          >
+            Reload
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className={noticeClassName}>
+          {notice}
+        </div>
+      )}
+      {!loading && dirty && (
+        <div className={`${styles.alert} ${styles.alertInfo}`}>
+          You have unsaved permission changes.
+        </div>
+      )}
+
+      {loading ? (
+        <div className={styles.legend}>
+          <div className={styles.legendTitle}>Loading permission matrix...</div>
+        </div>
+      ) : (
+        <div className={styles.matrixWrap}>
+          <table className={styles.matrix}>
+            <thead>
+              <tr>
+                <th>Permission</th>
+                <th><span className={`${styles.roleBadge} ${styles.roleAdmin}`}>Admin</span></th>
+                <th><span className={`${styles.roleBadge} ${styles.roleInstructor}`}>Instructor</span></th>
+                <th><span className={`${styles.roleBadge} ${styles.roleLearner}`}>Learner</span></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {permissions.map((permission, idx) => (
+                <tr key={permission.feature}>
+                  <td>{permission.feature}</td>
+                  {['admin', 'instructor', 'learner'].map((role) => (
+                    <td key={role}>
+                      <input
+                        type="checkbox"
+                        checked={!!permission[role]}
+                        onChange={() => toggle(idx, role)}
+                        className={styles.checkbox}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className={styles.legend}>
-        <div className={styles.legendTitle}>Role Hierarchy</div>
+        <div className={styles.legendTitle}>Role Access Model</div>
         <div className={styles.legendItems}>
           <div className={styles.legendItem}>
             <span className={`${styles.roleBadge} ${styles.roleAdmin}`}>Admin</span>
-            Full system access including user management and settings
+            Full platform access, including system settings, user groups, and role management.
           </div>
           <div className={styles.legendItem}>
             <span className={`${styles.roleBadge} ${styles.roleInstructor}`}>Instructor</span>
-            Manage exams, view analytics, assign schedules
+            Can reach only the admin utility pages that are explicitly granted in this matrix, such as attempt analysis or scheduling.
           </div>
           <div className={styles.legendItem}>
             <span className={`${styles.roleBadge} ${styles.roleLearner}`}>Learner</span>
-            Take exams, view own results and schedule
+            Self-service access to assigned tests, schedules, and personal attempt history.
           </div>
         </div>
       </div>

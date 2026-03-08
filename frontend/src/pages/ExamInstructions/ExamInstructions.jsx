@@ -1,58 +1,146 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getExam } from '../../services/exam.service'
+import { getTest } from '../../services/test.service'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
 import Loader from '../../components/common/Loader/Loader'
+import { normalizeTest } from '../../utils/assessmentAdapters'
+import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import styles from './ExamInstructions.module.scss'
 
 export default function ExamInstructions() {
-  const { examId } = useParams()
+  const { testId } = useParams()
   const navigate = useNavigate()
-  const [exam, setExam] = useState(null)
+  const [test, setTest] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    getExam(examId)
-      .then(({ data }) => setExam(data))
-      .catch(() => setError('Failed to load exam details'))
+  const loadTest = () => {
+    setLoading(true)
+    setError('')
+    getTest(testId)
+      .then(({ data }) => setTest(normalizeTest(data)))
+      .catch(() => setError('Failed to load test details'))
       .finally(() => setLoading(false))
-  }, [examId])
+  }
+
+  useEffect(() => {
+    loadTest()
+  }, [testId])
 
   if (loading) return <Loader />
-  if (error) return <div className={styles.error}>{error}</div>
-  if (!exam) return null
+  if (error) {
+    return (
+      <div className={styles.page}>
+        <ExamJourneyStepper currentStep={0} />
+        <div className={styles.errorCard}>
+          <div className={styles.errorTitle}>Could not prepare this test</div>
+          <div className={styles.error}>{error}</div>
+          <div className={styles.errorActions}>
+            <button type="button" className={styles.secondaryBtn} onClick={loadTest}>
+              Retry
+            </button>
+            <button type="button" className={styles.secondaryBtn} onClick={() => navigate('/tests')}>
+              Back to available tests
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  if (!test) return null
 
-  const hasProctoring = exam.proctoring_config &&
-    Object.values(exam.proctoring_config).some(v => v === true)
+  const requirements = getJourneyRequirements(test.proctoring_config || {})
+  const testSettings = test.settings || {}
+  const instructionsHeading = testSettings.instructions_heading || 'Before you begin:'
+  const instructionsBody = testSettings.instructions_body || testSettings.instructions || 'Review the guidance below before you start so the attempt can continue without interruptions.'
+  const instructionItems = Array.isArray(testSettings.instructions_list)
+    ? testSettings.instructions_list
+    : [
+        'Ensure a stable internet connection',
+        'Close all other browser tabs and applications',
+        'Have your ID ready for identity verification',
+        ...((requirements.systemCheckRequired || requirements.identityRequired)
+          ? ['Allow camera and microphone access when prompted']
+          : []),
+        'Do not navigate away from the test page',
+      ]
+
+  const hasProctoring = requirements.systemCheckRequired || requirements.identityRequired
+  const startRoute = requirements.systemCheckRequired
+    ? `/tests/${testId}/system-check`
+    : requirements.identityRequired
+      ? `/tests/${testId}/verify-identity`
+      : `/tests/${testId}/rules`
+  const journeyCards = [
+    {
+      label: 'Next step',
+      value: requirements.systemCheckRequired ? 'System check' : requirements.identityRequired ? 'Identity check' : 'Rules',
+      helper: requirements.systemCheckRequired
+        ? 'Camera, microphone, and device checks run before you can continue.'
+        : requirements.identityRequired
+          ? 'Identity capture is required before entering the rules screen.'
+          : 'You can continue straight to the rules acknowledgement.',
+    },
+    {
+      label: 'Monitoring',
+      value: hasProctoring ? 'Proctored' : 'Standard',
+      helper: hasProctoring ? 'Camera and microphone permissions will be requested.' : 'No proctoring checks are enabled for this test.',
+    },
+    {
+      label: 'Attempt policy',
+      value: `${test.max_attempts} allowed`,
+      helper: test.passing_score != null ? `Passing score: ${test.passing_score}%` : 'No passing threshold is configured.',
+    },
+  ]
+  const requirementItems = [
+    requirements.systemCheckRequired ? 'System check before entry' : null,
+    requirements.identityRequired ? 'Identity verification before rules' : null,
+    'Rules acknowledgement before starting',
+    test.time_limit_minutes ? `Countdown timer for ${test.time_limit_minutes} minutes` : 'Untimed attempt',
+  ].filter(Boolean)
+  const primaryActionLabel = requirements.systemCheckRequired
+    ? 'Continue to system check'
+    : requirements.identityRequired
+      ? 'Continue to identity check'
+      : 'Continue to rules'
 
   return (
     <div className={styles.page}>
       <ExamJourneyStepper currentStep={0} />
 
       <div className={styles.card}>
-        <h1 className={styles.title}>{exam.title}</h1>
+        <h1 className={styles.title}>{test.title}</h1>
         <p className={styles.description}>
-          {exam.course_title && `${exam.course_title} — ${exam.node_title}`}
+          {test.course_title && `${test.course_title} - ${test.node_title}`}
         </p>
+
+        <section className={styles.summaryGrid}>
+          {journeyCards.map((card) => (
+            <article key={card.label} className={styles.summaryCard}>
+              <div className={styles.summaryLabel}>{card.label}</div>
+              <div className={styles.summaryValue}>{card.value}</div>
+              <div className={styles.summarySub}>{card.helper}</div>
+            </article>
+          ))}
+        </section>
 
         <div className={styles.detailsGrid}>
           <div className={styles.detailItem}>
             <span className={styles.detailLabel}>Type</span>
-            <span className={styles.detailValue}>{exam.type}</span>
+            <span className={styles.detailValue}>{test.exam_type}</span>
           </div>
           <div className={styles.detailItem}>
             <span className={styles.detailLabel}>Time Limit</span>
-            <span className={styles.detailValue}>{exam.time_limit ? `${exam.time_limit} min` : 'Unlimited'}</span>
+            <span className={styles.detailValue}>{test.time_limit_minutes ? `${test.time_limit_minutes} min` : 'Unlimited'}</span>
           </div>
           <div className={styles.detailItem}>
             <span className={styles.detailLabel}>Max Attempts</span>
-            <span className={styles.detailValue}>{exam.max_attempts}</span>
+            <span className={styles.detailValue}>{test.max_attempts}</span>
           </div>
-          {exam.passing_score != null && (
+          {test.passing_score != null && (
             <div className={styles.detailItem}>
               <span className={styles.detailLabel}>Passing Score</span>
-              <span className={styles.detailValue}>{exam.passing_score}%</span>
+              <span className={styles.detailValue}>{test.passing_score}%</span>
             </div>
           )}
         </div>
@@ -63,27 +151,39 @@ export default function ExamInstructions() {
               <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <strong>This exam is proctored.</strong> Your camera and microphone will be monitored.
+              <strong>This test is proctored.</strong> Your camera and microphone will be monitored.
               Make sure you are in a quiet, well-lit environment.
             </div>
           </div>
         )}
 
         <div className={styles.instructions}>
-          <h3>Before you begin:</h3>
+          <h3>{instructionsHeading}</h3>
+          <p>{instructionsBody}</p>
           <ul>
-            <li>Ensure a stable internet connection</li>
-            <li>Close all other browser tabs and applications</li>
-            <li>Have your ID ready for identity verification</li>
-            {hasProctoring && <li>Allow camera and microphone access when prompted</li>}
-            <li>You will not be able to pause once the exam starts</li>
-            <li>Do not navigate away from the exam page</li>
+            {instructionItems.map((item, index) => (
+              <li key={`${item}-${index}`}>{item}</li>
+            ))}
           </ul>
         </div>
 
-        <button className={styles.btn} onClick={() => navigate(`/system-check/${examId}`)}>
-          Begin Exam
-        </button>
+        <div className={styles.readinessCard}>
+          <div className={styles.readinessTitle}>Journey checklist</div>
+          <ul className={styles.readinessList}>
+            {requirementItems.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className={styles.actions}>
+          <button type="button" className={styles.secondaryBtn} onClick={() => navigate('/tests')}>
+            Back to available tests
+          </button>
+          <button className={styles.btn} type="button" onClick={() => navigate(startRoute)}>
+            {primaryActionLabel}
+          </button>
+        </div>
       </div>
     </div>
   )

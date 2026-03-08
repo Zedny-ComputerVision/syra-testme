@@ -1,0 +1,29 @@
+.page {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.card {
+  width: min(480px, 100%);
+  padding: 2rem;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.title {
+  margin: 0 0 0.75rem;
+  color: var(--color-text);
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.copy {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.95rem;
+}

@@ -49,7 +49,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: 20px;
   padding: 0.35rem 0.75rem;
@@ -60,7 +60,7 @@
 
   &:focus-within {
     border-color: var(--color-primary);
-    background: rgba(0, 0, 0, 0.18);
+    background: color-mix(in srgb, var(--color-bg) 88%, var(--color-primary) 12%);
   }
 }
 
@@ -112,7 +112,13 @@
   cursor: pointer;
   font-size: 0.85rem;
 
-  &:hover { background: rgba(0,0,0,0.06); }
+  &:hover { background: color-mix(in srgb, var(--color-border) 40%, transparent); }
+}
+
+.resultRowStatic {
+  cursor: default;
+
+  &:hover { background: transparent; }
 }
 
 .resultType {
@@ -150,7 +156,7 @@
   padding: 0.2rem 0.4rem;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--color-border) 35%, transparent);
 }
 
 .accentChip {
@@ -168,8 +174,28 @@
   }
 }
 
+.accentChipEmerald {
+  background: var(--color-success-text);
+}
+
+.accentChipIndigo {
+  background: #6366f1;
+}
+
+.accentChipCyan {
+  background: var(--color-cyan);
+}
+
+.accentChipAmber {
+  background: #f59e0b;
+}
+
+.accentChipPink {
+  background: #ec4899;
+}
+
 .accentChipActive {
-  border-color: #fff;
+  border-color: var(--color-surface);
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15);
 }
 
@@ -203,7 +229,7 @@
   min-width: 17px;
   height: 17px;
   border-radius: 9px;
-  background: #ef4444;
+  background: var(--color-danger);
   color: #fff;
   font-size: 0.6rem;
   font-weight: 700;
@@ -241,7 +267,7 @@
   height: 30px;
   border-radius: 50%;
   background: var(--color-primary);
-  color: #0b111d;
+  color: var(--color-button-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -267,6 +293,11 @@
   line-height: 1.2;
 }
 
+.userChevron {
+  margin-left: 0.25rem;
+  opacity: 0.5;
+}
+
 .userRole {
   font-size: 0.62rem;
   font-weight: 600;
@@ -275,8 +306,8 @@
   color: var(--color-primary);
   line-height: 1;
 
-  &[data-role='admin'] { color: #ef4444; }
-  &[data-role='instructor'] { color: #3b82f6; }
+  &[data-role='admin'] { color: var(--color-danger-text); }
+  &[data-role='instructor'] { color: var(--color-info-text); }
 }
 
 @media (max-width: 600px) {
@@ -316,7 +347,7 @@
   height: 38px;
   border-radius: 50%;
   background: var(--color-primary);
-  color: #0b111d;
+  color: var(--color-button-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -359,18 +390,96 @@
   transition: background 0.12s;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--color-text) 4%, transparent);
   }
 
   svg { flex-shrink: 0; opacity: 0.7; }
 }
 
 .dropdownItemDanger {
-  color: #ef4444;
+  color: var(--color-danger-text);
 
   &:hover {
-    background: rgba(239, 68, 68, 0.08);
+    background: var(--color-danger-bg);
   }
 
   svg { opacity: 1; }
+}
+
+/* ---------- Notification Dropdown ---------- */
+.notifDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 200;
+  overflow: hidden;
+  animation: fadeDown 0.15s ease-out;
+}
+
+.notifHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notifTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.notifMarkAll {
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover { text-decoration: underline; }
+}
+
+.notifList {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.notifEmpty {
+  padding: 1.25rem 1rem;
+  text-align: center;
+  font-size: 0.83rem;
+  color: var(--color-muted);
+}
+
+.notifItem {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s;
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: rgba(0, 0, 0, 0.04); }
+}
+
+.notifUnread {
+  background: rgba(var(--color-primary-rgb, 16, 185, 129), 0.06);
+  border-left: 3px solid var(--color-primary);
+}
+
+.notifMsg {
+  font-size: 0.83rem;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.notifTime {
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  margin-top: 0.2rem;
 }

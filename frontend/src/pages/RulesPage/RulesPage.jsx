@@ -1,61 +1,129 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { createAttempt, getAttempt } from '../../services/attempt.service'
-import { setAttemptId, getAttemptId, clearAttemptId } from '../../utils/attemptSession'
+import { getAttempt } from '../../services/attempt.service'
+import { getTest } from '../../services/test.service'
+import { setAttemptId, clearAttemptId } from '../../utils/attemptSession'
+import { resolveAttempt } from '../../utils/journeyAttempt'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
+import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import styles from './RulesPage.module.scss'
 
-const RULES = [
-  'Do not use any external resources, books, or notes during the exam.',
-  'Do not communicate with others during the exam.',
+const FALLBACK_RULES = [
+  'Do not use any external resources, books, or notes during the test.',
+  'Do not communicate with others during the test.',
   'Keep your face visible in the camera at all times.',
   'Do not use a mobile phone or any other electronic device.',
-  'Stay in fullscreen mode throughout the exam.',
-  'Do not navigate away from the exam window.',
+  'Stay in fullscreen mode throughout the test.',
+  'Do not navigate away from the test window.',
   'Any suspicious behavior will be flagged and recorded.',
-  'Violations may result in exam termination or score invalidation.',
+  'Violations may result in test termination or score invalidation.',
 ]
 
 export default function RulesPage() {
-  const { examId } = useParams()
+  const { testId } = useParams()
   const navigate = useNavigate()
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [configLoading, setConfigLoading] = useState(true)
+  const [configError, setConfigError] = useState('')
   const [error, setError] = useState('')
+  const [rules, setRules] = useState(FALLBACK_RULES)
+  const [requirements, setRequirements] = useState(getJourneyRequirements({}))
+  const precheckFlags = useMemo(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('precheck_flags') || '{}') || {}
+    } catch {
+      return {}
+    }
+  }, [testId])
+  const systemCheckRecorded = Boolean(Object.keys(precheckFlags).length)
+  const systemCheckSatisfied = !requirements.systemCheckRequired || systemCheckRecorded
+  const prerequisiteCards = [
+    {
+      label: 'System check',
+      value: requirements.systemCheckRequired ? (systemCheckSatisfied ? 'Completed' : 'Pending') : 'Skipped',
+      helper: requirements.systemCheckRequired
+        ? systemCheckSatisfied
+          ? 'This browser session already passed the required device checks.'
+          : 'Return to the system check before entering the live attempt.'
+        : 'This test does not require device precheck.',
+    },
+    {
+      label: 'Identity',
+      value: requirements.identityRequired ? 'Required' : 'Skipped',
+      helper: requirements.identityRequired
+        ? 'Identity verification is checked again when you start the attempt.'
+        : 'Identity verification is not required for this test.',
+    },
+    {
+      label: 'Monitoring',
+      value: requirements.fullscreenRequired ? 'Fullscreen enforced' : 'Standard',
+      helper: requirements.fullscreenRequired
+        ? 'The live attempt will request fullscreen before entry.'
+        : 'The attempt can continue without fullscreen enforcement.',
+    },
+  ]
+
+  const loadRules = async () => {
+    setConfigLoading(true)
+    setConfigError('')
+    setError('')
+    try {
+      const { data } = await getTest(testId)
+      const configRules = data?.settings?.rules
+      setRules(Array.isArray(configRules) && configRules.length > 0 ? configRules : FALLBACK_RULES)
+      setRequirements(getJourneyRequirements(data?.proctoring_config || {}))
+    } catch {
+      setRules(FALLBACK_RULES)
+      setRequirements(getJourneyRequirements({}))
+      setConfigError('Failed to load the test rules and requirements. Retry before starting.')
+    } finally {
+      setConfigLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadRules()
+  }, [testId])
 
   const handleStart = async () => {
+    if (!systemCheckSatisfied) {
+      setError('Complete the system check in this browser session before starting the test.')
+      navigate(`/tests/${testId}/system-check`)
+      return
+    }
+    if (configLoading || configError) {
+      setError('Test rules are not ready yet. Retry loading the rules before starting.')
+      return
+    }
+    if (!agreed) {
+      setError('You must accept the rules before starting.')
+      return
+    }
+
     setLoading(true)
     setError('')
     try {
-      let attemptId = getAttemptId()
-      if (attemptId) {
-        try {
-          const { data: existing } = await getAttempt(attemptId)
-          if (existing.exam_id !== examId || existing.status !== 'IN_PROGRESS') {
-            attemptId = null
-            clearAttemptId()
-          } else if (!existing.identity_verified) {
-            setError('Pre-check not completed. Please restart verification.')
-            setLoading(false)
-            return
-          }
-        } catch {
-          attemptId = null
-          clearAttemptId()
-        }
+      let attemptId = await resolveAttempt(testId)
+      let { data: currentAttempt } = await getAttempt(attemptId)
+      if (String(currentAttempt.exam_id) !== String(testId) || currentAttempt.status !== 'IN_PROGRESS') {
+        clearAttemptId()
+        attemptId = await resolveAttempt(testId)
+        const refreshed = await getAttempt(attemptId)
+        currentAttempt = refreshed.data
       }
-
-      if (!attemptId) {
-        const { data } = await createAttempt(examId)
-        attemptId = data.id
-        setAttemptId(attemptId)
+      if (requirements.identityRequired && !(currentAttempt.identity_verified || currentAttempt.id_verified)) {
+        navigate(`/tests/${testId}/verify-identity`)
+        return
       }
+      setAttemptId(attemptId)
 
-      // Enter fullscreen
-      try { await document.documentElement.requestFullscreen() } catch {}
-      navigate(`/exam/${attemptId}`)
+      if (requirements.fullscreenRequired) {
+        try { await document.documentElement.requestFullscreen() } catch {}
+      }
+      navigate(`/attempts/${attemptId}/take`)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to start exam')
+      setError(err.response?.data?.detail || 'Failed to start test')
     } finally {
       setLoading(false)
     }
@@ -66,13 +134,37 @@ export default function RulesPage() {
       <ExamJourneyStepper currentStep={3} />
 
       <div className={styles.card}>
-        <h1 className={styles.title}>Exam Rules</h1>
+        <h1 className={styles.title}>Test Rules</h1>
         <p className={styles.sub}>Please read and accept the following rules before starting</p>
 
-        {error && <div style={{ color: '#fca5a5', marginBottom: '1rem', fontSize: '0.9rem' }}>{error}</div>}
+        {configError && (
+          <div className={styles.helperRow}>
+            <div className={styles.errorBanner}>{configError}</div>
+            <button type="button" className={styles.retryBtn} onClick={() => void loadRules()} disabled={configLoading || loading}>
+              {configLoading ? 'Retrying...' : 'Retry'}
+            </button>
+          </div>
+        )}
+        {error && <div className={styles.errorBanner}>{error}</div>}
+
+        <div className={styles.summaryGrid}>
+          {prerequisiteCards.map((card) => (
+            <div key={card.label} className={styles.summaryCard}>
+              <div className={styles.summaryLabel}>{card.label}</div>
+              <div className={styles.summaryValue}>{card.value}</div>
+              <div className={styles.summaryHelper}>{card.helper}</div>
+            </div>
+          ))}
+        </div>
+
+        {requirements.systemCheckRequired && !systemCheckSatisfied && (
+          <div className={styles.prereqWarning}>
+            System check has not been completed in this browser session yet. Return to the checks screen before starting the live attempt.
+          </div>
+        )}
 
         <div className={styles.rulesList}>
-          {RULES.map((rule, i) => (
+          {rules.map((rule, i) => (
             <div key={i} className={styles.ruleItem}>
               <span className={styles.ruleIcon}>&#10007;</span>
               <span>{rule}</span>
@@ -80,14 +172,31 @@ export default function RulesPage() {
           ))}
         </div>
 
-        <div className={styles.agree} onClick={() => setAgreed(!agreed)}>
-          <input type="checkbox" checked={agreed} onChange={() => setAgreed(!agreed)} id="agree" />
-          <label htmlFor="agree">I have read and agree to all exam rules</label>
+        <div className={styles.agree}>
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={() => setAgreed(!agreed)}
+            id="agree"
+            disabled={configLoading || Boolean(configError) || loading}
+          />
+          <label className={styles.agreeLabel} htmlFor="agree">I have read and agree to all test rules</label>
         </div>
 
-        <button className={styles.btn} disabled={!agreed || loading} onClick={handleStart}>
-          {loading ? 'Starting...' : 'Start Exam'}
-        </button>
+        <div className={styles.actions}>
+          {requirements.systemCheckRequired && !systemCheckSatisfied ? (
+            <button type="button" className={styles.secondaryBtn} onClick={() => navigate(`/tests/${testId}/system-check`)}>
+              Back to system check
+            </button>
+          ) : (
+            <button type="button" className={styles.secondaryBtn} onClick={() => navigate(`/tests/${testId}`)}>
+              Back to instructions
+            </button>
+          )}
+          <button className={styles.btn} type="button" disabled={!agreed || loading || configLoading || Boolean(configError) || !systemCheckSatisfied} onClick={handleStart}>
+            {loading ? 'Starting...' : configLoading ? 'Loading requirements...' : !systemCheckSatisfied ? 'Complete system check first' : 'Start Test'}
+          </button>
+        </div>
       </div>
     </div>
   )

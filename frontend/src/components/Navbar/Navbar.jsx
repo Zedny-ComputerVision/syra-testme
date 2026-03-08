@@ -1,38 +1,52 @@
-import React, { useContext, useState, useRef, useEffect } from 'react'
+import React, { useContext, useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
 import { ThemeContext } from '../../context/ThemeContext'
-import { getUnreadCount, markAllRead } from '../../services/notification.service'
-import { adminApi } from '../../services/admin.service'
+import { getUnreadCount, markAllRead, listNotifications } from '../../services/notification.service'
 import { searchAll } from '../../services/search.service'
 import styles from './Navbar.module.scss'
 
 export default function Navbar({ onMenuToggle }) {
-  const { user, logout } = useAuth()
+  const { user, logout, hasPermission } = useAuth()
   const { theme, toggleTheme, accent, setAccent } = useContext(ThemeContext)
   const navigate = useNavigate()
   const isDark = theme === 'dark'
+  const isAdmin = user?.role === 'ADMIN'
+  const isPrivileged = user?.role === 'ADMIN' || user?.role === 'INSTRUCTOR'
+  const canManageUsers = hasPermission?.('Manage Users')
+  const canViewOwnSchedule = hasPermission?.('View Own Schedule')
 
   const [unread, setUnread] = useState(0)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifications, setNotifications] = useState([])
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [results, setResults] = useState([])
   const menuRef = useRef(null)
+  const bellRef = useRef(null)
   const searchRef = useRef(null)
+  const searchDebounce = useRef(null)
 
   useEffect(() => {
     if (!user) return
     getUnreadCount().then(({ data }) => setUnread(data?.count || 0)).catch(() => {})
   }, [user])
 
-  // Close dropdown on outside click
+  useEffect(() => () => {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+  }, [])
+
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setUserMenuOpen(false)
+      }
+      if (bellRef.current && !bellRef.current.contains(e.target)) {
+        setNotifOpen(false)
       }
       if (searchRef.current && !searchRef.current.contains(e.target)) {
         setSearchOpen(false)
@@ -42,46 +56,89 @@ export default function Navbar({ onMenuToggle }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  const openNotifications = async () => {
+    const next = !notifOpen
+    setNotifOpen(next)
+    if (next) {
+      try {
+        const { data } = await listNotifications()
+        setNotifications(data || [])
+      } catch (e) {}
+    }
+  }
+
   const handleMarkAllRead = async () => {
     try {
       await markAllRead()
       setUnread(0)
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
     } catch (e) {}
   }
 
   const initials = (user?.name || user?.user_id || 'U').slice(0, 2).toUpperCase()
 
-  const performSearch = async (q) => {
+  const performSearch = useCallback(async (q) => {
     const query = q.trim()
-    if (!query) return
+    if (!query) { setResults([]); setSearchOpen(false); return }
     setSearching(true)
     setSearchOpen(true)
     try {
       const { data } = await searchAll(query)
+      const examResults = (data.exams || []).map((e) => ({
+        type: 'Test',
+        label: e.title,
+        meta: e.status,
+        to: isAdmin ? `/admin/tests/${e.id}/manage` : `/tests/${e.id}`,
+      }))
+      const userResults = isPrivileged
+        ? (data.users || []).map((u) => ({
+            type: 'User',
+            label: u.name,
+            meta: `${u.user_id || ''}${u.email ? ` | ${u.email}` : ''}`,
+            to: `/admin/users?search=${encodeURIComponent(u.user_id || u.email || u.name || '')}`,
+          }))
+        : []
       const mapped = [
-        ...(data.exams || []).map(e => ({ type: 'Exam', label: e.title, meta: e.status, to: '/admin/exams' })),
-        ...(data.attempts || []).map(a => ({ type: 'Attempt', label: a.exam_title || 'Attempt', meta: a.user_name, to: `/attempts/${a.id}` })),
-        ...(data.users || []).map(u => ({ type: 'User', label: u.name, meta: u.email, to: '/admin/users' })),
+        ...examResults,
+        ...(data.attempts || []).map(a => ({
+          type: 'Attempt',
+          label: a.test_title || a.exam_title || 'Attempt',
+          meta: a.user_name,
+          to: isPrivileged ? `/admin/attempt-analysis?id=${a.id}` : `/attempts/${a.id}`,
+        })),
+        ...userResults,
       ].slice(0, 8)
-      setResults(mapped)
+      setResults(
+        mapped.length > 0
+          ? mapped
+          : [{ type: 'Info', label: 'No results found', meta: `for "${query}"` }],
+      )
     } catch (e) {
       setResults([{ type: 'Error', label: 'Search failed', meta: 'Try again' }])
     } finally {
       setSearching(false)
     }
+  }, [isAdmin, isPrivileged])
+
+  const handleSearchChange = (e) => {
+    const q = e.target.value
+    setSearchQuery(q)
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    searchDebounce.current = setTimeout(() => performSearch(q), 350)
   }
 
   const handleSearchSubmit = (e) => {
     e.preventDefault()
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
     performSearch(searchQuery)
   }
 
   const accents = [
-    { key: 'emerald', label: 'E', color: '#10b981' },
-    { key: 'indigo', label: 'I', color: '#6366f1' },
-    { key: 'cyan', label: 'C', color: '#06b6d4' },
-    { key: 'amber', label: 'A', color: '#f59e0b' },
-    { key: 'pink', label: 'P', color: '#ec4899' },
+    { key: 'emerald', label: 'E', toneClass: styles.accentChipEmerald },
+    { key: 'indigo', label: 'I', toneClass: styles.accentChipIndigo },
+    { key: 'cyan', label: 'C', toneClass: styles.accentChipCyan },
+    { key: 'amber', label: 'A', toneClass: styles.accentChipAmber },
+    { key: 'pink', label: 'P', toneClass: styles.accentChipPink },
   ]
 
   return (
@@ -103,10 +160,10 @@ export default function Navbar({ onMenuToggle }) {
         <form onSubmit={handleSearchSubmit} className={styles.searchForm}>
           <input
             className={styles.searchInput}
-            placeholder="Search exams, attempts, users..."
+            placeholder="Search tests, attempts, users..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onFocus={() => setSearchOpen(results.length > 0)}
+            onChange={handleSearchChange}
+            onFocus={() => { if (results.length > 0) setSearchOpen(true) }}
           />
         </form>
         <AnimatePresence>
@@ -119,21 +176,35 @@ export default function Navbar({ onMenuToggle }) {
               transition={{ duration: 0.15 }}
             >
               {results.map((r, i) => (
-                <motion.button
-                  key={i}
-                  type="button"
-                  className={styles.resultRow}
-                  onClick={() => { setSearchOpen(false); navigate(r.to) }}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.02 }}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <div className={styles.resultType}>{r.type}</div>
-                  <div className={styles.resultLabel}>{r.label}</div>
-                  {r.meta && <div className={styles.resultMeta}>{r.meta}</div>}
-                </motion.button>
+                r.to ? (
+                  <motion.button
+                    key={i}
+                    type="button"
+                    className={styles.resultRow}
+                    onClick={() => { setSearchOpen(false); navigate(r.to) }}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <div className={styles.resultType}>{r.type}</div>
+                    <div className={styles.resultLabel}>{r.label}</div>
+                    {r.meta && <div className={styles.resultMeta}>{r.meta}</div>}
+                  </motion.button>
+                ) : (
+                  <motion.div
+                    key={i}
+                    className={`${styles.resultRow} ${styles.resultRowStatic}`}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                  >
+                    <div className={styles.resultType}>{r.type}</div>
+                    <div className={styles.resultLabel}>{r.label}</div>
+                    {r.meta && <div className={styles.resultMeta}>{r.meta}</div>}
+                  </motion.div>
+                )
               ))}
             </motion.div>
           )}
@@ -153,8 +224,7 @@ export default function Navbar({ onMenuToggle }) {
           {accents.map(a => (
             <button
               key={a.key}
-              className={`${styles.accentChip} ${accent === a.key ? styles.accentChipActive : ''}`}
-              style={{ background: a.color }}
+              className={`${styles.accentChip} ${a.toneClass} ${accent === a.key ? styles.accentChipActive : ''}`}
               onClick={() => setAccent(a.key)}
               title={`Use ${a.key} accent`}
               type="button"
@@ -176,13 +246,41 @@ export default function Navbar({ onMenuToggle }) {
         </button>
 
         {/* Notification bell */}
-        <div className={styles.bellWrap}>
-          <button className={styles.iconBtn} onClick={handleMarkAllRead} title="Notifications" type="button">
+        <div className={styles.bellWrap} ref={bellRef}>
+          <button className={styles.iconBtn} onClick={openNotifications} title="Notifications" type="button">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 01-3.46 0"/>
             </svg>
             {unread > 0 && <span className={styles.badge}>{unread > 9 ? '9+' : unread}</span>}
           </button>
+          {notifOpen && (
+            <div className={styles.notifDropdown}>
+              <div className={styles.notifHeader}>
+                <span className={styles.notifTitle}>Notifications</span>
+                {unread > 0 && (
+                  <button type="button" className={styles.notifMarkAll} onClick={handleMarkAllRead}>
+                    Mark all read
+                  </button>
+                )}
+              </div>
+              <div className={styles.notifList}>
+                {notifications.length === 0 ? (
+                  <div className={styles.notifEmpty}>No notifications</div>
+                ) : (
+                  notifications.map((n, i) => (
+                    <div key={n.id || i} className={`${styles.notifItem} ${!n.is_read ? styles.notifUnread : ''}`}>
+                      <div className={styles.notifMsg}>{n.message || n.title || 'Notification'}</div>
+                      {n.created_at && (
+                        <div className={styles.notifTime}>
+                          {new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* User Avatar + Dropdown */}
@@ -198,7 +296,7 @@ export default function Navbar({ onMenuToggle }) {
                 <span className={styles.userName}>{user.name || user.user_id}</span>
                 <span className={styles.userRole} data-role={user.role?.toLowerCase()}>{user.role}</span>
               </div>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: '0.25rem', opacity: 0.5 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.userChevron}>
                 <path d="M6 9l6 6 6-6"/>
               </svg>
             </button>
@@ -213,26 +311,28 @@ export default function Navbar({ onMenuToggle }) {
                   </div>
                 </div>
                 <div className={styles.dropdownDivider} />
-                <button className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/profile') }}>
+                <button type="button" className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/profile') }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   View Profile
                 </button>
-                <button className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/change-password') }}>
+                <button type="button" className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/change-password') }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1v4"/><path d="M10 3h4"/><rect x="4" y="7" width="16" height="14" rx="2"/><path d="M9 12v2"/><path d="M15 12v2"/></svg>
                   Change Password
                 </button>
-                {(user.role === 'ADMIN' || user.role === 'INSTRUCTOR') && (
-                  <button className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/admin/users') }}>
+                {isPrivileged && canManageUsers && (
+                  <button type="button" className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/admin/users') }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
                     Manage Users
                   </button>
                 )}
-                <button className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/schedule') }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                  My Schedule
-                </button>
+                {canViewOwnSchedule && (
+                  <button type="button" className={styles.dropdownItem} onClick={() => { setUserMenuOpen(false); navigate('/schedule') }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    My Schedule
+                  </button>
+                )}
                 <div className={styles.dropdownDivider} />
-                <button className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`} onClick={() => { setUserMenuOpen(false); logout() }}>
+                <button type="button" className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`} onClick={() => { setUserMenuOpen(false); logout() }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                   Logout
                 </button>

@@ -66,7 +66,7 @@
   letter-spacing: 0.04em;
   color: var(--color-muted);
   border-bottom: 1px solid var(--color-border);
-  background: rgba(0, 0, 0, 0.1);
+  background: color-mix(in srgb, var(--color-border) 24%, transparent);
 }
 
 .table td {
@@ -77,11 +77,10 @@
 }
 
 .table tbody tr {
-  cursor: pointer;
   transition: background 0.15s;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--color-text) 2%, transparent);
   }
 
   &:last-child td {
@@ -99,18 +98,18 @@
 }
 
 .badgeCompleted {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 .badgeInProgress {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
 }
 
 .badgeTimedOut {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 
 .empty {
@@ -118,4 +117,112 @@
   padding: 3rem 1rem;
   color: var(--color-muted);
   font-size: 0.9rem;
+}
+
+.errorRow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 1rem;
+}
+
+.secondaryBtn {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+
+.actionBtn {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+}
+
+.toolbar {
+  display: flex; gap: 0.65rem; margin-bottom: 0.85rem; flex-wrap: wrap; align-items: center;
+}
+
+.searchInput {
+  flex: 1; min-width: 200px;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-bg); color: var(--color-text);
+  font-size: 0.88rem; outline: none;
+  &:focus { border-color: var(--color-primary); }
+}
+
+.sortSelect {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-bg); color: var(--color-text);
+  font-size: 0.85rem; outline: none; appearance: none;
+  &:focus { border-color: var(--color-primary); }
+
+  option {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+}
+
+.statusTabs {
+  display: flex; gap: 0; margin-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.statusTab {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.55rem 0.9rem;
+  border: none; border-bottom: 2px solid transparent;
+  background: transparent; color: var(--color-muted);
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  &:hover { color: var(--color-text); }
+}
+
+.statusTabActive {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.tabCount {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 0.25rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 0.65rem; font-weight: 700;
+}
+
+.testName { font-weight: 500; }
+.certBadge { margin-left: 0.35rem; font-size: 0.85rem; }
+
+.scorePass { color: var(--color-success-text); font-weight: 700; }
+.scoreFail { color: var(--color-danger-text); font-weight: 700; }
+.mutedCell { color: var(--color-muted); font-size: 0.85rem; }
+
+.pagination {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.75rem 0; justify-content: flex-end;
+}
+
+.pageInfo { font-size: 0.82rem; color: var(--color-muted); margin-right: auto; }
+
+.pageBtn {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--color-border); border-radius: 6px;
+  background: transparent; color: var(--color-text);
+  font-size: 0.82rem; cursor: pointer;
+  &:hover:not(:disabled) { border-color: var(--color-primary); }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
 }

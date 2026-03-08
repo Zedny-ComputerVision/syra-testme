@@ -1,19 +1,78 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import UserGroup, RoleEnum
-from ...schemas import UserGroupCreate, UserGroupRead, Message
-from ..deps import get_db_dep, require_role
+from ...models import User, UserGroup, RoleEnum
+from ...schemas import UserGroupCreate, UserGroupRead, UserRead, Message
+from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
 
 
+def _clean_required_text(value: str | None, field_name: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field_name} is required",
+        )
+    return text
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _get_group_or_404(db: Session, group_id: str) -> UserGroup:
+    group_pk = parse_uuid_param(group_id, detail="Not found")
+    group = db.get(UserGroup, group_pk)
+    if not group:
+        raise HTTPException(status_code=404, detail="Not found")
+    return group
+
+
+def _ensure_unique_group_name(db: Session, name: str, existing_group_id=None):
+    groups = db.scalars(select(UserGroup)).all()
+    normalized = name.strip().lower()
+    for group in groups:
+        if group.id == existing_group_id:
+            continue
+        if str(group.name or "").strip().lower() == normalized:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group name exists")
+
+
+def _normalize_member_ids(db: Session, raw_member_ids: list[str] | None) -> list:
+    member_ids = []
+    for raw_member_id in raw_member_ids or []:
+        user_pk = parse_uuid_param(str(raw_member_id), detail="User not found")
+        user = db.get(User, user_pk)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.role != RoleEnum.LEARNER:
+            raise HTTPException(
+                status_code=422,
+                detail="Only learners can be added to groups",
+            )
+        normalized_user_id = str(user.id)
+        if normalized_user_id not in member_ids:
+            member_ids.append(normalized_user_id)
+    return member_ids
+
+
+def _normalize_group_payload(db: Session, body: UserGroupCreate) -> dict:
+    return {
+        "name": _clean_required_text(body.name, "Group name"),
+        "description": _clean_optional_text(body.description),
+        "member_ids": _normalize_member_ids(db, body.member_ids),
+    }
+
+
 @router.post("/", response_model=UserGroupRead)
-async def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN))):
-    if db.scalar(select(UserGroup).where(UserGroup.name == body.name)):
-        raise HTTPException(status_code=409, detail="Group name exists")
-    group = UserGroup(name=body.name, description=body.description, member_ids=body.member_ids)
+async def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+    payload = _normalize_group_payload(db, body)
+    _ensure_unique_group_name(db, payload["name"])
+    group = UserGroup(**payload)
     db.add(group)
     db.commit()
     db.refresh(group)
@@ -21,26 +80,23 @@ async def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep),
 
 
 @router.get("/", response_model=list[UserGroupRead])
-async def list_groups(db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    return db.scalars(select(UserGroup)).all()
+async def list_groups(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+    return db.scalars(select(UserGroup).order_by(UserGroup.created_at.desc())).all()
 
 
 @router.get("/{group_id}", response_model=UserGroupRead)
-async def get_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    group = db.get(UserGroup, group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Not found")
-    return group
+async def get_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+    return _get_group_or_404(db, group_id)
 
 
 @router.put("/{group_id}", response_model=UserGroupRead)
-async def update_group(group_id: str, body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN))):
-    group = db.get(UserGroup, group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Not found")
-    group.name = body.name
-    group.description = body.description
-    group.member_ids = body.member_ids
+async def update_group(group_id: str, body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+    group = _get_group_or_404(db, group_id)
+    payload = _normalize_group_payload(db, body)
+    _ensure_unique_group_name(db, payload["name"], existing_group_id=group.id)
+    group.name = payload["name"]
+    group.description = payload["description"]
+    group.member_ids = payload["member_ids"]
     db.add(group)
     db.commit()
     db.refresh(group)
@@ -48,10 +104,74 @@ async def update_group(group_id: str, body: UserGroupCreate, db: Session = Depen
 
 
 @router.delete("/{group_id}", response_model=Message)
-async def delete_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN))):
-    group = db.get(UserGroup, group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Not found")
+async def delete_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+    group = _get_group_or_404(db, group_id)
     db.delete(group)
     db.commit()
     return Message(detail="Deleted")
+
+
+@router.get("/{group_id}/members", response_model=list[UserRead])
+async def list_group_members(
+    group_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
+):
+    group = _get_group_or_404(db, group_id)
+    member_ids = [str(member_id) for member_id in (group.member_ids or [])]
+    if not member_ids:
+        return []
+    user_ids = [parse_uuid_param(member_id, detail="User not found") for member_id in member_ids]
+    users = db.scalars(select(User).where(User.id.in_(user_ids))).all()
+    user_map = {str(user.id): user for user in users}
+    return [user_map[member_id] for member_id in member_ids if member_id in user_map]
+
+
+@router.post("/{group_id}/members", response_model=Message)
+async def add_group_member(
+    group_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
+):
+    group = _get_group_or_404(db, group_id)
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=422, detail="user_id is required")
+    user_pk = parse_uuid_param(user_id, detail="User not found")
+    user = db.get(User, user_pk)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role != RoleEnum.LEARNER:
+        raise HTTPException(
+            status_code=422,
+            detail="Only learners can be added to groups",
+        )
+    member_ids = [str(member_id) for member_id in (group.member_ids or [])]
+    normalized_user_id = str(user.id)
+    if normalized_user_id in member_ids:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already in group")
+    member_ids.append(normalized_user_id)
+    group.member_ids = member_ids
+    db.add(group)
+    db.commit()
+    return Message(detail="Member added")
+
+
+@router.delete("/{group_id}/members/{user_id}", response_model=Message)
+async def remove_group_member(
+    group_id: str,
+    user_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
+):
+    group = _get_group_or_404(db, group_id)
+    user_pk = parse_uuid_param(user_id, detail="User not found")
+    member_ids = [str(member_id) for member_id in (group.member_ids or [])]
+    normalized_user_id = str(user_pk)
+    if normalized_user_id not in member_ids:
+        raise HTTPException(status_code=404, detail="Member not found")
+    group.member_ids = [member_id for member_id in member_ids if member_id != normalized_user_id]
+    db.add(group)
+    db.commit()
+    return Message(detail="Member removed")

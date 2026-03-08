@@ -39,15 +39,15 @@ class AudioMonitor:
                 }
         else:
             self._consecutive_noise = 0
-
-        # Anomaly: clipping or sustained noise over window
-        if peak > 0.98 or sum(r > self.noise_threshold for r in self._recent_rms) >= max(3, self.window // 2):
-            return {
-                "event_type": "AUDIO_ANOMALY",
-                "severity": "MEDIUM",
-                "detail": f"Audio anomaly (rms={rms:.3f}, peak={peak:.3f})",
-                "confidence": min(0.99, max(peak, rms / (self.noise_threshold + 1e-6))),
-            }
+            # Anomaly check only when audio is NOT a loud burst to avoid
+            # double-firing on the same chunk (mutual exclusion).
+            if peak > 0.98 or sum(r > self.noise_threshold for r in self._recent_rms) >= max(3, self.window // 2):
+                return {
+                    "event_type": "AUDIO_ANOMALY",
+                    "severity": "MEDIUM",
+                    "detail": f"Audio anomaly (rms={rms:.3f}, peak={peak:.3f})",
+                    "confidence": min(0.99, max(peak, rms / (self.noise_threshold + 1e-6))),
+                }
 
         return None
 

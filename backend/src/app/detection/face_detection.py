@@ -1,27 +1,18 @@
-"""Face presence detector using MediaPipe FaceDetection."""
+"""Face presence detector using YOLOv8 face detection."""
 
 import time
 import cv2
 import numpy as np
-try:
-    import mediapipe as mp
-except Exception:  # pragma: no cover - optional dependency in lightweight envs
-    mp = None
+
+from ._yolo_face import get_face_model
 
 
 class FaceDetector:
-    def __init__(self, disappeared_threshold: float = 2.0, min_confidence: float = 0.6):
+    def __init__(self, disappeared_threshold: float = 3.0, min_confidence: float = 0.6):
         self.disappeared_threshold = disappeared_threshold
         self.min_confidence = min_confidence
         self._last_seen: float | None = None
         self._disappeared_since: float | None = None
-        if hasattr(mp, "solutions"):
-            self._mp_face = mp.solutions.face_detection.FaceDetection(
-                model_selection=0, min_detection_confidence=min_confidence
-            )
-        else:
-            # Fallback: mediapipe without legacy solutions (keeps server booting; detection becomes no-op)
-            self._mp_face = None
 
     def process(self, frame_bytes: bytes) -> dict | None:
         now = time.time()
@@ -29,13 +20,20 @@ class FaceDetector:
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if frame is None:
             return None
-        if self._mp_face is None:
+
+        model = get_face_model()
+        if model is None:
             return None
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = self._mp_face.process(rgb)
-        detections = result.detections or []
-        has_face = len(detections) > 0
+        results = model.predict(frame, verbose=False, conf=self.min_confidence, imgsz=640)
+        confidences = [float(conf) for r in results for conf in r.boxes.conf]
+        return self.process_detections(len(confidences), confidences)
+
+    def process_detections(self, face_count: int, confidences: list[float]) -> dict | None:
+        """Process pre-computed YOLO results; avoids duplicate model inference when
+        orchestrator shares a single YOLO call across face and multi-face detectors."""
+        now = time.time()
+        has_face = face_count > 0
 
         if has_face:
             if self._disappeared_since is not None:
@@ -44,7 +42,7 @@ class FaceDetector:
                     "event_type": "FACE_REAPPEARED",
                     "severity": "LOW",
                     "detail": "Face reappeared in frame",
-                    "confidence": detections[0].score[0] if detections[0].score else 0.9,
+                    "confidence": confidences[0] if confidences else 0.9,
                 }
             self._last_seen = now
             return None

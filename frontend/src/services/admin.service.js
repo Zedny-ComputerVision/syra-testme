@@ -1,12 +1,44 @@
 import api from './api'
 
+const listTestRuntime = () => api.get('exams/')
+const getTestRuntime = (id) => api.get(`exams/${id}`)
+const createTestRuntime = (data) => api.post('exams/', data)
+const updateTestRuntime = (id, data) => api.put(`exams/${id}`, data)
+const deleteTestRuntime = (id) => api.delete(`exams/${id}`)
+const downloadLegacyExamReportCsv = (examId) => api.get(`reports/exam/${examId}`, { responseType: 'blob' })
+const downloadLegacyExamReportPdf = (examId) => api.get(`reports/exam/${examId}/pdf`, { responseType: 'blob' })
+
 export const adminApi = {
-  // Exams
-  exams: () => api.get('exams/'),
-  getExam: (id) => api.get(`exams/${id}`),
-  createExam: (data) => api.post('exams/', data),
-  updateExam: (id, data) => api.put(`exams/${id}`, data),
-  deleteExam: (id) => api.delete(`exams/${id}`),
+  // Canonical admin tests
+  tests: (params) => api.get('admin/tests', { params }),
+  allTests: (params = {}) => api.get('admin/tests', {
+    params: {
+      page_size: 100,
+      status: 'DRAFT,PUBLISHED,ARCHIVED',
+      ...params,
+    },
+  }),
+  getTest: (id) => api.get(`admin/tests/${id}`),
+  createTest: (data) => api.post('admin/tests', data),
+  updateTest: (id, data) => api.patch(`admin/tests/${id}`, data),
+  publishTest: (id) => api.post(`admin/tests/${id}/publish`),
+  archiveTest: (id) => api.post(`admin/tests/${id}/archive`),
+  unarchiveTest: (id) => api.post(`admin/tests/${id}/unarchive`),
+  duplicateTest: (id) => api.post(`admin/tests/${id}/duplicate`),
+  deleteTest: (id) => api.delete(`admin/tests/${id}`),
+  downloadTestReport: (id) => api.get(`admin/tests/${id}/report`, { responseType: 'text' }),
+
+  // Canonical runtime-test compatibility endpoints
+  listTestRuntime,
+  getTestRuntime,
+  createTestRuntime,
+  updateTestRuntime,
+  deleteTestRuntime,
+  exams: listTestRuntime,
+  getExam: getTestRuntime,
+  createExam: createTestRuntime,
+  updateExam: updateTestRuntime,
+  deleteExam: deleteTestRuntime,
 
   // Categories
   categories: () => api.get('categories/'),
@@ -26,39 +58,52 @@ export const adminApi = {
   questionPools: () => api.get('question-pools/'),
   getQuestionPool: (id) => api.get(`question-pools/${id}`),
   createQuestionPool: (data) => api.post('question-pools/', data),
+  updateQuestionPool: (id, data) => api.put(`question-pools/${id}`, data),
   getPoolQuestions: (poolId) => api.get(`question-pools/${poolId}/questions`),
+  createPoolQuestion: (poolId, data) => api.post(`question-pools/${poolId}/questions`, data),
+  updatePoolQuestion: (poolId, questionId, data) => api.put(`question-pools/${poolId}/questions/${questionId}`, data),
+  deletePoolQuestion: (poolId, questionId) => api.delete(`question-pools/${poolId}/questions/${questionId}`),
   seedExamFromPool: (poolId, examId, count = 5) =>
     api.post(`question-pools/${poolId}/seed-exam/${examId}`, null, { params: { count } }),
   deleteQuestionPool: (id) => api.delete(`question-pools/${id}`),
 
   // Schedules
+  schedulableTests: () => api.get('schedules/tests'),
   schedules: () => api.get('schedules/'),
   createSchedule: (data) => api.post('schedules/', data),
+  updateSchedule: (id, data) => api.put(`schedules/${id}`, data),
   deleteSchedule: (id) => api.delete(`schedules/${id}`),
   assignSchedule: (data) => api.post('schedules/', data),
 
   // Questions
-  getQuestions: (examId) => api.get(`questions/?exam_id=${examId}`),
+  getQuestions: (examId) => api.get('questions/', { params: { exam_id: examId } }),
   addQuestion: (data) => api.post('questions/', data),
   updateQuestion: (id, data) => api.put(`questions/${id}`, data),
   deleteQuestion: (id) => api.delete(`questions/${id}`),
 
   // Users
   users: () => api.get('users/'),
+  learnersForScheduling: (params) => api.get('users/learners', { params }),
   getUser: (id) => api.get(`users/${id}`),
   createUser: (data) => api.post('users/', data),
   updateUser: (id, data) => api.put(`users/${id}`, data),
   deleteUser: (id) => api.delete(`users/${id}`),
+  resetUserPassword: (id, new_password) => api.post(`users/${id}/reset-password`, { new_password }),
+  getMyPreference: (key) => api.get(`users/me/preferences/${key}`),
+  updateMyPreference: (key, value) => api.put(`users/me/preferences/${key}`, { value }),
 
   // Courses
   courses: () => api.get('courses/'),
   getCourse: (id) => api.get(`courses/${id}`),
   createCourse: (data) => api.post('courses/', data),
   updateCourse: (id, data) => api.put(`courses/${id}`, data),
+  deleteCourse: (id) => api.delete(`courses/${id}`),
 
   // Nodes
-  nodes: (courseId) => api.get(`nodes/${courseId ? `?course_id=${courseId}` : ''}`),
+  nodes: (courseId) => api.get('nodes/', { params: courseId ? { course_id: courseId } : {} }),
   createNode: (data) => api.post('nodes/', data),
+  updateNode: (id, data) => api.put(`nodes/${id}`, data),
+  deleteNode: (id) => api.delete(`nodes/${id}`),
 
   // Attempts / Analysis
   attempts: () => api.get('attempts/'),
@@ -69,8 +114,12 @@ export const adminApi = {
   pauseAttempt: (attemptId) => api.post(`proctoring/${attemptId}/pause`),
   resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
   listAttemptVideos: (attemptId) => api.get(`proctoring/${attemptId}/videos`),
-  generateExamReportPdf: (examId) => api.get(`reports/exam/${examId}/pdf`, { responseType: 'blob' }),
-  gradeAttempt: (id, score) => api.post(`attempts/${id}/submit`, null, { params: { score } }),
+  getAttemptAnswers: (attemptId) => api.get(`attempts/${attemptId}/answers`),
+  testReportCsv: (testId) => api.get(`reports/test/${testId}`, { responseType: 'blob' }),
+  generateTestReportPdf: (testId) => api.get(`reports/test/${testId}/pdf`, { responseType: 'blob' }),
+  examReportCsv: downloadLegacyExamReportCsv,
+  generateExamReportPdf: downloadLegacyExamReportPdf,
+  gradeAttempt: (id, score) => api.post(`attempts/${id}/grade`, null, { params: { score } }),
 
   // Dashboard
   dashboard: () => api.get('dashboard/'),
@@ -90,6 +139,9 @@ export const adminApi = {
   userGroups: () => api.get('user-groups/'),
   createUserGroup: (data) => api.post('user-groups/', data),
   deleteUserGroup: (id) => api.delete(`user-groups/${id}`),
+  getUserGroupMembers: (id) => api.get(`user-groups/${id}/members`),
+  addUserGroupMember: (groupId, userId) => api.post(`user-groups/${groupId}/members`, { user_id: userId }),
+  removeUserGroupMember: (groupId, userId) => api.delete(`user-groups/${groupId}/members/${userId}`),
 
   // Exam Templates
   examTemplates: () => api.get('exam-templates/'),
@@ -106,6 +158,8 @@ export const adminApi = {
   // Integrations
   testIntegrations: (config) => api.post('integrations/test', config),
   generatePredefinedReport: (slug) => api.post(`reports/predefined/${slug}`, null, { responseType: 'blob' }),
+  previewCustomReport: (payload) => api.post('reports/export/preview', payload),
+  exportCustomReport: (payload) => api.post('reports/export', payload, { responseType: 'blob' }),
 
   // Admin Settings
   settings: () => api.get('admin-settings/'),

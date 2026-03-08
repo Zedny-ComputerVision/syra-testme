@@ -3,5 +3,9 @@
 .title { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.3rem; color: var(--color-text); }
 .sub { color: var(--color-muted); margin-bottom: 0.8rem; }
 .input { width: 100%; border: 1px solid var(--color-border); border-radius: 10px; padding: 0.55rem 0.65rem; background: var(--color-bg); color: var(--color-text); margin-top: 0.6rem; }
-.btn { width: 100%; margin-top: 0.9rem; padding: 0.65rem; border: 1px solid var(--color-primary); background: var(--color-primary); color: #0b111d; border-radius: 10px; font-weight: 700; cursor: pointer; }
-.info { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: #10b981; padding: 0.6rem; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.9rem; }
+.btn { width: 100%; margin-top: 0.9rem; padding: 0.65rem; border: 1px solid var(--color-primary); background: var(--color-primary); color: var(--color-button-text); border-radius: 10px; font-weight: 700; cursor: pointer; }
+.secondaryBtn { width: 100%; margin-top: 0.65rem; padding: 0.6rem; border: 1px solid var(--color-border); background: transparent; color: var(--color-text); border-radius: 10px; font-weight: 600; cursor: pointer; }
+.info { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: var(--color-success-text); padding: 0.6rem; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.9rem; }
+.error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--color-danger-text-muted); padding: 0.6rem; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.9rem; }
+.loginLink { text-align: center; margin-top: 0.75rem; font-size: 0.85rem; color: var(--color-muted); }
+.link { color: var(--color-primary); text-decoration: none; font-weight: 600; &:hover { text-decoration: underline; } }

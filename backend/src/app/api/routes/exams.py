@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
@@ -6,8 +7,9 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from ...models import Exam, Node, RoleEnum, ExamStatus, Course, CourseStatus, Question
-from ...schemas import ExamCreate, ExamRead, ExamBase, Message
-from ..deps import get_current_user, get_db_dep, require_role
+from ...schemas import ExamCreate, ExamRead, ExamUpdate, Message
+from ..deps import ensure_permission, get_current_user, get_db_dep, learner_can_access_exam, require_permission
+from ...modules.tests.proctoring_requirements import normalize_proctoring_config
 import json
 
 router = APIRouter()
@@ -18,12 +20,14 @@ DEFAULT_PROCTORING = {
     "audio_detection": True,
     "object_detection": True,
     "eye_tracking": True,
+    "head_pose_detection": True,
     "mouth_detection": False,
     "face_verify": True,
     "fullscreen_enforce": True,
     "tab_switch_detect": True,
     "screen_capture": False,
     "copy_paste_block": True,
+    "alert_rules": [],
     "eye_deviation_deg": 12,
     "mouth_open_threshold": 0.35,
     "audio_rms_threshold": 0.08,
@@ -39,22 +43,46 @@ DEFAULT_PROCTORING = {
     "audio_chunk_ms": 3000,
     "screenshot_interval_sec": 60,
     "face_verify_threshold": 0.15,
+    "cheating_consecutive_frames": 5,
+    "head_pose_consecutive": 5,
+    "eye_consecutive": 5,
+    "object_confidence_threshold": 0.5,
+    "audio_consecutive_chunks": 2,
+    "audio_window": 5,
     "head_pose_yaw_deg": 20,
     "head_pose_pitch_deg": 20,
+    # Enhanced sustained gaze/head thresholds (radians).
+    "head_pitch_min_rad": -0.3,
+    "head_pitch_max_rad": 0.2,
+    "head_yaw_min_rad": -0.6,
+    "head_yaw_max_rad": 0.6,
+    "eye_pitch_min_rad": -0.5,
+    "eye_pitch_max_rad": 0.2,
+    "eye_yaw_min_rad": -0.5,
+    "eye_yaw_max_rad": 0.5,
+    "pose_change_threshold_rad": 0.1,
+    "eye_change_threshold_rad": 0.2,
 }
 
 
 def _assert_has_questions(db: Session, exam_id):
     count = db.scalar(select(func.count()).select_from(Question).where(Question.exam_id == exam_id))
     if not count:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Exam must have at least one question before publishing")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Test must have at least one question before publishing")
+
+
+def _parse_exam_id(exam_id: str) -> str:
+    try:
+        return str(UUID(exam_id))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Test not found")
 
 
 def normalize_proctoring(cfg: dict | None) -> dict:
     base = DEFAULT_PROCTORING.copy()
     if cfg:
         base.update({k: v for k, v in cfg.items() if v is not None})
-    return base
+    return normalize_proctoring_config(base)
 
 
 def _exam_read(exam: Exam) -> ExamRead:
@@ -74,6 +102,9 @@ def _exam_read(exam: Exam) -> ExamRead:
         max_attempts=exam.max_attempts,
         passing_score=exam.passing_score,
         proctoring_config=exam.proctoring_config,
+        description=exam.description,
+        settings=exam.settings,
+        certificate=exam.certificate,
         category_id=exam.category_id,
         grading_scale_id=exam.grading_scale_id,
         category_name=category_name,
@@ -86,27 +117,31 @@ def _exam_read(exam: Exam) -> ExamRead:
 
 @router.get("/", response_model=list[ExamRead])
 async def list_exams(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    query = select(Exam)
+    query = select(Exam).order_by(Exam.updated_at.desc(), Exam.created_at.desc())
     if current.role == RoleEnum.LEARNER:
         query = query.where(Exam.status == ExamStatus.OPEN)
+    else:
+        ensure_permission(db, current, "Edit Tests")
     exams = db.scalars(query).all()
+    if current.role == RoleEnum.LEARNER:
+        exams = [exam for exam in exams if learner_can_access_exam(db, exam, current)]
     return [_exam_read(ex) for ex in exams]
 
 
 @router.post("/", response_model=ExamRead)
-async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Create Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     # Accept either explicit node_id or fall back to the oldest node/course.
     now = datetime.now(timezone.utc)
     if not body.title or not body.title.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Title is required")
+        raise HTTPException(status_code=422, detail="Title is required")
     if body.time_limit is not None and body.time_limit <= 0:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_limit must be positive minutes")
+        raise HTTPException(status_code=422, detail="time_limit must be positive minutes")
     if body.time_limit is not None and body.time_limit > 600:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_limit exceeds maximum (600 minutes)")
+        raise HTTPException(status_code=422, detail="time_limit exceeds maximum (600 minutes)")
     if body.max_attempts is not None and body.max_attempts < 1:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="max_attempts must be at least 1")
+        raise HTTPException(status_code=422, detail="max_attempts must be at least 1")
     if body.status == ExamStatus.OPEN:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Exam must have at least one question before publishing")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Test must have at least one question before publishing")
 
     node_id = body.node_id
     node = None
@@ -136,12 +171,15 @@ async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), curre
     exam = Exam(
         node_id=node_id,
         title=body.title,
+        description=body.description,
         type=body.type,
         status=body.status,
         time_limit=body.time_limit,
         max_attempts=body.max_attempts,
         passing_score=body.passing_score,
         proctoring_config=normalize_proctoring(body.proctoring_config),
+        settings=body.settings,
+        certificate=body.certificate,
         category_id=body.category_id,
         grading_scale_id=body.grading_scale_id,
         created_at=now,
@@ -153,7 +191,7 @@ async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), curre
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="An exam with this title already exists for this module")
+        raise HTTPException(status_code=409, detail="A test with this title already exists for this module")
     except OperationalError as exc:
         db.rollback()
         raise HTTPException(status_code=503, detail=f"Database unavailable: {exc.orig}")
@@ -163,34 +201,41 @@ async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), curre
 
 @router.get("/{exam_id}", response_model=ExamRead)
 async def get_exam(exam_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    exam = db.get(Exam, exam_id)
+    parsed_id = _parse_exam_id(exam_id)
+    exam = db.get(Exam, parsed_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Exam not found")
-    if current.role == RoleEnum.LEARNER and exam.status != ExamStatus.OPEN:
-        raise HTTPException(status_code=404, detail="Exam not found")
+        raise HTTPException(status_code=404, detail="Test not found")
+    if current.role == RoleEnum.LEARNER:
+        if not learner_can_access_exam(db, exam, current):
+            raise HTTPException(status_code=404, detail="Test not found")
+    else:
+        ensure_permission(db, current, "Edit Tests")
     return _exam_read(exam)
 
 
 @router.put("/{exam_id}", response_model=ExamRead)
-async def update_exam(exam_id: str, body: ExamBase, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    exam = db.get(Exam, exam_id)
+async def update_exam(exam_id: str, body: ExamUpdate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+    parsed_id = _parse_exam_id(exam_id)
+    exam = db.get(Exam, parsed_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Exam not found")
+        raise HTTPException(status_code=404, detail="Test not found")
     if current.role == RoleEnum.INSTRUCTOR and exam.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
-    data = body.model_dump(exclude_none=True)
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        return _exam_read(exam)
     if "title" in data and not data["title"].strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Title is required")
+        raise HTTPException(status_code=422, detail="Title is required")
     if "time_limit" in data:
         tl = data["time_limit"]
         if tl is not None and tl <= 0:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_limit must be positive minutes")
+            raise HTTPException(status_code=422, detail="time_limit must be positive minutes")
         if tl is not None and tl > 600:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_limit exceeds maximum (600 minutes)")
+            raise HTTPException(status_code=422, detail="time_limit exceeds maximum (600 minutes)")
     if "max_attempts" in data:
         ma = data["max_attempts"]
         if ma is not None and ma < 1:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="max_attempts must be at least 1")
+            raise HTTPException(status_code=422, detail="max_attempts must be at least 1")
 
     for field, value in data.items():
         if field == "node_id":
@@ -214,10 +259,11 @@ async def update_exam(exam_id: str, body: ExamBase, db: Session = Depends(get_db
 
 
 @router.delete("/{exam_id}", response_model=Message)
-async def delete_exam(exam_id: str, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN))):
-    exam = db.get(Exam, exam_id)
+async def delete_exam(exam_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Delete Tests", RoleEnum.ADMIN))):
+    parsed_id = _parse_exam_id(exam_id)
+    exam = db.get(Exam, parsed_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Exam not found")
+        raise HTTPException(status_code=404, detail="Test not found")
     db.delete(exam)
     db.commit()
     return Message(detail="Deleted")

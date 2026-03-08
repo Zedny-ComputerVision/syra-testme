@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from ...models import Schedule, RoleEnum, Exam
 from ...modules.tests.models import Test
-from ...schemas import ScheduleBase, ScheduleRead, Message
-from ..deps import get_current_user, get_db_dep, require_role
+from ...schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
+from ...services.audit import write_audit_log
+from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
 
@@ -15,6 +16,13 @@ router = APIRouter()
 def _build(schedule: Schedule) -> ScheduleRead:
     exam = schedule.exam
     test = getattr(schedule, "test", None)
+    user = getattr(schedule, "user", None)
+    exam_type = getattr(exam, "type", None) if exam else None
+    test_type_value = getattr(getattr(test, "type", None), "value", getattr(test, "type", None)) if test else None
+    exam_type_value = getattr(exam_type, "value", exam_type) if exam_type else None
+    test_title = test.name if test else (exam.title if exam else None)
+    test_type = test_type_value if test else exam_type_value
+    test_time_limit = test.time_limit_minutes if test else (exam.time_limit if exam else None)
     return ScheduleRead(
         id=schedule.id,
         exam_id=schedule.exam_id,
@@ -25,19 +33,51 @@ def _build(schedule: Schedule) -> ScheduleRead:
         notes=schedule.notes,
         created_at=schedule.created_at,
         updated_at=schedule.updated_at,
+        user_name=user.name if user else None,
+        user_student_id=user.user_id if user else None,
+        test_title=test_title,
         exam_title=exam.title if exam else None,
-        exam_type=exam.type if exam else None,
+        exam_type=exam_type,
         exam_time_limit=exam.time_limit if exam else None,
-        test_name=test.name if test else None,
-        test_type=test.type.value if test else None,
-        test_time_limit=test.time_limit_minutes if test else None,
+        test_name=test_title,
+        test_type=test_type,
+        test_time_limit=test_time_limit,
+    )
+
+
+def _build_exam(exam: Exam) -> ExamRead:
+    node = exam.node
+    course = node.course if node else None
+    category_name = exam.category.name if exam.category else None
+    return ExamRead(
+        id=exam.id,
+        node_id=exam.node_id,
+        node_title=node.title if node else None,
+        course_id=course.id if course else None,
+        course_title=course.title if course else None,
+        title=exam.title,
+        type=exam.type,
+        status=exam.status,
+        time_limit=exam.time_limit,
+        max_attempts=exam.max_attempts,
+        passing_score=exam.passing_score,
+        proctoring_config=exam.proctoring_config,
+        description=exam.description,
+        settings=exam.settings,
+        certificate=exam.certificate,
+        category_id=exam.category_id,
+        grading_scale_id=exam.grading_scale_id,
+        category_name=category_name,
+        created_at=exam.created_at,
+        updated_at=exam.updated_at,
+        question_count=exam.question_count,
     )
 
 
 @router.post("/", response_model=ScheduleRead)
-async def create_schedule(body: ScheduleBase, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def create_schedule(body: ScheduleBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     if body.exam_id and not db.get(Exam, body.exam_id):
-        raise HTTPException(status_code=404, detail="Exam not found")
+        raise HTTPException(status_code=404, detail="Test not found")
     if body.test_id and not db.get(Test, body.test_id):
         raise HTTPException(status_code=404, detail="Test not found")
     if body.exam_id:
@@ -51,7 +91,24 @@ async def create_schedule(body: ScheduleBase, db: Session = Depends(get_db_dep),
     db.add(s)
     db.commit()
     db.refresh(s)
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="SCHEDULE_CREATED",
+        resource_type="schedule",
+        resource_id=str(s.id),
+        detail=f"exam={s.exam_id}; user={s.user_id}; mode={s.access_mode.value}",
+    )
     return _build(s)
+
+
+@router.get("/tests", response_model=list[ExamRead])
+async def list_schedulable_tests(
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
+    exams = db.scalars(select(Exam).order_by(Exam.created_at.desc())).all()
+    return [_build_exam(exam) for exam in exams]
 
 
 @router.get("/", response_model=list[ScheduleRead])
@@ -59,15 +116,59 @@ async def list_schedules(db: Session = Depends(get_db_dep), current=Depends(get_
     query = select(Schedule)
     if current.role == RoleEnum.LEARNER:
         query = query.where(Schedule.user_id == current.id)
+    else:
+        ensure_permission(db, current, "Assign Schedules")
     schedules = db.scalars(query).all()
     return [_build(s) for s in schedules]
 
 
-@router.delete("/{schedule_id}", response_model=Message)
-async def delete_schedule(schedule_id: str, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    s = db.get(Schedule, schedule_id)
+@router.put("/{schedule_id}", response_model=ScheduleRead)
+async def update_schedule(
+    schedule_id: str,
+    body: ScheduleUpdate,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
+    schedule_pk = parse_uuid_param(schedule_id, detail="Not found")
+    s = db.get(Schedule, schedule_pk)
     if not s:
         raise HTTPException(status_code=404, detail="Not found")
+    payload = body.model_dump(exclude_unset=True)
+    for field, value in payload.items():
+        if value is None and field == "scheduled_at":
+            continue
+        setattr(s, field, value)
+    s.updated_at = datetime.now(timezone.utc)
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    scheduled_at_str = s.scheduled_at.isoformat() if s.scheduled_at else "unset"
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="SCHEDULE_UPDATED",
+        resource_type="schedule",
+        resource_id=str(s.id),
+        detail=f"mode={s.access_mode.value}; scheduled_at={scheduled_at_str}",
+    )
+    return _build(s)
+
+
+@router.delete("/{schedule_id}", response_model=Message)
+async def delete_schedule(schedule_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+    schedule_pk = parse_uuid_param(schedule_id, detail="Not found")
+    s = db.get(Schedule, schedule_pk)
+    if not s:
+        raise HTTPException(status_code=404, detail="Not found")
+    detail = f"exam={s.exam_id}; user={s.user_id}"
     db.delete(s)
     db.commit()
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="SCHEDULE_DELETED",
+        resource_type="schedule",
+        resource_id=schedule_id,
+        detail=detail,
+    )
     return Message(detail="Deleted")

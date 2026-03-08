@@ -1,17 +1,58 @@
+.error {
+  background: var(--color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+  color: var(--color-danger-text-muted);
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.errorRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 .page {
   padding: 1.5rem;
   max-width: 760px;
   margin: 0 auto;
 }
 
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
 .title {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text);
-  margin: 0 0 1.25rem;
+  margin: 0;
+}
+
+.searchInput {
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.88rem;
+  outline: none;
+  min-width: 180px;
+  &:focus { border-color: var(--color-primary); }
 }
 
 .sectionLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--color-muted);
@@ -19,6 +60,18 @@
   letter-spacing: 0.04em;
   margin-bottom: 0.6rem;
   margin-top: 1.5rem;
+}
+
+.sectionCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-border) 50%, transparent);
+  color: var(--color-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
 }
 
 .list {
@@ -42,10 +95,39 @@
   }
 }
 
+.pastCard {
+  opacity: 0.6;
+}
+
 .cardLeft {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.countdownChip {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.notesText {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  font-style: italic;
 }
 
 .examTitle {
@@ -68,13 +150,18 @@
 }
 
 .modeOpen {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 .modeScheduled {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.modePast {
+  background: color-mix(in srgb, var(--color-border) 60%, transparent);
+  color: var(--color-muted);
 }
 
 .empty {
@@ -84,8 +171,60 @@
   font-size: 0.9rem;
 }
 
+.cardRight {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.takeBtn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--color-primary);
+  color: var(--color-button-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+
+  &:hover { opacity: 0.85; }
+}
+
+.takeBtnDisabled {
+  background: color-mix(in srgb, var(--color-border) 60%, transparent);
+  color: var(--color-muted);
+  cursor: not-allowed;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.secondaryBtn {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+}
+
+.helperText {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
 .loading {
   text-align: center;
   padding: 3rem;
   color: var(--color-muted);
+}
+
+@media (max-width: 720px) {
+  .errorRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ...models import Notification
 from ...schemas import NotificationRead, Message
-from ..deps import get_current_user, get_db_dep
+from ..deps import get_current_user, get_db_dep, parse_uuid_param
 
 router = APIRouter()
 
@@ -17,7 +17,8 @@ async def list_notifications(db: Session = Depends(get_db_dep), current=Depends(
 
 @router.post("/{notification_id}/read", response_model=Message)
 async def mark_read(notification_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    notif = db.get(Notification, notification_id)
+    notif_pk = parse_uuid_param(notification_id, detail="Not found")
+    notif = db.get(Notification, notif_pk)
     if not notif or notif.user_id != current.id:
         raise HTTPException(status_code=404, detail="Not found")
     notif.is_read = True

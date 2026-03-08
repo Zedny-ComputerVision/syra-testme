@@ -1,8 +1,24 @@
-import api from './api'
+import {
+  listTests,
+  getTest,
+  createTest,
+  updateTest,
+  deleteTest,
+  getTestQuestions,
+} from './test.service'
 
-export const listExams = () => api.get('exams/')
-export const getExam = (id) => api.get(`exams/${id}`)
-export const createExam = (data) => api.post('exams/', data)
-export const updateExam = (id, data) => api.put(`exams/${id}`, data)
-export const deleteExam = (id) => api.delete(`exams/${id}`)
-export const getExamQuestions = (examId) => api.get(`questions/?exam_id=${examId}`)
+export const listExams = listTests
+export const getExam = getTest
+export const createExam = createTest
+export const updateExam = updateTest
+export const deleteExam = deleteTest
+export const getExamQuestions = getTestQuestions
+
+export {
+  listTests,
+  getTest,
+  createTest,
+  updateTest,
+  deleteTest,
+  getTestQuestions,
+}

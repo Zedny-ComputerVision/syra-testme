@@ -1,8 +1,8 @@
 .page {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) 330px;
   gap: 1rem;
-  padding: 0;
+  padding: 1rem;
   min-height: 100vh;
 }
 
@@ -15,6 +15,52 @@
   gap: 1rem;
 }
 
+.centerState {
+  justify-content: center;
+  align-items: center;
+}
+
+.stateMessage {
+  color: var(--color-muted);
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.errorBanner,
+.warningBanner {
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  font-size: 0.9rem;
+}
+
+.errorBanner {
+  color: var(--color-danger-text-muted);
+  background: var(--color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  text-align: center;
+}
+
+.warningBanner {
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+
+.retryBtn {
+  padding: 0.7rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+}
+
 .examHeader {
   display: flex;
   align-items: center;
@@ -23,8 +69,8 @@
   flex-wrap: wrap;
   padding: 1rem 1.2rem;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: linear-gradient(120deg, rgba(255, 255, 255, 0.18), rgba(16, 185, 129, 0.08));
+  border: 1px solid color-mix(in srgb, var(--color-surface) 50%, transparent);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--color-surface) 50%, transparent), var(--color-success-bg));
 }
 
 .examTitle {
@@ -34,6 +80,13 @@
   margin: 0;
 }
 
+.headerMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .timer {
   display: flex;
   align-items: center;
@@ -41,16 +94,16 @@
   font-size: 1rem;
   font-weight: 700;
   color: var(--color-text);
-  background: rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--color-surface) 40%, transparent);
   padding: 0.45rem 0.9rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid color-mix(in srgb, var(--color-surface) 55%, transparent);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.1);
 }
 
 .timerDanger {
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.4);
+  color: var(--color-danger-text);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
   animation: pulse 1s ease-in-out infinite;
 }
 
@@ -65,8 +118,8 @@
 }
 
 .badgeHigh {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.25rem 0.6rem;
@@ -74,12 +127,136 @@
 }
 
 .badgeMedium {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.25rem 0.6rem;
   border-radius: 6px;
+}
+
+.badgeConnected {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+
+.badgeDisconnected {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+
+.badgePending,
+.badgeSaving,
+.badgeSaved,
+.badgeError {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+
+.badgePending {
+  background: color-mix(in srgb, var(--color-info-bg) 70%, var(--color-surface));
+  color: var(--color-info-text);
+}
+
+.badgeSaving {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.badgeSaved {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.badgeError {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.recordingHint {
+  font-size: 0.72rem;
+  color: var(--color-muted);
+}
+
+.progressWrap {
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-surface) 50%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-surface) 55%, transparent), color-mix(in srgb, var(--color-success-bg) 80%, transparent));
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.1);
+}
+
+.progressHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.progressTitle {
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-muted);
+}
+
+.progressMeta {
+  margin-top: 0.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.progressStats {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.progressChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.progressBar {
+  margin-top: 0.85rem;
+  height: 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 55%, transparent);
+  overflow: hidden;
+}
+
+.progressBarFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--color-success) 30%, transparent);
+  transition: width 0.18s ease;
+}
+
+.progressPercent {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--color-muted);
 }
 
 /* ---- Question Navigation ---- */
@@ -97,7 +274,7 @@
   justify-content: center;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--color-surface) 35%, transparent);
   color: var(--color-muted);
   font-size: 0.82rem;
   font-weight: 700;
@@ -111,23 +288,23 @@
 
 .qNumActive {
   background: var(--color-primary);
-  color: #0b111d;
+  color: var(--color-button-text);
   border-color: var(--color-primary);
 }
 
 .qNumAnswered {
-  background: rgba(16, 185, 129, 0.15);
+  background: var(--color-success-bg);
   color: var(--color-primary);
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 /* ---- Question Card ---- */
 .questionCard {
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--card-border);
   border-radius: 18px;
   padding: 1.4rem;
   flex: 1;
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.16), rgba(16, 185, 129, 0.06));
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.16), var(--color-success-bg));
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.12);
 }
 
@@ -166,7 +343,7 @@
   transition: border-color 0.15s, background 0.15s, transform 0.15s;
   font-size: 0.92rem;
   color: var(--color-text);
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
 
   &:hover {
     border-color: var(--color-primary);
@@ -181,8 +358,8 @@
 
 .optionSelected {
   border-color: var(--color-primary);
-  background: linear-gradient(120deg, rgba(16, 185, 129, 0.14), rgba(139, 92, 246, 0.08));
-  box-shadow: 0 12px 26px rgba(16, 185, 129, 0.18);
+  background: linear-gradient(120deg, var(--color-success-bg), rgba(139, 92, 246, 0.08));
+  box-shadow: 0 12px 26px var(--color-success-bg);
 }
 
 .textAnswer {
@@ -191,7 +368,7 @@
   padding: 0.85rem;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--color-bg);
   color: var(--color-text);
   font-size: 0.92rem;
   resize: vertical;
@@ -211,11 +388,47 @@
   margin-top: 1rem;
 }
 
+.submitError {
+  color: var(--color-danger-text);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.submitConfirm {
+  margin-bottom: 0.85rem;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 36%, transparent);
+  background: linear-gradient(135deg, var(--color-warning-bg), color-mix(in srgb, var(--color-surface) 35%, transparent));
+}
+
+.submitConfirmTitle {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.submitConfirmBody {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.submitConfirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+  flex-wrap: wrap;
+}
+
 .btnNav {
   padding: 0.65rem 1.25rem;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
   color: var(--color-text);
   font-size: 0.9rem;
   font-weight: 700;
@@ -236,7 +449,7 @@
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  color: #0b111d;
+  color: var(--color-button-text);
   font-size: 0.93rem;
   font-weight: 800;
   cursor: pointer;
@@ -254,43 +467,37 @@
   }
 }
 
-/* ---- Proctor Pane ---- */
 .proctorPane {
-  border-left: 1px solid rgba(255, 255, 255, 0.16);
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
   position: sticky;
-  top: 0;
-  overflow-y: auto;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
-  border-radius: 0 0 0 18px;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.1);
-
-  [data-theme='dark'] & {
-    background: linear-gradient(180deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.7));
-    border-color: rgba(148, 163, 184, 0.18);
-  }
+  top: 1rem;
+  align-self: start;
+  min-height: calc(100vh - 2rem);
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-surface) 50%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--color-surface) 40%, transparent), var(--color-success-bg));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.14);
+  padding: 0.75rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .page {
     grid-template-columns: 1fr;
   }
 
   .proctorPane {
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    width: 220px;
-    height: auto;
-    max-height: 320px;
-    border-radius: 16px 0 0 0;
-    z-index: 50;
+    position: relative;
+    top: auto;
+    min-height: auto;
+    max-width: 480px;
   }
+}
 
+@media (max-width: 900px) {
   .examPane {
     padding: 1rem;
+  }
+
+  .headerMeta {
+    align-items: flex-start;
   }
 }

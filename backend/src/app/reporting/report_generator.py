@@ -55,7 +55,7 @@ REPORT_TEMPLATE = """<!DOCTYPE html>
   <div class="card">
     <strong>Attempt:</strong> {{ attempt_id_short }}<br>
     <strong>User:</strong> {{ user_name }} ({{ user_student_id }})<br>
-    <strong>Exam:</strong> {{ exam_title }}<br>
+    <strong>Test:</strong> {{ exam_title }}<br>
     <strong>Started:</strong> {{ started_at }}<br>
     <strong>Duration:</strong> {{ duration }}
   </div>
@@ -83,7 +83,7 @@ REPORT_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div class="metric">
       <div class="value">{{ score if score is not none else 'N/A' }}</div>
-      <div class="label">Exam Score</div>
+      <div class="label">Test Score</div>
     </div>
   </div>
 

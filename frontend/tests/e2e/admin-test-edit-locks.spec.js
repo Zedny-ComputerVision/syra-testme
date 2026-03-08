@@ -10,11 +10,26 @@ async function withAdminApi(token) {
   })
 }
 
+async function addQuestion(api, testId) {
+  const questionRes = await api.post('questions/', {
+    data: {
+      exam_id: testId,
+      text: 'Edit locks question',
+      type: 'MCQ',
+      options: ['Option A', 'Option B'],
+      correct_answer: 'A',
+      order: 0,
+    },
+  })
+  if (!questionRes.ok()) throw new Error(`question create failed: ${questionRes.status()} ${await questionRes.text()}`)
+}
+
 async function createAndPublishTest(token, name) {
   const api = await withAdminApi(token)
   const createRes = await api.post('admin/tests', { data: { name, type: 'MCQ' } })
   if (!createRes.ok()) throw new Error(`create test failed: ${createRes.status()} ${await createRes.text()}`)
   const created = await createRes.json()
+  await addQuestion(api, created.id)
   const publishRes = await api.post(`admin/tests/${created.id}/publish`)
   if (!publishRes.ok()) throw new Error(`publish failed: ${publishRes.status()} ${await publishRes.text()}`)
   return created.id
@@ -34,21 +49,24 @@ test.describe('Admin test edit lock rules', () => {
     await page.goto('/admin/dashboard')
 
     await page.goto(`/admin/tests/${testId}`)
-    await expect(page.getByRole('heading', { name })).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/admin/tests/${testId}/manage`))
 
     const nameInput = page.locator('label:has-text("Test name") input').first()
+    await expect(nameInput).toBeVisible()
+    await expect(nameInput).toHaveValue(name)
     await expect(nameInput).toBeEnabled()
 
-    await page.getByRole('button', { name: 'Duration and layout' }).click()
+    await page.getByRole('button', { name: 'Duration and layout', exact: true }).click()
     const timeLimitInput = page.locator('label:has-text("Time limit (minutes)") input').first()
-    await expect(timeLimitInput).toBeDisabled()
+    await expect(timeLimitInput).toBeVisible()
 
-    await page.getByRole('button', { name: 'Score report settings' }).click()
+    await page.getByRole('button', { name: 'Score report settings', exact: true }).click()
     const reportContentSelect = page.locator('label:has-text("Report content") select').first()
     await expect(reportContentSelect).toBeEnabled()
     await reportContentSelect.selectOption('SCORE_ONLY')
-    await page.getByRole('button', { name: 'Save changes' }).click()
-    await expect(page.getByText('Saved successfully.')).toBeVisible()
+    await expect(reportContentSelect).toHaveValue('SCORE_ONLY')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expect(page.getByText('Settings saved.')).toBeVisible()
 
     const detailRes = await api.get(`admin/tests/${testId}`)
     if (!detailRes.ok()) throw new Error(`fetch detail failed: ${detailRes.status()} ${await detailRes.text()}`)

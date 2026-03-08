@@ -1,46 +1,252 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useParams, useNavigate } from 'react-router-dom'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
-import { getExam } from '../../services/exam.service'
+import { getTest } from '../../services/test.service'
+import { normalizeTest } from '../../utils/assessmentAdapters'
+import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import styles from './SystemCheckPage.module.scss'
 
 export default function SystemCheckPage() {
-  const { examId } = useParams()
+  const { testId } = useParams()
   const navigate = useNavigate()
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const canvasRef = useRef(null)
+  const micStreamRef = useRef(null)
+  const micAudioCtxRef = useRef(null)
+  const micIntervalRef = useRef(null)
+  const micTimeoutRef = useRef(null)
 
-  const [camera, setCamera] = useState('pending')   // pending | checking | passed | failed
+  const [camera, setCamera] = useState('pending')
   const [mic, setMic] = useState('pending')
   const [fullscreen, setFullscreen] = useState('pending')
   const [micLevel, setMicLevel] = useState(0)
   const [lighting, setLighting] = useState('pending')
   const [lightingScore, setLightingScore] = useState(0)
   const [proctorCfg, setProctorCfg] = useState({})
+  const [requirements, setRequirements] = useState(getJourneyRequirements({}))
+  const [configLoading, setConfigLoading] = useState(true)
+  const [configError, setConfigError] = useState('')
+  const [continueBusy, setContinueBusy] = useState(false)
+  const [checksBusy, setChecksBusy] = useState(false)
 
-  // Camera check
-  const checkCamera = useCallback(async () => {
+  const attachCameraStream = useCallback(async () => {
+    const video = videoRef.current
+    const stream = streamRef.current
+    if (!video || !stream) return
+    if (video.srcObject !== stream) {
+      video.srcObject = stream
+    }
+    try {
+      await video.play()
+    } catch {
+      // Browsers can reject play() during transient mount states. The
+      // stream stays attached and autoplay will resume when allowed.
+    }
+  }, [])
+
+  const stopCamera = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.pause?.()
+      videoRef.current.srcObject = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+  }, [])
+
+  const stopMicMonitor = useCallback(() => {
+    if (micIntervalRef.current) {
+      clearInterval(micIntervalRef.current)
+      micIntervalRef.current = null
+    }
+    if (micTimeoutRef.current) {
+      clearTimeout(micTimeoutRef.current)
+      micTimeoutRef.current = null
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop())
+      micStreamRef.current = null
+    }
+    if (micAudioCtxRef.current) {
+      micAudioCtxRef.current.close().catch(() => {})
+      micAudioCtxRef.current = null
+    }
+    setMicLevel(0)
+  }, [])
+
+  const checkCamera = useCallback(async (required) => {
+    stopCamera()
+    if (!required) {
+      setCamera('passed')
+      return
+    }
     setCamera('checking')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true })
       streamRef.current = stream
       if (videoRef.current) {
-        videoRef.current.srcObject = stream
+        void attachCameraStream()
       }
       setCamera('passed')
     } catch {
       setCamera('failed')
     }
+  }, [attachCameraStream, stopCamera])
+
+  const checkMic = useCallback(async (required) => {
+    stopMicMonitor()
+    if (!required) {
+      setMic('passed')
+      return
+    }
+    setMic('checking')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      micStreamRef.current = stream
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+      micAudioCtxRef.current = audioCtx
+      const source = audioCtx.createMediaStreamSource(stream)
+      const analyser = audioCtx.createAnalyser()
+      analyser.fftSize = 256
+      source.connect(analyser)
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      micIntervalRef.current = setInterval(() => {
+        analyser.getByteFrequencyData(data)
+        const avg = data.reduce((a, b) => a + b, 0) / data.length
+        setMicLevel(Math.min(100, avg * 2))
+      }, 100)
+      micTimeoutRef.current = setTimeout(() => {
+        stopMicMonitor()
+      }, 10000)
+      setMic('passed')
+    } catch {
+      setMic('failed')
+    }
+  }, [stopMicMonitor])
+
+  const checkFullscreen = useCallback((required) => {
+    if (!required) {
+      setFullscreen('passed')
+      return
+    }
+    setFullscreen('checking')
+    const supported = Boolean(document.documentElement.requestFullscreen)
+    if (!supported) {
+      setFullscreen('failed')
+      return
+    }
+    setFullscreen(document.fullscreenElement ? 'passed' : 'pending')
   }, [])
 
-  // Lighting check (simple average brightness)
+  const requestFullscreen = useCallback(async () => {
+    if (!requirements.fullscreenRequired) return
+    if (!document.documentElement.requestFullscreen) {
+      setFullscreen('failed')
+      return
+    }
+    setFullscreen('checking')
+    try {
+      await document.documentElement.requestFullscreen()
+      setFullscreen(document.fullscreenElement ? 'passed' : 'failed')
+    } catch {
+      setFullscreen('failed')
+    }
+  }, [requirements.fullscreenRequired])
+
+  const loadConfig = useCallback(async () => {
+    setConfigLoading(true)
+    setConfigError('')
+    try {
+      const { data } = await getTest(testId)
+      const normalized = normalizeTest(data)
+      const cfg = normalized?.proctoring_config || {}
+      setProctorCfg(cfg)
+      setRequirements(getJourneyRequirements(cfg))
+    } catch {
+      setConfigError('Failed to load test configuration. Please refresh and try again.')
+      setProctorCfg({})
+      setRequirements(getJourneyRequirements({}))
+    } finally {
+      setConfigLoading(false)
+    }
+  }, [testId])
+
+  const rerunChecks = useCallback(async () => {
+    if (checksBusy || configLoading || configError) return
+    setChecksBusy(true)
+    try {
+      await checkCamera(requirements.cameraRequired)
+      await checkMic(requirements.micRequired)
+      checkFullscreen(requirements.fullscreenRequired)
+      if (!requirements.lightingRequired) {
+        setLighting('passed')
+        setLightingScore(1)
+      } else {
+        setLighting('pending')
+      }
+    } finally {
+      setChecksBusy(false)
+    }
+  }, [
+    checkCamera,
+    checkFullscreen,
+    checkMic,
+    checksBusy,
+    configError,
+    configLoading,
+    requirements.cameraRequired,
+    requirements.fullscreenRequired,
+    requirements.lightingRequired,
+    requirements.micRequired,
+  ])
+
   useEffect(() => {
-    if (camera !== 'passed' || !videoRef.current) return
+    let cancelled = false
+    loadConfig().catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [loadConfig])
+
+  useEffect(() => {
+    if (configLoading) return
+    checkCamera(requirements.cameraRequired)
+    checkMic(requirements.micRequired)
+    checkFullscreen(requirements.fullscreenRequired)
+    if (!requirements.lightingRequired) {
+      setLighting('passed')
+      setLightingScore(1)
+    } else {
+      setLighting('pending')
+    }
+  }, [
+    configLoading,
+    requirements.cameraRequired,
+    requirements.micRequired,
+    requirements.fullscreenRequired,
+    requirements.lightingRequired,
+    checkCamera,
+    checkMic,
+    checkFullscreen,
+  ])
+
+  useEffect(() => {
+    if (camera !== 'passed') return
+    void attachCameraStream()
+  }, [attachCameraStream, camera])
+
+  useEffect(() => {
+    if (!requirements.lightingRequired) return undefined
+    if (camera !== 'passed' || !videoRef.current) {
+      setLighting('pending')
+      return undefined
+    }
     const canvas = canvasRef.current || document.createElement('canvas')
     canvasRef.current = canvas
-    let raf
+    let raf = 0
     const sample = () => {
       const vid = videoRef.current
       if (vid && vid.videoWidth > 0) {
@@ -51,77 +257,79 @@ export default function SystemCheckPage() {
         const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
         let sum = 0
         for (let i = 0; i < data.length; i += 4) {
-          const lum = (data[i] + data[i + 1] + data[i + 2]) / 3
-          sum += lum
+          sum += (data[i] + data[i + 1] + data[i + 2]) / 3
         }
         const avg = sum / (data.length / 4) / 255
         setLightingScore(avg)
-        const minScore = (proctorCfg.lighting_min_score || 0.35)
+        const minScore = proctorCfg.lighting_min_score || 0.35
         setLighting(avg >= minScore ? 'passed' : 'failed')
       }
       raf = requestAnimationFrame(sample)
     }
     raf = requestAnimationFrame(sample)
     return () => cancelAnimationFrame(raf)
-  }, [camera, proctorCfg.lighting_min_score])
-
-  // Mic check
-  const checkMic = useCallback(async () => {
-    setMic('checking')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
-      const source = audioCtx.createMediaStreamSource(stream)
-      const analyser = audioCtx.createAnalyser()
-      analyser.fftSize = 256
-      source.connect(analyser)
-      const data = new Uint8Array(analyser.frequencyBinCount)
-      const check = () => {
-        analyser.getByteFrequencyData(data)
-        const avg = data.reduce((a, b) => a + b, 0) / data.length
-        setMicLevel(Math.min(100, avg * 2))
-      }
-      const interval = setInterval(check, 100)
-      setTimeout(() => {
-        clearInterval(interval)
-        stream.getTracks().forEach(t => t.stop())
-        audioCtx.close()
-      }, 10000)
-      setMic('passed')
-    } catch {
-      setMic('failed')
-    }
-  }, [])
-
-  // Fullscreen check
-  const checkFullscreen = useCallback(() => {
-    setFullscreen('checking')
-    if (document.documentElement.requestFullscreen) {
-      setFullscreen('passed')
-    } else {
-      setFullscreen('failed')
-    }
-  }, [])
+  }, [camera, requirements.lightingRequired, proctorCfg.lighting_min_score])
 
   useEffect(() => {
-    getExam(examId).then(({ data }) => setProctorCfg(data.proctoring_config || {})).catch(() => {})
-    checkCamera()
-    checkMic()
-    checkFullscreen()
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop())
+    const handleFullscreenChange = () => {
+      if (!requirements.fullscreenRequired) {
+        setFullscreen('passed')
+        return
       }
+      setFullscreen(document.fullscreenElement ? 'passed' : 'pending')
     }
-  }, [checkCamera, checkMic, checkFullscreen])
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [requirements.fullscreenRequired])
 
-  const allPassed = camera === 'passed' && mic === 'passed' && fullscreen === 'passed' && lighting === 'passed'
+  useEffect(() => {
+    return () => {
+      stopCamera()
+      stopMicMonitor()
+    }
+  }, [stopCamera, stopMicMonitor])
+
+  const allPassed = useMemo(() => {
+    if (configLoading || configError) return false
+    return (
+      (!requirements.cameraRequired || camera === 'passed') &&
+      (!requirements.micRequired || mic === 'passed') &&
+      (!requirements.fullscreenRequired || fullscreen === 'passed') &&
+      (!requirements.lightingRequired || lighting === 'passed')
+    )
+  }, [
+    camera,
+    configError,
+    configLoading,
+    fullscreen,
+    lighting,
+    mic,
+    requirements.cameraRequired,
+    requirements.micRequired,
+    requirements.fullscreenRequired,
+    requirements.lightingRequired,
+  ])
 
   const renderIcon = (state) => {
     if (state === 'passed') return <span className={styles.iconPass}>&#10003;</span>
     if (state === 'failed') return <span className={styles.iconFail}>&#10007;</span>
     if (state === 'checking') return <span className={styles.iconChecking} />
     return <span className={styles.iconPending}>&#9679;</span>
+  }
+
+  const handleContinue = () => {
+    if (!allPassed || continueBusy) return
+    setContinueBusy(true)
+    const flags = {
+      mic_ok: !requirements.micRequired || mic === 'passed',
+      cam_ok: !requirements.cameraRequired || camera === 'passed',
+      fs_ok: !requirements.fullscreenRequired || fullscreen === 'passed',
+      lighting_score: lightingScore,
+      requirements,
+    }
+    sessionStorage.setItem('precheck_flags', JSON.stringify(flags))
+    const nextRoute = requirements.identityRequired ? `/tests/${testId}/verify-identity` : `/tests/${testId}/rules`
+    navigate(nextRoute)
   }
 
   return (
@@ -136,6 +344,14 @@ export default function SystemCheckPage() {
       >
         <h1 className={styles.title}>System Check</h1>
         <p className={styles.sub}>We need to verify your system meets the requirements</p>
+        {configError && (
+          <div className={styles.helperRow}>
+            <p className={styles.errorBanner}>{configError}</p>
+            <button type="button" className={styles.secondaryBtn} onClick={() => void loadConfig()} disabled={configLoading}>
+              {configLoading ? 'Retrying...' : 'Retry requirements'}
+            </button>
+          </div>
+        )}
 
         <div className={styles.checksList}>
           <motion.div
@@ -147,12 +363,13 @@ export default function SystemCheckPage() {
               {renderIcon(camera)}
               <span>Camera Access</span>
             </div>
-            {camera === 'passed' && (
+            {requirements.cameraRequired && camera === 'passed' && (
               <div className={styles.preview}>
                 <video ref={videoRef} className={styles.video} autoPlay muted playsInline />
               </div>
             )}
-            {camera === 'failed' && <p className={styles.hint}>Please allow camera access and refresh</p>}
+            {!requirements.cameraRequired && <p className={styles.hint}>Not required for this test.</p>}
+            {requirements.cameraRequired && camera === 'failed' && <p className={styles.hint}>Please allow camera access and refresh.</p>}
           </motion.div>
 
           <motion.div
@@ -164,12 +381,13 @@ export default function SystemCheckPage() {
               {renderIcon(mic)}
               <span>Microphone Access</span>
             </div>
-            {mic === 'passed' && (
+            {!requirements.micRequired && <p className={styles.hint}>Not required for this test.</p>}
+            {requirements.micRequired && mic === 'passed' && (
               <>
                 <div className={styles.levelBar}>
                   <div className={styles.levelFill} style={{ width: `${micLevel}%` }} />
                 </div>
-                <p className={styles.hint}>Speak to see microphone level</p>
+                <p className={styles.hint}>Speak to confirm microphone level.</p>
               </>
             )}
           </motion.div>
@@ -181,8 +399,18 @@ export default function SystemCheckPage() {
           >
             <div className={styles.checkInfo}>
               {renderIcon(fullscreen)}
-              <span>Fullscreen Support</span>
+              <span>Fullscreen Entry</span>
             </div>
+            <button
+              type="button"
+              className={styles.inlineBtn}
+              onClick={requestFullscreen}
+              disabled={!requirements.fullscreenRequired}
+            >
+              {!requirements.fullscreenRequired ? 'Not Required' : fullscreen === 'passed' ? 'Fullscreen Active' : 'Enter Fullscreen'}
+            </button>
+            {requirements.fullscreenRequired && fullscreen === 'pending' && <p className={styles.hint}>Enter fullscreen to continue.</p>}
+            {requirements.fullscreenRequired && fullscreen === 'failed' && <p className={styles.hint}>Fullscreen is required for this test.</p>}
           </motion.div>
 
           <motion.div
@@ -194,7 +422,8 @@ export default function SystemCheckPage() {
               {renderIcon(lighting)}
               <span>Lighting Quality</span>
             </div>
-            <p className={styles.hint}>Brightness: {(lightingScore * 100).toFixed(0)}%</p>
+            {!requirements.lightingRequired && <p className={styles.hint}>Not required for this test.</p>}
+            {requirements.lightingRequired && <p className={styles.hint}>Brightness: {(lightingScore * 100).toFixed(0)}%</p>}
           </motion.div>
 
           {proctorCfg.screen_capture && (
@@ -203,26 +432,27 @@ export default function SystemCheckPage() {
                 <span className={styles.iconPending}>&#9679;</span>
                 <span>Screen Share Permission</span>
               </div>
-              <p className={styles.hint}>You will be asked to share your screen when the exam starts.</p>
+              <p className={styles.hint}>You will be asked to share your screen when the test starts.</p>
             </motion.div>
           )}
         </div>
 
+        {!configError && !configLoading && (
+          <div className={styles.actionsRow}>
+            <button type="button" className={styles.secondaryBtn} onClick={() => void rerunChecks()} disabled={checksBusy || continueBusy}>
+              {checksBusy ? 'Re-running checks...' : 'Re-run checks'}
+            </button>
+          </div>
+        )}
+
         <motion.button
+          type="button"
           className={styles.btn}
-          disabled={!allPassed}
-          whileTap={{ scale: allPassed ? 0.98 : 1 }}
-          onClick={() => {
-            sessionStorage.setItem('precheck_flags', JSON.stringify({
-              mic_ok: mic === 'passed',
-              cam_ok: camera === 'passed',
-              fs_ok: fullscreen === 'passed',
-              lighting_score: lightingScore,
-            }))
-            navigate(`/verify-identity/${examId}`)
-          }}
+          disabled={!allPassed || continueBusy}
+          whileTap={{ scale: allPassed && !continueBusy ? 0.98 : 1 }}
+          onClick={handleContinue}
         >
-          {allPassed ? 'Continue' : 'Waiting for checks...'}
+          {configLoading ? 'Loading requirements...' : configError ? 'Cannot continue' : allPassed ? 'Continue' : 'Waiting for checks...'}
         </motion.button>
       </motion.div>
     </div>

@@ -39,17 +39,26 @@ class TestSettingsSchema(BaseModel):
 
 
 class TestBase(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: Optional[str] = None
     name: str | None = None
     description: Optional[str] = None
     type: TestType | None = None
+    node_id: Optional[UUID] = None
     category_id: Optional[UUID] = None
+    grading_scale_id: Optional[UUID] = None
     time_limit_minutes: Optional[int] = None
     attempts_allowed: Optional[int] = None
+    passing_score: Optional[float] = None
     randomize_questions: Optional[bool] = None
     report_displayed: Optional[ReportDisplayed] = None
     report_content: Optional[ReportContent] = None
     ui_config: Optional[dict] = None
     settings: Optional[TestSettingsSchema] = None
+    runtime_settings: Optional[dict] = None
+    proctoring_config: Optional[dict] = None
+    certificate: Optional[dict] = None
 
     @field_validator("name")
     @classmethod
@@ -108,6 +117,8 @@ class TestListItem(BaseModel):
     category: CategoryRef | None = None
     time_limit_minutes: int
     testing_sessions: int = 0
+    question_count: int = 0
+    certificate: dict | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -119,14 +130,25 @@ class TestDetail(BaseModel):
     description: str | None = None
     type: TestType
     status: TestStatus
+    runtime_status: str
+    node_id: UUID | None = None
+    node_title: str | None = None
+    course_id: UUID | None = None
+    course_title: str | None = None
     category_id: UUID | None = None
+    grading_scale_id: UUID | None = None
     time_limit_minutes: int
     attempts_allowed: int
+    passing_score: float | None = None
     randomize_questions: bool
     report_displayed: ReportDisplayed
     report_content: ReportContent
     ui_config: dict | None = None
     settings: TestSettingsSchema
+    runtime_settings: dict | None = None
+    proctoring_config: dict | None = None
+    certificate: dict | None = None
+    question_count: int = 0
     created_at: datetime
     updated_at: datetime
     published_at: datetime | None = None

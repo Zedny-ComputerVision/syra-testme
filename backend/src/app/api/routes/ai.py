@@ -65,17 +65,17 @@ async def generate_questions(body: GenerateRequest):
     )
 
     try:
-        completion = client.responses.create(
+        completion = client.chat.completions.create(
           model="gpt-4o-mini",
           messages=[
               {"role": "system", "content": system_prompt},
               {"role": "user", "content": user_prompt},
           ],
           temperature=0.7,
-          max_output_tokens=1200,
+          max_tokens=1200,
           response_format={"type": "json_object"},
         )
-        content = completion.output_text
+        content = completion.choices[0].message.content
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Model error: {exc}") from exc
 

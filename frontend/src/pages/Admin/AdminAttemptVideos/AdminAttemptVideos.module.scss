@@ -1,28 +1,82 @@
 .page { padding: 1rem; color: var(--color-text); }
 .head { display: flex; gap: 0.8rem; align-items: flex-start; margin-bottom: 0.9rem; }
+.headContent { min-width: 0; flex: 1; }
+.headActions { margin-left: auto; }
 .head h2 { margin: 0; font-size: 1.1rem; }
 .head p { margin: 0.25rem 0 0; color: var(--color-muted); font-size: 0.88rem; }
 .backBtn {
   border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.05);
+  background: color-mix(in srgb, var(--color-border) 28%, transparent);
   color: var(--color-text);
   border-radius: 8px;
   padding: 0.35rem 0.6rem;
   cursor: pointer;
 }
+.refreshBtn,
+.errorAction {
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+}
+.refreshBtn {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  padding: 0.35rem 0.75rem;
+}
+.loadingState {
+  color: var(--color-muted);
+}
+.supervisionRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+  flex-wrap: wrap;
+}
+.supervisionLabel,
+.supervisionHint {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+.supervisionSelect {
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 0.3rem 0.55rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  min-width: min(360px, 100%);
+}
 .error {
-  border: 1px solid rgba(239,68,68,0.45);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 50%, transparent);
   background: rgba(127,29,29,0.2);
-  color: #fecaca;
+  color: var(--color-danger-text-muted);
   border-radius: 10px;
   padding: 0.7rem;
   margin-bottom: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.errorAction {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  white-space: nowrap;
 }
 .empty {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1rem;
-  background: rgba(255,255,255,0.03);
+  background: color-mix(in srgb, var(--color-border) 22%, transparent);
   color: var(--color-muted);
 }
 .layout {
@@ -33,8 +87,40 @@
 .playerCard {
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: rgba(255,255,255,0.03);
+  background: color-mix(in srgb, var(--color-border) 22%, transparent);
   overflow: hidden;
+}
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.summaryCard {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-border) 18%, transparent);
+  padding: 0.7rem 0.8rem;
+}
+.summaryLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.summaryValue {
+  margin-top: 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.summaryHelper {
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--color-muted);
 }
 .playerTop {
   display: flex;
@@ -57,10 +143,31 @@
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.4rem 0.5rem;
-  background: rgba(255,255,255,0.04);
+  background: color-mix(in srgb, var(--color-border) 25%, transparent);
   color: var(--color-text);
 }
 .playerTop a { color: var(--color-primary); text-decoration: none; font-size: 0.84rem; white-space: nowrap; }
+.filterRow {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0 0.75rem 0.75rem;
+}
+.filterRow label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+.filterRow select {
+  min-width: 180px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  background: color-mix(in srgb, var(--color-border) 25%, transparent);
+  color: var(--color-text);
+}
 .video { width: 100%; max-height: 560px; background: #0a1226; }
 .timelineWrap {
   border-top: 1px solid var(--color-border);
@@ -106,14 +213,14 @@
   font-size: 0.75rem;
   border: 1px solid transparent;
 }
-.badgeNeutral { background: rgba(59, 130, 246, 0.18); border-color: rgba(59, 130, 246, 0.3); color: #bfdbfe; }
+.badgeNeutral { background: rgba(59, 130, 246, 0.18); border-color: color-mix(in srgb, var(--color-info) 35%, transparent); color: var(--color-info-text); }
 .badgeMedium { background: rgba(251, 146, 60, 0.2); border-color: rgba(251, 146, 60, 0.45); color: #fdba74; }
-.badgeHigh { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.45); color: #fca5a5; }
+.badgeHigh { background: color-mix(in srgb, var(--color-danger) 28%, transparent); border-color: color-mix(in srgb, var(--color-danger) 50%, transparent); color: var(--color-danger-text-muted); }
 
 .sideCard {
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: rgba(255,255,255,0.03);
+  background: color-mix(in srgb, var(--color-border) 22%, transparent);
   padding: 0.75rem;
   min-height: 480px;
   display: flex;
@@ -123,6 +230,25 @@
   margin: 0 0 0.6rem;
   font-size: 0.95rem;
 }
+
+.sideHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.clearBtn {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
 .emptySmall { color: var(--color-muted); font-size: 0.85rem; }
 .eventList {
   display: flex;
@@ -133,7 +259,7 @@
 }
 .eventBtn {
   border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.04);
+  background: color-mix(in srgb, var(--color-border) 25%, transparent);
   border-radius: 10px;
   color: var(--color-text);
   text-align: left;
@@ -144,6 +270,12 @@
   gap: 0.24rem;
 }
 .eventBtn:hover { border-color: rgba(99, 102, 241, 0.55); }
+
+.eventBtnActive {
+  border-color: color-mix(in srgb, var(--color-primary) 65%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
 .eventSeverity {
   width: fit-content;
   border-radius: 999px;
@@ -151,11 +283,60 @@
   font-weight: 700;
   padding: 0.13rem 0.42rem;
 }
-.eventHigh { background: rgba(220, 38, 38, 0.22); color: #fecaca; }
+.eventHigh { background: rgba(220, 38, 38, 0.22); color: var(--color-danger-text-muted); }
 .eventMedium { background: rgba(249, 115, 22, 0.22); color: #fdba74; }
-.eventLow { background: rgba(59, 130, 246, 0.2); color: #bfdbfe; }
+.eventLow { background: var(--color-info-bg); color: var(--color-info-text); }
 .eventMeta { font-size: 0.78rem; color: var(--color-text); }
 .eventDetail { font-size: 0.76rem; color: var(--color-muted); }
+
+.eventInspector {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.inspectorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.inspectorTime {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.inspectorTitle {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.inspectorDetail {
+  font-size: 0.82rem;
+  color: var(--color-text);
+  line-height: 1.45;
+}
+
+.inspectorMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.76rem;
+  color: var(--color-muted);
+}
+
+.inspectorImage {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  object-fit: cover;
+  background: #0a1226;
+}
 
 @media (max-width: 1080px) {
   .layout { grid-template-columns: 1fr; }
@@ -163,4 +344,16 @@
   .playerTop select { min-width: 0; width: 100%; }
   .sideCard { min-height: 0; }
   .eventList { max-height: 40vh; }
+  .head { flex-wrap: wrap; }
+  .headActions { margin-left: 0; }
+}
+
+@media (max-width: 640px) {
+  .error {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .supervisionSelect {
+    width: 100%;
+  }
 }

@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import { generateQuestionsAI } from '../../../services/ai.service'
+import { normalizeProctoringConfig } from '../../../utils/proctoringRequirements'
 import ExamQuestionPanel from '../ExamQuestionPanel/ExamQuestionPanel'
 import styles from './AdminNewTestWizard.module.scss'
 
 const STEPS = [
   { id: 0, label: 'Information' },
   { id: 1, label: 'Method' },
-  { id: 2, label: 'Settings' },
+  { id: 2, label: 'Proctoring' },
   { id: 3, label: 'Questions' },
   { id: 4, label: 'Grading' },
   { id: 5, label: 'Certificates' },
@@ -36,18 +37,179 @@ const DETECTORS = [
   { key: 'audio_detection', label: 'Audio Detection', desc: 'Detect speech and noise' },
   { key: 'object_detection', label: 'Object Detection', desc: 'Detect forbidden objects (phone, book)' },
   { key: 'eye_tracking', label: 'Eye Tracking', desc: 'Detect gaze deviation from screen' },
+  { key: 'head_pose_detection', label: 'Head Pose Detection', desc: 'Detect sustained head turns and posture changes' },
   { key: 'mouth_detection', label: 'Mouth Movement', desc: 'Detect talking during exam' },
 ]
+
+const DEFAULT_PROCTORING_CONFIG = normalizeProctoringConfig({
+  face_detection: true,
+  multi_face: true,
+  audio_detection: true,
+  object_detection: true,
+  eye_tracking: true,
+  head_pose_detection: true,
+  mouth_detection: false,
+  face_verify: true,
+  fullscreen_enforce: true,
+  tab_switch_detect: true,
+  screen_capture: false,
+  copy_paste_block: true,
+  alert_rules: [],
+  eye_deviation_deg: 12,
+  mouth_open_threshold: 0.35,
+  audio_rms_threshold: 0.08,
+  max_face_absence_sec: 5,
+  max_tab_blurs: 3,
+  max_alerts_before_autosubmit: 5,
+  lighting_min_score: 0.35,
+  face_verify_id_threshold: 0.18,
+  max_score_before_autosubmit: 15,
+  frame_interval_ms: 3000,
+  audio_chunk_ms: 3000,
+  screenshot_interval_sec: 60,
+  face_verify_threshold: 0.15,
+  cheating_consecutive_frames: 5,
+  head_pose_consecutive: 5,
+  eye_consecutive: 5,
+  head_pose_yaw_deg: 20,
+  head_pose_pitch_deg: 20,
+  object_confidence_threshold: 0.5,
+  audio_consecutive_chunks: 2,
+  audio_window: 5,
+})
+
+const PROCTORING_REQUIREMENTS = [
+  { key: 'identity_required', label: 'Identity verification', desc: 'Require selfie and ID checks before the learner enters the attempt.' },
+  { key: 'camera_required', label: 'Camera required', desc: 'Block the journey if the camera is unavailable.' },
+  { key: 'mic_required', label: 'Microphone required', desc: 'Block the journey if the microphone is unavailable.' },
+  { key: 'lighting_required', label: 'Lighting check', desc: 'Require the webcam feed to pass the minimum lighting score.' },
+  { key: 'fullscreen_enforce', label: 'Fullscreen lock', desc: 'Require fullscreen during the active attempt.' },
+  { key: 'tab_switch_detect', label: 'Tab / blur detection', desc: 'Track focus loss, tab switches, and hidden pages.' },
+  { key: 'copy_paste_block', label: 'Clipboard blocking', desc: 'Disable copy and paste shortcuts during the attempt.' },
+  { key: 'screen_capture', label: 'Periodic screen capture', desc: 'Capture timed screen snapshots for later review.' },
+]
+
+const PROCTORING_CONTROL_GROUPS = [
+  {
+    key: 'identity',
+    title: 'Identity & environment thresholds',
+    description: 'Tune how strict the journey checks are before the learner can start.',
+    controls: [
+      { key: 'max_face_absence_sec', label: 'Face absence grace period', desc: 'Lower is stricter. Missing faces trigger alerts sooner.', min: 1, max: 15, step: 1, unit: 'sec', enabledBy: 'face_detection' },
+      { key: 'lighting_min_score', label: 'Minimum lighting score', desc: 'Higher is stricter. Darker rooms will fail the precheck.', min: 0.1, max: 0.8, step: 0.05, unit: 'score', enabledBy: 'lighting_required' },
+      { key: 'face_verify_id_threshold', label: 'ID verification distance', desc: 'Lower is stricter. Tightens selfie-to-ID matching.', min: 0.05, max: 0.4, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
+      { key: 'face_verify_threshold', label: 'Live face verification distance', desc: 'Lower is stricter. Tightens ongoing face verification.', min: 0.05, max: 0.35, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
+      { key: 'object_confidence_threshold', label: 'Forbidden object confidence', desc: 'Higher is stricter. Require stronger model confidence before flagging objects.', min: 0.1, max: 0.95, step: 0.05, unit: 'confidence', enabledBy: 'object_detection' },
+    ],
+  },
+  {
+    key: 'attention',
+    title: 'Attention & movement sensitivity',
+    description: 'Control how aggressively gaze, posture, speech, and mouth movement are flagged.',
+    controls: [
+      { key: 'eye_deviation_deg', label: 'Eye deviation angle', desc: 'Lower is stricter. Smaller gaze drift triggers alerts.', min: 6, max: 25, step: 1, unit: 'deg', enabledBy: 'eye_tracking' },
+      { key: 'eye_consecutive', label: 'Eye consecutive frames', desc: 'Lower is stricter. Fewer frames are needed before flagging.', min: 1, max: 12, step: 1, unit: 'frames', enabledBy: 'eye_tracking' },
+      { key: 'head_pose_yaw_deg', label: 'Head yaw tolerance', desc: 'Lower is stricter. Smaller side turns count as suspicious.', min: 8, max: 35, step: 1, unit: 'deg', enabledBy: 'head_pose_detection' },
+      { key: 'head_pose_pitch_deg', label: 'Head pitch tolerance', desc: 'Lower is stricter. Smaller up/down head motion is flagged.', min: 8, max: 35, step: 1, unit: 'deg', enabledBy: 'head_pose_detection' },
+      { key: 'head_pose_consecutive', label: 'Head pose consecutive frames', desc: 'Lower is stricter. Head pose changes trigger sooner.', min: 1, max: 12, step: 1, unit: 'frames', enabledBy: 'head_pose_detection' },
+      { key: 'mouth_open_threshold', label: 'Mouth movement threshold', desc: 'Lower is stricter. Smaller mouth motion can trigger talking alerts.', min: 0.1, max: 0.8, step: 0.05, unit: 'ratio', enabledBy: 'mouth_detection' },
+      { key: 'audio_rms_threshold', label: 'Audio RMS threshold', desc: 'Lower is stricter. Quieter noise can trigger audio alerts.', min: 0.02, max: 0.25, step: 0.01, unit: 'rms', enabledBy: 'audio_detection' },
+      { key: 'audio_consecutive_chunks', label: 'Audio consecutive chunks', desc: 'Lower is stricter. Fewer noisy chunks are needed before alerting.', min: 1, max: 6, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
+      { key: 'audio_window', label: 'Audio anomaly window', desc: 'How many recent chunks are considered when detecting sustained audio anomalies.', min: 3, max: 10, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
+    ],
+  },
+  {
+    key: 'enforcement',
+    title: 'Enforcement & auto-submit',
+    description: 'Define when repeated violations should escalate to an automatic submission.',
+    controls: [
+      { key: 'max_tab_blurs', label: 'Maximum tab switches', desc: 'Lower is stricter. The attempt can auto-submit after fewer focus losses.', min: 1, max: 10, step: 1, unit: 'switches', enabledBy: 'tab_switch_detect' },
+      { key: 'max_alerts_before_autosubmit', label: 'Maximum alert count', desc: 'Auto-submit after this many alerts are logged.', min: 1, max: 20, step: 1, unit: 'alerts' },
+      { key: 'max_score_before_autosubmit', label: 'Maximum violation score', desc: 'Auto-submit after the weighted violation score crosses this number.', min: 3, max: 40, step: 1, unit: 'score' },
+      { key: 'cheating_consecutive_frames', label: 'Base consecutive-frame fallback', desc: 'Fallback consecutive frame count shared by sustained detectors.', min: 1, max: 12, step: 1, unit: 'frames' },
+    ],
+  },
+  {
+    key: 'capture',
+    title: 'Capture cadence & evidence',
+    description: 'Control how often visual/audio evidence is sampled and sent for analysis.',
+    controls: [
+      { key: 'frame_interval_ms', label: 'Frame analysis interval', desc: 'Higher saves bandwidth. Lower gives denser monitoring.', min: 1200, max: 6000, step: 200, unit: 'ms' },
+      { key: 'audio_chunk_ms', label: 'Audio chunk interval', desc: 'Higher sends fewer but larger audio chunks.', min: 1000, max: 6000, step: 250, unit: 'ms', enabledBy: 'audio_detection' },
+      { key: 'screenshot_interval_sec', label: 'Screen capture interval', desc: 'Only used when periodic screen capture is enabled.', min: 15, max: 180, step: 5, unit: 'sec', enabledBy: 'screen_capture' },
+    ],
+  },
+]
+
+const PROCTORING_LABELS = Object.fromEntries([
+  ...DETECTORS.map((detector) => [detector.key, detector.label]),
+  ...PROCTORING_REQUIREMENTS.map((control) => [control.key, control.label]),
+])
+
+const ALERT_RULE_EVENT_OPTIONS = [
+  { value: 'FULLSCREEN_EXIT', label: 'Fullscreen exit', desc: 'Learner exits fullscreen during the attempt.', requires: ['fullscreen_enforce'] },
+  { value: 'ALT_TAB', label: 'Tab switch', desc: 'Browser loses focus because the learner switched tabs or apps.', requires: ['tab_switch_detect'] },
+  { value: 'FOCUS_LOSS', label: 'Focus loss', desc: 'The test window loses focus or becomes hidden.', requires: ['tab_switch_detect'] },
+  { value: 'CAMERA_COVERED', label: 'Camera covered', desc: 'The webcam feed is blocked or too dark.', requires: ['camera_required'] },
+  { value: 'FACE_DISAPPEARED', label: 'No face detected', desc: 'The learner moves out of frame for too long.', requires: ['face_detection'] },
+  { value: 'MULTIPLE_FACES', label: 'Multiple faces', desc: 'More than one face appears in the camera view.', requires: ['multi_face'] },
+  { value: 'FACE_MISMATCH', label: 'Face mismatch', desc: 'Live face does not match the verified identity sample.', requires: ['face_verify'] },
+  { value: 'LOUD_AUDIO', label: 'Loud audio', desc: 'Sudden loud noise or speech is detected.', requires: ['audio_detection'] },
+  { value: 'AUDIO_ANOMALY', label: 'Audio anomaly', desc: 'Repeated suspicious audio activity is detected.', requires: ['audio_detection'] },
+  { value: 'FORBIDDEN_OBJECT', label: 'Forbidden object', desc: 'Phone, book, or other forbidden object is detected.', requires: ['object_detection'] },
+  { value: 'EYE_MOVEMENT', label: 'Eye movement', desc: 'Gaze deviates away from the screen for too long.', requires: ['eye_tracking'] },
+  { value: 'HEAD_POSE', label: 'Head pose', desc: 'The learner turns away or changes head pose suspiciously.', requires: ['head_pose_detection'] },
+  { value: 'MOUTH_MOVEMENT', label: 'Mouth movement', desc: 'Talking or sustained mouth movement is detected.', requires: ['mouth_detection'] },
+]
+
+const ALERT_RULE_ACTIONS = [
+  { value: 'FLAG_REVIEW', label: 'Flag for review' },
+  { value: 'WARN', label: 'Warn learner' },
+  { value: 'AUTO_SUBMIT', label: 'Auto-submit exam' },
+]
+
+const ALERT_RULE_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH']
+const ALERT_RULE_ACTION_HELPERS = {
+  FLAG_REVIEW: 'Creates a proctoring escalation event for admins to review later.',
+  WARN: 'Shows a live warning to the learner and keeps the exam running.',
+  AUTO_SUBMIT: 'Immediately submits the exam when the rule threshold is reached.',
+}
+
+function humanizeSettingLabel(value) {
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function createAlertRule(seed = {}) {
+  const id = seed.id || `rule-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+  return {
+    id,
+    event_type: seed.event_type || 'FULLSCREEN_EXIT',
+    threshold: Number.isFinite(Number(seed.threshold)) ? Math.max(1, Number(seed.threshold)) : 1,
+    severity: seed.severity || 'HIGH',
+    action: seed.action || 'WARN',
+    message: seed.message || '',
+  }
+}
+
+function describeAlertRule(rule) {
+  const option = ALERT_RULE_EVENT_OPTIONS.find((item) => item.value === rule.event_type)
+  const action = ALERT_RULE_ACTIONS.find((item) => item.value === rule.action)
+  return `${option?.label || humanizeSettingLabel(rule.event_type || 'Alert')} x${rule.threshold} -> ${action?.label || rule.action} (${rule.severity})`
+}
 
 export default function AdminNewTestWizard() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { id: paramId } = useParams()
   const editId = searchParams.get('edit') || paramId
+  const autosaveTimerRef = useRef(null)
 
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [examId, setExamId] = useState(editId || null)
+  const [editorLocked, setEditorLocked] = useState(false)
 
   /* ─── Step 0: Information ─── */
   const [title, setTitle] = useState('')
@@ -59,6 +221,11 @@ export default function AdminNewTestWizard() {
   const [courseId, setCourseId] = useState('')
   const [nodes, setNodes] = useState([])
   const [nodeId, setNodeId] = useState('')
+  const [creatingCourse, setCreatingCourse] = useState(false)
+  const [showCourseCreator, setShowCourseCreator] = useState(false)
+  const [newCourseTitle, setNewCourseTitle] = useState('')
+  const [newCourseDescription, setNewCourseDescription] = useState('')
+  const [newModuleTitle, setNewModuleTitle] = useState('Module 1')
   const [examTemplates, setExamTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
 
@@ -88,28 +255,8 @@ export default function AdminNewTestWizard() {
   const [showProgressBar, setShowProgressBar] = useState(true)
   const [unlimitedTime, setUnlimitedTime] = useState(false)
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(60)
-  const [proctoring, setProctoring] = useState({
-    face_detection: true,
-    multi_face: true,
-    audio_detection: true,
-    object_detection: true,
-    eye_tracking: true,
-    mouth_detection: false,
-    fullscreen_enforce: true,
-    tab_switch_detect: true,
-    screen_capture: false,
-    copy_paste_block: true,
-    eye_deviation_deg: 12,
-    mouth_open_threshold: 0.35,
-    audio_rms_threshold: 0.08,
-    max_face_absence_sec: 5,
-    max_tab_blurs: 3,
-    max_alerts_before_autosubmit: 5,
-    frame_interval_ms: 3000,
-    audio_chunk_ms: 3000,
-    screenshot_interval_sec: 60,
-  })
-  const [proctoringView, setProctoringView] = useState('candidate_monitoring')
+  const [proctoring, setProctoring] = useState(DEFAULT_PROCTORING_CONFIG)
+  const [proctoringView, setProctoringView] = useState('proctoring_settings')
   const [proctoringSessionId, setProctoringSessionId] = useState('')
   const [proctoringLoading, setProctoringLoading] = useState(false)
   const [proctoringRows, setProctoringRows] = useState([])
@@ -152,15 +299,18 @@ export default function AdminNewTestWizard() {
   const [certSubtitle, setCertSubtitle] = useState('')
   const [certCompany, setCertCompany] = useState('')
   const [certSigner, setCertSigner] = useState('Examiner')
-  const [certDescription, setCertDescription] = useState('This is to certify that the above named candidate has successfully completed the examination.')
+  const [certDescription, setCertDescription] = useState('This is to certify that the above named candidate has successfully completed the assessment.')
 
   /* ─── Step 7: Sessions ─── */
   const [users, setUsers] = useState([])
   const [selectedUsers, setSelectedUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
+  const [bulkLearnerInput, setBulkLearnerInput] = useState('')
+  const [bulkLearnerFeedback, setBulkLearnerFeedback] = useState('')
   const [accessMode, setAccessMode] = useState('OPEN')
   const [scheduledAt, setScheduledAt] = useState('')
   const [assignedSessions, setAssignedSessions] = useState([])
+  const [sessionBusy, setSessionBusy] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiTopic, setAiTopic] = useState('')
   const [aiCount, setAiCount] = useState(5)
@@ -168,6 +318,133 @@ export default function AdminNewTestWizard() {
 
   /* ─── Step 8: Save ─── */
   const [publishStatus, setPublishStatus] = useState('CLOSED')
+
+  const toDateTimeLocalValue = (value) => {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000))
+    return local.toISOString().slice(0, 16)
+  }
+
+  const loadNodesForCourse = async (selectedCourseId, { createIfEmpty = false } = {}) => {
+    if (!selectedCourseId) {
+      setNodes([])
+      setNodeId('')
+      return []
+    }
+    try {
+      const { data } = await adminApi.nodes(selectedCourseId)
+      const nodeList = Array.isArray(data)
+        ? data
+        : typeof data === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(data)
+                if (Array.isArray(parsed)) return parsed
+                return parsed ? [parsed] : []
+              } catch {
+                return []
+              }
+            })()
+          : data
+            ? [data]
+            : []
+      if (nodeList.length) {
+        setNodes(nodeList)
+        setNodeId((prev) => (
+          prev && nodeList.some((node) => String(node.id) === String(prev))
+            ? prev
+            : nodeList[0].id
+        ))
+        return nodeList
+      }
+      if (createIfEmpty) {
+        const { data: node } = await adminApi.createNode({ course_id: selectedCourseId, title: 'Module 1', order: 0 })
+        setNodes([node])
+        setNodeId(node.id)
+        return [node]
+      }
+      setNodes([])
+      setNodeId('')
+      return []
+    } catch {
+      setNodes([])
+      setNodeId('')
+      return []
+    }
+  }
+
+  const loadAssignedSessions = useCallback(async (targetExamId = examId) => {
+    if (!targetExamId) {
+      setAssignedSessions([])
+      setSelectedUsers([])
+      setAccessMode('OPEN')
+      setScheduledAt('')
+      return
+    }
+    try {
+      const { data } = await adminApi.schedules()
+      const examSchedules = (data || []).filter((schedule) => String(schedule.exam_id) === String(targetExamId))
+      const nextAssigned = examSchedules.map((schedule) => {
+        const learner = users.find((user) => String(user.id) === String(schedule.user_id))
+        return {
+          id: schedule.id,
+          userId: schedule.user_id,
+          user: learner?.user_id || learner?.name || String(schedule.user_id).slice(0, 8),
+          mode: schedule.access_mode || 'OPEN',
+          at: schedule.scheduled_at || '',
+        }
+      })
+      setAssignedSessions(nextAssigned)
+      setSelectedUsers(examSchedules.map((schedule) => schedule.user_id))
+      if (examSchedules.length > 0) {
+        const firstSchedule = examSchedules[0]
+        setAccessMode(firstSchedule.access_mode || 'OPEN')
+        const sameScheduleTime = examSchedules.every((schedule) => String(schedule.scheduled_at || '') === String(firstSchedule.scheduled_at || ''))
+        setScheduledAt(sameScheduleTime ? toDateTimeLocalValue(firstSchedule.scheduled_at) : '')
+      } else {
+        setAccessMode('OPEN')
+        setScheduledAt('')
+      }
+    } catch {
+      setAssignedSessions([])
+      setSelectedUsers([])
+    }
+  }, [examId, users])
+
+  const handleCreateCourseInline = async () => {
+    if (!newCourseTitle.trim()) {
+      setPanelError('Enter a course title before creating one.')
+      return
+    }
+    setCreatingCourse(true)
+    setPanelError('')
+    try {
+      const { data: course } = await adminApi.createCourse({
+        title: newCourseTitle.trim(),
+        description: newCourseDescription.trim() || null,
+        status: 'DRAFT',
+      })
+      const { data: node } = await adminApi.createNode({
+        course_id: course.id,
+        title: newModuleTitle.trim() || 'Module 1',
+        order: 0,
+      })
+      setCourses((current) => [...current, course])
+      setCourseId(course.id)
+      setNodes([node])
+      setNodeId(node.id)
+      setShowCourseCreator(false)
+      setNewCourseTitle('')
+      setNewCourseDescription('')
+      setNewModuleTitle('Module 1')
+    } catch (e) {
+      setPanelError(e.response?.data?.detail || 'Failed to create the course. Please try again.')
+    } finally {
+      setCreatingCourse(false)
+    }
+  }
 
   /* ─── Load lookups ─── */
   useEffect(() => {
@@ -186,47 +463,102 @@ export default function AdminNewTestWizard() {
       setPools(poolRes.data || [])
       setUsers((userRes.data || []).filter(u => u.role === 'LEARNER'))
       setExamTemplates(tplRes?.data || [])
-      if (courseList.length && !courseId) {
+      if (courseList.length) {
         const first = courseList[0]
-        setCourseId(first.id)
-        adminApi.nodes(first.id).then(({ data }) => {
-          setNodes(data || [])
-          if (data?.length) setNodeId(data[0].id)
-        }).catch(() => setNodes([]))
+        setCourseId((current) => current || first.id)
+        if (!courseId) {
+          loadNodesForCourse(first.id, { createIfEmpty: true })
+        }
       }
     }).catch(() => {})
   }, [])
 
-  // Reload nodes when course changes
   useEffect(() => {
-    if (!courseId) return
-    adminApi.nodes(courseId).then(({ data }) => {
-      setNodes(data || [])
-      if (data?.length) {
-        setNodeId(data[0].id)
-      }
-    }).catch(() => setNodes([]))
-  }, [courseId])
+    if (!nodes.length) return
+    setNodeId((current) => (
+      current && nodes.some((node) => String(node.id) === String(current))
+        ? current
+        : nodes[0].id
+    ))
+  }, [nodes])
 
   /* ─── Load existing exam for edit ─── */
   useEffect(() => {
     if (!editId) return
-    adminApi.getExam(editId).then(({ data: ex }) => {
-      setTitle(ex.title || '')
-      setDescription(ex.description || '')
-      setExamType(ex.exam_type || 'MCQ')
-      setCategoryId(ex.category_id || '')
-      setCourseId(ex.course_id || '')
-      setNodeId(ex.node_id || '')
-      setPassingScore(ex.passing_score ?? 60)
-      setMaxAttempts(ex.max_attempts ?? 1)
-      setGradingScaleId(ex.grading_scale_id || '')
-      if (ex.proctoring_config) setProctoring(ex.proctoring_config)
-      if (ex.time_limit_minutes) setTimeLimitMinutes(ex.time_limit_minutes)
-      else setUnlimitedTime(true)
+    adminApi.getTest(editId).then(({ data: test }) => {
+      if (!test) return
+      setEditorLocked(test.status && test.status !== 'DRAFT')
+      const runtimeSettings = test.runtime_settings || {}
+      setTitle(test.name || '')
+      setDescription(test.description || '')
+      setExamCode(test.code || '')
+      setExamType(test.type || 'MCQ')
+      setCategoryId(test.category_id || '')
+      setCourseId(test.course_id || '')
+      setNodeId(test.node_id || '')
+      if (test.course_id) {
+        loadNodesForCourse(test.course_id, { createIfEmpty: true })
+      }
+      setPassingScore(test.passing_score ?? 60)
+      setMaxAttempts(test.attempts_allowed ?? 1)
+      setGradingScaleId(test.grading_scale_id || '')
+      setPublishStatus(test.status === 'PUBLISHED' ? 'OPEN' : 'CLOSED')
+      if (test.proctoring_config) setProctoring({ ...DEFAULT_PROCTORING_CONFIG, ...normalizeProctoringConfig(test.proctoring_config) })
+      if (test.time_limit_minutes != null) {
+        setUnlimitedTime(false)
+        setTimeLimitMinutes(test.time_limit_minutes)
+      } else {
+        setUnlimitedTime(true)
+      }
+      setMethod(runtimeSettings.creation_method || 'manual')
+      if (runtimeSettings.generator_config) {
+        const g = runtimeSettings.generator_config
+        if (g.strategy) setGeneratorBy(g.strategy)
+        if (g.total_questions) setGeneratorCount(g.total_questions)
+        if (g.difficulty_mix) setGeneratorDifficultyMix(g.difficulty_mix)
+        if (g.categories) setGeneratorCategories(g.categories)
+        if (g.pools) setGeneratorPools(g.pools)
+        setGeneratorTagsInclude((g.include_tags || []).join(', '))
+        setGeneratorTagsExclude((g.exclude_tags || []).join(', '))
+        if (g.unique_per_candidate != null) setGeneratorUniquePerCandidate(!!g.unique_per_candidate)
+        if (g.version_count) setGeneratorVersionCount(g.version_count)
+        if (g.random_seed) setGeneratorRandomSeed(g.random_seed)
+        if (g.prevent_question_reuse != null) setGeneratorPreventReuse(!!g.prevent_question_reuse)
+        if (g.shuffle_answers != null) setGeneratorShuffleAnswers(!!g.shuffle_answers)
+        if (g.adaptive != null) setGeneratorAdaptive(!!g.adaptive)
+      }
+      setPageFormat(runtimeSettings.page_format || 'one_per_page')
+      setCalculatorType(runtimeSettings.calculator_type || 'none')
+      setHideMetadata(!!runtimeSettings.hide_metadata)
+      setRandomizeQuestions(!!runtimeSettings.randomize_questions)
+      setRandomizeAnswers(!!runtimeSettings.randomize_answers)
+      setShowProgressBar(runtimeSettings.show_progress_bar ?? true)
+      setNegativeMarking(!!runtimeSettings.negative_marking)
+      setNegMarkValue(runtimeSettings.neg_mark_value ?? 0.25)
+      setNegMarkType(runtimeSettings.neg_mark_type || 'points')
+      setShowFinalScore(runtimeSettings.show_final_score ?? true)
+      setShowQuestionScores(!!runtimeSettings.show_question_scores)
+      setSpecialAccommodations(runtimeSettings.special_accommodations || '')
+      setSpecialRequests(runtimeSettings.special_requests || '')
+      if (test.certificate) {
+        setCertEnabled(true)
+        setCertTemplate(test.certificate.template || 'Classic')
+        setCertOrientation(test.certificate.orientation || 'landscape')
+        setCertTitle(test.certificate.title || 'Certificate of Achievement')
+        setCertSubtitle(test.certificate.subtitle || '')
+        setCertCompany(test.certificate.issuer || '')
+        setCertSigner(test.certificate.signer || 'Examiner')
+        setCertDescription(test.certificate.description || 'This is to certify that the above named candidate has successfully completed the assessment.')
+      } else {
+        setCertEnabled(false)
+      }
     }).catch(() => {})
     adminApi.getQuestions(editId).then(({ data }) => setQuestions(data || [])).catch(() => {})
   }, [editId])
+
+  useEffect(() => {
+    loadAssignedSessions(examId)
+  }, [examId, users, loadAssignedSessions])
 
   useEffect(() => {
     if (step === 3 && !examId) {
@@ -245,11 +577,13 @@ export default function AdminNewTestWizard() {
     if (cfg.time_limit_minutes != null) { setUnlimitedTime(false); setTimeLimitMinutes(cfg.time_limit_minutes) }
     if (cfg.max_attempts != null) setMaxAttempts(cfg.max_attempts)
     if (cfg.passing_score != null) setPassingScore(cfg.passing_score)
-    if (cfg.proctoring_config) setProctoring(cfg.proctoring_config)
+    if (cfg.proctoring_config) setProctoring({ ...DEFAULT_PROCTORING_CONFIG, ...normalizeProctoringConfig(cfg.proctoring_config) })
     if (cfg.settings) {
       setRandomizeQuestions(!!cfg.settings.randomize_questions)
       setRandomizeAnswers(!!cfg.settings.randomize_answers)
       setShowProgressBar(cfg.settings.show_progress_bar ?? showProgressBar)
+      setSpecialAccommodations(cfg.settings.special_accommodations || '')
+      setSpecialRequests(cfg.settings.special_requests || '')
       if (cfg.settings.creation_method) setMethod(cfg.settings.creation_method)
       if (cfg.settings.generator_config) {
         const g = cfg.settings.generator_config
@@ -277,19 +611,7 @@ export default function AdminNewTestWizard() {
     }
   }
 
-  const buildExamData = () => ({
-    title,
-    node_id: nodeId || undefined,
-    course_id: courseId || undefined,
-    exam_type: examType,
-    category_id: categoryId || undefined,
-    description: description || undefined,
-    passing_score: passingScore,
-    max_attempts: maxAttempts,
-    grading_scale_id: gradingScaleId || undefined,
-    proctoring_config: proctoring,
-    time_limit_minutes: unlimitedTime ? null : timeLimitMinutes,
-    settings: {
+  const buildRuntimeSettings = () => ({
       creation_method: method,
       generator_config: method === 'generator' ? {
         strategy: generatorBy,
@@ -317,8 +639,11 @@ export default function AdminNewTestWizard() {
       neg_mark_type: negMarkType,
       show_final_score: showFinalScore,
       show_question_scores: showQuestionScores,
-    },
-    certificate: certEnabled ? {
+      special_accommodations: specialAccommodations,
+      special_requests: specialRequests,
+    })
+
+  const buildCertificate = () => (certEnabled ? {
       template: certTemplate,
       orientation: certOrientation,
       title: certTitle,
@@ -326,20 +651,40 @@ export default function AdminNewTestWizard() {
       issuer: certCompany,
       signer: certSigner,
       description: certDescription,
-    } : null,
-    status: publishStatus,
+    } : null)
+
+  const buildTestPayload = () => ({
+    code: examCode || null,
+    name: title,
+    description,
+    type: examType,
+    node_id: nodeId || undefined,
+    category_id: categoryId || undefined,
+    grading_scale_id: gradingScaleId || undefined,
+    time_limit_minutes: unlimitedTime ? null : timeLimitMinutes,
+    attempts_allowed: maxAttempts,
+    passing_score: passingScore,
+    randomize_questions: randomizeQuestions,
+    runtime_settings: buildRuntimeSettings(),
+    proctoring_config: normalizeProctoringConfig(proctoring),
+    certificate: buildCertificate(),
   })
 
   const saveExam = async () => {
-    const data = buildExamData()
-    if (examId) {
-      await adminApi.updateExam(examId, data)
-    } else {
-      const res = await adminApi.createExam(data)
-      setExamId(res.data.id)
-      return res.data.id
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
     }
-    return examId
+    const data = buildTestPayload()
+    let id = examId
+    if (examId) {
+      await adminApi.updateTest(examId, data)
+    } else {
+      const res = await adminApi.createTest(data)
+      setExamId(res.data.id)
+      id = res.data.id
+    }
+    return id
   }
 
   const ensureExamCreated = async () => {
@@ -354,8 +699,7 @@ export default function AdminNewTestWizard() {
       }
       return newId
     } catch (e) {
-      console.error(e)
-      setQuestionInitError('Could not create the exam yet. Please check required fields and try again.')
+      setQuestionInitError('Could not create the test yet. Please check required fields and try again.')
       return null
     } finally {
       setSaving(false)
@@ -363,24 +707,21 @@ export default function AdminNewTestWizard() {
   }
 
   const autoPersist = async () => {
-    if (!examId) return
-    try {
-      await saveExam()
-    } catch (e) {
-      console.error(e)
-      setPanelError('Autosave failed. Check your connection and try again.')
-    }
+    if (!examId || editorLocked) return
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = setTimeout(async () => {
+      try {
+        await saveExam()
+      } catch (e) {
+        setPanelError('Autosave failed. Check your connection and try again.')
+      }
+    }, 250)
   }
 
   const handleNext = async () => {
     setPanelError('')
-    if (step === 0 && !title.trim()) return
-    if (step === 1 && method === 'generator' && (!generatorCount || generatorCount < 1)) {
-      setPanelError('Please set a total question count for the generator.')
-      return
-    }
-    if (step >= 3 && questions.length === 0) {
-      setPanelError('Add at least one question before continuing.')
+    if (editorLocked) {
+      setPanelError('Published and archived tests must be edited from Manage Tests.')
       return
     }
     if (step === 0 && courseId && !nodeId) {
@@ -390,27 +731,47 @@ export default function AdminNewTestWizard() {
         setNodes([node])
         setNodeId(node.id)
       } catch (e) {
-        console.error(e)
+        setPanelError(e.response?.data?.detail || 'Could not create module. Please try again.')
       } finally {
         setSaving(false)
       }
       return
     }
+    const validationMessage = validateStep(step)
+    if (validationMessage) {
+      setPanelError(validationMessage)
+      return
+    }
     // Save on important steps
     if ([0, 1, 2, 3, 4, 5].includes(step)) {
+      let saveSucceeded = true
       setSaving(true)
-      try { await saveExam() } catch (e) { console.error(e); setPanelError('Could not save. Please check required fields and try again.'); } finally { setSaving(false) }
+      try {
+        await saveExam()
+      } catch (e) {
+        saveSucceeded = false
+        setPanelError(e.response?.data?.detail || 'Could not save. Please check required fields and try again.')
+      } finally {
+        setSaving(false)
+      }
+      if (!saveSucceeded) return
     }
     setStep(s => Math.min(STEPS.length - 1, s + 1))
   }
 
   const handleSeedPool = async () => {
     if (!selectedPool || !examId) return
+    const selectedPoolRecord = pools.find((pool) => String(pool.id) === String(selectedPool))
+    if (selectedPoolRecord && Number(selectedPoolRecord.question_count || 0) < 1) {
+      setPanelError('This pool has no questions yet. Open the pool and add questions before seeding this test.')
+      return
+    }
+    setPanelError('')
     try {
       await adminApi.seedExamFromPool(selectedPool, examId, seedCount)
       const { data } = await adminApi.getQuestions(examId)
       setQuestions(data || [])
-    } catch (e) { console.error(e) }
+    } catch (e) { setPanelError(e.response?.data?.detail || 'Failed to seed questions from pool.') }
   }
 
   const handleAIGenerate = async () => {
@@ -434,7 +795,7 @@ export default function AdminNewTestWizard() {
         await adminApi.addQuestion({
           exam_id: ensuredId,
           text: q.text,
-          type: 'MCQ',
+          question_type: 'MCQ',
           options: q.options && q.options.length ? q.options : null,
           correct_answer: q.correct_answer || (q.options && q.options[0]) || '',
           order: questions.length + idx + 1,
@@ -444,7 +805,6 @@ export default function AdminNewTestWizard() {
       const refreshed = await adminApi.getQuestions(ensuredId)
       setQuestions(refreshed.data || [])
     } catch (e) {
-      console.error(e)
       setPanelError(e.response?.data?.detail || 'AI generation failed')
     } finally {
       setAiLoading(false)
@@ -452,40 +812,477 @@ export default function AdminNewTestWizard() {
   }
 
   const handleAssignSessions = async () => {
-    if (!examId || selectedUsers.length === 0) return
+    if (!examId || (selectedUsers.length === 0 && assignedSessions.length === 0)) return
+    if (accessMode === 'RESTRICTED' && !scheduledAt) {
+      setPanelError('Restricted access requires a scheduled date and time.')
+      return
+    }
+    setPanelError('')
+    setSessionBusy(true)
     try {
-      for (const uid of selectedUsers) {
-        await adminApi.createSchedule({
-          user_id: uid, exam_id: examId,
-          scheduled_at: scheduledAt || new Date().toISOString(),
-          access_mode: accessMode,
-        })
+      const existingByUser = new Map(assignedSessions.map((session) => [String(session.userId), session]))
+      const selectedSet = new Set(selectedUsers.map((id) => String(id)))
+      const staleSessions = assignedSessions.filter((session) => !selectedSet.has(String(session.userId)))
+      for (const stale of staleSessions) {
+        await adminApi.deleteSchedule(stale.id)
       }
-      const names = selectedUsers.map(uid => users.find(u => u.id === uid)?.user_id || uid)
-      setAssignedSessions(prev => [...prev, ...names.map(n => ({ user: n, mode: accessMode, at: scheduledAt }))])
-      setSelectedUsers([])
-    } catch (e) { console.error(e) }
+      for (const uid of selectedUsers) {
+        const existing = existingByUser.get(String(uid))
+        const payload = {
+          scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : (existing?.at || new Date().toISOString()),
+          access_mode: accessMode || existing?.mode || 'OPEN',
+          notes: null,
+        }
+        if (existing?.id) {
+          await adminApi.updateSchedule(existing.id, payload)
+        } else {
+          await adminApi.createSchedule({
+            user_id: uid,
+            exam_id: examId,
+            ...payload,
+          })
+        }
+      }
+      await loadAssignedSessions(examId)
+    } catch (e) {
+      setPanelError(e.response?.data?.detail || 'Failed to assign sessions. Please try again.')
+    } finally {
+      setSessionBusy(false)
+    }
+  }
+
+  const handleRemoveSession = async (sessionId, userId) => {
+    setPanelError('')
+    setSessionBusy(true)
+    try {
+      await adminApi.deleteSchedule(sessionId)
+      setSelectedUsers((prev) => prev.filter((id) => String(id) !== String(userId)))
+      await loadAssignedSessions(examId)
+    } catch (e) {
+      setPanelError(e.response?.data?.detail || 'Failed to remove the session.')
+    } finally {
+      setSessionBusy(false)
+    }
   }
 
   const handlePublish = async () => {
-    if (questions.length === 0) {
-      setPanelError('Add at least one question before publishing.')
+    if (editorLocked) {
+      setPanelError('Published and archived tests must be edited from Manage Tests.')
       return
+    }
+    if (publishStatus === 'OPEN') {
+      const publishGateSteps = [0, 1, 2, 4, 5, 7]
+      for (const gateStep of publishGateSteps) {
+        const validationMessage = validateStep(gateStep, { forPublish: true })
+        if (validationMessage) {
+          setStep(gateStep)
+          setPanelError(validationMessage)
+          return
+        }
+      }
     }
     setSaving(true)
     try {
       const id = await saveExam()
-      navigate('/admin/exams')
-    } catch (e) { console.error(e); setPanelError(e.response?.data?.detail || 'Could not save. Please add questions and try again.') } finally { setSaving(false) }
+      if (publishStatus === 'OPEN') {
+        await adminApi.publishTest(id)
+      }
+      navigate('/admin/tests')
+    } catch (e) { setPanelError(e.response?.data?.detail || 'Could not save. Please add questions and try again.') } finally { setSaving(false) }
   }
 
-  const toggleDetector = (key) => setProctoring(prev => ({ ...prev, [key]: !prev[key] }))
-  const toggleUser = (uid) => setSelectedUsers(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid])
+  const toggleDetector = (key) => {
+    setProctoring((prev) => ({ ...prev, [key]: !prev[key] }))
+    if (examId) autoPersist()
+  }
+  const addAlertRule = () => {
+    setProctoring((prev) => ({ ...prev, alert_rules: [...(prev.alert_rules || []), createAlertRule()] }))
+    if (examId) autoPersist()
+  }
+  const updateAlertRule = (ruleId, key, rawValue) => {
+    setProctoring((prev) => ({
+      ...prev,
+      alert_rules: (prev.alert_rules || []).map((rule) => (
+        rule.id === ruleId
+          ? {
+              ...rule,
+              [key]: key === 'threshold' ? Math.max(1, Number.parseInt(rawValue, 10) || 1) : rawValue,
+            }
+          : rule
+      )),
+    }))
+    if (examId) autoPersist()
+  }
+  const removeAlertRule = (ruleId) => {
+    setProctoring((prev) => ({
+      ...prev,
+      alert_rules: (prev.alert_rules || []).filter((rule) => rule.id !== ruleId),
+    }))
+    if (examId) autoPersist()
+  }
+  const updateProctoringFlag = (key, checked) => {
+    setProctoring((prev) => ({ ...prev, [key]: checked }))
+    if (examId) autoPersist()
+  }
+  const updateProctoringNumber = (key, rawValue, { integer = false } = {}) => {
+    const nextValue = integer ? Number.parseInt(rawValue, 10) : Number.parseFloat(rawValue)
+    if (!Number.isFinite(nextValue)) return
+    setProctoring((prev) => ({ ...prev, [key]: nextValue }))
+    if (examId) autoPersist()
+  }
+  const applyProctoringPreset = (mode) => {
+    const presetValues = {
+      lenient: {
+        eye_deviation_deg: 16,
+        eye_consecutive: 7,
+        head_pose_yaw_deg: 26,
+        head_pose_pitch_deg: 24,
+        head_pose_consecutive: 7,
+        mouth_open_threshold: 0.45,
+        audio_rms_threshold: 0.12,
+        audio_consecutive_chunks: 3,
+        max_face_absence_sec: 8,
+        max_tab_blurs: 5,
+        max_alerts_before_autosubmit: 10,
+        max_score_before_autosubmit: 20,
+        frame_interval_ms: 4200,
+        audio_chunk_ms: 4000,
+        screenshot_interval_sec: 90,
+        lighting_min_score: 0.28,
+        face_verify_id_threshold: 0.24,
+        face_verify_threshold: 0.2,
+        object_confidence_threshold: 0.65,
+      },
+      standard: {
+        eye_deviation_deg: 12,
+        eye_consecutive: 5,
+        head_pose_yaw_deg: 20,
+        head_pose_pitch_deg: 20,
+        head_pose_consecutive: 5,
+        mouth_open_threshold: 0.35,
+        audio_rms_threshold: 0.08,
+        audio_consecutive_chunks: 2,
+        max_face_absence_sec: 5,
+        max_tab_blurs: 3,
+        max_alerts_before_autosubmit: 5,
+        max_score_before_autosubmit: 15,
+        frame_interval_ms: 3000,
+        audio_chunk_ms: 3000,
+        screenshot_interval_sec: 60,
+        lighting_min_score: 0.35,
+        face_verify_id_threshold: 0.18,
+        face_verify_threshold: 0.15,
+        object_confidence_threshold: 0.5,
+      },
+      strict: {
+        eye_deviation_deg: 8,
+        eye_consecutive: 3,
+        head_pose_yaw_deg: 14,
+        head_pose_pitch_deg: 14,
+        head_pose_consecutive: 3,
+        mouth_open_threshold: 0.22,
+        audio_rms_threshold: 0.05,
+        audio_consecutive_chunks: 1,
+        max_face_absence_sec: 3,
+        max_tab_blurs: 1,
+        max_alerts_before_autosubmit: 3,
+        max_score_before_autosubmit: 9,
+        frame_interval_ms: 1800,
+        audio_chunk_ms: 2000,
+        screenshot_interval_sec: 30,
+        lighting_min_score: 0.45,
+        face_verify_id_threshold: 0.12,
+        face_verify_threshold: 0.1,
+        object_confidence_threshold: 0.35,
+        screen_capture: true,
+      },
+    }
+    setProctoring((prev) => ({ ...prev, ...(presetValues[mode] || {}) }))
+    if (examId) autoPersist()
+  }
+  const mergeLearnerSelection = (incomingIds) => {
+    setSelectedUsers((prev) => {
+      const merged = new Map(prev.map((id) => [String(id), id]))
+      incomingIds.forEach((id) => {
+        merged.set(String(id), id)
+      })
+      return Array.from(merged.values())
+    })
+  }
+  const toggleUser = (uid) => {
+    setBulkLearnerFeedback('')
+    setSelectedUsers((prev) => (
+      prev.some((id) => String(id) === String(uid))
+        ? prev.filter((id) => String(id) !== String(uid))
+        : [...prev, uid]
+    ))
+  }
 
   const filteredUsers = users.filter(u =>
     !userSearch || u.user_id?.toLowerCase().includes(userSearch.toLowerCase()) || u.name?.toLowerCase().includes(userSearch.toLowerCase())
   )
+  const selectedLearnerKeys = new Set(selectedUsers.map((id) => String(id)))
+  const totalLearners = users.length
+  const selectedVisibleLearners = filteredUsers.filter((user) => selectedLearnerKeys.has(String(user.id))).length
+  const allLearnersSelected = totalLearners > 0 && users.every((user) => selectedLearnerKeys.has(String(user.id)))
+  const allVisibleLearnersSelected = filteredUsers.length > 0 && filteredUsers.every((user) => selectedLearnerKeys.has(String(user.id)))
+  const sessionRequiresSchedule = accessMode === 'RESTRICTED'
+  const canSaveAssignments = !sessionBusy
+    && (selectedUsers.length > 0 || assignedSessions.length > 0)
+    && (!sessionRequiresSchedule || Boolean(scheduledAt))
   const fmtDateTime = (v) => (v ? new Date(v).toLocaleString() : '-')
+  const generatorMixTotal = Object.values(generatorDifficultyMix).reduce((sum, value) => sum + Number(value || 0), 0)
+  const activeDetectorCount = DETECTORS.filter(({ key }) => Boolean(proctoring[key])).length
+  const alertRuleCount = Array.isArray(proctoring.alert_rules) ? proctoring.alert_rules.length : 0
+  const enabledProctoringChecks = Object.entries(proctoring)
+    .filter(([, value]) => typeof value === 'boolean' && value)
+    .map(([key]) => humanizeSettingLabel(key))
+
+  const validateStep = (targetStep, { forPublish = false } = {}) => {
+    if (targetStep === 0) {
+      if (!title.trim()) return 'Test name is required.'
+      if (courseId && !nodeId) return 'Select or create a module before continuing.'
+    }
+    if (targetStep === 1 && method === 'generator') {
+      if (!generatorCount || Number(generatorCount) < 1) return 'Please set a total question count for the generator.'
+      if (generatorMixTotal !== 100) return 'Generator difficulty mix must total exactly 100%.'
+    }
+    if (targetStep === 2) {
+      if (!unlimitedTime && (!Number.isFinite(Number(timeLimitMinutes)) || Number(timeLimitMinutes) <= 0)) {
+        return 'Provide a valid time limit or enable unlimited time.'
+      }
+    }
+    if (targetStep === 4) {
+      if (!Number.isFinite(Number(passingScore)) || Number(passingScore) < 0 || Number(passingScore) > 100) {
+        return 'Passing score must be between 0 and 100.'
+      }
+      if (!Number.isFinite(Number(maxAttempts)) || Number(maxAttempts) < 1) {
+        return 'Max attempts must be at least 1.'
+      }
+      if (negativeMarking && (!Number.isFinite(Number(negMarkValue)) || Number(negMarkValue) < 0)) {
+        return 'Negative marking must be zero or higher.'
+      }
+    }
+    if (targetStep === 5 && certEnabled) {
+      if (!certTitle.trim()) return 'Enter a certificate title or disable certificates.'
+      if (!certSigner.trim()) return 'Enter a certificate signer or disable certificates.'
+    }
+    if (targetStep === 7 && accessMode === 'RESTRICTED' && selectedUsers.length > 0 && !scheduledAt) {
+      return 'Restricted assignments require a scheduled date and time.'
+    }
+    if (forPublish && questions.length === 0) {
+      return 'Add at least one question before publishing.'
+    }
+    return ''
+  }
+
+  const selectedPoolRecord = pools.find((pool) => String(pool.id) === String(selectedPool))
+  const selectedPoolCount = Number(selectedPoolRecord?.question_count || 0)
+
+  const infoReady = Boolean(title.trim() && (!courseId || nodeId))
+  const settingsReady = Boolean(unlimitedTime || (Number.isFinite(Number(timeLimitMinutes)) && Number(timeLimitMinutes) > 0))
+  const gradingReady = Boolean(
+    Number.isFinite(Number(passingScore))
+    && Number(passingScore) >= 0
+    && Number(passingScore) <= 100
+    && Number.isFinite(Number(maxAttempts))
+    && Number(maxAttempts) >= 1
+  )
+  const certificatesReady = !certEnabled || Boolean(certTitle.trim() && certSigner.trim())
+  const currentStepValidation = validateStep(step)
+  const cycleOverviewCards = [
+    {
+      label: 'Current step',
+      value: `${step + 1} / ${STEPS.length}`,
+      helper: currentStepValidation || 'Ready to continue',
+      tone: currentStepValidation ? 'attention' : 'ready',
+    },
+    {
+      label: 'Questions',
+      value: String(questions.length),
+      helper: questions.length > 0 ? `${method === 'generator' ? 'Generated / seeded' : 'Manually curated'} question bank ready` : 'Questions still need to be added',
+      tone: questions.length > 0 ? 'ready' : 'attention',
+    },
+    {
+      label: 'Sessions',
+      value: String(assignedSessions.length),
+      helper: assignedSessions.length > 0 ? `${accessMode === 'RESTRICTED' ? 'Restricted schedule saved' : 'Open access saved'}` : 'No learners assigned yet',
+      tone: assignedSessions.length > 0 ? 'ready' : 'info',
+    },
+    {
+      label: 'Proctoring',
+      value: `${activeDetectorCount} checks`,
+      helper: `Fullscreen ${proctoring.fullscreen_enforce ? 'on' : 'off'} | Tabs ${proctoring.tab_switch_detect ? 'tracked' : 'not tracked'} | Rules ${alertRuleCount}`,
+      tone: activeDetectorCount > 0 ? 'ready' : 'attention',
+    },
+    {
+      label: 'Readiness',
+      value: infoReady && settingsReady && gradingReady && certificatesReady ? 'Healthy' : 'Needs review',
+      helper: `${infoReady ? 'Info ok' : 'Info missing'} | ${settingsReady ? 'Settings ok' : 'Settings missing'} | ${gradingReady ? 'Grading ok' : 'Grading missing'}`,
+      tone: infoReady && settingsReady && gradingReady && certificatesReady ? 'ready' : 'attention',
+    },
+  ]
+
+  const reviewSections = [
+    {
+      key: 'information',
+      title: 'Information',
+      editStep: 0,
+      items: [
+        ['Test Title', title || '-'],
+        ['Description', description || 'None'],
+        ['Category', categories.find((category) => category.id === categoryId)?.name || 'None'],
+        ['Course', courses.find((course) => String(course.id) === String(courseId))?.title || 'None'],
+        ['Module', nodes.find((node) => String(node.id) === String(nodeId))?.title || 'None'],
+        ['Code', examCode || 'Auto-generated'],
+      ],
+    },
+    {
+      key: 'question-design',
+      title: 'Question Design',
+      editStep: 1,
+      items: [
+        ['Creation Method', method === 'manual' ? 'Manual selection' : `Generator (${generatorBy})`],
+        ...(method === 'generator'
+          ? [
+              ['Total Questions', generatorCount],
+              ['Difficulty Mix', `${generatorDifficultyMix.easy}% easy | ${generatorDifficultyMix.medium}% medium | ${generatorDifficultyMix.hard}% hard`],
+              ['Generator Categories', generatorCategories.length ? String(generatorCategories.length) : 'All'],
+              ['Generator Pools', generatorPools.length ? String(generatorPools.length) : 'All'],
+              ['Tags Include', generatorTagsInclude || 'None'],
+              ['Tags Exclude', generatorTagsExclude || 'None'],
+            ]
+          : [
+              ['Question Bank', `${questions.length} question(s) currently authored`],
+              ['Seed Pool', selectedPoolRecord ? `${selectedPoolRecord.name} (${selectedPoolCount} question${selectedPoolCount === 1 ? '' : 's'})` : 'None'],
+            ]),
+      ],
+    },
+    {
+      key: 'delivery',
+      title: 'Delivery & Security',
+      editStep: 2,
+      items: [
+        ['Question Type', examType],
+        ['Page Format', pageFormat],
+        ['Calculator', calculatorType],
+        ['Time Limit', unlimitedTime ? 'Unlimited' : `${timeLimitMinutes} minutes`],
+        ['Randomize Questions', randomizeQuestions ? 'Yes' : 'No'],
+        ['Randomize Answers', randomizeAnswers ? 'Yes' : 'No'],
+        ['Show Progress Bar', showProgressBar ? 'Yes' : 'No'],
+        ['Enabled Proctoring Checks', enabledProctoringChecks.join(', ') || 'None'],
+        ['Alert Escalation Rules', alertRuleCount > 0 ? proctoring.alert_rules.map((rule) => describeAlertRule(rule)).join(' | ') : 'None'],
+        ['Special Accommodations', specialAccommodations || 'None'],
+        ['Special Requests', specialRequests || 'None'],
+      ],
+    },
+    {
+      key: 'grading',
+      title: 'Scoring & Results',
+      editStep: 4,
+      items: [
+        ['Passing Score', `${passingScore}%`],
+        ['Max Attempts', maxAttempts],
+        ['Grading Scale', gradingScales.find((gradingScale) => gradingScale.id === gradingScaleId)?.name || 'None'],
+        ['Negative Marking', negativeMarking ? `Yes (${negMarkValue} ${negMarkType})` : 'No'],
+        ['Show Final Score', showFinalScore ? 'Yes' : 'No'],
+        ['Show Question Scores', showQuestionScores ? 'Yes' : 'No'],
+      ],
+    },
+    {
+      key: 'certificates',
+      title: 'Certificates',
+      editStep: 5,
+      items: [
+        ['Certificate', certEnabled ? `${certTemplate} (${certOrientation})` : 'Disabled'],
+        ['Certificate Title', certEnabled ? certTitle || 'None' : 'Disabled'],
+        ['Subtitle', certEnabled ? certSubtitle || 'None' : 'Disabled'],
+        ['Issuer', certEnabled ? certCompany || 'None' : 'Disabled'],
+        ['Signer', certEnabled ? certSigner || 'None' : 'Disabled'],
+      ],
+    },
+    {
+      key: 'readiness',
+      title: 'Final Readiness',
+      editStep: 3,
+      items: [
+        ['Questions Authored', `${questions.length} question(s)`],
+        ['Ready for Publishing', questions.length > 0 ? 'Yes' : 'Add at least one question first'],
+        ['Sessions Assigned', `${assignedSessions.length} session(s)`],
+        ['Next Phase', 'Assign learners and schedule access in Step 7'],
+      ],
+    },
+  ]
+
+  useEffect(() => () => {
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+  }, [])
+
+  const handleSelectAllLearners = () => {
+    if (users.length === 0) {
+      setBulkLearnerFeedback('There are no learners available to assign yet.')
+      return
+    }
+    setPanelError('')
+    setBulkLearnerFeedback(`Selected all ${users.length} learner${users.length === 1 ? '' : 's'}.`)
+    setSelectedUsers(users.map((user) => user.id))
+  }
+
+  const handleSelectVisibleLearners = () => {
+    if (filteredUsers.length === 0) {
+      setBulkLearnerFeedback('No learners match the current search.')
+      return
+    }
+    setPanelError('')
+    mergeLearnerSelection(filteredUsers.map((user) => user.id))
+    setBulkLearnerFeedback(`Selected ${filteredUsers.length} learner${filteredUsers.length === 1 ? '' : 's'} from the filtered list.`)
+  }
+
+  const handleClearLearnerSelection = () => {
+    setPanelError('')
+    setSelectedUsers([])
+    setBulkLearnerFeedback('Cleared the learner selection.')
+  }
+
+  const handleBulkLearnerMatch = () => {
+    const tokens = Array.from(new Set(
+      bulkLearnerInput
+        .split(/[\n,;]+/)
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    ))
+    if (tokens.length === 0) {
+      setBulkLearnerFeedback('Paste learner IDs, emails, or user IDs first.')
+      return
+    }
+
+    const matchedLearners = users.filter((user) => {
+      const keys = [user.id, user.user_id, user.email]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+      return tokens.some((token) => keys.includes(token))
+    })
+    if (matchedLearners.length === 0) {
+      setPanelError('None of the pasted learners matched the current learner list.')
+      setBulkLearnerFeedback(`Matched 0 of ${tokens.length} entries.`)
+      return
+    }
+
+    setPanelError('')
+    mergeLearnerSelection(matchedLearners.map((user) => user.id))
+    const matchedKeys = new Set()
+    matchedLearners.forEach((user) => {
+      ;[user.id, user.user_id, user.email]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((value) => matchedKeys.add(value))
+    })
+    const unmatchedCount = tokens.filter((token) => !matchedKeys.has(token)).length
+    setBulkLearnerFeedback(
+      `Matched ${matchedLearners.length} learner${matchedLearners.length === 1 ? '' : 's'}`
+      + (unmatchedCount > 0 ? `, ${unmatchedCount} entr${unmatchedCount === 1 ? 'y was' : 'ies were'} not found.` : '.'),
+    )
+  }
 
   useEffect(() => {
     if (step !== 2 || !examId) return
@@ -531,6 +1328,43 @@ export default function AdminNewTestWizard() {
     return () => { cancelled = true }
   }, [step, examId, users])
 
+  const [proctoringRowBusy, setProctoringRowBusy] = useState({})
+  const [proctoringBulkBusy, setProctoringBulkBusy] = useState(false)
+
+  const handleProctoringPauseResume = async (row) => {
+    setProctoringRowBusy((prev) => ({ ...prev, [row.id]: true }))
+    try {
+      if (row.paused) await adminApi.resumeAttempt(row.id)
+      else await adminApi.pauseAttempt(row.id)
+      // Refresh rows
+      const { data: attempts } = await adminApi.attempts()
+      const filtered = (attempts || []).filter((a) => String(a.exam_id) === String(examId))
+      setProctoringRows((prev) => prev.map((r) => {
+        const updated = filtered.find((a) => String(a.id) === r.id)
+        return updated ? { ...r, status: updated.status, paused: row.paused ? false : true } : r
+      }))
+    } catch { /* silent */ }
+    finally { setProctoringRowBusy((prev) => ({ ...prev, [row.id]: false })) }
+  }
+
+  const handleProctoringBulkPause = async (toPause) => {
+    if (!filteredProctoringRows.length) return
+    setProctoringBulkBusy(true)
+    try {
+      for (const r of filteredProctoringRows) {
+        if (toPause && !r.paused) await adminApi.pauseAttempt(r.id)
+        if (!toPause && r.paused) await adminApi.resumeAttempt(r.id)
+      }
+      const { data: attempts } = await adminApi.attempts()
+      const filtered = (attempts || []).filter((a) => String(a.exam_id) === String(examId))
+      setProctoringRows((prev) => prev.map((r) => {
+        const updated = filtered.find((a) => String(a.id) === r.id)
+        return updated ? { ...r, status: updated.status } : r
+      }))
+    } catch { /* silent */ }
+    finally { setProctoringBulkBusy(false) }
+  }
+
   const filteredProctoringRows = proctoringRows.filter((row) => {
     if (proctoringSessionId && String(row.sessionId) !== String(proctoringSessionId)) return false
     if (proctoringSearch.attemptId && !row.attemptId.toLowerCase().includes(proctoringSearch.attemptId.toLowerCase())) return false
@@ -560,7 +1394,7 @@ export default function AdminNewTestWizard() {
             </div>
           )}
           <div className={styles.formGroup}>
-            <label className={styles.label}>Test Name <span style={{ color: '#ef4444' }}>*</span></label>
+            <label className={styles.label}>Test Name <span className={styles.requiredMark}>*</span></label>
             <input name="title" className={styles.input} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Midterm Examination - Computer Science" />
           </div>
           <div className={styles.formGroup}>
@@ -574,22 +1408,22 @@ export default function AdminNewTestWizard() {
                 name="course"
                 className={styles.select}
                 value={courseId}
-                onChange={async e => {
-                  const val = e.target.value
-                  setCourseId(val)
+                onChange={e => {
+                  const nextCourseId = e.target.value
+                  setCourseId(nextCourseId)
                   setNodeId('')
-                  try {
-                    const { data } = await adminApi.nodes(val)
-                    setNodes(data || [])
-                    if (data?.length) setNodeId(data[0].id)
-                  } catch {
-                    setNodes([])
-                  }
+                  loadNodesForCourse(nextCourseId, { createIfEmpty: true })
                 }}
               >
+                <option value="">Select course...</option>
                 {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
-              {!courses.length && <p className={styles.helper}>Create a course first to organize your exam.</p>}
+              <div className={styles.inlineActions}>
+                <button className={styles.btnSecondary} type="button" onClick={() => setShowCourseCreator((current) => !current)}>
+                  {showCourseCreator ? 'Cancel New Course' : 'Create Course'}
+                </button>
+              </div>
+              {!courses.length && <p className={styles.helper}>No courses yet. Create one here and the wizard will keep going.</p>}
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label}>Module</label>
@@ -597,7 +1431,7 @@ export default function AdminNewTestWizard() {
                 <option value="">Select module...</option>
                 {nodes.map(n => <option key={n.id} value={n.id}>{n.title}</option>)}
               </select>
-              {!nodes.length && courseId && <p className={styles.helper}>No modules in this course—advance and I’ll create Module 1 automatically.</p>}
+              {!nodes.length && courseId && <p className={styles.helper}>No modules in this course. The wizard will create Module 1 automatically.</p>}
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label}>External Code / ID</label>
@@ -611,6 +1445,35 @@ export default function AdminNewTestWizard() {
               </select>
             </div>
           </div>
+          {showCourseCreator && (
+            <div className={styles.inlineCard}>
+              <div className={styles.inlineCardHead}>
+                <div>
+                  <div className={styles.label}>Create course inline</div>
+                  <div className={styles.helper}>This creates a draft course and its first module without leaving the wizard.</div>
+                </div>
+              </div>
+              <div className={styles.inputRow}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Course title</label>
+                  <input className={styles.input} value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)} placeholder="e.g. Computer Science 101" />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>First module</label>
+                  <input className={styles.input} value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)} placeholder="Module 1" />
+                </div>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Course description</label>
+                <textarea className={styles.textarea} rows={3} value={newCourseDescription} onChange={(e) => setNewCourseDescription(e.target.value)} placeholder="Optional description for the training course..." />
+              </div>
+              <div className={styles.inlineActions}>
+                <button className={styles.btnSecondary} type="button" onClick={handleCreateCourseInline} disabled={creatingCourse || !newCourseTitle.trim()}>
+                  {creatingCourse ? 'Creating...' : 'Create Course and Module'}
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )
 
@@ -619,7 +1482,7 @@ export default function AdminNewTestWizard() {
           <h3 className={styles.panelTitle}>Test Creation Method</h3>
           <div className={styles.methodCards}>
             <div className={`${styles.methodCard} ${method === 'manual' ? styles.methodCardActive : ''}`} onClick={() => setMethod('manual')}>
-              <div className={styles.methodIcon}>✏️</div>
+              <div className={styles.methodIcon}>Edit</div>
               <div className={styles.methodLabel}>Manual Selection</div>
               <div className={styles.methodDesc}>Pick questions from pools or create them manually. Define exactly which questions appear in each test version.</div>
               <div className={styles.methodRadio}>
@@ -627,7 +1490,7 @@ export default function AdminNewTestWizard() {
               </div>
             </div>
             <div className={`${styles.methodCard} ${method === 'generator' ? styles.methodCardActive : ''}`} onClick={() => setMethod('generator')}>
-              <div className={styles.methodIcon}>⚡</div>
+              <div className={styles.methodIcon}>AI</div>
               <div className={styles.methodLabel}>Generator Mode</div>
               <div className={styles.methodDesc}>Let the system automatically select questions based on your criteria. Creates unique test versions per candidate.</div>
               <div className={styles.methodRadio}>
@@ -640,10 +1503,10 @@ export default function AdminNewTestWizard() {
               <div className={styles.aiBar}>
                 <div>
                   <div className={styles.label}>AI-assisted generation</div>
-                  <div className={styles.helper}>Enter a topic and let the model draft questions, then we save them into this exam.</div>
+                  <div className={styles.helper}>Enter a topic and let the model draft questions, then we save them into this test.</div>
                 </div>
                 <div className={styles.aiControls}>
-                  <input className={styles.input} style={{ maxWidth: '220px' }} placeholder="Topic or chapter" value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
+                  <input className={`${styles.input} ${styles.aiTopicInput}`} placeholder="Topic or chapter" value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
                   <input className={styles.inputMini} type="number" min={1} max={15} value={aiCount} onChange={e => setAiCount(Number(e.target.value))} />
                   <select className={styles.selectMini} value={aiDifficulty} onChange={e => setAiDifficulty(e.target.value)}>
                     <option value="mixed">Mixed</option>
@@ -652,19 +1515,19 @@ export default function AdminNewTestWizard() {
                     <option value="hard">Hard</option>
                   </select>
                   <button type="button" className={styles.btnSeed} onClick={handleAIGenerate} disabled={aiLoading}>
-                    {aiLoading ? 'Generating…' : 'Generate with AI'}
+                    {aiLoading ? 'Generating...' : 'Generate with AI'}
                   </button>
                 </div>
               </div>
 
               <div className={styles.formGroup}>
                 <label className={styles.label}>Select Questions Based On</label>
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.35rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.88rem', color: 'var(--color-text)' }}>
+                <div className={styles.generatorChoiceRow}>
+                  <label className={styles.generatorChoiceLabel}>
                     <input type="radio" checked={generatorBy === 'difficulty'} onChange={() => setGeneratorBy('difficulty')} />
                     Difficulty mix
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.88rem', color: 'var(--color-text)' }}>
+                  <label className={styles.generatorChoiceLabel}>
                     <input type="radio" checked={generatorBy === 'category'} onChange={() => setGeneratorBy('category')} />
                     Category quotas
                   </label>
@@ -672,7 +1535,7 @@ export default function AdminNewTestWizard() {
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Total Questions</label>
-                <input className={styles.input} type="number" min={1} max={200} value={generatorCount} onChange={e => setGeneratorCount(Number(e.target.value))} style={{ maxWidth: '180px' }} />
+                <input className={`${styles.input} ${styles.generatorCountInput}`} type="number" min={1} max={200} value={generatorCount} onChange={e => setGeneratorCount(Number(e.target.value))} />
               </div>
 
               <div className={styles.generatorGrid}>
@@ -699,7 +1562,7 @@ export default function AdminNewTestWizard() {
                       />
                     </div>
                   ))}
-                  <div className={styles.helper}>Totals can exceed/under 100 — we normalize during generation.</div>
+                  <div className={styles.helper}>Totals can exceed or fall below 100. They are normalized during generation.</div>
                 </div>
 
                 <div className={styles.formGroup}>
@@ -788,7 +1651,18 @@ export default function AdminNewTestWizard() {
 
       case 2: return (
         <>
-          <h3 className={styles.panelTitle}>Test Settings</h3>
+          <h3 className={styles.panelTitle}>Proctoring & Test Settings</h3>
+          <div className={styles.summaryChips}>
+            <span className={styles.chip}>Phase 3 of 9</span>
+            <span className={styles.chip}>Checks enabled: {activeDetectorCount}</span>
+            <span className={styles.chip}>Escalation rules: {alertRuleCount}</span>
+            <span className={styles.chip}>Fullscreen: {proctoring.fullscreen_enforce ? 'On' : 'Off'}</span>
+            <span className={styles.chip}>Tabs: {proctoring.tab_switch_detect ? 'Tracked' : 'Ignored'}</span>
+          </div>
+          <p className={styles.phaseIntro}>
+            This is the dedicated proctoring phase. Configure delivery rules, AI monitoring, special accommodations, and live candidate controls here before you publish.
+          </p>
+          <div className={styles.sectionDivider}>Delivery settings</div>
           <div className={styles.inputRow}>
             <div className={styles.formGroup}>
               <label className={styles.label}>Question Type</label>
@@ -861,10 +1735,10 @@ export default function AdminNewTestWizard() {
             {proctoringView === 'candidate_monitoring' && (
               <div className={styles.monitoringTableCard}>
                 <div className={styles.monitoringActions}>
-                  <button type="button" className={styles.btnSecondary}>Pause session</button>
-                  <button type="button" className={styles.btnSecondary}>Resume session</button>
-                  <button type="button" className={styles.btnPrimarySolid}>Open supervision mode</button>
-                  <button type="button" className={styles.btnSecondary}>Filter</button>
+                  <button type="button" className={styles.btnSecondary} disabled={proctoringBulkBusy} onClick={() => handleProctoringBulkPause(true)}>Pause filtered</button>
+                  <button type="button" className={styles.btnSecondary} disabled={proctoringBulkBusy} onClick={() => handleProctoringBulkPause(false)}>Resume filtered</button>
+                  <button type="button" className={styles.btnPrimarySolid} onClick={() => examId && navigate(`/admin/videos?exam_id=${examId}`)}>Open supervision mode</button>
+                  {examId && <button type="button" className={styles.btnSecondary} onClick={() => navigate(`/admin/tests/${examId}/manage?tab=proctoring`)}>Full proctoring view</button>}
                 </div>
 
                 <div className={styles.monitoringTableWrap}>
@@ -910,18 +1784,20 @@ export default function AdminNewTestWizard() {
                           <tr key={row.id}>
                             <td>
                               <div className={styles.rowActionGroup}>
-                                <button type="button" className={styles.rowIconBtn} title="Pause attempt" aria-label="Pause attempt">
-                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M8 5v14M16 5v14" />
-                                  </svg>
+                                <button type="button" className={styles.rowIconBtn} title={row.paused ? 'Resume attempt' : 'Pause attempt'} aria-label={row.paused ? 'Resume attempt' : 'Pause attempt'} disabled={proctoringRowBusy[row.id]} onClick={() => handleProctoringPauseResume(row)}>
+                                  {row.paused ? (
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                                  ) : (
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 5v14M16 5v14" /></svg>
+                                  )}
                                 </button>
-                                <button type="button" className={styles.rowIconBtn} title="Open reports" aria-label="Open reports">
+                                <button type="button" className={styles.rowIconBtn} title="Analyze attempt" aria-label="Analyze attempt" onClick={() => navigate(`/admin/attempt-analysis?id=${row.id}`)}>
                                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                     <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
                                   </svg>
                                 </button>
-                                <button type="button" className={styles.rowIconBtn} title="Open video recordings" aria-label="Open video recordings">
+                                <button type="button" className={styles.rowIconBtn} title="Open video recordings" aria-label="Open video recordings" onClick={() => navigate(`/admin/videos/${row.id}`)}>
                                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M23 7l-7 5 7 5V7z" />
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
@@ -954,22 +1830,169 @@ export default function AdminNewTestWizard() {
             {proctoringView === 'special_accommodations' && (
               <div className={styles.proctoringNotes}>
                 <label className={styles.label}>Special accommodations</label>
-                <textarea className={styles.textarea} value={specialAccommodations} onChange={(e) => setSpecialAccommodations(e.target.value)} rows={4} />
+                <textarea
+                  className={styles.textarea}
+                  value={specialAccommodations}
+                  onChange={(e) => {
+                    setSpecialAccommodations(e.target.value)
+                    if (examId) autoPersist()
+                  }}
+                  rows={4}
+                />
               </div>
             )}
 
             {proctoringView === 'special_requests' && (
               <div className={styles.proctoringNotes}>
                 <label className={styles.label}>Special requests</label>
-                <textarea className={styles.textarea} value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={4} />
+                <textarea
+                  className={styles.textarea}
+                  value={specialRequests}
+                  onChange={(e) => {
+                    setSpecialRequests(e.target.value)
+                    if (examId) autoPersist()
+                  }}
+                  rows={4}
+                />
               </div>
             )}
 
-            <div className={styles.sectionDivider}>Proctoring controls</div>
+            <div className={styles.sectionDivider}>Journey requirements</div>
+            <div className={styles.requirementGrid}>
+              {PROCTORING_REQUIREMENTS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`${styles.requirementCard} ${proctoring[item.key] ? styles.requirementCardActive : ''}`}
+                  onClick={() => updateProctoringFlag(item.key, !proctoring[item.key])}
+                >
+                  <div className={styles.requirementCardHead}>
+                    <div className={styles.requirementCardTitle}>{item.label}</div>
+                    <div className={`${styles.toggleTrack} ${proctoring[item.key] ? styles.toggleTrackOn : ''}`}>
+                      <div className={styles.toggleThumb} />
+                    </div>
+                  </div>
+                  <div className={styles.requirementCardDesc}>{item.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.sectionDivider}>Alert escalation rules</div>
+            <div className={styles.alertRuleShell}>
+              <div className={styles.alertRuleHead}>
+                <div>
+                  <div className={styles.alertRuleTitle}>Escalate specific proctoring alerts</div>
+                  <div className={styles.alertRuleDesc}>
+                    Choose which alert matters, how many repeats are allowed, what severity gets logged, and what the exam should do when the threshold is reached.
+                  </div>
+                </div>
+                <button type="button" className={styles.btnSecondary} onClick={addAlertRule}>Add rule</button>
+              </div>
+
+              {alertRuleCount === 0 ? (
+                <div className={styles.alertRuleEmpty}>
+                  No custom alert rules yet. The global auto-submit thresholds still apply until you add a rule here.
+                </div>
+              ) : (
+                <div className={styles.alertRuleList}>
+                  {proctoring.alert_rules.map((rule, index) => {
+                    const option = ALERT_RULE_EVENT_OPTIONS.find((item) => item.value === rule.event_type) || ALERT_RULE_EVENT_OPTIONS[0]
+                    const dependencies = Array.isArray(option.requires) ? option.requires : []
+                    const missingDependencies = dependencies.filter((dep) => !proctoring[dep])
+                    const dependencyLabel = missingDependencies.map((dep) => PROCTORING_LABELS[dep] || humanizeSettingLabel(dep)).join(', ')
+                    return (
+                      <div key={rule.id} className={styles.alertRuleCard}>
+                        <div className={styles.alertRuleCardHead}>
+                          <div>
+                            <div className={styles.alertRuleCardTitle}>Rule {index + 1}</div>
+                            <div className={styles.alertRuleCardMeta}>{describeAlertRule(rule)}</div>
+                          </div>
+                          <button type="button" className={styles.reviewEditBtn} onClick={() => removeAlertRule(rule.id)}>Remove</button>
+                        </div>
+                        <div className={styles.alertRuleGrid}>
+                          <div className={styles.formGroup}>
+                            <label className={styles.label}>Alert type</label>
+                            <select
+                              aria-label={`Alert type ${index + 1}`}
+                              className={styles.select}
+                              value={rule.event_type}
+                              onChange={(e) => updateAlertRule(rule.id, 'event_type', e.target.value)}
+                            >
+                              {ALERT_RULE_EVENT_OPTIONS.map((item) => (
+                                <option key={item.value} value={item.value}>{item.label}</option>
+                              ))}
+                            </select>
+                            <div className={styles.helper}>{option.desc}</div>
+                          </div>
+                          <div className={styles.formGroup}>
+                            <label className={styles.label}>Trigger after</label>
+                            <input
+                              aria-label={`Trigger after ${index + 1}`}
+                              className={styles.input}
+                              type="number"
+                              min={1}
+                              max={20}
+                              value={rule.threshold}
+                              onChange={(e) => updateAlertRule(rule.id, 'threshold', e.target.value)}
+                            />
+                            <div className={styles.helper}>Count of matching alerts before this rule fires.</div>
+                          </div>
+                          <div className={styles.formGroup}>
+                            <label className={styles.label}>Escalation severity</label>
+                            <select
+                              aria-label={`Escalation severity ${index + 1}`}
+                              className={styles.select}
+                              value={rule.severity}
+                              onChange={(e) => updateAlertRule(rule.id, 'severity', e.target.value)}
+                            >
+                              {ALERT_RULE_SEVERITIES.map((value) => (
+                                <option key={value} value={value}>{value}</option>
+                              ))}
+                            </select>
+                            <div className={styles.helper}>Severity stored on the escalation event for review and reporting.</div>
+                          </div>
+                          <div className={styles.formGroup}>
+                            <label className={styles.label}>What happens</label>
+                            <select
+                              aria-label={`What happens ${index + 1}`}
+                              className={styles.select}
+                              value={rule.action}
+                              onChange={(e) => updateAlertRule(rule.id, 'action', e.target.value)}
+                            >
+                              {ALERT_RULE_ACTIONS.map((item) => (
+                                <option key={item.value} value={item.value}>{item.label}</option>
+                              ))}
+                            </select>
+                            <div className={styles.helper}>{ALERT_RULE_ACTION_HELPERS[rule.action] || ALERT_RULE_ACTION_HELPERS.WARN}</div>
+                          </div>
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.label}>Optional escalation message</label>
+                          <input
+                            aria-label={`Escalation message ${index + 1}`}
+                            className={styles.input}
+                            value={rule.message || ''}
+                            onChange={(e) => updateAlertRule(rule.id, 'message', e.target.value)}
+                            placeholder="Optional custom message shown when this rule fires"
+                          />
+                        </div>
+                        {missingDependencies.length > 0 && (
+                          <div className={styles.alertRuleDependencyWarning}>
+                            This rule depends on {dependencyLabel}. Enable it above or the rule will never fire.
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.sectionDivider}>Detector switches</div>
             <div className={styles.presetRow}>
-              <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 15, mouth_open_threshold: 0.4, audio_rms_threshold: 0.1, max_face_absence_sec: 8, max_tab_blurs: 5, max_alerts_before_autosubmit: 8, frame_interval_ms: 4000, audio_chunk_ms: 4000, screenshot_interval_sec: 90 }))}>Lenient</button>
-              <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 12, mouth_open_threshold: 0.35, audio_rms_threshold: 0.08, max_face_absence_sec: 5, max_tab_blurs: 3, max_alerts_before_autosubmit: 5, frame_interval_ms: 3000, audio_chunk_ms: 3000, screenshot_interval_sec: 60 }))}>Standard</button>
-              <button className={styles.btnSecondary} type="button" onClick={() => setProctoring(prev => ({ ...prev, eye_deviation_deg: 8, mouth_open_threshold: 0.25, audio_rms_threshold: 0.05, max_face_absence_sec: 3, max_tab_blurs: 1, max_alerts_before_autosubmit: 3, frame_interval_ms: 2000, audio_chunk_ms: 2000, screenshot_interval_sec: 30, screen_capture: true }))}>Strict</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('lenient')}>Lenient</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('standard')}>Standard</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('strict')}>Strict</button>
             </div>
             <div className={styles.detectorsGrid}>
               {DETECTORS.map(d => (
@@ -986,6 +2009,72 @@ export default function AdminNewTestWizard() {
                 </div>
               ))}
             </div>
+
+            <div className={styles.sectionDivider}>Advanced detector tuning</div>
+            <div className={styles.advancedSectionStack}>
+              {PROCTORING_CONTROL_GROUPS.map((group) => (
+                <div key={group.key} className={styles.advancedSectionCard}>
+                  <div className={styles.advancedSectionHead}>
+                    <div className={styles.advancedSectionTitle}>{group.title}</div>
+                    <div className={styles.advancedSectionDesc}>{group.description}</div>
+                  </div>
+                  <div className={styles.advancedControlGrid}>
+                    {group.controls.map((control) => {
+                      const dependencies = Array.isArray(control.enabledBy)
+                        ? control.enabledBy
+                        : control.enabledBy
+                          ? [control.enabledBy]
+                          : []
+                      const controlEnabled = dependencies.length === 0 || dependencies.every((dep) => Boolean(proctoring[dep]))
+                      const dependencyLabel = dependencies.map((dep) => PROCTORING_LABELS[dep] || humanizeSettingLabel(dep)).join(' and ')
+                      const numericValue = proctoring[control.key] ?? control.min
+                      return (
+                        <div
+                          key={control.key}
+                          className={`${styles.advancedControlCard} ${!controlEnabled ? styles.advancedControlCardDisabled : ''}`}
+                        >
+                          <div className={styles.advancedControlHead}>
+                            <div>
+                              <div className={styles.advancedControlLabel}>{control.label}</div>
+                              <div className={styles.advancedControlDesc}>{control.desc}</div>
+                            </div>
+                            <div className={styles.advancedControlMeta}>
+                              {numericValue}
+                              <span className={styles.advancedControlUnit}>{control.unit}</span>
+                            </div>
+                          </div>
+                          <input
+                            className={styles.advancedControlRange}
+                            type="range"
+                            min={control.min}
+                            max={control.max}
+                            step={control.step}
+                            value={numericValue}
+                            disabled={!controlEnabled}
+                            onChange={(e) => updateProctoringNumber(control.key, e.target.value, { integer: Number.isInteger(control.step) })}
+                          />
+                          <div className={styles.advancedControlInputs}>
+                            <input
+                              className={`${styles.input} ${styles.advancedNumberInput}`}
+                              type="number"
+                              min={control.min}
+                              max={control.max}
+                              step={control.step}
+                              value={numericValue}
+                              disabled={!controlEnabled}
+                              onChange={(e) => updateProctoringNumber(control.key, e.target.value, { integer: Number.isInteger(control.step) })}
+                            />
+                            <span className={styles.advancedInputHint}>
+                              {controlEnabled ? `Recommended range: ${control.min} to ${control.max} ${control.unit}` : `Enable ${dependencyLabel} first`}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className={styles.sectionDivider}>Time Limit</div>
@@ -994,9 +2083,9 @@ export default function AdminNewTestWizard() {
             <span>Unlimited time (no timer)</span>
           </label>
           {!unlimitedTime && (
-            <div className={styles.formGroup} style={{ marginTop: '0.75rem' }}>
+            <div className={`${styles.formGroup} ${styles.timeLimitWrap}`}>
               <label className={styles.label}>Duration (minutes)</label>
-              <input name="time_limit" className={styles.input} type="number" min={1} max={600} value={timeLimitMinutes} onChange={e => setTimeLimitMinutes(Number(e.target.value))} style={{ maxWidth: '200px' }} />
+              <input name="time_limit" className={`${styles.input} ${styles.timeLimitInput}`} type="number" min={1} max={600} value={timeLimitMinutes} onChange={e => setTimeLimitMinutes(Number(e.target.value))} />
             </div>
           )}
         </>
@@ -1005,32 +2094,39 @@ export default function AdminNewTestWizard() {
       case 3: return (
         <>
           <h3 className={styles.panelTitle}>Questions</h3>
-          <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+          <p className={styles.questionsIntro}>
             Add questions directly or seed from a question pool.
           </p>
 
           {method === 'manual' && examId && (
             <>
               <div className={styles.poolSeed}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }}>Seed from pool:</span>
-                <select className={styles.select} style={{ flex: 1 }} value={selectedPool} onChange={e => setSelectedPool(e.target.value)}>
+                <span className={styles.poolSeedLabel}>Seed from pool:</span>
+                <select className={`${styles.select} ${styles.poolSeedSelect}`} value={selectedPool} onChange={e => setSelectedPool(e.target.value)}>
                   <option value="">Select pool...</option>
-                  {pools.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {pools.map(p => <option key={p.id} value={p.id}>{p.name} ({Number(p.question_count || 0)})</option>)}
                 </select>
-                <input className={styles.input} type="number" min={1} max={100} value={seedCount} onChange={e => setSeedCount(Number(e.target.value))} style={{ width: '80px' }} />
-                <button className={styles.btnSeed} onClick={handleSeedPool} disabled={!selectedPool || !examId || saving}>
+                <input className={`${styles.input} ${styles.poolSeedCountInput}`} type="number" min={1} max={100} value={seedCount} onChange={e => setSeedCount(Number(e.target.value))} />
+                <button className={styles.btnSeed} onClick={handleSeedPool} disabled={!selectedPool || !examId || saving || selectedPoolCount < 1}>
                   {saving ? 'Saving...' : 'Seed'}
                 </button>
               </div>
+              {selectedPool && (
+                <div className={styles.helper}>
+                  {selectedPoolCount > 0
+                    ? `${selectedPoolCount} question${selectedPoolCount === 1 ? '' : 's'} available in this pool for seeding.`
+                    : 'This pool is empty. Open Question Pools and add questions before seeding.'}
+                </div>
+              )}
               <ExamQuestionPanel examId={examId} questions={questions} onUpdate={setQuestions} questionTypes={QUESTION_TYPES} />
             </>
           )}
           {!examId && (
-            <div style={{ padding: '1rem', border: '1px dashed var(--color-border)', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', color: 'var(--color-muted)' }}>
-              <div style={{ fontSize: '0.9rem', marginBottom: '0.35rem' }}>
-                {saving ? 'Creating the exam so you can add questions…' : 'Hang tight while we create the exam so you can start adding questions right away.'}
+            <div className={styles.questionInitCard}>
+              <div className={styles.questionInitLead}>
+                {saving ? 'Creating the test so you can add questions...' : 'Hang tight while we create the test so you can start adding questions right away.'}
               </div>
-              {questionInitError && <div style={{ color: '#f87171', marginBottom: '0.5rem' }}>{questionInitError}</div>}
+              {questionInitError && <div className={styles.questionInitError}>{questionInitError}</div>}
               {!saving && (
                 <button className={styles.btnSeed} onClick={ensureExamCreated}>
                   Retry create
@@ -1048,7 +2144,7 @@ export default function AdminNewTestWizard() {
             <div className={styles.formGroup}>
               <label className={styles.label}>Passing Mark (%)</label>
               <input className={styles.input} type="number" min={0} max={100} value={passingScore} onChange={e => { setPassingScore(Number(e.target.value)); if (examId) autoPersist() }} />
-              <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.25rem', display: 'block' }}>
+              <span className={styles.metricHelper}>
                 Achieve more than {passingScore}% on the entire test to pass.
               </span>
             </div>
@@ -1071,7 +2167,7 @@ export default function AdminNewTestWizard() {
             <span>Enable negative marking for wrong answers</span>
           </label>
           {negativeMarking && (
-            <div className={styles.inputRow} style={{ marginTop: '0.75rem' }}>
+            <div className={`${styles.inputRow} ${styles.negativeMarkRow}`}>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Deduction per Wrong Answer</label>
                 <input className={styles.input} type="number" min={0} step={0.25} value={negMarkValue} onChange={e => { setNegMarkValue(Number(e.target.value)); if (examId) autoPersist() }} />
@@ -1100,22 +2196,22 @@ export default function AdminNewTestWizard() {
 
           <div className={styles.conductGrid}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Exam conduct controls</label>
+              <label className={styles.label}>Test conduct controls</label>
               <div className={styles.toggleRow}>
                 <label className={styles.checkItem}>
-                  <input type="checkbox" checked={proctoring.fullscreen_enforce} onChange={e => setProctoring(p => ({ ...p, fullscreen_enforce: e.target.checked }))} />
+                  <input type="checkbox" checked={proctoring.fullscreen_enforce} onChange={e => { setProctoring(p => ({ ...p, fullscreen_enforce: e.target.checked })); if (examId) autoPersist() }} />
                   Enforce fullscreen
                 </label>
                 <label className={styles.checkItem}>
-                  <input type="checkbox" checked={proctoring.tab_switch_detect} onChange={e => setProctoring(p => ({ ...p, tab_switch_detect: e.target.checked }))} />
+                  <input type="checkbox" checked={proctoring.tab_switch_detect} onChange={e => { setProctoring(p => ({ ...p, tab_switch_detect: e.target.checked })); if (examId) autoPersist() }} />
                   Detect tab switches
                 </label>
                 <label className={styles.checkItem}>
-                  <input type="checkbox" checked={proctoring.screen_capture} onChange={e => setProctoring(p => ({ ...p, screen_capture: e.target.checked }))} />
+                  <input type="checkbox" checked={proctoring.screen_capture} onChange={e => { setProctoring(p => ({ ...p, screen_capture: e.target.checked })); if (examId) autoPersist() }} />
                   Capture screen periodically
                 </label>
                 <label className={styles.checkItem}>
-                  <input type="checkbox" checked={proctoring.copy_paste_block} onChange={e => setProctoring(p => ({ ...p, copy_paste_block: e.target.checked }))} />
+                  <input type="checkbox" checked={proctoring.copy_paste_block} onChange={e => { setProctoring(p => ({ ...p, copy_paste_block: e.target.checked })); if (examId) autoPersist() }} />
                   Block copy / paste
                 </label>
               </div>
@@ -1128,15 +2224,14 @@ export default function AdminNewTestWizard() {
       case 5: return (
         <>
           <h3 className={styles.panelTitle}>Certificates</h3>
-          <label className={styles.checkItem} style={{ marginBottom: '1rem' }}>
+          <label className={`${styles.checkItem} ${styles.certToggleRow}`}>
             <div
               className={`${styles.toggleTrack} ${certEnabled ? styles.toggleTrackOn : ''}`}
-              style={{ cursor: 'pointer' }}
               onClick={() => { setCertEnabled(v => !v); if (examId) autoPersist() }}
             >
               <div className={styles.toggleThumb} />
             </div>
-            <span style={{ marginLeft: '0.5rem', fontWeight: 600 }}>Issue certificate upon passing</span>
+            <span className={styles.toggleLabelStrong}>Issue certificate upon passing</span>
           </label>
           {certEnabled && (
             <>
@@ -1149,9 +2244,9 @@ export default function AdminNewTestWizard() {
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Orientation</label>
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '0.35rem' }}>
+                  <div className={styles.orientationRow}>
                     {['landscape', 'portrait'].map(o => (
-                      <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.88rem', color: 'var(--color-text)' }}>
+                      <label key={o} className={styles.orientationOption}>
                         <input type="radio" checked={certOrientation === o} onChange={() => { setCertOrientation(o); if (examId) autoPersist() }} />
                         {o.charAt(0).toUpperCase() + o.slice(1)}
                       </label>
@@ -1174,15 +2269,20 @@ export default function AdminNewTestWizard() {
                 <input className={styles.input} value={certCompany} onChange={e => { setCertCompany(e.target.value); if (examId) autoPersist() }} placeholder="e.g. SYRA Learning Institute" />
               </div>
               <div className={styles.formGroup}>
+                <label className={styles.label}>Signer Name</label>
+                <input className={styles.input} value={certSigner} onChange={e => { setCertSigner(e.target.value); if (examId) autoPersist() }} placeholder="e.g. Dr. Jane Doe" />
+              </div>
+              <div className={styles.formGroup}>
                 <label className={styles.label}>Certificate Body Text</label>
                 <textarea className={styles.textarea} rows={3} value={certDescription} onChange={e => { setCertDescription(e.target.value); if (examId) autoPersist() }} />
               </div>
               <div className={styles.certPreview}>
-                <div className={styles.certPreviewLabel}>{certTemplate} — {certOrientation}</div>
-                <div className={styles.certPreviewBox} style={{ aspectRatio: certOrientation === 'landscape' ? '4/3' : '3/4' }}>
+                <div className={styles.certPreviewLabel}>{certTemplate} - {certOrientation}</div>
+                <div className={`${styles.certPreviewBox} ${certOrientation === 'landscape' ? styles.certPreviewLandscape : styles.certPreviewPortrait}`}>
                   <div className={styles.certPreviewTitle}>{certTitle || 'Certificate Title'}</div>
                   {certSubtitle && <div className={styles.certPreviewSub}>{certSubtitle}</div>}
                   {certCompany && <div className={styles.certPreviewCompany}>{certCompany}</div>}
+                  {certSigner && <div className={styles.certPreviewCompany}>Signed by {certSigner}</div>}
                 </div>
               </div>
             </>
@@ -1193,49 +2293,37 @@ export default function AdminNewTestWizard() {
       case 6: return (
         <>
           <h3 className={styles.panelTitle}>Review</h3>
-          {[
-            ['Test Title', title || '—'],
-            ['Description', description || 'None'],
-            ['Category', categories.find(c => c.id === categoryId)?.name || 'None'],
-            ['Creation Method', method === 'manual' ? 'Manual Selection' : `Generator (${generatorBy})`],
-            ...(method === 'generator' ? [
-              ['Generator: Total Questions', generatorCount],
-              ['Generator: Difficulty Mix', `${generatorDifficultyMix.easy}% / ${generatorDifficultyMix.medium}% / ${generatorDifficultyMix.hard}%`],
-              ['Generator: Categories', generatorCategories.length ? generatorCategories.length : 'All'],
-              ['Generator: Pools', generatorPools.length ? generatorPools.length : 'All'],
-              ['Generator: Tags Include', generatorTagsInclude || 'None'],
-              ['Generator: Tags Exclude', generatorTagsExclude || 'None'],
-            ] : []),
-      ['Question Type', examType],
-            ['Page Format', pageFormat],
-            ['Calculator', calculatorType],
-            ['Time Limit', unlimitedTime ? 'Unlimited' : `${timeLimitMinutes} minutes`],
-            ['Randomize Questions', randomizeQuestions ? 'Yes' : 'No'],
-            ['Passing Score', `${passingScore}%`],
-            ['Max Attempts', maxAttempts],
-            ['Grading Scale', gradingScales.find(g => g.id === gradingScaleId)?.name || 'None'],
-            ['Negative Marking', negativeMarking ? `Yes (${negMarkValue} ${negMarkType})` : 'No'],
-            ['Questions', `${questions.length} question(s)` + (questions.length === 0 ? ' — add at least one' : '')],
-            ['Certificate', certEnabled ? `${certTemplate} (${certOrientation})` : 'Disabled'],
-            ['Proctoring', Object.entries(proctoring).filter(([,v]) => v).map(([k]) => k).join(', ') || 'None'],
-            ['Sessions Assigned', `${assignedSessions.length} session(s)`],
-          ].map(([label, value]) => (
-            <div key={label} className={styles.reviewRow}>
-              <span className={styles.reviewLabel}>{label}</span>
-              <span className={styles.reviewValue}>{String(value)}</span>
-            </div>
-          ))}
+          <div className={styles.reviewGrid}>
+            {reviewSections.map((section) => (
+              <div key={section.key} className={styles.reviewCard}>
+                <div className={styles.reviewCardHeader}>
+                  <div className={styles.reviewCardTitle}>{section.title}</div>
+                  <button type="button" className={styles.reviewEditBtn} onClick={() => setStep(section.editStep)}>
+                    Edit Step {section.editStep + 1}
+                  </button>
+                </div>
+                <div className={styles.reviewCardList}>
+                  {section.items.map(([label, value]) => (
+                    <div key={`${section.key}-${label}`} className={styles.reviewRow}>
+                      <span className={styles.reviewLabel}>{label}</span>
+                      <span className={styles.reviewValue}>{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </>
       )
 
       case 7: return (
         <>
           <h3 className={styles.panelTitle}>Testing Sessions</h3>
-          <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+          <p className={styles.sessionIntro}>
             Assign this test to learners with a scheduled date and time.
           </p>
           {!examId ? (
-            <p style={{ color: 'var(--color-muted)' }}>Save the test first (go back and advance through steps).</p>
+            <p className={styles.sessionEmpty}>Save the test first (go back and advance through steps).</p>
           ) : (
             <>
               <div className={styles.inputRow}>
@@ -1251,28 +2339,75 @@ export default function AdminNewTestWizard() {
                   <input className={styles.input} type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
                 </div>
               </div>
+              {sessionRequiresSchedule && !scheduledAt && (
+                <div className={styles.sessionWarning}>Restricted access requires a scheduled date and time before assignments can be saved.</div>
+              )}
 
-              <label className={styles.label} style={{ marginTop: '0.75rem' }}>Select Learners</label>
+              <label className={`${styles.label} ${styles.sectionLabel}`}>Select Learners</label>
+              <div className={styles.helper}>Existing assigned learners are preselected. Save assignments to update their access mode or scheduled time.</div>
+              <div className={styles.summaryChips}>
+                <span className={styles.chip}>Learners: {totalLearners}</span>
+                <span className={styles.chip}>Visible: {filteredUsers.length}</span>
+                <span className={styles.chip}>Selected: {selectedUsers.length}</span>
+                <span className={styles.chip}>Visible selected: {selectedVisibleLearners}</span>
+              </div>
+              <div className={styles.sessionBulkBar}>
+                <button type="button" className={styles.btnSecondary} onClick={handleSelectAllLearners} disabled={sessionBusy || totalLearners === 0 || allLearnersSelected}>
+                  {allLearnersSelected ? 'All learners selected' : `Select all learners (${totalLearners})`}
+                </button>
+                <button type="button" className={styles.btnSecondary} onClick={handleSelectVisibleLearners} disabled={sessionBusy || filteredUsers.length === 0 || allVisibleLearnersSelected}>
+                  {allVisibleLearnersSelected ? 'Visible learners selected' : `Select visible (${filteredUsers.length})`}
+                </button>
+                <button type="button" className={styles.btnSecondary} onClick={handleClearLearnerSelection} disabled={sessionBusy || selectedUsers.length === 0}>
+                  Clear selection
+                </button>
+              </div>
+              <div className={styles.inlineCard}>
+                <div className={styles.inlineCardHead}>
+                  <div className={styles.label}>Bulk add learners</div>
+                  <div className={styles.helper}>Paste learner IDs, emails, or internal IDs separated by commas or new lines.</div>
+                </div>
+                <textarea
+                  className={styles.textarea}
+                  aria-label="Bulk learners"
+                  rows={3}
+                  placeholder={'learner001@example.com\nLIV1772920670269\n1b2c3d4e-...'}
+                  value={bulkLearnerInput}
+                  onChange={(e) => setBulkLearnerInput(e.target.value)}
+                />
+                <div className={styles.inlineActions}>
+                  <button type="button" className={styles.btnSecondary} onClick={handleBulkLearnerMatch} disabled={sessionBusy || !bulkLearnerInput.trim()}>
+                    Add pasted learners
+                  </button>
+                </div>
+                {bulkLearnerFeedback && <div className={styles.bulkSelectionMessage}>{bulkLearnerFeedback}</div>}
+              </div>
               <input className={styles.userSearch} placeholder="Search learners..." value={userSearch} onChange={e => setUserSearch(e.target.value)} />
               <div className={styles.userList}>
                 {filteredUsers.map(u => (
                   <label key={u.id} className={styles.userItem}>
                     <input type="checkbox" checked={selectedUsers.includes(u.id)} onChange={() => toggleUser(u.id)} />
-                    <span>{u.user_id} — {u.name || u.email || 'Learner'}</span>
+                    <span>{u.user_id} - {u.name || u.email || 'Learner'}</span>
                   </label>
                 ))}
-                {filteredUsers.length === 0 && <div className={styles.userItem} style={{ color: 'var(--color-muted)' }}>No learners found.</div>}
+                {filteredUsers.length === 0 && <div className={`${styles.userItem} ${styles.emptyUserItem}`}>No learners found.</div>}
               </div>
-              <button className={styles.btnSeed} onClick={handleAssignSessions} disabled={selectedUsers.length === 0}>
-                Assign {selectedUsers.length > 0 ? `(${selectedUsers.length})` : ''}
+              <button
+                className={styles.btnSeed}
+                onClick={handleAssignSessions}
+                disabled={!canSaveAssignments}
+              >
+                {sessionBusy ? 'Saving...' : `Save assignments${selectedUsers.length > 0 ? ` (${selectedUsers.length})` : assignedSessions.length > 0 ? ' (clear/update)' : ''}`}
               </button>
-
               {assignedSessions.length > 0 && (
-                <div style={{ marginTop: '1rem' }}>
-                  <div className={styles.label} style={{ marginBottom: '0.5rem' }}>Assigned Sessions</div>
+                <div className={styles.sessionActions}>
+                  <div className={`${styles.label} ${styles.sessionActionsTitle}`}>Assigned sessions ({assignedSessions.length})</div>
                   {assignedSessions.map((s, i) => (
-                    <div key={i} style={{ padding: '0.4rem 0.75rem', background: 'rgba(0,0,0,0.1)', borderRadius: '6px', marginBottom: '0.3rem', fontSize: '0.82rem', color: 'var(--color-muted)' }}>
-                      {s.user} — {s.mode} {s.at ? `@ ${new Date(s.at).toLocaleString()}` : ''}
+                    <div key={`action-${i}`} className={styles.sessionRow}>
+                      <span>{s.user} - {s.mode}{s.at ? ` @ ${new Date(s.at).toLocaleString()}` : ''}</span>
+                      <button type="button" className={styles.sessionRemove} onClick={() => handleRemoveSession(s.id, s.userId)} disabled={sessionBusy}>
+                        Remove
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1285,36 +2420,41 @@ export default function AdminNewTestWizard() {
       case 8: return (
         <>
           <h3 className={styles.panelTitle}>Save Test</h3>
-          <p style={{ color: 'var(--color-muted)', fontSize: '0.88rem', marginBottom: '1.25rem' }}>
+          <p className={styles.sessionIntro}>
             Choose the initial status for this test. You can change it later from the Manage Tests page.
           </p>
-          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <div className={styles.summaryChips}>
             <span className={styles.chip}>Questions: {questions.length}</span>
             <span className={styles.chip}>Seed Pools: {selectedPool ? 1 : 0}</span>
             <span className={styles.chip}>Scheduled: {assignedSessions.length}</span>
             <span className={styles.chip}>Status: {publishStatus === 'OPEN' ? 'Published' : 'Draft'}</span>
           </div>
+          {questions.length === 0 && (
+            <div className={styles.publishWarning}>
+              Drafts can be saved without questions. Publishing still requires at least one question.
+            </div>
+          )}
           <div className={styles.formGroup}>
             <label className={styles.label}>Publication Status</label>
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.75rem 1rem', border: `1px solid ${publishStatus === 'CLOSED' ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: '8px', flex: 1, background: publishStatus === 'CLOSED' ? 'rgba(16,185,129,0.06)' : 'transparent' }}>
-                <input type="radio" checked={publishStatus === 'CLOSED'} onChange={() => { setPublishStatus('CLOSED'); if (examId) autoPersist() }} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--color-text)' }}>Draft</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Not visible to candidates</div>
+            <div className={styles.publishOptions}>
+              <label className={`${styles.publishOption} ${publishStatus === 'CLOSED' ? styles.publishOptionActive : ''}`}>
+                <input type="radio" checked={publishStatus === 'CLOSED'} onChange={() => setPublishStatus('CLOSED')} />
+                <div className={styles.publishOptionCopy}>
+                  <div className={styles.publishOptionTitle}>Draft</div>
+                  <div className={styles.publishOptionSubtitle}>Not visible to candidates</div>
                 </div>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.75rem 1rem', border: `1px solid ${publishStatus === 'OPEN' ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: '8px', flex: 1, background: publishStatus === 'OPEN' ? 'rgba(16,185,129,0.06)' : 'transparent' }}>
-                <input type="radio" checked={publishStatus === 'OPEN'} onChange={() => { setPublishStatus('OPEN'); if (examId) autoPersist() }} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--color-text)' }}>Published</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Visible and active for candidates</div>
+              <label className={`${styles.publishOption} ${publishStatus === 'OPEN' ? styles.publishOptionActive : ''}`}>
+                <input type="radio" checked={publishStatus === 'OPEN'} onChange={() => setPublishStatus('OPEN')} />
+                <div className={styles.publishOptionCopy}>
+                  <div className={styles.publishOptionTitle}>Published</div>
+                  <div className={styles.publishOptionSubtitle}>Visible and active for candidates</div>
                 </div>
               </label>
             </div>
           </div>
-          <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-            <strong style={{ color: 'var(--color-text)' }}>Summary:</strong> "{title || 'Unnamed Test'}" with {questions.length} questions, {assignedSessions.length} sessions assigned.
+          <div className={styles.publishSummary}>
+            <strong className={styles.publishSummaryStrong}>Summary:</strong> "{title || 'Unnamed Test'}" with {questions.length} questions, {assignedSessions.length} sessions assigned.
           </div>
         </>
       )
@@ -1336,7 +2476,7 @@ export default function AdminNewTestWizard() {
             onClick={() => s.id <= step && setStep(s.id)}
           >
             <span className={`${styles.stepNum} ${s.id === step ? styles.stepNumActive : ''} ${s.id < step ? styles.stepNumCompleted : ''}`}>
-              {s.id < step ? '✓' : s.id + 1}
+              {s.id < step ? 'OK' : s.id + 1}
             </span>
             {s.label}
           </div>
@@ -1346,6 +2486,24 @@ export default function AdminNewTestWizard() {
       {/* Panel */}
       <div className={`${styles.panel} glass`}>
         {panelError && <div className={styles.errorBanner}>{panelError}</div>}
+        <div className={styles.stepOverviewGrid}>
+          {cycleOverviewCards.map((card) => (
+            <div
+              key={card.label}
+              className={`${styles.stepOverviewCard} ${
+                card.tone === 'ready'
+                  ? styles.stepOverviewCardReady
+                  : card.tone === 'attention'
+                    ? styles.stepOverviewCardAttention
+                    : styles.stepOverviewCardInfo
+              }`}
+            >
+              <div className={styles.stepOverviewLabel}>{card.label}</div>
+              <div className={styles.stepOverviewValue}>{card.value}</div>
+              <div className={styles.stepOverviewHelper}>{card.helper}</div>
+            </div>
+          ))}
+        </div>
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -1362,15 +2520,15 @@ export default function AdminNewTestWizard() {
       {/* Actions */}
       <div className={styles.actions}>
         <button className={styles.btnBack} onClick={() => setStep(s => s - 1)} disabled={step === 0}>
-          ← Back
+          Back
         </button>
         {step < STEPS.length - 1 ? (
-          <button className={styles.btnNext} onClick={handleNext} disabled={(step === 0 && !title.trim()) || (step >= 3 && questions.length === 0) || saving}>
-            {saving ? 'Saving...' : 'Next →'}
+          <button className={styles.btnNext} onClick={handleNext} disabled={(step === 0 && !title.trim()) || saving || editorLocked}>
+            {saving ? 'Saving...' : 'Next'}
           </button>
         ) : (
-          <button className={styles.btnPublish} onClick={handlePublish} disabled={saving || questions.length === 0}>
-            {saving ? 'Saving...' : publishStatus === 'OPEN' ? '🚀 Publish Test' : '💾 Save as Draft'}
+          <button className={styles.btnPublish} onClick={handlePublish} disabled={saving || editorLocked || (publishStatus === 'OPEN' && questions.length === 0)}>
+            {saving ? 'Saving...' : publishStatus === 'OPEN' ? 'Publish Test' : 'Save as Draft'}
           </button>
         )}
       </div>

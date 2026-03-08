@@ -157,12 +157,15 @@ class Exam(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     node_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("nodes.id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(4000))
     type: Mapped[ExamType] = mapped_column(SAEnum(ExamType), default=ExamType.MCQ, nullable=False)
     status: Mapped[ExamStatus] = mapped_column(SAEnum(ExamStatus), default=ExamStatus.CLOSED, nullable=False)
     time_limit: Mapped[int | None] = mapped_column(Integer)
     max_attempts: Mapped[int] = mapped_column(Integer, default=1)
     passing_score: Mapped[float | None] = mapped_column(Float)
     proctoring_config: Mapped[dict | None] = mapped_column(JSON)
+    settings: Mapped[dict | None] = mapped_column(JSON)
+    certificate: Mapped[dict | None] = mapped_column(JSON)
     category_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"))
     grading_scale_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("grading_scales.id"))
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -236,6 +239,9 @@ class Attempt(Base):
 
 class AttemptAnswer(Base):
     __tablename__ = "attempt_answers"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "question_id", name="uq_attempt_answer_attempt_question"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     attempt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("attempts.id", ondelete="CASCADE"))
@@ -354,6 +360,20 @@ class UserGroup(Base):
     member_ids: Mapped[list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_user_preference_user_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
 
 
 class ExamTemplate(Base):

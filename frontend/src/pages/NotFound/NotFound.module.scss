@@ -1,0 +1,37 @@
+.page {
+  min-height: 60vh;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.code {
+  font-size: 4rem;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--color-muted);
+}
+
+.copy {
+  margin: 0.75rem 0 1.5rem;
+  color: var(--color-muted);
+  font-size: 0.95rem;
+}
+
+.btn {
+  padding: 0.65rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: var(--color-button-text);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+
+  &:hover {
+    opacity: 0.92;
+  }
+}

@@ -28,16 +28,16 @@
   display: inline-block;
 }
 
-.connected { background: #22c55e; }
-.disconnected { background: #f97316; }
-.closed { background: #ef4444; }
+.connected { background: var(--color-success); }
+.disconnected { background: var(--color-warning); }
+.closed { background: var(--color-danger); }
 
 .videoWrap {
   border-radius: 8px;
   overflow: hidden;
   background: #000;
   aspect-ratio: 4 / 3;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--color-border);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
 }
 
@@ -51,6 +51,16 @@
 .statusText {
   font-size: 0.75rem;
   color: var(--color-muted);
+  text-align: center;
+}
+
+.cameraError {
+  font-size: 0.72rem;
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
   text-align: center;
 }
 
@@ -76,22 +86,22 @@
   border-radius: 6px;
   font-size: 0.78rem;
   color: var(--color-text);
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
   border-left: 3px solid var(--color-border);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
 }
 
 .alertHIGH {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
+  border-left-color: var(--color-danger);
+  background: var(--color-danger-bg);
 }
 
 .alertMEDIUM {
-  border-left-color: #fbbf24;
-  background: rgba(251, 191, 36, 0.08);
+  border-left-color: var(--color-warning);
+  background: var(--color-warning-bg);
 }
 
 .alertLOW {
-  border-left-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.08);
+  border-left-color: var(--color-info);
+  background: var(--color-info-bg);
 }

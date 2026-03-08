@@ -11,6 +11,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1024,
   },
   test: {
+    environment: 'jsdom',
     exclude: [...configDefaults.exclude, 'tests/e2e/**'],
   },
 })

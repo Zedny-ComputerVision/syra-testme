@@ -1,65 +1,275 @@
 import React, { useEffect, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import useAuth from '../../../hooks/useAuth'
 import styles from './AdminCategories.module.scss'
 
-const EMPTY = { name: '', type: 'EXAM', description: '' }
+const CATEGORY_OPTIONS = [
+  { value: 'TEST', label: 'Test' },
+  { value: 'TRAINING', label: 'Training' },
+  { value: 'SURVEY', label: 'Survey' },
+]
+
+const CATEGORY_LABELS = Object.fromEntries(CATEGORY_OPTIONS.map((option) => [option.value, option.label]))
+const EMPTY = { name: '', type: 'TEST', description: '' }
+const PAGE_SIZE = 10
+
+function resolveError(err, fallback) {
+  return err?.response?.data?.detail || fallback
+}
 
 export default function AdminCategories() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState(null) // null | 'create' | category object (edit)
+  const [modal, setModal] = useState(null)
   const [form, setForm] = useState(EMPTY)
+  const [modalError, setModalError] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+  const [deleteBusyId, setDeleteBusyId] = useState(null)
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('ALL')
+  const [sortDir, setSortDir] = useState('asc')
+  const [page, setPage] = useState(1)
 
-  const load = () => {
+  const load = async () => {
     setLoading(true)
-    adminApi.categories()
-      .then(({ data }) => setCategories(data || []))
-      .catch(() => setCategories([]))
-      .finally(() => setLoading(false))
+    setError('')
+    try {
+      const { data } = await adminApi.categories()
+      setCategories(data || [])
+    } catch (err) {
+      setError(resolveError(err, 'Failed to load categories.'))
+    } finally {
+      setLoading(false)
+    }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    void load()
+  }, [])
 
-  const openCreate = () => { setForm(EMPTY); setModal('create') }
-  const openEdit = (cat) => { setForm({ name: cat.name, type: cat.type || 'EXAM', description: cat.description || '' }); setModal(cat) }
-  const close = () => setModal(null)
+  const normalizedSearch = search.trim().toLowerCase()
+  const filtered = categories.filter((category) => {
+    const matchSearch = !normalizedSearch
+      || category.name.toLowerCase().includes(normalizedSearch)
+      || (category.description || '').toLowerCase().includes(normalizedSearch)
+    const matchType = typeFilter === 'ALL' || category.type === typeFilter
+    return matchSearch && matchType
+  })
+
+  const sorted = [...filtered].sort((left, right) => {
+    const comparison = left.name.localeCompare(right.name)
+    return sortDir === 'asc' ? comparison : -comparison
+  })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const hasActiveFilters = Boolean(normalizedSearch) || typeFilter !== 'ALL' || sortDir !== 'asc'
+  const typeCounts = ['ALL', ...CATEGORY_OPTIONS.map((option) => option.value)].reduce((counts, type) => {
+    counts[type] = type === 'ALL' ? categories.length : categories.filter((category) => category.type === type).length
+    return counts
+  }, {})
+  const summaryCards = [
+    {
+      label: 'Loaded categories',
+      value: categories.length,
+      helper: 'All category records currently available',
+    },
+    {
+      label: 'Visible now',
+      value: sorted.length,
+      helper: hasActiveFilters ? 'Matching the active search and type filters' : 'All loaded categories',
+    },
+    {
+      label: 'Test categories',
+      value: typeCounts.TEST || 0,
+      helper: 'Used for test and assessment classification',
+    },
+    {
+      label: 'Training and survey',
+      value: (typeCounts.TRAINING || 0) + (typeCounts.SURVEY || 0),
+      helper: 'Non-test category groups',
+    },
+  ]
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [page, totalPages])
+
+  const clearFilters = () => {
+    setSearch('')
+    setTypeFilter('ALL')
+    setSortDir('asc')
+    setPage(1)
+  }
+
+  const openCreate = () => {
+    setForm(EMPTY)
+    setModalError('')
+    setModal('create')
+  }
+
+  const openEdit = (category) => {
+    setForm({
+      name: category.name || '',
+      type: category.type || 'TEST',
+      description: category.description || '',
+    })
+    setModalError('')
+    setModal(category)
+  }
+
+  const close = () => {
+    if (saving) return
+    setModal(null)
+    setModalError('')
+  }
 
   const handleSave = async () => {
+    const payload = {
+      name: form.name.trim(),
+      type: form.type,
+      description: form.description.trim(),
+    }
+
+    if (!payload.name) {
+      setModalError('Category name is required.')
+      return
+    }
+
+    setSaving(true)
+    setModalError('')
+    setNotice('')
     try {
       if (modal === 'create') {
-        await adminApi.createCategory(form)
+        await adminApi.createCategory(payload)
+        setNotice('Category created.')
       } else {
-        await adminApi.updateCategory(modal.id, form)
+        await adminApi.updateCategory(modal.id, payload)
+        setNotice('Category updated.')
       }
-      close()
-      load()
+      setModal(null)
+      await load()
     } catch (err) {
-      console.error('Save failed', err)
+      setModalError(resolveError(err, 'Failed to save category.'))
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this category?')) return
+    if (deleteConfirmId !== id) {
+      setDeleteConfirmId(id)
+      return
+    }
+    setDeleteBusyId(id)
+    setDeleteConfirmId(null)
+    setNotice('')
+    setError('')
     try {
       await adminApi.deleteCategory(id)
-      load()
+      setNotice('Category deleted.')
+      await load()
     } catch (err) {
-      console.error('Delete failed', err)
+      setError(resolveError(err, 'Failed to delete category.'))
+    } finally {
+      setDeleteBusyId(null)
     }
   }
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Categories" subtitle="Organize exams by category">
-        <button className={styles.btnPrimary} onClick={openCreate}>+ New Category</button>
+      <AdminPageHeader title="Categories" subtitle="Organize tests, surveys, and training by category">
+        <button type="button" className={styles.btnPrimary} onClick={openCreate}>+ New Category</button>
       </AdminPageHeader>
+
+      {notice && <div className={styles.noticeBanner}>{notice}</div>}
+      {error && (
+        <div className={styles.helperRow}>
+          <div className={styles.errorBanner}>{error}</div>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>Retry</button>
+        </div>
+      )}
+
+      <div className={styles.summaryGrid}>
+        {summaryCards.map((card) => (
+          <div key={card.label} className={styles.summaryCard}>
+            <div className={styles.summaryLabel}>{card.label}</div>
+            <div className={styles.summaryValue}>{card.value}</div>
+            <div className={styles.summarySub}>{card.helper}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className={styles.toolbarPanel}>
+        <div className={styles.toolbar}>
+          <input
+            type="text"
+            className={styles.searchInput}
+            placeholder="Search categories..."
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+          />
+          <div className={styles.filterTabs}>
+            {[{ value: 'ALL', label: 'All' }, ...CATEGORY_OPTIONS].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`${styles.filterTab} ${typeFilter === option.value ? styles.filterTabActive : ''}`}
+                onClick={() => {
+                  setTypeFilter(option.value)
+                  setPage(1)
+                }}
+              >
+                {option.label}
+                <span className={styles.tabCount}>{typeCounts[option.value] || 0}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={styles.sortBtn}
+            onClick={() => setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))}
+          >
+            {sortDir === 'asc' ? 'Sort: name A-Z' : 'Sort: name Z-A'}
+          </button>
+          <div className={styles.toolbarActions}>
+            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>Refresh</button>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>Clear filters</button>
+          </div>
+        </div>
+        <div className={styles.filterMeta}>
+          Showing {sorted.length} matching categor{sorted.length !== 1 ? 'ies' : 'y'} across {categories.length} loaded.
+        </div>
+      </div>
 
       <div className={styles.tableWrap}>
         {loading ? (
-          <div className={styles.empty}>Loading...</div>
-        ) : categories.length === 0 ? (
-          <div className={styles.empty}>No categories yet.</div>
+          <div className={styles.emptyState}>
+            <div className={styles.emptyTitle}>Loading categories...</div>
+            <div className={styles.emptyText}>Fetching the latest category records and type counts.</div>
+          </div>
+        ) : sorted.length === 0 && hasActiveFilters ? (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyTitle}>No categories match the current filters.</div>
+            <div className={styles.emptyText}>Clear the search or type filter to restore the full category list.</div>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters}>Clear filters</button>
+          </div>
+        ) : sorted.length === 0 ? (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyTitle}>No categories yet</div>
+            <div className={styles.emptyText}>Create a category to organize tests, surveys, or training content.</div>
+          </div>
         ) : (
           <table className={styles.table}>
             <thead>
@@ -71,15 +281,36 @@ export default function AdminCategories() {
               </tr>
             </thead>
             <tbody>
-              {categories.map(cat => (
-                <tr key={cat.id}>
-                  <td>{cat.name}</td>
-                  <td><span className={styles.typeBadge}>{cat.type || 'EXAM'}</span></td>
-                  <td>{cat.description || '-'}</td>
+              {paginated.map((category) => (
+                <tr key={category.id}>
+                  <td className={styles.nameCell}>{category.name}</td>
+                  <td>
+                    <span className={`${styles.typeBadge} ${styles[`type${category.type}`] || ''}`}>
+                      {CATEGORY_LABELS[category.type] || category.type || 'Test'}
+                    </span>
+                  </td>
+                  <td className={styles.descCell}>
+                    {category.description || <span className={styles.mutedCell}>No description</span>}
+                  </td>
                   <td>
                     <div className={styles.actionBtns}>
-                      <button className={styles.actionBtn} onClick={() => openEdit(cat)}>Edit</button>
-                      <button className={styles.actionBtn} onClick={() => handleDelete(cat.id)}>Delete</button>
+                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(category)} disabled={deleteBusyId === category.id}>
+                        Edit
+                      </button>
+                      {isAdmin && (deleteConfirmId === category.id ? (
+                        <>
+                          <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id}>
+                            {deleteBusyId === category.id ? 'Deleting...' : 'Confirm'}
+                          </button>
+                          <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === category.id}>
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id}>
+                          Delete
+                        </button>
+                      ))}
                     </div>
                   </td>
                 </tr>
@@ -89,29 +320,40 @@ export default function AdminCategories() {
         )}
       </div>
 
+      {totalPages > 1 && (
+        <div className={styles.pagination}>
+          <span className={styles.pageInfo}>{sorted.length} categor{sorted.length !== 1 ? 'ies' : 'y'} | Page {page} of {totalPages}</span>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))} disabled={page === 1}>Previous</button>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))} disabled={page === totalPages}>Next</button>
+        </div>
+      )}
+
       {modal && (
         <div className={styles.modalOverlay} onClick={close}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
             <h3 className={styles.modalTitle}>{modal === 'create' ? 'New Category' : 'Edit Category'}</h3>
+            {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
-              <label className={styles.label}>Name</label>
-              <input className={styles.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <label className={styles.label} htmlFor="category-name">Name</label>
+              <input id="category-name" className={styles.input} value={form.name} onChange={(event) => setForm((currentForm) => ({ ...currentForm, name: event.target.value }))} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Type</label>
-              <select className={styles.select} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                <option value="EXAM">Exam</option>
-                <option value="QUIZ">Quiz</option>
-                <option value="SURVEY">Survey</option>
+              <label className={styles.label} htmlFor="category-type">Type</label>
+              <select id="category-type" className={styles.select} value={form.type} onChange={(event) => setForm((currentForm) => ({ ...currentForm, type: event.target.value }))}>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Description</label>
-              <input className={styles.input} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+              <label className={styles.label} htmlFor="category-description">Description</label>
+              <input id="category-description" className={styles.input} value={form.description} onChange={(event) => setForm((currentForm) => ({ ...currentForm, description: event.target.value }))} />
             </div>
             <div className={styles.modalActions}>
-              <button className={styles.btnCancel} onClick={close}>Cancel</button>
-              <button className={styles.btnPrimary} onClick={handleSave} disabled={!form.name.trim()}>Save</button>
+              <button type="button" className={styles.btnCancel} onClick={close} disabled={saving}>Cancel</button>
+              <button type="button" className={styles.btnPrimary} onClick={() => void handleSave()} disabled={saving || !form.name.trim()}>
+                {saving ? 'Saving...' : modal === 'create' ? 'Create Category' : 'Save Changes'}
+              </button>
             </div>
           </div>
         </div>

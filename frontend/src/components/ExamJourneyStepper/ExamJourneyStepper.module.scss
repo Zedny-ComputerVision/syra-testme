@@ -1,4 +1,4 @@
 .stepper { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.item, .active { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.6rem; border-radius: 999px; background: rgba(255,255,255,0.05); }
-.active { background: var(--color-primary); color: #0b111d; }
-.index { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,0.15); display: grid; place-items: center; font-size: 12px; }
+.item, .active { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.6rem; border-radius: 999px; background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+.active { background: var(--color-primary); color: var(--color-button-text); }
+.index { width: 20px; height: 20px; border-radius: 50%; background: color-mix(in srgb, var(--color-text) 12%, transparent); display: grid; place-items: center; font-size: 12px; }

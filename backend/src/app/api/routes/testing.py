@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ...core.config import get_settings
 from ...core.security import hash_password
+from ...db.base import Base
 from ...models import User, RoleEnum, Course, CourseStatus, Node, QuestionPool, Exam, ExamStatus, ExamType, Question
 from ..deps import get_db_dep
 
@@ -21,8 +22,15 @@ def _require_enabled():
 @router.post("/testing/reset-seed")
 def reset_seed(db: Session = Depends(get_db_dep)):
     _require_enabled()
-    # Truncate key tables
-    db.execute(text("TRUNCATE TABLE attempt_answers, attempts, questions, exams, nodes, courses, question_pools, users RESTART IDENTITY CASCADE"))
+    bind = db.get_bind()
+    if bind and bind.dialect.name == "sqlite":
+        db.execute(text("PRAGMA foreign_keys=OFF"))
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(table.delete())
+        db.execute(text("PRAGMA foreign_keys=ON"))
+    else:
+        table_names = ", ".join(table.name for table in reversed(Base.metadata.sorted_tables))
+        db.execute(text(f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE"))
     now = datetime.now(timezone.utc)
 
     # Admin

@@ -1,4 +1,6 @@
 import uuid
+from datetime import datetime, timezone
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -10,7 +12,7 @@ from src.app.api.deps import get_db_dep, get_current_user
 from src.app.db.base import Base
 from src.app.modules.tests.routes_admin import router as admin_tests_router
 from src.app.modules.tests.enums import TestStatus, TestType
-from src.app.models import RoleEnum
+from src.app.models import ExamType, Question, RoleEnum
 
 
 class DummyUser:
@@ -44,6 +46,7 @@ def create_app_and_db():
     app.include_router(admin_tests_router, prefix="/api")
     app.dependency_overrides[get_db_dep] = get_db_override
     app.dependency_overrides[get_current_user] = lambda: DummyUser()
+    app.state.testing_session_local = TestingSessionLocal
     return app
 
 
@@ -60,9 +63,31 @@ def _create_test(client, name="Sample", type="MCQ"):
     return resp.json()
 
 
+def _add_question(client, test_id):
+    db = client.app.state.testing_session_local()
+    try:
+        db.add(
+            Question(
+                exam_id=uuid.UUID(test_id),
+                text="Question 1",
+                type=ExamType.MCQ,
+                options=["A", "B"],
+                correct_answer="A",
+                points=1.0,
+                order=0,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_publish_generates_code_and_sets_status(client):
     created = _create_test(client, "Draft One")
     test_id = created["id"]
+    _add_question(client, test_id)
     resp = client.post(f"/api/admin/tests/{test_id}/publish")
     assert resp.status_code == 200
     body = resp.json()
@@ -80,6 +105,7 @@ def test_publish_generates_code_and_sets_status(client):
 def test_patch_locked_fields_returns_409(client):
     created = _create_test(client, "Lock Me")
     test_id = created["id"]
+    _add_question(client, test_id)
     client.post(f"/api/admin/tests/{test_id}/publish")
     resp = client.patch(f"/api/admin/tests/{test_id}", json={"time_limit_minutes": 45})
     assert resp.status_code == 409
@@ -91,6 +117,8 @@ def test_list_filters_and_pagination(client):
     t1 = _create_test(client, "Alpha")
     t2 = _create_test(client, "Beta")
     t3 = _create_test(client, "Gamma")
+    _add_question(client, t2["id"])
+    _add_question(client, t3["id"])
     client.post(f"/api/admin/tests/{t2['id']}/publish")
     client.post(f"/api/admin/tests/{t3['id']}/archive")
 
@@ -114,6 +142,7 @@ def test_list_filters_and_pagination(client):
 def test_delete_non_draft_returns_409_forbidden_error(client):
     created = _create_test(client, "Delete Guard")
     test_id = created["id"]
+    _add_question(client, test_id)
     client.post(f"/api/admin/tests/{test_id}/publish")
     resp = client.delete(f"/api/admin/tests/{test_id}")
     assert resp.status_code == 409
@@ -122,14 +151,13 @@ def test_delete_non_draft_returns_409_forbidden_error(client):
     assert body["error"]["code"] == "FORBIDDEN"
 
 
-def test_report_endpoint_returns_not_found_error_envelope(client):
-    created = _create_test(client, "Report Missing")
+def test_report_endpoint_returns_html_report(client):
+    created = _create_test(client, "Report Available")
     test_id = created["id"]
     resp = client.get(f"/api/admin/tests/{test_id}/report")
-    assert resp.status_code == 404
-    body = resp.json()
-    assert body["error"]["code"] == "NOT_FOUND"
-    assert body["error"]["message"] == "Report not available"
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "Report Available Report" in resp.text
 
 
 def test_patch_archived_returns_409_locked_fields(client):
@@ -140,3 +168,40 @@ def test_patch_archived_returns_409_locked_fields(client):
     assert resp.status_code == 409
     body = resp.json()
     assert body["error"]["code"] == "LOCKED_FIELDS"
+
+
+def test_runtime_settings_round_trip_on_admin_tests(client):
+    created = client.post(
+        "/api/admin/tests",
+        json={
+            "name": "Runtime Settings",
+            "type": "MCQ",
+            "runtime_settings": {
+                "instructions": "Read carefully",
+                "show_score_report": True,
+                "show_answer_review": False,
+            },
+        },
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["runtime_status"] == "CLOSED"
+    assert body["runtime_settings"]["instructions"] == "Read carefully"
+    assert body["runtime_settings"]["show_score_report"] is True
+
+    test_id = body["id"]
+    updated = client.patch(
+        f"/api/admin/tests/{test_id}",
+        json={
+            "runtime_settings": {
+                "instructions": "Updated instructions",
+                "show_score_report": False,
+                "show_answer_review": True,
+            }
+        },
+    )
+    assert updated.status_code == 200
+    updated_body = updated.json()
+    assert updated_body["runtime_settings"]["instructions"] == "Updated instructions"
+    assert updated_body["runtime_settings"]["show_score_report"] is False
+    assert updated_body["runtime_settings"]["show_answer_review"] is True

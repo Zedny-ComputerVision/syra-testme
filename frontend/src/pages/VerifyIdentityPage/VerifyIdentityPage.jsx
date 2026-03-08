@@ -3,39 +3,174 @@ import { useParams, useNavigate } from 'react-router-dom'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
 import { resolveAttempt } from '../../utils/journeyAttempt'
 import { precheckAttempt } from '../../services/attempt.service'
+import { getTest } from '../../services/test.service'
+import { normalizeTest } from '../../utils/assessmentAdapters'
+import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import { setAttemptId } from '../../utils/attemptSession'
 import styles from './VerifyIdentityPage.module.scss'
 
+const REASON_MESSAGES = {
+  MIC_CHECK_FAILED: 'Microphone check failed.',
+  CAMERA_CHECK_FAILED: 'Camera check failed.',
+  FULLSCREEN_REQUIRED: 'Fullscreen is required.',
+  LOW_LIGHTING: 'Lighting is too low. Move to a brighter area.',
+  FACE_MATCH_FAILED: 'Face match between selfie and ID photo failed.',
+  ID_TEXT_MISSING_OR_INVALID: 'No valid ID number was found from OCR or manual input.',
+  OCR_UNAVAILABLE_AND_MANUAL_ID_REQUIRED: 'OCR is not available on the server. Enter your ID number manually.',
+  ID_IMAGE_TOO_SIMILAR_TO_SELFIE: 'ID capture is too similar to your selfie. Show the actual ID card.',
+  ID_CAPTURE_LOOKS_LIKE_SELFIE: 'ID capture looks like a selfie. Hold your ID card in front of the camera.',
+  ID_DOCUMENT_NOT_DETECTED: 'No ID card/document outline detected. Make sure the full ID card is visible in frame.',
+}
+
+const toReasonText = (reason) => REASON_MESSAGES[reason] || reason
+
 export default function VerifyIdentityPage() {
-  const { examId } = useParams()
+  const { testId } = useParams()
   const navigate = useNavigate()
   const videoRef = useRef(null)
   const canvasRef = useRef(document.createElement('canvas'))
   const streamRef = useRef(null)
+  const selfieInputRef = useRef(null)
+  const idInputRef = useRef(null)
+  const pickerExitedFullscreenRef = useRef(false)
   const [selfie, setSelfie] = useState(null)
   const [idPhoto, setIdPhoto] = useState(null)
   const [idNumber, setIdNumber] = useState('')
   const [error, setError] = useState('')
+  const [failureReasons, setFailureReasons] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [lightingScore, setLightingScore] = useState(0)
+  const [requirements, setRequirements] = useState(getJourneyRequirements({}))
+  const [loadingConfig, setLoadingConfig] = useState(true)
+  const [configResolved, setConfigResolved] = useState(false)
+  const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
+  const [fullscreenResumeNeeded, setFullscreenResumeNeeded] = useState(false)
+
+  const requirementCards = [
+    {
+      label: 'Identity check',
+      value: requirements.identityRequired ? 'Required' : 'Skipped',
+      helper: requirements.identityRequired ? 'Selfie and ID evidence are required before the learner can continue.' : 'This test skips identity verification.',
+    },
+    {
+      label: 'Camera',
+      value: requirements.cameraRequired ? 'Required' : 'Optional',
+      helper: requirements.cameraRequired ? 'Live camera access is expected for capture and proctoring.' : 'Uploads can be used without a live camera requirement.',
+    },
+    {
+      label: 'Lighting',
+      value: requirements.lightingRequired ? `${Math.round(lightingScore * 100)}% live` : 'Not enforced',
+      helper: requirements.lightingRequired ? 'Move into brighter light if the score stays too low.' : 'Low-light rejection is disabled for this test.',
+    },
+    {
+      label: 'OCR fallback',
+      value: idNumber.trim() ? 'Manual ID entered' : 'OCR first',
+      helper: idNumber.trim() ? 'Manual ID will be sent together with OCR evidence.' : 'If OCR misses the ID text, the learner can type it manually.',
+    },
+  ]
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+  }, [])
+
+  const requestFullscreen = useCallback(async () => {
+    if (!requirements.fullscreenRequired) return true
+    if (document.fullscreenElement) {
+      setFullscreenActive(true)
+      setFullscreenResumeNeeded(false)
+      pickerExitedFullscreenRef.current = false
+      return true
+    }
+    const request = document.documentElement.requestFullscreen
+    if (!request) return false
+    try {
+      await request.call(document.documentElement)
+      setFullscreenActive(Boolean(document.fullscreenElement))
+      setFullscreenResumeNeeded(false)
+      pickerExitedFullscreenRef.current = false
+      return Boolean(document.fullscreenElement)
+    } catch {
+      setFullscreenActive(Boolean(document.fullscreenElement))
+      return false
+    }
+  }, [requirements.fullscreenRequired])
 
   const startCamera = useCallback(async () => {
     try {
+      stopCamera()
       const stream = await navigator.mediaDevices.getUserMedia({ video: true })
       streamRef.current = stream
       if (videoRef.current) videoRef.current.srcObject = stream
     } catch {
-      setError('Unable to access camera. Please allow camera permissions.')
+      setError('Camera is unavailable. You can still upload selfie and ID images below.')
     }
-  }, [])
+  }, [stopCamera])
+
+  const openUploadPicker = useCallback((inputRef) => {
+    pickerExitedFullscreenRef.current = requirements.fullscreenRequired && Boolean(document.fullscreenElement)
+    if (pickerExitedFullscreenRef.current) {
+      setFullscreenResumeNeeded(false)
+    }
+    inputRef.current?.click()
+  }, [requirements.fullscreenRequired])
+
+  const loadRequirements = useCallback(async () => {
+    setLoadingConfig(true)
+    setError('')
+    setConfigResolved(false)
+    try {
+      const { data } = await getTest(testId)
+      const normalized = normalizeTest(data)
+      const nextRequirements = getJourneyRequirements(normalized?.proctoring_config || {})
+      setRequirements(nextRequirements)
+      setConfigResolved(true)
+      if (!nextRequirements.identityRequired) {
+        navigate(`/tests/${testId}/rules`, { replace: true })
+        return
+      }
+      await startCamera()
+    } catch {
+      setRequirements(getJourneyRequirements({ identity_required: true, camera_required: true, lighting_required: true }))
+      setError('Failed to load test verification requirements. Please refresh and try again.')
+    } finally {
+      setLoadingConfig(false)
+    }
+  }, [navigate, startCamera, testId])
 
   useEffect(() => {
-    startCamera()
+    let cancelled = false
+    loadRequirements().catch(() => {})
     return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      cancelled = true
+      stopCamera()
     }
-  }, [startCamera])
+  }, [loadRequirements, stopCamera])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const active = Boolean(document.fullscreenElement)
+      setFullscreenActive(active)
+      if (!requirements.fullscreenRequired) {
+        setFullscreenResumeNeeded(false)
+        pickerExitedFullscreenRef.current = false
+        return
+      }
+      if (active) {
+        setFullscreenResumeNeeded(false)
+        pickerExitedFullscreenRef.current = false
+        return
+      }
+      if (pickerExitedFullscreenRef.current) {
+        setFullscreenResumeNeeded(true)
+      }
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [requirements.fullscreenRequired])
 
   const capture = () => {
     const video = videoRef.current
@@ -64,42 +199,134 @@ export default function VerifyIdentityPage() {
     setIdPhoto(canvas.toDataURL('image/jpeg', 0.9))
   }
 
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+
+  const estimateLightingFromDataUrl = (dataUrl) => new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const canvas = canvasRef.current
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+        let sum = 0
+        for (let i = 0; i < data.length; i += 4) {
+          sum += (data[i] + data[i + 1] + data[i + 2]) / 3
+        }
+        resolve(sum / (data.length / 4) / 255)
+      } catch {
+        resolve(0)
+      }
+    }
+    img.onerror = () => resolve(0)
+    img.src = dataUrl
+  })
+
+  const handleUploadSelfie = async (file) => {
+    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+      setFullscreenResumeNeeded(true)
+    }
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload a valid selfie image file.')
+      return
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      setSelfie(dataUrl)
+      const score = await estimateLightingFromDataUrl(dataUrl)
+      setLightingScore(score)
+      setError('')
+      setFailureReasons([])
+      setResult(null)
+    } catch {
+      setError('Failed to load selfie image.')
+    }
+  }
+
+  const handleUploadId = async (file) => {
+    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+      setFullscreenResumeNeeded(true)
+    }
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload a valid ID image file.')
+      return
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      setIdPhoto(dataUrl)
+      setError('')
+      setFailureReasons([])
+      setResult(null)
+    } catch {
+      setError('Failed to load ID image.')
+    }
+  }
+
   const retake = () => {
     setSelfie(null)
     setIdPhoto(null)
     setResult(null)
+    setFailureReasons([])
+    setError('')
     startCamera()
   }
 
   const confirm = async () => {
+    if (submitting) return
+    if (!configResolved) {
+      setError('Cannot verify identity because test requirements were not loaded.')
+      return
+    }
+    if (!requirements.identityRequired) {
+      navigate(`/tests/${testId}/rules`, { replace: true })
+      return
+    }
     if (!selfie || !idPhoto) {
-      setError('Capture both your selfie and your ID photo first.')
+      setError('Capture or upload both your selfie and your ID photo first.')
+      return
+    }
+    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+      setFullscreenResumeNeeded(true)
+      setError('Return to fullscreen before continuing.')
       return
     }
     setSubmitting(true)
     setError('')
+    setFailureReasons([])
     try {
-      const attemptId = await resolveAttempt(examId)
+      const attemptId = await resolveAttempt(testId)
       setAttemptId(attemptId)
       const flags = JSON.parse(sessionStorage.getItem('precheck_flags') || '{}')
       const payload = {
         selfie_b64: selfie,
         id_b64: idPhoto,
         lighting_score: flags.lighting_score ?? lightingScore,
-        mic_ok: flags.mic_ok ?? true,
-        cam_ok: flags.cam_ok ?? true,
-        fs_ok: document.fullscreenElement != null || (flags.fs_ok ?? true),
+        mic_ok: flags.mic_ok ?? !requirements.micRequired,
+        cam_ok: flags.cam_ok ?? Boolean(selfie),
+        fs_ok: !requirements.fullscreenRequired || Boolean(document.fullscreenElement),
         id_text: idNumber || undefined,
       }
       const { data } = await precheckAttempt(attemptId, payload)
       setResult(data)
       if (!data.all_pass) {
-        setError('Precheck failed. Please retake photos or improve lighting.')
+        const reasons = Array.isArray(data.failure_reasons) ? data.failure_reasons : []
+        setFailureReasons(reasons)
+        setError('Precheck failed. Fix the issues below and retry.')
         return
       }
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
-      navigate(`/rules/${examId}`)
+      if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop())
+      navigate(`/tests/${testId}/rules`)
     } catch (e) {
+      setFailureReasons([])
       setError(e.response?.data?.detail || 'Failed to verify identity. Please retake your photo and try again.')
     } finally {
       setSubmitting(false)
@@ -112,9 +339,44 @@ export default function VerifyIdentityPage() {
 
       <div className={styles.card}>
         <h1 className={styles.title}>Verify Your Identity</h1>
-        <p className={styles.sub}>Take a clear photo of yourself for verification</p>
+        <p className={styles.sub}>Capture or upload a clear selfie and a clear ID image</p>
 
+        <div className={styles.requirementGrid}>
+          {requirementCards.map((card) => (
+            <div key={card.label} className={styles.requirementCard}>
+              <div className={styles.requirementLabel}>{card.label}</div>
+              <div className={styles.requirementValue}>{card.value}</div>
+              <div className={styles.requirementHelper}>{card.helper}</div>
+            </div>
+          ))}
+        </div>
+
+        {loadingConfig && <div className={styles.errorBox}>Loading verification requirements...</div>}
         {error && <div className={styles.errorBox}>{error}</div>}
+        {!loadingConfig && requirements.fullscreenRequired && (!fullscreenActive || fullscreenResumeNeeded) && (
+          <div className={styles.helperRow}>
+            <div className={styles.warningBox}>
+              Opening the browser file picker can exit fullscreen. Return to fullscreen before continuing.
+            </div>
+            <button type="button" className={styles.btnSecondary} onClick={() => void requestFullscreen()} disabled={submitting}>
+              Return to fullscreen
+            </button>
+          </div>
+        )}
+        {!loadingConfig && !configResolved && (
+          <div className={styles.helperRow}>
+            <button type="button" className={styles.btnSecondary} onClick={() => void loadRequirements()}>
+              Retry requirements
+            </button>
+          </div>
+        )}
+        {failureReasons.length > 0 && (
+          <ul className={styles.reasonList}>
+            {failureReasons.map((reason) => (
+              <li key={reason}>{toReasonText(reason)}</li>
+            ))}
+          </ul>
+        )}
 
         <div className={styles.cameraArea}>
           <div className={styles.videoWrapper}>
@@ -122,13 +384,39 @@ export default function VerifyIdentityPage() {
             <div className={styles.faceGuide} />
           </div>
           <div className={styles.captureRow}>
-            <button className={styles.captureBtn} onClick={capture}>
+            <button type="button" className={styles.captureBtn} onClick={capture} disabled={loadingConfig || submitting || !configResolved}>
               Capture Selfie
             </button>
-            <button className={styles.captureBtn} onClick={captureId}>
+            <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(selfieInputRef)} disabled={loadingConfig || submitting || !configResolved}>
+              Upload Selfie
+            </button>
+            <button type="button" className={styles.captureBtn} onClick={captureId} disabled={loadingConfig || submitting || !configResolved}>
               Capture ID
             </button>
+            <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(idInputRef)} disabled={loadingConfig || submitting || !configResolved}>
+              Upload ID
+            </button>
           </div>
+          <input
+            ref={selfieInputRef}
+            className={styles.fileInput}
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              handleUploadSelfie(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
+          <input
+            ref={idInputRef}
+            className={styles.fileInput}
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              handleUploadId(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
           <div className={styles.previewRow}>
             {selfie && (
               <div className={styles.photoPreview}>
@@ -143,27 +431,45 @@ export default function VerifyIdentityPage() {
               </div>
             )}
           </div>
+          <div className={styles.captureChecklist}>
+            <div className={`${styles.captureState} ${selfie ? styles.captureStateReady : ''}`}>Selfie {selfie ? 'ready' : 'missing'}</div>
+            <div className={`${styles.captureState} ${idPhoto ? styles.captureStateReady : ''}`}>ID image {idPhoto ? 'ready' : 'missing'}</div>
+            <div className={`${styles.captureState} ${idNumber.trim() ? styles.captureStateReady : ''}`}>Manual ID {idNumber.trim() ? 'provided' : 'optional'}</div>
+          </div>
           <div className={styles.photoActions}>
-            <button className={styles.btnSecondary} onClick={retake}>Retake</button>
-            <button className={styles.btnPrimary} onClick={confirm} disabled={submitting}>
+            <button type="button" className={styles.btnSecondary} onClick={retake} disabled={submitting || !configResolved}>Retake</button>
+            <button type="button" className={styles.btnPrimary} onClick={confirm} disabled={submitting || loadingConfig || !configResolved || !selfie || !idPhoto || (requirements.fullscreenRequired && !fullscreenActive)}>
               {submitting ? 'Verifying...' : 'Confirm & Continue'}
             </button>
           </div>
           <div className={styles.formRow}>
-            <label className={styles.label}>ID number (optional)</label>
+            <label className={styles.label} htmlFor="identity-id-number">ID number (required if OCR is unavailable)</label>
             <input
+              id="identity-id-number"
               className={styles.input}
               placeholder="e.g. passport / national ID"
               value={idNumber}
-              onChange={e => setIdNumber(e.target.value)}
+              onChange={(e) => setIdNumber(e.target.value)}
             />
             <p className={styles.helper}>If OCR misses your ID text, you can type it here.</p>
           </div>
           {result && (
-            <div className={styles.resultBox}>
-              <div>Face match score: {result.face_match_score?.toFixed(3)}</div>
-              <div>Lighting ok: {result.lighting_ok ? 'Yes' : 'No'}</div>
-              <div>ID verified: {result.id_verified ? 'Yes' : 'No'}</div>
+            <div className={styles.resultPanel}>
+              <div className={styles.resultBox}>
+                <div>Face match score: {result.face_match_score?.toFixed(3)}</div>
+                <div>Lighting ok: {result.lighting_ok ? 'Yes' : 'No'}</div>
+                <div>ID verified: {result.id_verified ? 'Yes' : 'No'}</div>
+                <div>OCR available: {result.ocr_available ? 'Yes' : 'No'}</div>
+                <div>Manual ID accepted: {result.manual_id_valid ? 'Yes' : 'No'}</div>
+                <div>Document outline detected: {result.id_document_outline ? 'Yes' : 'No'}</div>
+                <div>Face signature mode: {result.signature_mode?.selfie || 'n/a'} / {result.signature_mode?.id || 'n/a'}</div>
+              </div>
+              <div className={styles.resultBox}>
+                <div>ID candidates: {(result.ocr_candidates || []).length > 0 ? result.ocr_candidates.join(', ') : 'None detected'}</div>
+                <div>Selfie vs ID similarity: {typeof result.id_selfie_similarity === 'number' ? result.id_selfie_similarity.toFixed(3) : '-'}</div>
+                <div>ID face ratio: {typeof result.id_face_ratio === 'number' ? result.id_face_ratio.toFixed(3) : '-'}</div>
+                <div>Failure reasons: {failureReasons.length > 0 ? failureReasons.map(toReasonText).join(' | ') : 'None'}</div>
+              </div>
             </div>
           )}
         </div>

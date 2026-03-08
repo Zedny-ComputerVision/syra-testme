@@ -1,9 +1,103 @@
 .page { display: flex; flex-direction: column; gap: 1rem; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
-.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; padding: 1rem 1.1rem; }
+
+.helper,
+.error,
+.notice {
+  padding: 0.7rem 0.95rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.helper {
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  color: var(--color-text);
+}
+
+.error {
+  background: var(--color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  color: var(--color-danger-text-muted);
+}
+
+.notice {
+  background: var(--color-success-bg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  color: var(--color-success-text);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
 .title { font-weight: 700; }
-.sub { color: var(--color-muted); margin: 0.25rem 0 0.6rem; }
-.colsLabel { font-size: 0.8rem; font-weight: 600; color: var(--color-muted); }
-.chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.35rem 0 0.7rem; }
-.chip { background: var(--color-border); padding: 0.25rem 0.45rem; border-radius: 8px; font-size: 0.78rem; }
-.btn { padding: 0.55rem 0.8rem; border-radius: 10px; border: 1px solid var(--color-primary); background: var(--color-primary); color: #0b111d; font-weight: 700; cursor: pointer; }
+.sub { color: var(--color-muted); margin: 0.25rem 0 0.2rem; }
+
+.metaRow {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.metaChip {
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.metaDetail {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.colsLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.1rem 0 0.4rem;
+}
+
+.chip {
+  background: var(--color-border);
+  padding: 0.25rem 0.45rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.btn {
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-button-text);
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: auto;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}

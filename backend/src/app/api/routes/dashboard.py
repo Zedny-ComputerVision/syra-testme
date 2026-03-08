@@ -1,10 +1,12 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import Attempt, Exam, Schedule, RoleEnum, AttemptStatus
+from ...models import Attempt, Exam, ExamStatus, Schedule, RoleEnum, AttemptStatus
 from ...schemas import DashboardRead, ScheduleRead
-from ..deps import get_current_user, get_db_dep
+from ..deps import ensure_permission, get_current_user, get_db_dep, learner_can_access_exam
 
 router = APIRouter()
 
@@ -12,6 +14,12 @@ router = APIRouter()
 def _build_schedule_read(s: Schedule) -> ScheduleRead:
     exam = s.exam
     test = getattr(s, "test", None)
+    exam_type = getattr(exam, "type", None) if exam else None
+    test_type_value = getattr(getattr(test, "type", None), "value", getattr(test, "type", None)) if test else None
+    exam_type_value = getattr(exam_type, "value", exam_type) if exam_type else None
+    test_title = test.name if test else (exam.title if exam else None)
+    test_type = test_type_value if test else exam_type_value
+    test_time_limit = test.time_limit_minutes if test else (exam.time_limit if exam else None)
     return ScheduleRead(
         id=s.id,
         exam_id=s.exam_id,
@@ -22,17 +30,27 @@ def _build_schedule_read(s: Schedule) -> ScheduleRead:
         notes=s.notes,
         created_at=s.created_at,
         updated_at=s.updated_at,
+        user_name=s.user.name if s.user else None,
+        user_student_id=s.user.user_id if s.user else None,
+        test_title=test_title,
         exam_title=exam.title if exam else None,
-        exam_type=exam.type if exam else None,
+        exam_type=exam_type,
         exam_time_limit=exam.time_limit if exam else None,
-        test_name=test.name if test else None,
-        test_type=test.type.value if test else None,
-        test_time_limit=test.time_limit_minutes if test else None,
+        test_name=test_title,
+        test_type=test_type,
+        test_time_limit=test_time_limit,
     )
+
+
+def _is_pool_library_exam(exam: Exam) -> bool:
+    settings = exam.settings if isinstance(exam.settings, dict) else {}
+    return bool(settings.get("_pool_library"))
 
 
 @router.get("/", response_model=DashboardRead)
 async def dashboard(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+    ensure_permission(db, current, "View Dashboard")
+    now = datetime.now(timezone.utc)
     attempts_query = select(Attempt).where(Attempt.user_id == current.id) if current.role == RoleEnum.LEARNER else select(Attempt)
     attempts = db.scalars(attempts_query).all()
     total_attempts = len(attempts)
@@ -44,9 +62,13 @@ async def dashboard(db: Session = Depends(get_db_dep), current=Depends(get_curre
     schedules_query = select(Schedule)
     if current.role == RoleEnum.LEARNER:
         schedules_query = schedules_query.where(Schedule.user_id == current.id)
+    schedules_query = schedules_query.where(Schedule.scheduled_at >= now)
     upcoming = db.scalars(schedules_query).all()
+    exams = [exam for exam in db.scalars(select(Exam)).all() if not _is_pool_library_exam(exam)]
+    if current.role == RoleEnum.LEARNER:
+        exams = [exam for exam in exams if learner_can_access_exam(db, exam, current, now=now)]
     return DashboardRead(
-        total_exams=db.scalar(select(func.count(Exam.id))) or 0,
+        total_exams=len(exams),
         total_attempts=total_attempts,
         in_progress_attempts=in_progress,
         completed_attempts=completed,

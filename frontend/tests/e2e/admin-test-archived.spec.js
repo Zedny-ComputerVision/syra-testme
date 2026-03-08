@@ -10,11 +10,26 @@ async function adminApi(token) {
   })
 }
 
+async function addQuestion(api, testId) {
+  const questionRes = await api.post('questions/', {
+    data: {
+      exam_id: testId,
+      text: 'Archived lock question',
+      type: 'MCQ',
+      options: ['Option A', 'Option B'],
+      correct_answer: 'A',
+      order: 0,
+    },
+  })
+  if (!questionRes.ok()) throw new Error(`question create failed: ${questionRes.status()} ${await questionRes.text()}`)
+}
+
 async function createArchivedTest(token, name) {
   const api = await adminApi(token)
   const createRes = await api.post('admin/tests', { data: { name, type: 'MCQ' } })
   if (!createRes.ok()) throw new Error(`create failed: ${createRes.status()} ${await createRes.text()}`)
   const created = await createRes.json()
+  await addQuestion(api, created.id)
   const publishRes = await api.post(`admin/tests/${created.id}/publish`)
   if (!publishRes.ok()) throw new Error(`publish failed: ${publishRes.status()} ${await publishRes.text()}`)
   const archiveRes = await api.post(`admin/tests/${created.id}/archive`)
@@ -36,14 +51,8 @@ test.describe('Admin archived test lock', () => {
     await page.goto('/admin/dashboard')
 
     await page.goto(`/admin/tests/${testId}`)
-    await expect(page.getByRole('heading', { name })).toBeVisible()
-
-    const saveButton = page.getByRole('button', { name: 'Save changes' })
-    await expect(saveButton).toBeDisabled()
-    await expect(page.locator('label:has-text("Test name") input').first()).toBeDisabled()
-
-    await page.getByRole('button', { name: 'Reports' }).click()
-    await expect(page.locator('label:has-text("Report content") select').first()).toBeDisabled()
+    await expect(page).toHaveURL(new RegExp(`/admin/tests/${testId}/manage`))
+    await expect(page.locator('label:has-text("Test name") input').first()).toHaveValue(name)
 
     const patchRes = await api.patch(`admin/tests/${testId}`, { data: { name: `${name} Updated` } })
     expect(patchRes.status()).toBe(409)

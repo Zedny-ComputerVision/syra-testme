@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { jwtDecode } from 'jwt-decode'
 import { login as loginApi } from '../../services/auth.service'
 import useAuth from '../../hooks/useAuth'
@@ -21,7 +21,7 @@ export default function Login() {
       const { data } = await loginApi(email, password)
       login(data)
       const role = data?.access_token ? jwtDecode(data.access_token)?.role : null
-      if (role === 'ADMIN' || role === 'INSTRUCTOR') {
+      if (role === 'ADMIN') {
         navigate('/admin/dashboard')
       } else {
         navigate('/')
@@ -66,12 +66,10 @@ export default function Login() {
           {loading ? <div className={styles.spinner} /> : 'Sign In'}
         </button>
 
-        <p className={styles.hint}>
-          Demo users:&nbsp;
-          <code>admin@example.com</code> / <code>Admin1234!</code>&nbsp;|&nbsp;
-          <code>student1@example.com</code> / <code>Student1234!</code>&nbsp;|&nbsp;
-          <code>instructor@example.com</code> / <code>Instructor1234!</code>
-        </p>
+        <div className={styles.actionsRow}>
+          <Link className={styles.secondaryLink} to="/forgot-password">Forgot password?</Link>
+          <Link className={styles.secondaryLink} to="/signup">Create account</Link>
+        </div>
       </form>
     </div>
   )

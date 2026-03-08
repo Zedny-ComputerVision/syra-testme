@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from ...api.deps import require_role, get_db_dep
+from ...api.deps import get_db_dep, require_permission
 from ...models import RoleEnum
 from ...services.integrations import dispatch_integrations
 from ...core.config import get_settings
@@ -11,7 +11,7 @@ settings = get_settings()
 
 
 @router.post("/test")
-async def test_integrations(config: dict, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.ADMIN))):
+async def test_integrations(config: dict, db: Session = Depends(get_db_dep), current=Depends(require_permission("System Settings", RoleEnum.ADMIN))):
     event = {
         "event_type": "TEST",
         "detail": "Integration test ping",

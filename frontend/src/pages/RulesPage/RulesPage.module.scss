@@ -25,6 +25,92 @@
   margin: 0 0 1.5rem;
 }
 
+.helperRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.errorBanner {
+  color: var(--color-danger-text-muted);
+  background: var(--color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.helperRow .errorBanner {
+  margin-bottom: 0;
+}
+
+.retryBtn {
+  padding: 0.6rem 0.95rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.summaryCard {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-border) 16%, transparent);
+  padding: 0.8rem 0.9rem;
+}
+
+.summaryLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.summaryValue {
+  margin-top: 0.25rem;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.summaryHelper {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+
+.prereqWarning {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .rulesList {
   display: flex;
   flex-direction: column;
@@ -54,8 +140,8 @@
   gap: 0.6rem;
   margin-bottom: 1.5rem;
   padding: 1rem;
-  background: rgba(16, 185, 129, 0.06);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: var(--color-success-bg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
   border-radius: 8px;
   cursor: pointer;
 }
@@ -67,7 +153,7 @@
   cursor: pointer;
 }
 
-.agree label {
+.agreeLabel {
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text);
@@ -75,12 +161,12 @@
 }
 
 .btn {
-  width: 100%;
+  flex: 1;
   padding: 0.85rem;
   border: none;
   border-radius: 10px;
   background: var(--color-primary);
-  color: #0b111d;
+  color: var(--color-button-text);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -97,5 +183,33 @@
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+}
+
+.secondaryBtn {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0.85rem 1rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .helperRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions {
+    flex-direction: column;
   }
 }

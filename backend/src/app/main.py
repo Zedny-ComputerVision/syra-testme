@@ -15,12 +15,13 @@ from datetime import datetime, timezone
 from .api.router import router as api_router
 from .core.config import get_settings
 from .core.limiter import limiter
+from .core.security import verify_token
 from .db import session
 from .db.base import Base
 from .db.session import SessionLocal
 from sqlalchemy import select, text
-from .models import ReportSchedule
-from .api.routes.report_schedules import run_report_schedule
+from .models import ReportSchedule, SystemSettings
+from .api.routes.report_schedules import report_schedule_due, run_report_schedule
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("syra")
@@ -65,6 +66,70 @@ TRAILING_RESOURCES = {
     "/api/admin/tests",
 }
 
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+MAINTENANCE_PUBLIC_PATHS = {
+    "/api/admin-settings/maintenance/public",
+}
+MAINTENANCE_ALLOWED_WRITE_PATHS = {
+    "/api/auth/login",
+    "/api/auth/refresh",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+}
+REQUIRED_API_ROUTES = (
+    "/api/auth/signup-status",
+    "/api/exams/",
+    "/api/attempts/resolve",
+    "/api/precheck/{attempt_id}",
+    "/api/admin/tests/",
+    "/api/admin/tests/{test_id}",
+    "/api/admin/tests/{test_id}/publish",
+    "/api/admin/tests/{test_id}/archive",
+    "/api/admin/tests/{test_id}/unarchive",
+)
+
+
+def _request_role_from_headers(request: Request) -> str | None:
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    try:
+        payload = verify_token(token, expected_type="access")
+    except Exception:
+        return None
+    return payload.get("role")
+
+
+def _maintenance_blocks_request(mode: str, method: str, path: str, role: str | None) -> bool:
+    if not path.startswith("/api"):
+        return False
+    if path in MAINTENANCE_PUBLIC_PATHS:
+        return False
+    if role == "ADMIN":
+        return False
+    normalized_method = method.upper()
+    if mode == "read-only":
+        if normalized_method in SAFE_METHODS:
+            return False
+        if path in MAINTENANCE_ALLOWED_WRITE_PATHS:
+            return False
+        return True
+    if mode == "down":
+        if path in MAINTENANCE_PUBLIC_PATHS or path in MAINTENANCE_ALLOWED_WRITE_PATHS:
+            return False
+        return True
+    return False
+
+
+def _assert_required_api_routes() -> None:
+    registered = {getattr(route, "path", "") for route in app.router.routes}
+    missing = [path for path in REQUIRED_API_ROUTES if path not in registered]
+    if missing:
+        raise RuntimeError(f"Missing required API routes: {', '.join(missing)}")
+
 
 class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -73,6 +138,32 @@ class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
         if path in TRAILING_RESOURCES and not path.endswith("/"):
             request.scope["path"] = path + "/"
             request.scope["raw_path"] = (path + "/").encode()
+        return await call_next(request)
+
+
+class MaintenanceModeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.scope.get("path", "")
+        if not path.startswith("/api"):
+            return await call_next(request)
+
+        mode = "off"
+        try:
+            with SessionLocal() as db:
+                setting = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
+                if setting and setting.value:
+                    mode = setting.value
+        except Exception:
+            mode = "off"
+
+        role = _request_role_from_headers(request)
+        if _maintenance_blocks_request(mode, request.method, path, role):
+            detail = (
+                "System is currently read-only for maintenance."
+                if mode == "read-only"
+                else "System is temporarily unavailable for maintenance."
+            )
+            return JSONResponse(status_code=503, content={"detail": detail})
         return await call_next(request)
 
 
@@ -90,6 +181,7 @@ app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 # Normalize path before CORS so preflights/post match expected route
 app.add_middleware(TrailingSlashNormalizeMiddleware)
+app.add_middleware(MaintenanceModeMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -136,6 +228,7 @@ app.mount("/videos", StaticFiles(directory=str(VIDEOS_DIR)), name="videos")
 
 
 def _run_startup_initialization() -> None:
+    _assert_required_api_routes()
     try:
         Base.metadata.create_all(bind=session.engine)
         logger.info("Database tables created/verified (DB: %s)", settings.DATABASE_URL.split("@")[-1])
@@ -160,6 +253,9 @@ def _run_startup_initialization() -> None:
                 ensure_column(conn, "attempts", "id_verified", "ALTER TABLE attempts ADD COLUMN id_verified BOOLEAN")
                 ensure_column(conn, "attempts", "lighting_score", "ALTER TABLE attempts ADD COLUMN lighting_score FLOAT")
                 ensure_column(conn, "attempts", "precheck_passed_at", "ALTER TABLE attempts ADD COLUMN precheck_passed_at DATETIME")
+                ensure_column(conn, "exams", "description", "ALTER TABLE exams ADD COLUMN description VARCHAR(4000)")
+                ensure_column(conn, "exams", "settings", "ALTER TABLE exams ADD COLUMN settings JSON")
+                ensure_column(conn, "exams", "certificate", "ALTER TABLE exams ADD COLUMN certificate JSON")
         except Exception as exc:
             logger.warning("Schema backfill skipped: %s", exc)
 
@@ -174,6 +270,20 @@ def _run_startup_initialization() -> None:
                 if "test_id" not in cols:
                     conn.execute(text("ALTER TABLE schedules ADD COLUMN test_id UUID"))
                     logger.info("Added missing column schedules.test_id")
+
+                exam_cols = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'exams'"
+                )).scalars().all()
+                if "description" not in exam_cols:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN description VARCHAR(4000)"))
+                    logger.info("Added missing column exams.description")
+                if "settings" not in exam_cols:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN settings JSONB"))
+                    logger.info("Added missing column exams.settings")
+                if "certificate" not in exam_cols:
+                    conn.execute(text("ALTER TABLE exams ADD COLUMN certificate JSONB"))
+                    logger.info("Added missing column exams.certificate")
             elif session.engine.dialect.name == "sqlite":
                 cols = [row[1] for row in conn.execute(text("PRAGMA table_info(schedules)")).all()]
                 if "test_id" not in cols:
@@ -184,8 +294,6 @@ def _run_startup_initialization() -> None:
 
 
 async def _schedule_loop():
-    from croniter import croniter
-
     while True:
         try:
             with SessionLocal() as db:
@@ -194,15 +302,7 @@ async def _schedule_loop():
                 ).all()
                 now = datetime.now(timezone.utc)
                 for sched in schedules:
-                    if not sched.schedule_cron:
-                        continue
-                    base = sched.last_run_at or now
-                    try:
-                        itr = croniter(sched.schedule_cron, base)
-                        next_time = itr.get_next(datetime)
-                    except Exception:
-                        continue
-                    if next_time <= now:
+                    if report_schedule_due(sched, now):
                         run_report_schedule(db, sched)
         except Exception as exc:
             logger.error("Report scheduler error: %s", exc)
@@ -215,9 +315,10 @@ async def _purge_identity_loop():
             ident_dir = BASE_DIR / "storage" / "identity"
             ident_dir.mkdir(parents=True, exist_ok=True)
             cutoff = datetime.now(timezone.utc).timestamp() - 24 * 3600
-            for f in ident_dir.glob("*.bin"):
-                if f.stat().st_mtime < cutoff:
-                    f.unlink(missing_ok=True)
+            for pattern in ("*.bin", "*.jpg"):
+                for f in ident_dir.glob(pattern):
+                    if f.stat().st_mtime < cutoff:
+                        f.unlink(missing_ok=True)
         except Exception as exc:
             logger.error("Identity purge error: %s", exc)
         await asyncio.sleep(3600)

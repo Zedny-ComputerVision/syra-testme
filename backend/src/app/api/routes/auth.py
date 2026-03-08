@@ -22,7 +22,7 @@ from ...schemas import (
     Message,
     UserCreate,
 )
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class SignupRequest(BaseModel):
@@ -31,8 +31,42 @@ class SignupRequest(BaseModel):
     user_id: str
     password: str
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: EmailStr | str) -> str:
+        return str(value).strip().lower()
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("Name is required")
+        return text
+
+    @field_validator("user_id")
+    @classmethod
+    def validate_user_id(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("User ID is required")
+        return text
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if len(value or "") < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return value
+
 from ..deps import get_current_user, get_db_dep
-from ...services.email import send_password_reset_email, send_admin_setup_email, send_password_changed_email
+from ...services.email import (
+    get_email_delivery_status,
+    send_welcome_email,
+    send_password_reset_email,
+    send_admin_setup_email,
+    send_password_changed_email,
+)
 
 router = APIRouter()
 settings = get_settings()
@@ -63,8 +97,13 @@ def _signup_allowed(db: Session) -> bool:
     return (setting and str(setting.value).lower() in {"1", "true", "yes"}) or False
 
 
+@router.get("/signup-status")
+async def signup_status(db: Session = Depends(get_db_dep)):
+    return {"allowed": _signup_allowed(db)}
+
+
 @router.post("/signup", response_model=Message)
-async def signup(body: SignupRequest, db: Session = Depends(get_db_dep)):
+async def signup(body: SignupRequest, background: BackgroundTasks, db: Session = Depends(get_db_dep)):
     if not _signup_allowed(db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Self sign-up disabled")
     existing = db.scalar(select(User).where((User.email == body.email) | (User.user_id == body.user_id)))
@@ -79,7 +118,9 @@ async def signup(body: SignupRequest, db: Session = Depends(get_db_dep)):
     )
     db.add(user)
     db.commit()
-    return Message(detail="Signup successful. Please log in.")
+    db.refresh(user)
+    background.add_task(send_welcome_email, user)
+    return Message(detail="Signup successful. Please check your email and log in.")
 
 
 @router.post("/login", response_model=Token)
@@ -91,14 +132,23 @@ async def login(request: Request, body: LoginRequest, db: Session = Depends(get_
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
-    access_token = create_access_token(str(user.id), user.user_id, user.role.value)
+    access_token = create_access_token(
+        str(user.id),
+        user.user_id,
+        user.role.value,
+        name=user.name,
+        email=user.email,
+    )
     refresh_token = create_refresh_token(str(user.id))
     return Token(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/refresh", response_model=TokenRefresh)
 async def refresh(body: RefreshRequest, db: Session = Depends(get_db_dep)):
-    payload = verify_token(body.refresh_token, expected_type="refresh")
+    try:
+        payload = verify_token(body.refresh_token, expected_type="refresh")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     sub = payload.get("sub")
     try:
         user_pk = uuid.UUID(sub) if isinstance(sub, str) else sub
@@ -110,7 +160,13 @@ async def refresh(body: RefreshRequest, db: Session = Depends(get_db_dep)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
-    new_access = create_access_token(str(user.id), user.user_id, user.role.value)
+    new_access = create_access_token(
+        str(user.id),
+        user.user_id,
+        user.role.value,
+        name=user.name,
+        email=user.email,
+    )
     return TokenRefresh(access_token=new_access)
 
 
@@ -138,6 +194,12 @@ async def change_password(
 @router.post("/forgot-password", status_code=202, response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_FORGOT)
 async def forgot_password(request: Request, body: ForgotPasswordRequest, background: BackgroundTasks, db: Session = Depends(get_db_dep)):
+    email_ready, email_error = get_email_delivery_status()
+    if not email_ready:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=email_error or "Password reset is temporarily unavailable.",
+        )
     user = db.scalar(select(User).where(User.email == body.email))
     if user:
         token = create_password_reset_token(str(user.id))
@@ -147,9 +209,17 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, backgro
 
 @router.post("/reset-password", response_model=Message)
 async def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db_dep)):
-    payload = verify_token(body.token, expected_type="password_reset")
+    try:
+        payload = verify_token(body.token, expected_type="password_reset")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     sub = payload.get("sub")
-    user = db.get(User, sub)
+    try:
+        user_pk = uuid.UUID(sub) if isinstance(sub, str) else sub
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    user = db.get(User, user_pk)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     user.hashed_password = hash_password(body.new_password)

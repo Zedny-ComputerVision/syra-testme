@@ -14,8 +14,10 @@ class Settings(BaseSettings):
     PASSWORD_RESET_EXPIRE_MINUTES: int = Field(default=60)
 
     BREVO_API_KEY: str | None = None
+    BREVO_BASE_URL: str = "https://api.brevo.com/v3"
     BREVO_SENDER_EMAIL: str | None = None
-    BREVO_SANDBOX: bool = True
+    BREVO_SENDER_NAME: str | None = None
+    BREVO_SANDBOX: bool = False
 
     OPENAI_API_KEY: str | None = None
 
@@ -27,6 +29,7 @@ class Settings(BaseSettings):
     SMTP_TLS: bool = True
 
     FRONTEND_BASE_URL: str | None = None
+    BACKEND_BASE_URL: str = Field(default="http://127.0.0.1:8000")
 
     CORS_ORIGINS: str = Field(default="*")
     RATE_LIMIT_LOGIN: str = Field(default="10/minute")

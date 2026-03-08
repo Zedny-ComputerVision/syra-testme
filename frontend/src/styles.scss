@@ -33,6 +33,25 @@
   --sidebar-width: 240px;
   --navbar-height: 56px;
   --transition-speed: 0.2s;
+
+  /* Semantic color tokens */
+  --color-button-text: #0b111d;
+  --color-danger-text: #dc2626;
+  --color-danger-text-muted: #ef4444;
+  --color-danger-bg: #fee2e2;
+  --color-warning-text: #d97706;
+  --color-warning-bg: #fef3c7;
+  --color-success-text: #059669;
+  --color-success-bg: #d1fae5;
+  --color-info-text: #2563eb;
+  --color-info-bg: #dbeafe;
+  --color-select-bg: var(--color-surface);
+  --color-select-text: var(--color-text);
+  --color-select-option-bg: #ffffff;
+  --color-select-option-text: #1e293b;
+  --color-accent-bg: rgba(139, 92, 246, 0.12);
+  --color-cyan: #06b6d4;
+  --color-cyan-bg: rgba(6, 182, 212, 0.12);
 }
 
 /* ---------- Dark Theme ---------- */
@@ -59,6 +78,25 @@
   --color-warning: #fbbf24;
   --color-success: #34d399;
   --color-info: #60a5fa;
+
+  /* Semantic color tokens (dark overrides) */
+  --color-button-text: #0b111d;
+  --color-danger-text: #f87171;
+  --color-danger-text-muted: #fca5a5;
+  --color-danger-bg: rgba(239, 68, 68, 0.15);
+  --color-warning-text: #fbbf24;
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-success-text: #34d399;
+  --color-success-bg: rgba(16, 185, 129, 0.15);
+  --color-info-text: #60a5fa;
+  --color-info-bg: rgba(59, 130, 246, 0.15);
+  --color-select-bg: #0d1625;
+  --color-select-text: #e6eefb;
+  --color-select-option-bg: #0d1625;
+  --color-select-option-text: #e6eefb;
+  --color-accent-bg: rgba(139, 92, 246, 0.15);
+  --color-cyan: #22d3ee;
+  --color-cyan-bg: rgba(6, 182, 212, 0.15);
 }
 
 /* ---------- Global Resets ---------- */
@@ -133,7 +171,7 @@ body::after {
   cursor: pointer;
 }
 
-:where(.glass-card, [class*="card"]) {
+:where(.glass-card, [class*="_card_"]) {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   box-shadow: var(--card-shadow);
@@ -141,25 +179,25 @@ body::after {
   will-change: transform, box-shadow;
 }
 
-:where(.glass-card, [class*="card"]):hover:not(:disabled) {
+:where(.glass-card, [class*="_card_"]):hover:not(:disabled) {
   transform: translateY(-2px) scale(1.01);
   box-shadow: var(--card-shadow-hover);
   border-color: color-mix(in srgb, var(--color-primary) 35%, var(--card-border));
   background: var(--card-bg-strong);
 }
 
-:where(.glass-card, [class*="card"]):active:not(:disabled) {
+:where(.glass-card, [class*="_card_"]):active:not(:disabled) {
   transform: translateY(0) scale(0.995);
   box-shadow: var(--card-shadow);
 }
 
-:where(.glass-card, [class*="card"]):focus-visible {
+:where(.glass-card, [class*="_card_"]):focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(.glass-card, [class*="card"]) {
+  :where(.glass-card, [class*="_card_"]) {
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
     transform: none !important;
   }
@@ -168,7 +206,7 @@ body::after {
 .maintenance-banner {
   width: 100%;
   background: var(--color-warning);
-  color: #0b111d;
+  color: var(--color-button-text);
   padding: 0.4rem 1rem;
   text-align: center;
   font-weight: 700;
@@ -182,7 +220,7 @@ body::after {
 .maintenance-banner {
   width: 100%;
   background: var(--color-warning);
-  color: #0b111d;
+  color: var(--color-button-text);
   padding: 0.4rem 1rem;
   text-align: center;
   font-weight: 700;
@@ -231,11 +269,49 @@ button {
   cursor: pointer;
 }
 
+button:not([class]) {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.5rem 0.8rem;
+  transition:
+    border-color var(--transition-speed) ease,
+    background-color var(--transition-speed) ease,
+    opacity var(--transition-speed) ease;
+}
+
+button:not([class]):hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+button:not([class]):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 input,
 select,
 textarea {
   font-family: inherit;
   font-size: inherit;
+}
+
+input:not([class]):not([type='checkbox']):not([type='radio']),
+select:not([class]),
+textarea:not([class]) {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: 0.55rem 0.7rem;
+}
+
+input:not([class]):not([type='checkbox']):not([type='radio']):disabled,
+select:not([class]):disabled,
+textarea:not([class]):disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 /* ---------- App Shell - CSS Grid Layout ---------- */
@@ -259,6 +335,21 @@ textarea {
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
+}
+
+.app-shell--exam {
+  grid-template-columns: 1fr;
+}
+
+.app-shell__content--exam {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 /* ---------- Scrollbar Styling ---------- */

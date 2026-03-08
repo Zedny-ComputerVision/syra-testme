@@ -14,6 +14,11 @@ class TestStatus(str, Enum):
 class TestType(str, Enum):
     __test__ = False
     MCQ = "MCQ"
+    MULTI = "MULTI"
+    TRUEFALSE = "TRUEFALSE"
+    ORDERING = "ORDERING"
+    FILLINBLANK = "FILLINBLANK"
+    MATCHING = "MATCHING"
     TEXT = "TEXT"
 
 

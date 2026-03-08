@@ -62,6 +62,8 @@ class FaceVerifier:
             else None
         )
         self._mismatching = False
+        self._consecutive_mismatches = 0
+        self._consecutive_required = 2
 
     def process(self, frame_bytes: bytes) -> dict | None:
         if not self.enabled or self.baseline is None or self._mesh is None:
@@ -79,14 +81,19 @@ class FaceVerifier:
             return None
         dist = cosine_distance(self.baseline, live_vec)
         if dist > self.threshold:
-            self._mismatching = True
-            return {
-                "event_type": "FACE_MISMATCH",
-                "severity": "HIGH",
-                "detail": f"Live face differs from verified identity (dist={dist:.3f})",
-                "confidence": min(0.99, dist / self.threshold),
-                "meta": {"distance": dist},
-            }
+            self._consecutive_mismatches += 1
+            if self._consecutive_mismatches >= self._consecutive_required:
+                self._mismatching = True
+                return {
+                    "event_type": "FACE_MISMATCH",
+                    "severity": "HIGH",
+                    "detail": f"Live face differs from verified identity (dist={dist:.3f})",
+                    "confidence": min(0.99, dist / self.threshold),
+                    "meta": {"distance": dist},
+                }
+            return None
+        # Face matches — reset consecutive counter
+        self._consecutive_mismatches = 0
         if self._mismatching and dist <= self.threshold * 0.8:
             self._mismatching = False
             return {

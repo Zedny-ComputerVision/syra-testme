@@ -2,6 +2,59 @@
 
 .loading { text-align: center; padding: 3rem; color: var(--color-muted); }
 
+.refreshButton,
+.alertButton,
+.linkButton {
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+}
+
+.refreshButton {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+
+.alertWarning {
+  background: var(--color-warning-bg);
+  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+  color: var(--color-warning-text);
+}
+
+.alertError {
+  background: var(--color-danger-bg);
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  color: var(--color-danger-text-muted);
+}
+
+.alertButton {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  white-space: nowrap;
+}
+
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -17,6 +70,14 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+
+  &:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-success-bg);
+  }
 }
 
 .kpiIcon {
@@ -28,6 +89,36 @@
   justify-content: center;
   font-size: 1.4rem;
   flex-shrink: 0;
+}
+
+.kpiIconBlue {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.kpiIconGreen {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.kpiIconRed {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.kpiIconViolet {
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+}
+
+.kpiIconAmber {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.kpiIconCyan {
+  background: var(--color-cyan-bg);
+  color: var(--color-cyan);
 }
 
 .kpiValue {
@@ -62,12 +153,45 @@
   overflow: hidden;
 }
 
-.tableCardTitle {
+.tableCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tableCardTitle {
   font-size: 0.88rem;
   font-weight: 700;
   color: var(--color-text);
-  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.countBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-border) 50%, transparent);
+  color: var(--color-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+}
+
+.viewAllBtn {
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 0;
+  &:hover { text-decoration: underline; }
 }
 
 .table {
@@ -83,7 +207,7 @@
   text-transform: uppercase;
   color: var(--color-muted);
   border-bottom: 1px solid var(--color-border);
-  background: rgba(0,0,0,0.05);
+  background: color-mix(in srgb, var(--color-border) 35%, transparent);
 }
 
 .table td {
@@ -96,3 +220,29 @@
 .table tbody tr:last-child td { border-bottom: none; }
 
 .empty { text-align: center; padding: 2rem; color: var(--color-muted); font-size: 0.85rem; }
+
+.integrityScore {
+  color: var(--color-danger-text);
+  font-weight: 700;
+}
+
+.linkButton {
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  padding: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mutedCell {
+  color: var(--color-muted) !important;
+  font-size: 0.78rem !important;
+}
+
+@media (max-width: 640px) {
+  .alert {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
