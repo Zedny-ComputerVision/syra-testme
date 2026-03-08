@@ -25,6 +25,7 @@ backend/storage/evidence/
 backend/storage/videos/
 backend/storage/video_chunks/
 backend/storage/identity/
+# Local reference clone; keep out of version control.
 youtestme-clone-main/
 backend/*.err
 frontend/*.err
