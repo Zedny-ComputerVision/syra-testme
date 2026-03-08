@@ -11,7 +11,7 @@ async function bootstrapSession(page, token) {
 }
 
 function integrationCard(page, title) {
-  return page.locator('div').filter({ hasText: title }).filter({ has: page.getByRole('button', { name: /Enable|Disable/ }) }).first()
+  return page.getByTestId(`integration-card-${title.toLowerCase()}`)
 }
 
 function scheduleRow(page, title) {
@@ -48,13 +48,13 @@ test.describe('Admin system pages', () => {
     await expect(page.getByRole('heading', { name: 'Report Builder' })).toBeVisible()
 
     const main = page.locator('main')
-    await main.getByRole('textbox').nth(0).fill(scheduleName)
-    await main.getByRole('textbox').nth(1).fill('bad cron')
-    await main.getByRole('textbox').nth(2).fill(email)
+    await main.getByLabel('Name').fill(scheduleName)
+    await main.getByLabel('Cron').fill('bad cron')
+    await main.getByLabel('Recipients (comma separated emails)').fill(email)
     await main.getByRole('button', { name: 'Save Schedule' }).click()
     await expect(page.getByText('Invalid cron expression')).toBeVisible()
 
-    await main.getByRole('textbox').nth(1).fill('0 8 * * *')
+    await main.getByLabel('Cron').fill('0 8 * * *')
     await main.getByRole('button', { name: 'Save Schedule' }).click()
     await expect(page.getByText('Schedule created.')).toBeVisible()
 
@@ -67,13 +67,15 @@ test.describe('Admin system pages', () => {
     await expect(generatedReportLink).toHaveAttribute('href', /\/reports\//)
 
     await row.getByRole('button', { name: 'Delete' }).click()
-    await expect(page.getByText(scheduleName)).not.toBeVisible()
+    await row.getByRole('button', { name: 'Confirm delete' }).click()
+    await expect(row).toHaveCount(0)
 
     await page.goto('/admin/subscribers')
     const subscriberRow = page.locator('div').filter({ hasText: email }).filter({ has: page.getByRole('button', { name: 'Remove' }) }).first()
     await subscriberRow.getByRole('button', { name: 'Remove' }).nth(0).click()
+    await subscriberRow.getByRole('button', { name: 'Confirm remove' }).click()
     await expect(page.getByText('Subscriber removed.')).toBeVisible()
-    await expect(page.getByText(email)).not.toBeVisible()
+    await expect(subscriberRow).toHaveCount(0)
   })
 
   test('integrations require a URL before enabling and persist saved values', async ({ page, context }) => {
@@ -90,20 +92,20 @@ test.describe('Admin system pages', () => {
     await page.goto('/admin/integrations')
     await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible()
 
-    const main = page.locator('main')
-    await main.getByRole('button', { name: 'Enable' }).nth(0).click()
+    const slackCard = integrationCard(page, 'Slack')
+    await slackCard.getByRole('button', { name: 'Enable' }).click()
     await expect(page.getByText('Slack requires a URL before you can enable it.')).toBeVisible()
 
-    await main.getByRole('textbox').nth(0).fill(slackUrl)
-    await main.getByRole('button', { name: 'Save' }).nth(0).click()
+    await slackCard.getByLabel('Webhook URL').fill(slackUrl)
+    await slackCard.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Slack settings saved.')).toBeVisible()
 
     await page.reload()
-    const reloadedMain = page.locator('main')
-    await expect(reloadedMain.getByRole('textbox').nth(0)).toHaveValue(slackUrl)
+    const reloadedSlackCard = integrationCard(page, 'Slack')
+    await expect(reloadedSlackCard.getByLabel('Webhook URL')).toHaveValue(slackUrl)
 
-    await reloadedMain.getByRole('button', { name: 'Enable' }).nth(0).click()
+    await reloadedSlackCard.getByRole('button', { name: 'Enable' }).click()
     await expect(page.getByText('Slack enabled.')).toBeVisible()
-    await expect(reloadedMain.getByRole('button', { name: 'Disable' }).nth(0)).toBeVisible()
+    await expect(reloadedSlackCard.getByRole('button', { name: 'Disable' })).toBeVisible()
   })
 })

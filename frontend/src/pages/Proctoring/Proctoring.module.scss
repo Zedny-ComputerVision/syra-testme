@@ -104,7 +104,16 @@
 .timerDanger {
   color: var(--color-danger-text);
   border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
-  animation: pulse 1s ease-in-out infinite;
+  animation: pulse 1s ease-in-out infinite, timerPulseGlow 1.2s ease-in-out infinite;
+}
+
+@keyframes timerPulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-danger) 22%, transparent);
+  }
 }
 
 @keyframes pulse {
@@ -283,18 +292,22 @@
 
   &:hover {
     border-color: var(--color-primary);
+    color: var(--color-primary);
+    transform: scale(1.08);
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--color-primary) 22%, transparent);
   }
 }
 
 .qNumActive {
-  background: var(--color-primary);
-  color: var(--color-button-text);
+  background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent)));
+  color: #ffffff;
   border-color: var(--color-primary);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
 
 .qNumAnswered {
   background: var(--color-success-bg);
-  color: var(--color-primary);
+  color: var(--color-success-text);
   border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
@@ -358,8 +371,10 @@
 
 .optionSelected {
   border-color: var(--color-primary);
-  background: linear-gradient(120deg, var(--color-success-bg), rgba(139, 92, 246, 0.08));
-  box-shadow: 0 12px 26px var(--color-success-bg);
+  border-width: 2px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-accent) 6%, transparent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent),
+              0 8px 20px color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 
 .textAnswer {

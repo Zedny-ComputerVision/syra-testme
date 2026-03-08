@@ -66,25 +66,33 @@ test.describe('Admin Manage Tests page', () => {
       .filter({ has: page.locator('option[value="ARCHIVED"]') })
       .first()
 
+    const openRowMenu = async (row) => {
+      await row.getByRole('button', { name: /More actions for/i }).click()
+    }
+
     // Publish -> Archive -> Unarchive flow on first draft
     await page.fill('input[placeholder="Search by name or code..."]', publishName)
     const publishRow = page.locator('tbody tr', { hasText: publishName })
     await expect(publishRow).toBeVisible()
-    await publishRow.getByRole('button', { name: 'Schedule' }).click()
+    await openRowMenu(publishRow)
+    await publishRow.getByRole('button', { name: 'Testing sessions' }).click()
     await expect(page).toHaveURL(/\/admin\/tests\/.+\/manage\?tab=sessions/)
     await expect(page.getByRole('heading', { name: 'Testing sessions' })).toBeVisible()
     await page.goto('/admin/tests')
     await page.fill('input[placeholder="Search by name or code..."]', publishName)
     await expect(publishRow).toBeVisible()
+    await openRowMenu(publishRow)
     await publishRow.getByRole('button', { name: 'Candidates' }).click()
     await expect(page).toHaveURL(/\/admin\/tests\/.+\/manage\?tab=candidates/)
     await expect(page.getByRole('heading', { name: 'Candidates' })).toBeVisible()
     await page.goto('/admin/tests')
     await page.fill('input[placeholder="Search by name or code..."]', publishName)
     await expect(publishRow).toBeVisible()
+    await openRowMenu(publishRow)
     await publishRow.getByRole('button', { name: 'Publish', exact: true }).click()
     await expect(publishRow.getByText('Published')).toBeVisible()
 
+    await openRowMenu(publishRow)
     await publishRow.getByRole('button', { name: 'Archive', exact: true }).click()
     await expect(publishRow).toHaveCount(0)
 
@@ -93,6 +101,7 @@ test.describe('Admin Manage Tests page', () => {
     await page.getByRole('button', { name: 'Apply', exact: true }).click()
     const archivedRow = page.locator('tbody tr', { hasText: publishName })
     await expect(archivedRow).toBeVisible()
+    await openRowMenu(archivedRow)
     await archivedRow.getByRole('button', { name: 'Unarchive', exact: true }).click()
     await expect(archivedRow).toHaveCount(0)
 
@@ -102,6 +111,7 @@ test.describe('Admin Manage Tests page', () => {
     await page.fill('input[placeholder="Search by name or code..."]', deleteName)
     const deleteRow = page.locator('tbody tr', { hasText: deleteName })
     await expect(deleteRow).toBeVisible()
+    await openRowMenu(deleteRow)
     await deleteRow.getByRole('button', { name: 'Delete', exact: true }).click()
     await deleteRow.getByRole('button', { name: 'Confirm delete', exact: true }).click()
     await expect(deleteRow).toHaveCount(0)

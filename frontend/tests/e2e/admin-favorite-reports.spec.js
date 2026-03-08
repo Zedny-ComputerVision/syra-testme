@@ -15,8 +15,8 @@ test.describe('Admin favorite reports', () => {
 
     const title = `Risk Alerts ${Date.now()}`
     await page.goto('/admin/favorite-reports')
-    await page.getByPlaceholder('Title').fill(title)
-    await page.getByPlaceholder('URL or path').fill('/admin/reports')
+    await page.getByLabel('Title').fill(title)
+    await page.getByLabel('URL or path').fill('/admin/reports')
     await page.getByRole('button', { name: 'Save' }).click()
 
     await expect(page.getByText(title, { exact: false })).toBeVisible()

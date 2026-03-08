@@ -34,13 +34,13 @@ describe('AdminSubscribers page', () => {
     render(<AdminSubscribers />)
 
     await waitFor(() => expect(screen.getByText('Failed to load subscribers.')).toBeTruthy())
-    const input = screen.getByPlaceholderText('user@example.com')
+    const input = screen.getByLabelText('Add subscribers')
     expect(input.disabled).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     await waitFor(() => expect(screen.getByText('ops@example.com')).toBeTruthy())
-    expect(screen.getByPlaceholderText('user@example.com').disabled).toBe(false)
+    expect(screen.getByLabelText('Add subscribers').disabled).toBe(false)
   })
 
   it('normalizes loaded subscribers and requires explicit confirmation before removing one', async () => {

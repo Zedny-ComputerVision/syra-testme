@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 import os
+import re
 import sys
 
 from fastapi import FastAPI, Request
@@ -35,12 +36,32 @@ EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 
+LOCAL_DEV_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
+def _is_local_dev_origin(origin: str) -> bool:
+    return bool(re.match(LOCAL_DEV_ORIGIN_REGEX, origin))
+
+
 # Parse allowed CORS origins; fall back to explicit list so credentials work.
 _raw_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
-ALLOWED_ORIGINS = _raw_origins if _raw_origins and _raw_origins != ["*"] else [
+USE_DEFAULT_LOCAL_DEV_CORS = not _raw_origins or _raw_origins == ["*"]
+USE_LOCAL_DEV_CORS_REGEX = USE_DEFAULT_LOCAL_DEV_CORS or all(_is_local_dev_origin(origin) for origin in _raw_origins)
+ALLOWED_ORIGINS = _raw_origins if not USE_DEFAULT_LOCAL_DEV_CORS else [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+ALLOWED_ORIGIN_REGEX = LOCAL_DEV_ORIGIN_REGEX if USE_LOCAL_DEV_CORS_REGEX else None
+
+
+def _origin_is_allowed(origin: str | None) -> bool:
+    if not origin:
+        return False
+    if "*" in ALLOWED_ORIGINS or origin in ALLOWED_ORIGINS:
+        return True
+    if ALLOWED_ORIGIN_REGEX and re.match(ALLOWED_ORIGIN_REGEX, origin):
+        return True
+    return False
 
 app = FastAPI(title="SYRA LMS", redirect_slashes=False)
 
@@ -185,6 +206,7 @@ app.add_middleware(MaintenanceModeMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -195,7 +217,7 @@ class EnsureCORSHeaders(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         origin = request.headers.get("origin")
-        if origin and (origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS):
+        if _origin_is_allowed(origin):
             if "access-control-allow-origin" not in {k.lower() for k in response.headers.keys()}:
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -210,7 +232,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     origin = request.headers.get("origin", "")
     headers: dict[str, str] = {}
-    if origin and (origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS):
+    if _origin_is_allowed(origin):
         headers["Access-Control-Allow-Origin"] = origin
         headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(

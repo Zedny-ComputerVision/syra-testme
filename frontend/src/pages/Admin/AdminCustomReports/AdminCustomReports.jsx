@@ -137,8 +137,8 @@ export default function AdminCustomReports() {
 
       <div className={styles.toolbar}>
         <div className={styles.controls}>
-          <label className={styles.label}>Dataset</label>
-          <select className={styles.select} value={datasetKey} onChange={(e) => setDatasetKey(e.target.value)}>
+          <label className={styles.label} htmlFor="custom-report-dataset">Dataset</label>
+          <select id="custom-report-dataset" className={styles.select} value={datasetKey} onChange={(e) => setDatasetKey(e.target.value)}>
             {Object.entries(DATASETS).map(([key, value]) => (
               <option key={key} value={key}>{value.label}</option>
             ))}
@@ -146,9 +146,10 @@ export default function AdminCustomReports() {
         </div>
 
         <div className={styles.searchGroup}>
-          <label className={styles.label}>Search</label>
+          <label className={styles.label} htmlFor="custom-report-search">Search</label>
           <div className={styles.searchRow}>
             <input
+              id="custom-report-search"
               className={styles.input}
               value={search}
               onChange={(e) => setSearch(e.target.value)}

@@ -80,8 +80,8 @@ describe('AdminFavoriteReports page', () => {
     render(<AdminFavoriteReports />)
 
     await waitFor(() => expect(screen.getByText('Scheduled Reports')).toBeTruthy())
-    fireEvent.change(screen.getByPlaceholderText('Title'), { target: { value: 'Risk Alerts' } })
-    fireEvent.change(screen.getByPlaceholderText('URL or path'), { target: { value: '/admin/reports' } })
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Risk Alerts' } })
+    fireEvent.change(screen.getByLabelText('URL or path'), { target: { value: '/admin/reports' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(updateMyPreference).toHaveBeenCalled())

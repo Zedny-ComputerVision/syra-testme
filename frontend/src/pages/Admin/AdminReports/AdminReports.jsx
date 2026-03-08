@@ -252,22 +252,22 @@ export default function AdminReports() {
               )}
             </div>
           )}
-          <label className={styles.label}>Name</label>
-          <input className={styles.input} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} required />
+          <label className={styles.label} htmlFor="report-schedule-name">Name</label>
+          <input id="report-schedule-name" className={styles.input} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} required />
 
-          <label className={styles.label}>Report Type</label>
-          <select className={styles.input} value={form.report_type} onChange={(e) => setForm((current) => ({ ...current, report_type: e.target.value }))}>
+          <label className={styles.label} htmlFor="report-schedule-type">Report Type</label>
+          <select id="report-schedule-type" className={styles.input} value={form.report_type} onChange={(e) => setForm((current) => ({ ...current, report_type: e.target.value }))}>
             <option value="attempt-summary">Attempt Summary</option>
             <option value="risk-alerts">Risk Alerts</option>
             <option value="usage">Usage</option>
           </select>
 
-          <label className={styles.label}>Cron</label>
-          <input className={styles.input} value={form.schedule_cron} onChange={(e) => setForm((current) => ({ ...current, schedule_cron: e.target.value }))} />
+          <label className={styles.label} htmlFor="report-schedule-cron">Cron</label>
+          <input id="report-schedule-cron" className={styles.input} value={form.schedule_cron} onChange={(e) => setForm((current) => ({ ...current, schedule_cron: e.target.value }))} />
           <div className={styles.hint}>Example: 0 8 * * * (every day at 08:00)</div>
 
-          <label className={styles.label}>Recipients (comma separated emails)</label>
-          <input className={styles.input} value={form.recipients} onChange={(e) => setForm((current) => ({ ...current, recipients: e.target.value }))} />
+          <label className={styles.label} htmlFor="report-schedule-recipients">Recipients (comma separated emails)</label>
+          <input id="report-schedule-recipients" className={styles.input} value={form.recipients} onChange={(e) => setForm((current) => ({ ...current, recipients: e.target.value }))} />
           <button type="button" className={styles.hintBtn} onClick={loadSubscribers} disabled={loadingSubs}>
             {loadingSubs ? 'Loading...' : 'Load from Subscribers list'}
           </button>

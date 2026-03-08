@@ -12,6 +12,10 @@ from src.app.api.deps import get_db_dep, get_current_user
 from src.app.db.base import Base
 from src.app.modules.tests.routes_admin import router as admin_tests_router
 from src.app.modules.tests.enums import TestStatus, TestType
+from src.app.modules.tests.proctoring_requirements import (
+    get_proctoring_requirements,
+    normalize_proctoring_config,
+)
 from src.app.models import ExamType, Question, RoleEnum
 
 
@@ -205,3 +209,24 @@ def test_runtime_settings_round_trip_on_admin_tests(client):
     assert updated_body["runtime_settings"]["instructions"] == "Updated instructions"
     assert updated_body["runtime_settings"]["show_score_report"] is False
     assert updated_body["runtime_settings"]["show_answer_review"] is True
+
+
+def test_proctoring_requirements_prefer_fullscreen_enforce_alias():
+    requirements = get_proctoring_requirements(
+        {
+            "fullscreen_required": True,
+            "fullscreen_enforce": False,
+        }
+    )
+
+    assert requirements["fullscreen_required"] is False
+
+    normalized = normalize_proctoring_config(
+        {
+            "fullscreen_required": True,
+            "fullscreen_enforce": False,
+        }
+    )
+
+    assert normalized["fullscreen_enforce"] is False
+    assert normalized["fullscreen_required"] is False

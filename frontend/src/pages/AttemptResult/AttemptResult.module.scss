@@ -134,6 +134,7 @@
   position: relative;
   width: 160px;
   height: 160px;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--color-primary) 45%, transparent));
 }
 
 .scoreRing svg {
@@ -326,11 +327,19 @@
 }
 
 .answerCard {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
   padding: 1rem 1.25rem;
   margin-bottom: 0.75rem;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--card-shadow-hover);
+  }
 }
 
 .answerHeader {

@@ -7,11 +7,13 @@ import AdminManageTestPage from './AdminManageTestPage'
 
 const getTestRuntimeMock = vi.fn()
 const getTestMock = vi.fn()
+const allTestsMock = vi.fn()
 const attemptsMock = vi.fn()
 const schedulesMock = vi.fn()
 const usersMock = vi.fn()
 const getQuestionsMock = vi.fn()
 const categoriesMock = vi.fn()
+const createCategoryMock = vi.fn()
 const getAttemptEventsMock = vi.fn()
 const listAttemptVideosMock = vi.fn()
 const pauseAttemptMock = vi.fn()
@@ -35,6 +37,7 @@ const generateTestReportPdfMock = vi.fn()
 
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
+    allTests: (...args) => allTestsMock(...args),
     getTestRuntime: (...args) => getTestRuntimeMock(...args),
     getTest: (...args) => getTestMock(...args),
     attempts: (...args) => attemptsMock(...args),
@@ -42,6 +45,7 @@ vi.mock('../../../services/admin.service', () => ({
     users: (...args) => usersMock(...args),
     getQuestions: (...args) => getQuestionsMock(...args),
     categories: (...args) => categoriesMock(...args),
+    createCategory: (...args) => createCategoryMock(...args),
     getAttemptEvents: (...args) => getAttemptEventsMock(...args),
     listAttemptVideos: (...args) => listAttemptVideosMock(...args),
     pauseAttempt: (...args) => pauseAttemptMock(...args),
@@ -96,7 +100,7 @@ function renderPage(initialEntries = ['/admin/tests/test-1/manage']) {
   }
 
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
+    <MemoryRouter initialEntries={initialEntries} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <LocationEcho />
       <Routes>
         <Route path="/admin/tests/:id/manage" element={<AdminManageTestPage />} />
@@ -118,6 +122,7 @@ describe('AdminManageTestPage', () => {
 
     getTestRuntimeMock.mockResolvedValue({ data: runtimeExam })
     getTestMock.mockResolvedValue({ data: adminTest })
+    allTestsMock.mockResolvedValue({ data: { items: [] } })
     attemptsMock.mockResolvedValue({ data: [] })
     schedulesMock.mockResolvedValue({ data: [] })
     usersMock.mockResolvedValue({
@@ -125,6 +130,7 @@ describe('AdminManageTestPage', () => {
     })
     getQuestionsMock.mockResolvedValue({ data: [] })
     categoriesMock.mockResolvedValue({ data: [] })
+    createCategoryMock.mockResolvedValue({ data: { id: 'cat-2', name: 'Security', type: 'TEST', description: '' } })
     getAttemptEventsMock.mockResolvedValue({ data: [] })
     listAttemptVideosMock.mockResolvedValue({ data: [] })
     pauseAttemptMock.mockResolvedValue({ data: {} })
@@ -159,7 +165,7 @@ describe('AdminManageTestPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     await waitFor(() => expect(getTestRuntimeMock).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByDisplayValue('Midterm')).toBeTruthy())
   })
 
   it('keeps session assignment disabled until learner and schedule are provided', async () => {
@@ -180,17 +186,17 @@ describe('AdminManageTestPage', () => {
   it('keeps tab changes stable and writes canonical manage-tab query values', async () => {
     renderPage(['/admin/tests/test-1/manage?tab=testing-sessions'])
 
-    await screen.findByRole('heading', { name: 'Testing sessions' })
+    await screen.findByLabelText('Learner')
     expect(screen.getByTestId('location-search').textContent).toBe('?tab=testing-sessions')
 
     fireEvent.click(screen.getByRole('button', { name: 'Candidates' }))
 
-    await screen.findByRole('heading', { name: 'Candidates' })
+    await screen.findByText('Assigned learners stay visible here even before they start the test, so the roster and attempt activity are tracked in one place.')
     await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe('?tab=candidates'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Testing sessions' }))
 
-    await screen.findByRole('heading', { name: 'Testing sessions' })
+    await screen.findByLabelText('Learner')
     await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe('?tab=sessions'))
   })
 
@@ -231,16 +237,39 @@ describe('AdminManageTestPage', () => {
     await waitFor(() => expect(screen.getByText('No questions found.')).toBeTruthy())
   })
 
-  it('requires coupon details before saving when coupons are enabled', async () => {
+  it('renders coupon management as its own settings page and saves generated draft coupons', async () => {
     renderPage()
 
-    await screen.findByRole('heading', { name: 'Settings' })
+    await screen.findByDisplayValue('Midterm')
+    fireEvent.click(screen.getByRole('button', { name: 'Coupons' }))
+    await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe('?section=coupons'))
 
-    fireEvent.click(screen.getByLabelText('Enable coupon discounts'))
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+    expect(screen.getByText('List of coupons')).toBeTruthy()
+    expect(screen.getByText('No coupons created.')).toBeTruthy()
 
-    await waitFor(() => expect(screen.getByText('Coupon code is required when coupons are enabled.')).toBeTruthy())
-    expect(updateTestMock).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Generate coupons' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create coupon rows' }))
+    await screen.findByText('SAVE-001')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateTestMock).toHaveBeenCalledWith(
+      'test-1',
+      expect.objectContaining({
+        runtime_settings: expect.objectContaining({
+          coupons_enabled: true,
+          coupon_code: 'SAVE-001',
+          coupon_discount_value: 10,
+          coupon_entries: expect.arrayContaining([
+            expect.objectContaining({
+              code: 'SAVE-001',
+              discount_type: 'percentage',
+              amount: 10,
+            }),
+          ]),
+        }),
+      }),
+    ))
   })
 
   it('locks report review toggles when a test is already published', async () => {
@@ -249,12 +278,173 @@ describe('AdminManageTestPage', () => {
 
     renderPage()
 
-    await screen.findByRole('heading', { name: 'Settings' })
+    await screen.findByDisplayValue('Midterm')
+    fireEvent.click(screen.getByRole('button', { name: 'Personal report settings' }))
+    await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe('?section=personal-report'))
 
-    expect(screen.getByLabelText('Show score report to candidate').disabled).toBe(true)
-    expect(screen.getByLabelText('Allow answer review after submission').disabled).toBe(true)
-    expect(screen.getByLabelText('Show correct answers in review').disabled).toBe(true)
-    expect(screen.getByLabelText('Email result to candidate on submit').disabled).toBe(true)
+    expect(screen.getByLabelText('Display score').disabled).toBe(true)
+    expect(screen.getByLabelText('Configure report lifespan').disabled).toBe(true)
+    expect(screen.getByLabelText('Export personal report as Excel file').disabled).toBe(true)
+  })
+
+  it('saves the latest score report customization state on an immediate save click', async () => {
+    renderPage()
+
+    await screen.findByDisplayValue('Midterm')
+    fireEvent.click(screen.getByRole('button', { name: 'Score report settings' }))
+    await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe('?section=score-report'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create custom settings' }))
+    fireEvent.change(screen.getByLabelText('Report heading'), { target: { value: 'Operational Score Report' } })
+    fireEvent.click(screen.getByLabelText('Include proctoring summary'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateTestMock).toHaveBeenCalledWith(
+      'test-1',
+      expect.objectContaining({
+        runtime_settings: expect.objectContaining({
+          custom_score_report_enabled: true,
+          score_report_settings: expect.objectContaining({
+            heading: 'Operational Score Report',
+            include_proctoring_summary: true,
+          }),
+        }),
+      }),
+    ))
+  })
+
+  it('adds a certificate and saves it through the draft settings flow', async () => {
+    renderPage()
+
+    await screen.findByDisplayValue('Midterm')
+    fireEvent.click(screen.getByRole('button', { name: 'Certificates' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add certificate' }))
+
+    fireEvent.change(screen.getByLabelText('Certificate title'), { target: { value: 'Certificate of Mastery' } })
+    fireEvent.change(screen.getByLabelText('Subtitle'), { target: { value: 'Awarded for excellent completion' } })
+    fireEvent.change(screen.getByLabelText('Issuer'), { target: { value: 'SYRA Institute' } })
+    fireEvent.change(screen.getByLabelText('Signer'), { target: { value: 'Dr. Review' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateTestMock).toHaveBeenCalledWith(
+      'test-1',
+      expect.objectContaining({
+        certificate: {
+          title: 'Certificate of Mastery',
+          subtitle: 'Awarded for excellent completion',
+          issuer: 'SYRA Institute',
+          signer: 'Dr. Review',
+        },
+      }),
+    ))
+  })
+
+  it('adds a translation row and persists it in runtime settings', async () => {
+    renderPage()
+
+    await screen.findByDisplayValue('Midterm')
+    fireEvent.click(screen.getByRole('button', { name: 'Language settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add translation' }))
+
+    fireEvent.change(screen.getByLabelText('Translated title'), { target: { value: 'الاختبار النصفي' } })
+    fireEvent.change(screen.getByLabelText('Translated instructions'), { target: { value: 'اقرأ التعليمات بعناية' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save translation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateTestMock).toHaveBeenCalledWith(
+      'test-1',
+      expect.objectContaining({
+        runtime_settings: expect.objectContaining({
+          test_translations: [
+            expect.objectContaining({
+              language: 'en',
+              title: 'الاختبار النصفي',
+              instructions_body: 'اقرأ التعليمات بعناية',
+            }),
+          ],
+        }),
+      }),
+    ))
+  })
+
+  it('imports attachment rows and persists structured attachment items', async () => {
+    renderPage()
+
+    await screen.findByDisplayValue('Midterm')
+    fireEvent.click(screen.getByRole('button', { name: 'Attachments' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Import from library' }))
+
+    fireEvent.change(screen.getByLabelText('Attachment rows'), {
+      target: {
+        value: 'Guide | https://example.com/guide.pdf\nhttps://example.com/briefing.png',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Import rows' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateTestMock).toHaveBeenCalledWith(
+      'test-1',
+      expect.objectContaining({
+        runtime_settings: expect.objectContaining({
+          attachment_items: [
+            expect.objectContaining({
+              title: 'Guide',
+              url: 'https://example.com/guide.pdf',
+            }),
+            expect.objectContaining({
+              url: 'https://example.com/briefing.png',
+            }),
+          ],
+        }),
+      }),
+    ))
+  })
+
+  it('creates a category inline and assigns it before saving the draft', async () => {
+    categoriesMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValue({ data: [{ id: 'cat-2', name: 'Security', type: 'TEST', description: 'Ops' }] })
+
+    renderPage()
+
+    await screen.findByDisplayValue('Midterm')
+    fireEvent.click(screen.getByRole('button', { name: 'Test categories' }))
+
+    fireEvent.change(screen.getByLabelText('Category name'), { target: { value: 'Security' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Ops' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create category' }))
+
+    await waitFor(() => expect(createCategoryMock).toHaveBeenCalledWith({
+      name: 'Security',
+      type: 'TEST',
+      description: 'Ops',
+    }))
+
+    await waitFor(() => expect(screen.getByLabelText('Assigned category').value).toBe('cat-2'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateTestMock).toHaveBeenCalledWith(
+      'test-1',
+      expect.objectContaining({
+        category_id: 'cat-2',
+      }),
+    ))
+  })
+
+  it('renders only the selected settings page and syncs the section query parameter', async () => {
+    renderPage(['/admin/tests/test-1/manage?section=instructions'])
+
+    await screen.findByLabelText('Test instructions')
+    expect(screen.getByTestId('location-search').textContent).toBe('?section=instructions')
+    expect(screen.queryByLabelText('Test name *')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Basic information' }))
+
+    await screen.findByLabelText('Test name *')
+    await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe(''))
+    expect(screen.queryByLabelText('Test instructions')).toBeNull()
   })
 
   it('shows a monitoring-specific empty state and restores attempts when filters are cleared', async () => {
@@ -335,7 +525,7 @@ describe('AdminManageTestPage', () => {
       data: [{ id: 'event-1', severity: 'HIGH', event_type: 'PHONE_DETECTED' }],
     })
 
-    renderPage()
+    renderPage(['/admin/tests/test-1/manage?tab=reports'])
 
     await screen.findByText('Learner access')
     expect(screen.getByText('0 open / 1 restricted')).toBeTruthy()
@@ -346,7 +536,7 @@ describe('AdminManageTestPage', () => {
     expect(screen.getByText('Retake policy')).toBeTruthy()
     expect(screen.getByText(/Cooldown 24 hour\(s\), max 1 attempt\(s\)/)).toBeTruthy()
     expect(screen.getByText('Review queue')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Review proctoring' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Proctoring' }).length).toBeGreaterThan(0)
   })
 
   it('allows grading a submitted attempt and opening its result from the candidates tab', async () => {
@@ -413,7 +603,7 @@ describe('AdminManageTestPage', () => {
 
   it('does not bounce to the tests list when it is still mounted during a non-manage route transition', async () => {
     render(
-      <MemoryRouter initialEntries={['/admin/videos/attempt-1']}>
+      <MemoryRouter initialEntries={['/admin/videos/attempt-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="*" element={<AdminManageTestPage />} />
           <Route path="/admin/tests" element={<div>All tests</div>} />

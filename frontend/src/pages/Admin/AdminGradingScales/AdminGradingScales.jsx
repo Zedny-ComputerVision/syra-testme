@@ -254,6 +254,7 @@ export default function AdminGradingScales() {
       <div className={styles.toolbarPanel}>
         <div className={styles.toolbar}>
           <input
+            aria-label="Search scales"
             type="text"
             className={styles.searchInput}
             placeholder="Search scales..."
@@ -354,10 +355,10 @@ export default function AdminGradingScales() {
               <label className={styles.label}>Grade Bands</label>
               {bands.map((band, index) => (
                 <div key={index} className={styles.bandRow}>
-                  <input className={`${styles.inputSmall} ${styles.inputSmallLabel}`} value={band.label} onChange={(event) => updateBand(index, 'label', event.target.value)} placeholder="Label" />
-                  <input className={styles.inputSmall} type="number" value={band.min_score} onChange={(event) => updateBand(index, 'min_score', event.target.value)} placeholder="Min" />
+                  <input aria-label={`Band ${index + 1} label`} className={`${styles.inputSmall} ${styles.inputSmallLabel}`} value={band.label} onChange={(event) => updateBand(index, 'label', event.target.value)} placeholder="Label" />
+                  <input aria-label={`Band ${index + 1} minimum score`} className={styles.inputSmall} type="number" value={band.min_score} onChange={(event) => updateBand(index, 'min_score', event.target.value)} placeholder="Min" />
                   <span className={styles.bandSeparator}>-</span>
-                  <input className={styles.inputSmall} type="number" value={band.max_score} onChange={(event) => updateBand(index, 'max_score', event.target.value)} placeholder="Max" />
+                  <input aria-label={`Band ${index + 1} maximum score`} className={styles.inputSmall} type="number" value={band.max_score} onChange={(event) => updateBand(index, 'max_score', event.target.value)} placeholder="Max" />
                   <span className={styles.percentSuffix}>%</span>
                   {bands.length > 1 && (
                     <button className={styles.removeBand} type="button" onClick={() => removeBand(index)} disabled={saving}>

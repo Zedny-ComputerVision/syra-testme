@@ -74,6 +74,7 @@ export default function AdminAttemptVideos() {
   const [videos, setVideos] = useState([])
   const [events, setEvents] = useState([])
   const [error, setError] = useState('')
+  const [warning, setWarning] = useState('')
   const [selectedVideoName, setSelectedVideoName] = useState('')
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
@@ -153,19 +154,41 @@ export default function AdminAttemptVideos() {
     async function load() {
       setLoading(true)
       setError('')
+      setWarning('')
       setSelectedVideoName('')
       try {
-        const [{ data: attemptData }, { data: videosData }, { data: eventsData }] = await Promise.all([
+        const [attemptResult, videosResult, eventsResult] = await Promise.allSettled([
           adminApi.getAttempt(resolvedId),
           adminApi.listAttemptVideos(resolvedId),
           adminApi.getAttemptEvents(resolvedId),
         ])
         if (off) return
-        const sortedVideos = [...(videosData || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        setAttempt(attemptData || null)
+        if (attemptResult.status !== 'fulfilled') {
+          setAttempt(null)
+          setVideos([])
+          setEvents([])
+          setError(attemptResult.reason?.response?.data?.detail || 'Failed to load attempt recordings')
+          return
+        }
+
+        const warnings = []
+        const attemptData = attemptResult.value.data || null
+        const videosData = videosResult.status === 'fulfilled' ? (videosResult.value.data || []) : []
+        const eventsData = eventsResult.status === 'fulfilled' ? (eventsResult.value.data || []) : []
+
+        if (videosResult.status !== 'fulfilled') {
+          warnings.push('Video recordings could not be loaded. Retry to fetch the saved files.')
+        }
+        if (eventsResult.status !== 'fulfilled') {
+          warnings.push('Warning events could not be loaded. Video playback remains available.')
+        }
+
+        const sortedVideos = [...videosData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        setAttempt(attemptData)
         setVideos(sortedVideos)
-        setEvents(eventsData || [])
+        setEvents(eventsData)
         setSelectedVideoName((prev) => prev || (sortedVideos[0]?.name || ''))
+        setWarning(warnings.join(' '))
       } catch (e) {
         if (off) return
         setError(e.response?.data?.detail || 'Failed to load attempt recordings')
@@ -311,6 +334,7 @@ export default function AdminAttemptVideos() {
     setDuration(0)
     setCurrentTime(0)
     setSelectedEventId('')
+    setWarning('')
     setRetryToken((current) => current + 1)
   }
 
@@ -417,6 +441,15 @@ export default function AdminAttemptVideos() {
         <div className={styles.error}>
           <span>{error}</span>
           <button type="button" className={styles.errorAction} onClick={handleRetry}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      {!error && warning ? (
+        <div className={styles.warning}>
+          <span>{warning}</span>
+          <button type="button" className={styles.warningAction} onClick={handleRetry}>
             Retry
           </button>
         </div>

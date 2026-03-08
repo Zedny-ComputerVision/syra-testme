@@ -34,7 +34,7 @@ vi.mock('../../services/api', () => ({
 
 function renderResult(initialEntry = '/attempts/attempt-1') {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter initialEntries={[initialEntry]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/attempts/:id" element={<AttemptResult />} />
         <Route path="/admin/tests/:id/manage" element={<div>Manage test route</div>} />

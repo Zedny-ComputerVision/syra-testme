@@ -28,6 +28,6 @@ npm run dev
 Env files already populated with local defaults.
 
 ## Notes
-- AI proctoring detectors are stubbed; integrate OpenCV/MediaPipe/YOLO for production.
+- AI proctoring uses optional computer-vision/OCR backends with heuristic fallbacks. For strongest production accuracy, install and configure the heavier detector dependencies the deployment will rely on.
 - Reports are written to `backend/storage/reports`.
 - Evidence screenshots are written to `backend/storage/evidence`.

@@ -323,8 +323,19 @@ test.describe('Core test cycle', () => {
     await expect(page).toHaveURL(new RegExp(`/attempts/${attemptId}$`), { timeout: 30000 })
 
     // Learner result should stay pending until the admin grades the manual-response attempt.
-    await expect(page.getByText('Awaiting manual review')).toBeVisible()
-    await expect(page.getByText('Saved Answers')).toBeVisible()
+    await expect.poll(async () => {
+      const attemptRes = await learnerApi.get(`attempts/${attemptId}`)
+      const attemptBody = await attemptRes.json()
+      return {
+        status: attemptBody.status,
+        score: attemptBody.score,
+      }
+    }, { timeout: 20000 }).toEqual({
+      status: 'SUBMITTED',
+      score: null,
+    })
+    await expect(page.getByText('Awaiting manual review')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByText('Saved Answers')).toBeVisible({ timeout: 20000 })
     await expect(page.getByRole('button', { name: /Download Certificate/i })).toHaveCount(0)
 
     await expect.poll(async () => {

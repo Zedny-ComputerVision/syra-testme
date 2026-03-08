@@ -13,7 +13,8 @@
   cursor: pointer;
 }
 .refreshBtn,
-.errorAction {
+.errorAction,
+.warningAction {
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
@@ -66,6 +67,25 @@
   gap: 0.75rem;
 }
 .errorAction {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  white-space: nowrap;
+}
+.warning {
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 50%, transparent);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent);
+  color: var(--color-warning-text, var(--color-text));
+  border-radius: 10px;
+  padding: 0.7rem;
+  margin-bottom: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.warningAction {
   border: 1px solid currentColor;
   background: transparent;
   color: inherit;

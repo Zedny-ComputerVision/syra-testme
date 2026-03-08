@@ -50,14 +50,27 @@ export default function AdminCourses() {
     setError('')
     setWarning('')
     try {
-      const [coursesRes, testsRes] = await Promise.all([
+      const [coursesRes, testsRes] = await Promise.allSettled([
         adminApi.courses(),
         isAdmin ? adminApi.allTests() : adminApi.exams(),
       ])
-      const courseList = coursesRes.data || []
+      if (coursesRes.status !== 'fulfilled') {
+        setCourses([])
+        setNodes({})
+        setAllTests([])
+        setError(resolveError(coursesRes.reason) || 'Failed to load courses')
+        return
+      }
+
+      const courseList = coursesRes.value.data || []
       setCourses(courseList)
-      const testRows = isAdmin ? (testsRes.data?.items || []) : (testsRes.data || [])
-      setAllTests(testRows.map(normalizeAdminTest))
+      if (testsRes.status === 'fulfilled') {
+        const testRows = isAdmin ? (testsRes.value.data?.items || []) : (testsRes.value.data || [])
+        setAllTests(testRows.map(normalizeAdminTest))
+      } else {
+        setAllTests([])
+        setWarning('Linked tests could not be loaded. Courses and modules remain available, but linked test counts may be incomplete until you retry.')
+      }
 
       const nodeEntries = await Promise.allSettled(
         courseList.map(async (course) => {
@@ -79,7 +92,11 @@ export default function AdminCourses() {
       })
       setNodes(nodeMap)
       if (failedCourses.length) {
-        setWarning(`Some module lists could not be loaded: ${failedCourses.join(', ')}.`)
+        setWarning((current) => (
+          current
+            ? `${current} Some module lists could not be loaded: ${failedCourses.join(', ')}.`
+            : `Some module lists could not be loaded: ${failedCourses.join(', ')}.`
+        ))
       }
     } catch (err) {
       setCourses([])
@@ -265,12 +282,12 @@ export default function AdminCourses() {
       <div className={styles.grid}>
         <form className={styles.card} onSubmit={createCourse}>
           <div className={styles.sectionTitle}>New Course</div>
-          <label className={styles.label}>Title</label>
-          <input className={styles.input} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
-          <label className={styles.label}>Description</label>
-          <textarea className={styles.textarea} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} />
-          <label className={styles.label}>Status</label>
-          <select className={styles.input} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+          <label className={styles.label} htmlFor="course-form-title">Title</label>
+          <input id="course-form-title" className={styles.input} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
+          <label className={styles.label} htmlFor="course-form-description">Description</label>
+          <textarea id="course-form-description" className={styles.textarea} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} />
+          <label className={styles.label} htmlFor="course-form-status">Status</label>
+          <select id="course-form-status" className={styles.input} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
             {COURSE_STATUS_OPTIONS.map((statusOption) => (
               <option key={statusOption.value} value={statusOption.value}>{statusOption.label}</option>
             ))}

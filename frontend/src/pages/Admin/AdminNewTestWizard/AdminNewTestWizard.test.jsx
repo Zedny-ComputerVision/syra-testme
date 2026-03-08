@@ -6,6 +6,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import AdminNewTestWizard from './AdminNewTestWizard'
 
 const coursesMock = vi.fn()
+const nodesMock = vi.fn()
+const createNodeMock = vi.fn()
 const categoriesMock = vi.fn()
 const gradingScalesMock = vi.fn()
 const questionPoolsMock = vi.fn()
@@ -23,6 +25,8 @@ const resumeAttemptMock = vi.fn()
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
     courses: (...args) => coursesMock(...args),
+    nodes: (...args) => nodesMock(...args),
+    createNode: (...args) => createNodeMock(...args),
     categories: (...args) => categoriesMock(...args),
     gradingScales: (...args) => gradingScalesMock(...args),
     questionPools: (...args) => questionPoolsMock(...args),
@@ -49,7 +53,7 @@ vi.mock('../ExamQuestionPanel/ExamQuestionPanel', () => ({
 
 function renderWizard() {
   return render(
-    <MemoryRouter initialEntries={['/admin/tests/new']}>
+    <MemoryRouter initialEntries={['/admin/tests/new']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/admin/tests/new" element={<AdminNewTestWizard />} />
       </Routes>
@@ -61,6 +65,8 @@ describe('AdminNewTestWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     coursesMock.mockResolvedValue({ data: [] })
+    nodesMock.mockResolvedValue({ data: [{ id: 'node-1', title: 'Module 1' }] })
+    createNodeMock.mockResolvedValue({ data: { id: 'node-1', title: 'Module 1' } })
     categoriesMock.mockResolvedValue({ data: [] })
     gradingScalesMock.mockResolvedValue({ data: [] })
     questionPoolsMock.mockResolvedValue({ data: [] })
@@ -80,12 +86,23 @@ describe('AdminNewTestWizard', () => {
     cleanup()
   })
 
+  it('labels the core test information fields for the first step', async () => {
+    renderWizard()
+
+    expect(await screen.findByLabelText(/Test Name/i)).toBeTruthy()
+    expect(screen.getByLabelText('Description')).toBeTruthy()
+    expect(screen.getByLabelText('Course')).toBeTruthy()
+    expect(screen.getByLabelText('Module')).toBeTruthy()
+    expect(screen.getByLabelText('External Code / ID')).toBeTruthy()
+    expect(screen.getByLabelText('Category')).toBeTruthy()
+  })
+
   it('does not advance to the next phase when saving the current step fails', async () => {
     createTestMock.mockRejectedValue({ response: { data: { detail: 'Save failed.' } } })
 
     renderWizard()
 
-    fireEvent.change((await screen.findAllByPlaceholderText('e.g. Midterm Examination - Computer Science'))[0], {
+    fireEvent.change(await screen.findByLabelText(/Test Name/i), {
       target: { value: 'Core Cycle Test' },
     })
     fireEvent.click(screen.getByRole('button', { name: /^Next$/i }))
@@ -95,6 +112,19 @@ describe('AdminNewTestWizard', () => {
     expect(screen.queryByText('Test Creation Method')).toBeNull()
   })
 
+  it('keeps the wizard usable when a non-critical bootstrap lookup fails', async () => {
+    coursesMock.mockResolvedValue({
+      data: [{ id: 'course-1', title: 'Course One' }],
+    })
+    categoriesMock.mockRejectedValue(new Error('categories unavailable'))
+
+    renderWizard()
+
+    expect(await screen.findByText('Some setup data failed to load. The wizard is still usable with the data that is available.')).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Course One' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Module 1' })).toBeTruthy()
+  })
+
   it('blocks seeding from an empty pool and explains why', async () => {
     questionPoolsMock.mockResolvedValue({
       data: [{ id: 'pool-1', name: 'Empty Pool', question_count: 0 }],
@@ -102,7 +132,7 @@ describe('AdminNewTestWizard', () => {
 
     renderWizard()
 
-    fireEvent.change(await screen.findByPlaceholderText('e.g. Midterm Examination - Computer Science'), {
+    fireEvent.change(await screen.findByLabelText(/Test Name/i), {
       target: { value: 'Core Cycle Test' },
     })
 
@@ -135,7 +165,7 @@ describe('AdminNewTestWizard', () => {
 
     expect((await screen.findAllByText('Proctoring')).length).toBeGreaterThan(0)
 
-    fireEvent.change(await screen.findByPlaceholderText('e.g. Midterm Examination - Computer Science'), {
+    fireEvent.change(await screen.findByLabelText(/Test Name/i), {
       target: { value: 'Core Cycle Test' },
     })
 

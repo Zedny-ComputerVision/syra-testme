@@ -167,8 +167,10 @@ export default function AdminSubscribers() {
             <button type="button" className={styles.secondaryBtn} onClick={load}>Retry</button>
           </div>
         )}
+        <label className={styles.filterLabel} htmlFor="subscriber-emails">Add subscribers</label>
         <div className={styles.row}>
           <input
+            id="subscriber-emails"
             className={styles.input}
             type="email"
             placeholder="user@example.com"

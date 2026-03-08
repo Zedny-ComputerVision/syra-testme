@@ -21,6 +21,11 @@ try:
 except Exception:  # pragma: no cover - optional dependency in lightweight envs
     pytesseract = None
 
+try:
+    import easyocr
+except Exception:  # pragma: no cover - optional dependency in lightweight envs
+    easyocr = None
+
 router = APIRouter()
 
 EVIDENCE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "identity"
@@ -30,6 +35,8 @@ ALLOW_TEST_BYPASS = bool(settings.PRECHECK_ALLOW_TEST_BYPASS or settings.E2E_SEE
 _ID_TOKEN_RE = re.compile(r"[A-Z0-9]{6,24}")
 _HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _TESSERACT_CONFIGURED = False
+_EASYOCR_READER = None
+_EASYOCR_INIT_ATTEMPTED = False
 
 
 def _decode_b64(data_url: str) -> bytes:
@@ -61,7 +68,7 @@ def _extract_face_crop(img_bgr: np.ndarray) -> np.ndarray | None:
 
 def _tesseract_text(img_bgr: np.ndarray) -> dict:
     if pytesseract is None:
-        return {"raw": "", "lines": [], "available": False, "error": "pytesseract_not_installed"}
+        return _easyocr_text(img_bgr, "pytesseract_not_installed")
     try:
         global _TESSERACT_CONFIGURED
         if not _TESSERACT_CONFIGURED:
@@ -76,9 +83,44 @@ def _tesseract_text(img_bgr: np.ndarray) -> dict:
         _ = pytesseract.get_tesseract_version()
         txt = pytesseract.image_to_string(img_bgr)
         lines = [l.strip() for l in txt.splitlines() if l.strip()]
-        return {"raw": txt, "lines": lines[:20], "available": True, "error": None}
+        return {"raw": txt, "lines": lines[:20], "available": True, "error": None, "engine": "tesseract"}
     except Exception as exc:
-        return {"raw": "", "lines": [], "available": False, "error": str(exc)}
+        return _easyocr_text(img_bgr, str(exc))
+
+
+def _easyocr_text(img_bgr: np.ndarray, prior_error: str | None = None) -> dict:
+    global _EASYOCR_READER, _EASYOCR_INIT_ATTEMPTED
+    if easyocr is None:
+        return {
+            "raw": "",
+            "lines": [],
+            "available": False,
+            "error": prior_error or "easyocr_not_installed",
+            "engine": None,
+        }
+    try:
+        if _EASYOCR_READER is None:
+            if _EASYOCR_INIT_ATTEMPTED:
+                raise RuntimeError(prior_error or "easyocr_initialization_failed")
+            _EASYOCR_READER = easyocr.Reader(["en"], gpu=False)
+            _EASYOCR_INIT_ATTEMPTED = True
+        lines = [str(line).strip() for line in _EASYOCR_READER.readtext(img_bgr, detail=0) if str(line).strip()]
+        return {
+            "raw": "\n".join(lines),
+            "lines": lines[:20],
+            "available": True,
+            "error": prior_error,
+            "engine": "easyocr",
+        }
+    except Exception as exc:
+        _EASYOCR_INIT_ATTEMPTED = True
+        return {
+            "raw": "",
+            "lines": [],
+            "available": False,
+            "error": prior_error or str(exc),
+            "engine": None,
+        }
 
 
 def _largest_face_box(img_bgr: np.ndarray) -> tuple[int, int, int, int] | None:

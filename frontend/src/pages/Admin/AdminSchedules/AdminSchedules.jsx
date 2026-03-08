@@ -14,11 +14,13 @@ export default function AdminSchedules() {
   const [schedules, setSchedules] = useState([])
   const [tests, setTests] = useState([])
   const [users, setUsers] = useState([])
+  const [schedulesReady, setSchedulesReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [bootstrapMessage, setBootstrapMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)
   const [deleteBusyId, setDeleteBusyId] = useState(null)
@@ -29,19 +31,45 @@ export default function AdminSchedules() {
   const load = async () => {
     setLoading(true)
     setError('')
+    setBootstrapMessage('')
     try {
-      const [sRes, tRes, uRes] = await Promise.all([
+      const [sRes, tRes, uRes] = await Promise.allSettled([
         adminApi.schedules(),
         adminApi.allTests(),
         adminApi.users(),
       ])
-      setSchedules(sRes.data || [])
-      setTests((tRes.data?.items || []).map(normalizeAdminTest))
-      setUsers(uRes.data || [])
-      setCreateReady(true)
-    } catch (err) {
-      setCreateReady(false)
-      setError(resolveError(err, 'Failed to load schedules.'))
+      const failures = []
+
+      if (sRes.status === 'fulfilled') {
+        setSchedules(sRes.value.data || [])
+        setSchedulesReady(true)
+      } else {
+        setSchedules([])
+        setSchedulesReady(false)
+        failures.push('schedules')
+        setError(resolveError(sRes.reason, 'Failed to load schedules.'))
+      }
+
+      if (tRes.status === 'fulfilled') {
+        setTests((tRes.value.data?.items || []).map(normalizeAdminTest))
+      } else {
+        setTests([])
+        failures.push('tests')
+      }
+
+      if (uRes.status === 'fulfilled') {
+        setUsers(uRes.value.data || [])
+      } else {
+        setUsers([])
+        failures.push('users')
+      }
+
+      setCreateReady(failures.length === 0)
+      if (failures.includes('schedules')) {
+        setBootstrapMessage('Existing schedules could not be loaded. Retry before editing or assigning schedules.')
+      } else if (failures.length > 0) {
+        setBootstrapMessage('Some assignment lookup data could not be loaded. Existing schedules remain visible, but assigning new schedules is temporarily disabled.')
+      }
     } finally {
       setLoading(false)
     }
@@ -123,7 +151,7 @@ export default function AdminSchedules() {
     {
       label: 'Assigned schedules',
       value: schedules.length,
-      helper: 'All learner schedule records currently loaded',
+      helper: schedulesReady ? 'All learner schedule records currently loaded' : 'Schedule list needs a retry before editing',
     },
     {
       label: 'Visible now',
@@ -150,7 +178,7 @@ export default function AdminSchedules() {
   return (
     <div className={styles.page}>
       <AdminPageHeader title="Schedules" subtitle="Assign tests to learners">
-        <button type="button" className={styles.btnPrimary} onClick={() => setShowForm((current) => !current)}>
+        <button type="button" className={styles.btnPrimary} onClick={() => setShowForm((current) => !current)} disabled={!createReady}>
           {showForm ? 'Hide Form' : '+ Assign'}
         </button>
       </AdminPageHeader>
@@ -161,6 +189,7 @@ export default function AdminSchedules() {
           <button className={styles.actionBtn} onClick={() => void load()}>Retry</button>
         </div>
       )}
+      {!error && bootstrapMessage && <div className={styles.warningMsg}>{bootstrapMessage}</div>}
       {notice && <div className={styles.noticeMsg}>{notice}</div>}
 
       <section className={styles.summaryGrid}>
@@ -176,37 +205,37 @@ export default function AdminSchedules() {
       {showForm && (
         <div className={styles.assignForm}>
           <h3 className={styles.assignTitle}>Assign Test</h3>
-          {!createReady && <div className={styles.errorMsg}>Assignment is disabled until schedules, tests, and users load successfully.</div>}
+          {!createReady && <div className={styles.errorMsg}>{bootstrapMessage || 'Assignment is disabled until schedules, tests, and users load successfully.'}</div>}
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>User</label>
-              <select className={styles.select} value={form.user_id} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, user_id: e.target.value }))}>
+              <label className={styles.label} htmlFor="schedule-form-user">User</label>
+              <select id="schedule-form-user" className={styles.select} value={form.user_id} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, user_id: e.target.value }))}>
                 <option value="">Select user...</option>
                 {users.map((user) => <option key={user.id} value={user.id}>{user.user_id} - {user.name}</option>)}
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Test</label>
-              <select className={styles.select} value={form.exam_id} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, exam_id: e.target.value }))}>
+              <label className={styles.label} htmlFor="schedule-form-test">Test</label>
+              <select id="schedule-form-test" className={styles.select} value={form.exam_id} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, exam_id: e.target.value }))}>
                 <option value="">Select test...</option>
                 {tests.map((test) => <option key={test.id} value={test.id}>{test.title}</option>)}
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Scheduled At</label>
-              <input className={styles.input} type="datetime-local" value={form.scheduled_at} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, scheduled_at: e.target.value }))} />
+              <label className={styles.label} htmlFor="schedule-form-datetime">Scheduled At</label>
+              <input id="schedule-form-datetime" className={styles.input} type="datetime-local" value={form.scheduled_at} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, scheduled_at: e.target.value }))} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Access Mode</label>
-              <select className={styles.select} value={form.access_mode} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, access_mode: e.target.value }))}>
+              <label className={styles.label} htmlFor="schedule-form-mode">Access Mode</label>
+              <select id="schedule-form-mode" className={styles.select} value={form.access_mode} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, access_mode: e.target.value }))}>
                 <option value="OPEN">Open (anytime)</option>
                 <option value="RESTRICTED">Restricted (by schedule)</option>
               </select>
             </div>
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.label}>Notes</label>
-            <textarea className={styles.textarea} value={form.notes} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))} />
+            <label className={styles.label} htmlFor="schedule-form-notes">Notes</label>
+            <textarea id="schedule-form-notes" className={styles.textarea} value={form.notes} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))} />
           </div>
           <button type="button" className={styles.btnPrimary} onClick={() => void handleAssign()} disabled={!createReady || saving || !form.user_id || !form.exam_id || !form.scheduled_at}>
             {saving ? 'Assigning...' : 'Assign'}

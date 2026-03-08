@@ -44,7 +44,7 @@ describe('TrainingCourses page', () => {
     listTestsMock.mockRejectedValue(new Error('tests unavailable'))
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <TrainingCourses />
       </MemoryRouter>,
     )
@@ -75,7 +75,7 @@ describe('TrainingCourses page', () => {
     listTestsMock.mockResolvedValue({ data: [] })
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <TrainingCourses />
       </MemoryRouter>,
     )
@@ -109,7 +109,7 @@ describe('TrainingCourses page', () => {
     listTestsMock.mockResolvedValue({ data: [] })
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <TrainingCourses />
       </MemoryRouter>,
     )

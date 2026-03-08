@@ -43,7 +43,7 @@ describe('AdminUsers permission modes', () => {
     useAuthMock.mockReturnValue({ user: { role: 'INSTRUCTOR' } })
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AdminUsers />
       </MemoryRouter>,
     )
@@ -73,7 +73,7 @@ describe('AdminUsers permission modes', () => {
       })
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AdminUsers />
       </MemoryRouter>,
     )
@@ -90,7 +90,7 @@ describe('AdminUsers permission modes', () => {
     useAuthMock.mockReturnValue({ user: { role: 'ADMIN' } })
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AdminUsers />
       </MemoryRouter>,
     )

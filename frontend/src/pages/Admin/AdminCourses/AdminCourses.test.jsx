@@ -1,6 +1,6 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 
 import AdminCourses from './AdminCourses'
@@ -42,6 +42,10 @@ describe('AdminCourses instructor permissions', () => {
     nodesMock.mockResolvedValue({ data: [] })
   })
 
+  afterEach(() => {
+    cleanup()
+  })
+
   it('renders read-only shared courses without unsupported mutation actions', async () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -50,6 +54,9 @@ describe('AdminCourses instructor permissions', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Shared Course')).toBeTruthy())
+    expect(screen.getByLabelText('Title')).toBeTruthy()
+    expect(screen.getByLabelText('Description')).toBeTruthy()
+    expect(screen.getByLabelText('Status')).toBeTruthy()
     expect(screen.getByText('Read-only course. Only the course owner or an admin can edit modules and publishing settings.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull()
@@ -67,5 +74,18 @@ describe('AdminCourses instructor permissions', () => {
 
     await waitFor(() => expect(screen.getByText('Shared Course')).toBeTruthy())
     expect(screen.getByText('Some module lists could not be loaded: Shared Course.')).toBeTruthy()
+  })
+
+  it('keeps courses visible when linked tests fail to load', async () => {
+    examsMock.mockRejectedValueOnce(new Error('tests unavailable'))
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AdminCourses />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Shared Course')).toBeTruthy())
+    expect(screen.getByText('Linked tests could not be loaded. Courses and modules remain available, but linked test counts may be incomplete until you retry.')).toBeTruthy()
   })
 })

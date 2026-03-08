@@ -278,10 +278,10 @@ export default function AdminSurveys() {
       <div className={styles.grid}>
         <form className={styles.card} onSubmit={save}>
           <div className={styles.sectionTitle}>{editingId ? 'Edit Survey' : 'New Survey'}</div>
-          <label className={styles.label}>Title</label>
-          <input className={styles.input} value={title} onChange={(event) => setTitle(event.target.value)} required />
-          <label className={styles.label}>Description</label>
-          <textarea className={styles.textarea} value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
+          <label className={styles.label} htmlFor="survey-title">Title</label>
+          <input id="survey-title" className={styles.input} value={title} onChange={(event) => setTitle(event.target.value)} required />
+          <label className={styles.label} htmlFor="survey-description">Description</label>
+          <textarea id="survey-description" className={styles.textarea} value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
           <label className={`${styles.label} ${styles.checkboxLabel}`}>
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
             Active (visible to learners)

@@ -7,10 +7,31 @@ export default function ExamJourneyStepper({ step, currentStep }) {
   return (
     <div className={styles.stepper}>
       {steps.map((s, idx) => (
-        <div key={s} className={idx === activeStep ? styles.active : styles.item}>
-          <span className={styles.index}>{idx + 1}</span>
-          <span>{s}</span>
-        </div>
+        <React.Fragment key={s}>
+          <div
+            className={
+              idx === activeStep
+                ? styles.active
+                : idx < activeStep
+                ? styles.done
+                : styles.item
+            }
+          >
+            <span className={styles.index}>
+              {idx < activeStep ? (
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              ) : (
+                idx + 1
+              )}
+            </span>
+            <span>{s}</span>
+          </div>
+          {idx < steps.length - 1 && (
+            <span className={`${styles.connector} ${idx < activeStep ? styles.connectorFilled : ''}`} />
+          )}
+        </React.Fragment>
       ))}
     </div>
   )

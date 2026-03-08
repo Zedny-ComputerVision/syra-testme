@@ -17,25 +17,26 @@ export async function ensureAdmin(context) {
   ].filter(Boolean)))
   const base = await request.newContext({ baseURL: API_BASE })
 
+  // Reset seed first when the endpoint is available so each spec starts from known state.
+  try {
+    const seed = await base.post('testing/reset-seed')
+    if (seed.ok()) {
+      const seeded = await seed.json()
+      cachedAdminToken = null
+      cachedAdminPassword = seeded.admin.password
+      const token = await loginToken(base, seeded.admin.email, seeded.admin.password)
+      cachedAdminToken = token
+      return { token, email: seeded.admin.email, password: seeded.admin.password }
+    }
+  } catch (_) {
+    // ignore if endpoint not enabled
+  }
   if (cachedAdminToken && cachedAdminPassword) {
     const me = await base.get('auth/me', { headers: { Authorization: `Bearer ${cachedAdminToken}` } })
     if (me.ok()) {
       return { token: cachedAdminToken, email: adminEmail, password: cachedAdminPassword }
     }
     cachedAdminToken = null
-  }
-  // If seed endpoint is enabled, reset DB and seed fixtures
-  try {
-    const seed = await base.post('testing/reset-seed')
-    if (seed.ok()) {
-      const seeded = await seed.json()
-      const token = await loginToken(base, adminEmail, password)
-      cachedAdminToken = token
-      cachedAdminPassword = seeded.admin.password
-      return { token, email: seeded.admin.email, password: seeded.admin.password }
-    }
-  } catch (_) {
-    // ignore if endpoint not enabled
   }
   // Try login with known admin password candidates.
   for (const candidate of candidatePasswords) {

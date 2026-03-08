@@ -169,6 +169,30 @@ def test_precheck_face_crop_uses_detected_face_region_instead_of_center_crop(mon
     assert int(crop.max()) == 255
 
 
+def test_ocr_falls_back_to_easyocr_when_tesseract_is_unavailable(monkeypatch):
+    import numpy as np
+
+    class DummyReader:
+        def __init__(self, langs, gpu):
+            assert langs == ["en"]
+            assert gpu is False
+
+        def readtext(self, _img, detail=0):
+            assert detail == 0
+            return ["ID NUMBER", "A1234567"]
+
+    monkeypatch.setattr(precheck_routes, "pytesseract", None)
+    monkeypatch.setattr(precheck_routes, "easyocr", SimpleNamespace(Reader=DummyReader))
+    monkeypatch.setattr(precheck_routes, "_EASYOCR_READER", None)
+    monkeypatch.setattr(precheck_routes, "_EASYOCR_INIT_ATTEMPTED", False)
+
+    out = precheck_routes._tesseract_text(np.zeros((32, 32, 3), dtype=np.uint8))
+
+    assert out["available"] is True
+    assert out["engine"] == "easyocr"
+    assert out["lines"] == ["ID NUMBER", "A1234567"]
+
+
 def test_invalid_token_returns_401_on_protected_endpoint():
     res = client.get("/api/exams/", headers={"Authorization": "Bearer definitely-not-a-token"})
     assert res.status_code == 401

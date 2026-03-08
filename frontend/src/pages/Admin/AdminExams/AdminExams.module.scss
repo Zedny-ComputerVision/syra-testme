@@ -141,10 +141,12 @@
 }
 
 .tableWrap {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
   overflow: auto;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
 }
 
 .table {
@@ -174,8 +176,16 @@
   vertical-align: middle;
 }
 
-.table tbody tr:last-child td {
-  border-bottom: none;
+.table tbody tr {
+  transition: background 0.12s ease;
+
+  &:hover td {
+    background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  }
+
+  &:last-child td {
+    border-bottom: none;
+  }
 }
 
 .nameCell {

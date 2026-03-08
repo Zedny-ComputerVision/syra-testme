@@ -33,7 +33,7 @@ vi.mock('../../components/ExamJourneyStepper/ExamJourneyStepper', () => ({
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/tests/test-1/system-check']}>
+    <MemoryRouter initialEntries={['/tests/test-1/system-check']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/tests/:testId/system-check" element={<SystemCheckPage />} />
       </Routes>

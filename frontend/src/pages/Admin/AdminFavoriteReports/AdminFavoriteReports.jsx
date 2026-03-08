@@ -252,8 +252,10 @@ export default function AdminFavoriteReports() {
       <div className={styles.grid}>
         <form className={styles.card} onSubmit={handleAddSubmit}>
           <div className={styles.sectionTitle}>Add Favorite</div>
-          <input className={styles.input} placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
-          <input className={styles.input} placeholder="URL or path" value={link} onChange={e => setLink(e.target.value)} />
+          <label className={styles.filterLabel} htmlFor="favorite-title">Title</label>
+          <input id="favorite-title" className={styles.input} placeholder="Favorite title" value={title} onChange={e => setTitle(e.target.value)} />
+          <label className={styles.filterLabel} htmlFor="favorite-link">URL or path</label>
+          <input id="favorite-link" className={styles.input} placeholder="https://example.com/report or /admin/reports" value={link} onChange={e => setLink(e.target.value)} />
           <div className={styles.empty}>Use a public URL or a supported admin route such as `/admin/reports`.</div>
           <button type="submit" className={styles.btn} disabled={!title || !link || saving}>{saving ? 'Saving...' : 'Save'}</button>
         </form>
@@ -266,7 +268,7 @@ export default function AdminFavoriteReports() {
                 <input
                   id="favorite-search"
                   className={styles.input}
-                  placeholder="Search title or link..."
+                  placeholder="Search saved favorites..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />

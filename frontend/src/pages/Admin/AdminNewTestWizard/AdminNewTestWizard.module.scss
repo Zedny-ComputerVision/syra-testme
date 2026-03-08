@@ -21,7 +21,7 @@
   padding: 0.55rem;
   border-radius: 14px;
   border: 1px solid var(--card-border);
-  background: linear-gradient(120deg, color-mix(in srgb, var(--color-surface) 50%, transparent), var(--color-success-bg));
+  background: linear-gradient(120deg, color-mix(in srgb, var(--color-surface) 50%, transparent), color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)));
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12);
 
   [data-theme='dark'] & {
@@ -53,9 +53,9 @@
 
 .stepActive {
   color: var(--color-text);
-  border-color: color-mix(in srgb, var(--color-success) 80%, transparent);
-  box-shadow: 0 8px 25px color-mix(in srgb, var(--color-success) 42%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 35%, transparent), rgba(139, 92, 246, 0.12));
+  border-color: color-mix(in srgb, var(--color-primary) 80%, transparent);
+  box-shadow: 0 8px 25px color-mix(in srgb, var(--color-primary) 30%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 14%, transparent), color-mix(in srgb, var(--color-accent) 8%, transparent));
 }
 
 .stepCompleted {
@@ -370,9 +370,9 @@
 }
 
 .methodCardActive {
-  border-color: color-mix(in srgb, var(--color-success) 90%, transparent);
-  box-shadow: 0 14px 32px color-mix(in srgb, var(--color-success) 30%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 30%, transparent), rgba(139, 92, 246, 0.12));
+  border-color: color-mix(in srgb, var(--color-primary) 80%, transparent);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--color-primary) 22%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-accent) 8%, transparent));
 }
 
 .methodIcon {
@@ -459,8 +459,8 @@
 
 .chipToggleOn {
   border-color: var(--color-primary);
-  background: linear-gradient(135deg, var(--color-success-bg), rgba(139,92,246,0.12));
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--color-success) 30%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-accent) 8%, transparent));
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 .sliderRow {
@@ -747,9 +747,9 @@
 }
 
 .requirementCardActive {
-  border-color: color-mix(in srgb, var(--color-success) 70%, transparent);
-  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-success) 22%, transparent);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--color-success) 22%, transparent), rgba(139, 92, 246, 0.1));
+  border-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-accent) 7%, transparent));
 }
 
 .requirementCardHead {
@@ -1001,9 +1001,9 @@
 }
 
 .detectorOn {
-  border-color: color-mix(in srgb, var(--color-success) 70%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 30%, transparent), rgba(139, 92, 246, 0.12));
-  box-shadow: 0 14px 32px color-mix(in srgb, var(--color-success) 30%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-accent) 8%, transparent));
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 .detectorToggle {
@@ -1263,7 +1263,7 @@
   max-width: 320px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--color-success-bg) 0%, rgba(139, 92, 246, 0.08) 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 8%, transparent) 0%, color-mix(in srgb, var(--color-accent) 6%, transparent) 100%);
   display: flex;
   flex-direction: column;
   align-items: center;

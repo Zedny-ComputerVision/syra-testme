@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import React, { startTransition, useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import { generateQuestionsAI } from '../../../services/ai.service'
@@ -205,6 +205,8 @@ export default function AdminNewTestWizard() {
   const { id: paramId } = useParams()
   const editId = searchParams.get('edit') || paramId
   const autosaveTimerRef = useRef(null)
+  const prefersReducedMotion = useReducedMotion()
+  const stepTransitionDuration = prefersReducedMotion || import.meta.env.MODE === 'test' ? 0 : 0.25
 
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -325,6 +327,18 @@ export default function AdminNewTestWizard() {
     if (Number.isNaN(date.getTime())) return ''
     const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000))
     return local.toISOString().slice(0, 16)
+  }
+
+  useEffect(() => () => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current)
+    }
+  }, [])
+
+  const goToStep = (nextStep) => {
+    startTransition(() => {
+      setStep(nextStep)
+    })
   }
 
   const loadNodesForCourse = async (selectedCourseId, { createIfEmpty = false } = {}) => {
@@ -448,29 +462,51 @@ export default function AdminNewTestWizard() {
 
   /* ─── Load lookups ─── */
   useEffect(() => {
-    Promise.all([
+    let cancelled = false
+
+    const readSettledData = (result, fallback = []) => (
+      result.status === 'fulfilled' ? (result.value?.data || fallback) : fallback
+    )
+
+    Promise.allSettled([
       adminApi.courses(),
       adminApi.categories(),
       adminApi.gradingScales(),
       adminApi.questionPools(),
       adminApi.users(),
       adminApi.examTemplates(),
-    ]).then(([courseRes, catRes, gsRes, poolRes, userRes, tplRes]) => {
-      const courseList = courseRes.data || []
+    ]).then((results) => {
+      if (cancelled) return
+      const [courseRes, catRes, gsRes, poolRes, userRes, tplRes] = results
+      const courseList = readSettledData(courseRes)
       setCourses(courseList)
-      setCategories(catRes.data || [])
-      setGradingScales(gsRes.data || [])
-      setPools(poolRes.data || [])
-      setUsers((userRes.data || []).filter(u => u.role === 'LEARNER'))
-      setExamTemplates(tplRes?.data || [])
+      setCategories(readSettledData(catRes))
+      setGradingScales(readSettledData(gsRes))
+      setPools(readSettledData(poolRes))
+      setUsers(readSettledData(userRes).filter((user) => user.role === 'LEARNER'))
+      setExamTemplates(readSettledData(tplRes))
+
       if (courseList.length) {
         const first = courseList[0]
         setCourseId((current) => current || first.id)
         if (!courseId) {
-          loadNodesForCourse(first.id, { createIfEmpty: true })
+          void loadNodesForCourse(first.id, { createIfEmpty: true })
         }
       }
-    }).catch(() => {})
+
+      const failedBootstrap = results.some((result) => result.status === 'rejected')
+      if (failedBootstrap) {
+        setPanelError((current) => current || 'Some setup data failed to load. The wizard is still usable with the data that is available.')
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setPanelError((current) => current || 'Failed to load setup data. Retry the page to continue.')
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -756,7 +792,9 @@ export default function AdminNewTestWizard() {
       }
       if (!saveSucceeded) return
     }
-    setStep(s => Math.min(STEPS.length - 1, s + 1))
+    startTransition(() => {
+      setStep((current) => Math.min(STEPS.length - 1, current + 1))
+    })
   }
 
   const handleSeedPool = async () => {
@@ -875,7 +913,7 @@ export default function AdminNewTestWizard() {
       for (const gateStep of publishGateSteps) {
         const validationMessage = validateStep(gateStep, { forPublish: true })
         if (validationMessage) {
-          setStep(gateStep)
+          goToStep(gateStep)
           setPanelError(validationMessage)
           return
         }
@@ -1383,9 +1421,9 @@ export default function AdminNewTestWizard() {
           <h3 className={styles.panelTitle}>Test Information</h3>
           {examTemplates.length > 0 && (
             <div className={styles.formGroup}>
-              <label className={styles.label}>Start from Template</label>
+              <label className={styles.label} htmlFor="wizard-template">Start from Template</label>
               <div className={styles.templateRow}>
-                <select className={styles.select} value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}>
+                <select id="wizard-template" className={styles.select} value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}>
                   <option value="">Select template...</option>
                   {examTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
@@ -1394,17 +1432,18 @@ export default function AdminNewTestWizard() {
             </div>
           )}
           <div className={styles.formGroup}>
-            <label className={styles.label}>Test Name <span className={styles.requiredMark}>*</span></label>
-            <input name="title" className={styles.input} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Midterm Examination - Computer Science" />
+            <label className={styles.label} htmlFor="wizard-title">Test Name <span className={styles.requiredMark}>*</span></label>
+            <input id="wizard-title" name="title" className={styles.input} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Midterm Examination - Computer Science" />
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.label}>Description</label>
-            <textarea name="description" className={styles.textarea} value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="Describe the test purpose, scope, and any special instructions..." />
+            <label className={styles.label} htmlFor="wizard-description">Description</label>
+            <textarea id="wizard-description" name="description" className={styles.textarea} value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="Describe the test purpose, scope, and any special instructions..." />
           </div>
           <div className={styles.inputRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Course</label>
+              <label className={styles.label} htmlFor="wizard-course">Course</label>
               <select
+                id="wizard-course"
                 name="course"
                 className={styles.select}
                 value={courseId}
@@ -1426,20 +1465,20 @@ export default function AdminNewTestWizard() {
               {!courses.length && <p className={styles.helper}>No courses yet. Create one here and the wizard will keep going.</p>}
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Module</label>
-              <select name="node" className={styles.select} value={nodeId} onChange={e => setNodeId(e.target.value)}>
+              <label className={styles.label} htmlFor="wizard-node">Module</label>
+              <select id="wizard-node" name="node" className={styles.select} value={nodeId} onChange={e => setNodeId(e.target.value)}>
                 <option value="">Select module...</option>
                 {nodes.map(n => <option key={n.id} value={n.id}>{n.title}</option>)}
               </select>
               {!nodes.length && courseId && <p className={styles.helper}>No modules in this course. The wizard will create Module 1 automatically.</p>}
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>External Code / ID</label>
-              <input name="exam_code" className={styles.input} value={examCode} onChange={e => setExamCode(e.target.value)} placeholder="e.g. CS-101-MT" />
+              <label className={styles.label} htmlFor="wizard-exam-code">External Code / ID</label>
+              <input id="wizard-exam-code" name="exam_code" className={styles.input} value={examCode} onChange={e => setExamCode(e.target.value)} placeholder="e.g. CS-101-MT" />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Category</label>
-              <select name="category" className={styles.select} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+              <label className={styles.label} htmlFor="wizard-category">Category</label>
+              <select id="wizard-category" name="category" className={styles.select} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
                 <option value="">No Category</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -1455,17 +1494,17 @@ export default function AdminNewTestWizard() {
               </div>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Course title</label>
-                  <input className={styles.input} value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)} placeholder="e.g. Computer Science 101" />
+                  <label className={styles.label} htmlFor="wizard-new-course-title">Course title</label>
+                  <input id="wizard-new-course-title" className={styles.input} value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)} placeholder="e.g. Computer Science 101" />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>First module</label>
-                  <input className={styles.input} value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)} placeholder="Module 1" />
+                  <label className={styles.label} htmlFor="wizard-new-module-title">First module</label>
+                  <input id="wizard-new-module-title" className={styles.input} value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)} placeholder="Module 1" />
                 </div>
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Course description</label>
-                <textarea className={styles.textarea} rows={3} value={newCourseDescription} onChange={(e) => setNewCourseDescription(e.target.value)} placeholder="Optional description for the training course..." />
+                <label className={styles.label} htmlFor="wizard-new-course-description">Course description</label>
+                <textarea id="wizard-new-course-description" className={styles.textarea} rows={3} value={newCourseDescription} onChange={(e) => setNewCourseDescription(e.target.value)} placeholder="Optional description for the training course..." />
               </div>
               <div className={styles.inlineActions}>
                 <button className={styles.btnSecondary} type="button" onClick={handleCreateCourseInline} disabled={creatingCourse || !newCourseTitle.trim()}>
@@ -1506,9 +1545,9 @@ export default function AdminNewTestWizard() {
                   <div className={styles.helper}>Enter a topic and let the model draft questions, then we save them into this test.</div>
                 </div>
                 <div className={styles.aiControls}>
-                  <input className={`${styles.input} ${styles.aiTopicInput}`} placeholder="Topic or chapter" value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
-                  <input className={styles.inputMini} type="number" min={1} max={15} value={aiCount} onChange={e => setAiCount(Number(e.target.value))} />
-                  <select className={styles.selectMini} value={aiDifficulty} onChange={e => setAiDifficulty(e.target.value)}>
+                  <input aria-label="AI topic or chapter" className={`${styles.input} ${styles.aiTopicInput}`} placeholder="Topic or chapter" value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
+                  <input aria-label="AI question count" className={styles.inputMini} type="number" min={1} max={15} value={aiCount} onChange={e => setAiCount(Number(e.target.value))} />
+                  <select aria-label="AI difficulty" className={styles.selectMini} value={aiDifficulty} onChange={e => setAiDifficulty(e.target.value)}>
                     <option value="mixed">Mixed</option>
                     <option value="easy">Easy</option>
                     <option value="medium">Medium</option>
@@ -1534,8 +1573,8 @@ export default function AdminNewTestWizard() {
                 </div>
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Total Questions</label>
-                <input className={`${styles.input} ${styles.generatorCountInput}`} type="number" min={1} max={200} value={generatorCount} onChange={e => setGeneratorCount(Number(e.target.value))} />
+                <label className={styles.label} htmlFor="wizard-generator-count">Total Questions</label>
+                <input id="wizard-generator-count" className={`${styles.input} ${styles.generatorCountInput}`} type="number" min={1} max={200} value={generatorCount} onChange={e => setGeneratorCount(Number(e.target.value))} />
               </div>
 
               <div className={styles.generatorGrid}>
@@ -1602,12 +1641,12 @@ export default function AdminNewTestWizard() {
 
               <div className={styles.generatorGrid}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Include Tags (comma separated)</label>
-                  <input className={styles.input} value={generatorTagsInclude} onChange={e => setGeneratorTagsInclude(e.target.value)} placeholder="math, algebra, fundamentals" />
+                  <label className={styles.label} htmlFor="wizard-generator-tags-include">Include Tags (comma separated)</label>
+                  <input id="wizard-generator-tags-include" className={styles.input} value={generatorTagsInclude} onChange={e => setGeneratorTagsInclude(e.target.value)} placeholder="math, algebra, fundamentals" />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Exclude Tags (comma separated)</label>
-                  <input className={styles.input} value={generatorTagsExclude} onChange={e => setGeneratorTagsExclude(e.target.value)} placeholder="archived, beta" />
+                  <label className={styles.label} htmlFor="wizard-generator-tags-exclude">Exclude Tags (comma separated)</label>
+                  <input id="wizard-generator-tags-exclude" className={styles.input} value={generatorTagsExclude} onChange={e => setGeneratorTagsExclude(e.target.value)} placeholder="archived, beta" />
                 </div>
               </div>
 
@@ -1634,12 +1673,12 @@ export default function AdminNewTestWizard() {
                   </div>
                   <div className={styles.inputRow}>
                     <div className={styles.formGroup}>
-                      <label className={styles.label}>Versions to pre-generate</label>
-                      <input className={styles.input} type="number" min={1} max={20} value={generatorVersionCount} onChange={e => setGeneratorVersionCount(Number(e.target.value))} />
+                      <label className={styles.label} htmlFor="wizard-generator-version-count">Versions to pre-generate</label>
+                      <input id="wizard-generator-version-count" className={styles.input} type="number" min={1} max={20} value={generatorVersionCount} onChange={e => setGeneratorVersionCount(Number(e.target.value))} />
                     </div>
                     <div className={styles.formGroup}>
-                      <label className={styles.label}>Random Seed (optional)</label>
-                      <input className={styles.input} value={generatorRandomSeed} onChange={e => setGeneratorRandomSeed(e.target.value)} placeholder="Leave blank for random" />
+                      <label className={styles.label} htmlFor="wizard-generator-random-seed">Random Seed (optional)</label>
+                      <input id="wizard-generator-random-seed" className={styles.input} value={generatorRandomSeed} onChange={e => setGeneratorRandomSeed(e.target.value)} placeholder="Leave blank for random" />
                     </div>
                   </div>
                 </div>
@@ -1665,23 +1704,23 @@ export default function AdminNewTestWizard() {
           <div className={styles.sectionDivider}>Delivery settings</div>
           <div className={styles.inputRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Question Type</label>
-              <select className={styles.select} value={examType} onChange={e => setExamType(e.target.value)}>
+              <label className={styles.label} htmlFor="wizard-exam-type">Question Type</label>
+              <select id="wizard-exam-type" className={styles.select} value={examType} onChange={e => setExamType(e.target.value)}>
                 <option value="MCQ">Multiple Choice (MCQ)</option>
                 <option value="TEXT">Essay / Text</option>
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Page Format</label>
-              <select className={styles.select} value={pageFormat} onChange={e => setPageFormat(e.target.value)}>
+              <label className={styles.label} htmlFor="wizard-page-format">Page Format</label>
+              <select id="wizard-page-format" className={styles.select} value={pageFormat} onChange={e => setPageFormat(e.target.value)}>
                 <option value="one_per_page">One question per page</option>
                 <option value="all_per_page">All questions on one page</option>
                 <option value="section_per_page">One section per page</option>
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Calculator</label>
-              <select className={styles.select} value={calculatorType} onChange={e => setCalculatorType(e.target.value)}>
+              <label className={styles.label} htmlFor="wizard-calculator-type">Calculator</label>
+              <select id="wizard-calculator-type" className={styles.select} value={calculatorType} onChange={e => setCalculatorType(e.target.value)}>
                 <option value="none">No calculator</option>
                 <option value="basic">Basic calculator</option>
                 <option value="scientific">Scientific calculator</option>
@@ -1716,12 +1755,12 @@ export default function AdminNewTestWizard() {
 
             <div className={styles.inputRow}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Test</label>
-                <input className={styles.input} value={title || 'Untitled test'} readOnly />
+                <label className={styles.label} htmlFor="wizard-proctoring-test">Test</label>
+                <input id="wizard-proctoring-test" className={styles.input} value={title || 'Untitled test'} readOnly />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Testing session</label>
-                <select className={styles.select} value={proctoringSessionId} onChange={(e) => setProctoringSessionId(e.target.value)}>
+                <label className={styles.label} htmlFor="wizard-proctoring-session">Testing session</label>
+                <select id="wizard-proctoring-session" className={styles.select} value={proctoringSessionId} onChange={(e) => setProctoringSessionId(e.target.value)}>
                   <option value="">All testing sessions</option>
                   {proctoringSessions.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -1829,8 +1868,9 @@ export default function AdminNewTestWizard() {
 
             {proctoringView === 'special_accommodations' && (
               <div className={styles.proctoringNotes}>
-                <label className={styles.label}>Special accommodations</label>
+                <label className={styles.label} htmlFor="wizard-special-accommodations">Special accommodations</label>
                 <textarea
+                  id="wizard-special-accommodations"
                   className={styles.textarea}
                   value={specialAccommodations}
                   onChange={(e) => {
@@ -1844,8 +1884,9 @@ export default function AdminNewTestWizard() {
 
             {proctoringView === 'special_requests' && (
               <div className={styles.proctoringNotes}>
-                <label className={styles.label}>Special requests</label>
+                <label className={styles.label} htmlFor="wizard-special-requests">Special requests</label>
                 <textarea
+                  id="wizard-special-requests"
                   className={styles.textarea}
                   value={specialRequests}
                   onChange={(e) => {
@@ -2084,8 +2125,8 @@ export default function AdminNewTestWizard() {
           </label>
           {!unlimitedTime && (
             <div className={`${styles.formGroup} ${styles.timeLimitWrap}`}>
-              <label className={styles.label}>Duration (minutes)</label>
-              <input name="time_limit" className={`${styles.input} ${styles.timeLimitInput}`} type="number" min={1} max={600} value={timeLimitMinutes} onChange={e => setTimeLimitMinutes(Number(e.target.value))} />
+              <label className={styles.label} htmlFor="wizard-time-limit">Duration (minutes)</label>
+              <input id="wizard-time-limit" name="time_limit" className={`${styles.input} ${styles.timeLimitInput}`} type="number" min={1} max={600} value={timeLimitMinutes} onChange={e => setTimeLimitMinutes(Number(e.target.value))} />
             </div>
           )}
         </>
@@ -2142,19 +2183,19 @@ export default function AdminNewTestWizard() {
           <h3 className={styles.panelTitle}>Grading Configuration</h3>
           <div className={styles.inputRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Passing Mark (%)</label>
-              <input className={styles.input} type="number" min={0} max={100} value={passingScore} onChange={e => { setPassingScore(Number(e.target.value)); if (examId) autoPersist() }} />
+              <label className={styles.label} htmlFor="wizard-passing-score">Passing Mark (%)</label>
+              <input id="wizard-passing-score" className={styles.input} type="number" min={0} max={100} value={passingScore} onChange={e => { setPassingScore(Number(e.target.value)); if (examId) autoPersist() }} />
               <span className={styles.metricHelper}>
                 Achieve more than {passingScore}% on the entire test to pass.
               </span>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Max Attempts Allowed</label>
-              <input className={styles.input} type="number" min={1} max={99} value={maxAttempts} onChange={e => { setMaxAttempts(Number(e.target.value)); if (examId) autoPersist() }} />
+              <label className={styles.label} htmlFor="wizard-max-attempts">Max Attempts Allowed</label>
+              <input id="wizard-max-attempts" className={styles.input} type="number" min={1} max={99} value={maxAttempts} onChange={e => { setMaxAttempts(Number(e.target.value)); if (examId) autoPersist() }} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Grading Scale</label>
-              <select className={styles.select} value={gradingScaleId} onChange={e => { setGradingScaleId(e.target.value); if (examId) autoPersist() }}>
+              <label className={styles.label} htmlFor="wizard-grading-scale">Grading Scale</label>
+              <select id="wizard-grading-scale" className={styles.select} value={gradingScaleId} onChange={e => { setGradingScaleId(e.target.value); if (examId) autoPersist() }}>
                 <option value="">No scale</option>
                 {gradingScales.map(gs => <option key={gs.id} value={gs.id}>{gs.name}</option>)}
               </select>
@@ -2169,12 +2210,12 @@ export default function AdminNewTestWizard() {
           {negativeMarking && (
             <div className={`${styles.inputRow} ${styles.negativeMarkRow}`}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Deduction per Wrong Answer</label>
-                <input className={styles.input} type="number" min={0} step={0.25} value={negMarkValue} onChange={e => { setNegMarkValue(Number(e.target.value)); if (examId) autoPersist() }} />
+                <label className={styles.label} htmlFor="wizard-negative-mark-value">Deduction per Wrong Answer</label>
+                <input id="wizard-negative-mark-value" className={styles.input} type="number" min={0} step={0.25} value={negMarkValue} onChange={e => { setNegMarkValue(Number(e.target.value)); if (examId) autoPersist() }} />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Deduction Type</label>
-                <select className={styles.select} value={negMarkType} onChange={e => { setNegMarkType(e.target.value); if (examId) autoPersist() }}>
+                <label className={styles.label} htmlFor="wizard-negative-mark-type">Deduction Type</label>
+                <select id="wizard-negative-mark-type" className={styles.select} value={negMarkType} onChange={e => { setNegMarkType(e.target.value); if (examId) autoPersist() }}>
                   <option value="points">Fixed Points</option>
                   <option value="percentage">Percentage of Question</option>
                 </select>
@@ -2237,8 +2278,8 @@ export default function AdminNewTestWizard() {
             <>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Template</label>
-                  <select className={styles.select} value={certTemplate} onChange={e => { setCertTemplate(e.target.value); if (examId) autoPersist() }}>
+                  <label className={styles.label} htmlFor="wizard-certificate-template">Template</label>
+                  <select id="wizard-certificate-template" className={styles.select} value={certTemplate} onChange={e => { setCertTemplate(e.target.value); if (examId) autoPersist() }}>
                     {CERTIFICATE_TEMPLATES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
@@ -2256,25 +2297,25 @@ export default function AdminNewTestWizard() {
               </div>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Certificate Title</label>
-                  <input className={styles.input} value={certTitle} onChange={e => { setCertTitle(e.target.value); if (examId) autoPersist() }} />
+                  <label className={styles.label} htmlFor="wizard-certificate-title">Certificate Title</label>
+                  <input id="wizard-certificate-title" className={styles.input} value={certTitle} onChange={e => { setCertTitle(e.target.value); if (examId) autoPersist() }} />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Subtitle</label>
-                  <input className={styles.input} value={certSubtitle} onChange={e => { setCertSubtitle(e.target.value); if (examId) autoPersist() }} placeholder="e.g. with Distinction" />
+                  <label className={styles.label} htmlFor="wizard-certificate-subtitle">Subtitle</label>
+                  <input id="wizard-certificate-subtitle" className={styles.input} value={certSubtitle} onChange={e => { setCertSubtitle(e.target.value); if (examId) autoPersist() }} placeholder="e.g. with Distinction" />
                 </div>
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Company / Institution Name</label>
-                <input className={styles.input} value={certCompany} onChange={e => { setCertCompany(e.target.value); if (examId) autoPersist() }} placeholder="e.g. SYRA Learning Institute" />
+                <label className={styles.label} htmlFor="wizard-certificate-company">Company / Institution Name</label>
+                <input id="wizard-certificate-company" className={styles.input} value={certCompany} onChange={e => { setCertCompany(e.target.value); if (examId) autoPersist() }} placeholder="e.g. SYRA Learning Institute" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Signer Name</label>
-                <input className={styles.input} value={certSigner} onChange={e => { setCertSigner(e.target.value); if (examId) autoPersist() }} placeholder="e.g. Dr. Jane Doe" />
+                <label className={styles.label} htmlFor="wizard-certificate-signer">Signer Name</label>
+                <input id="wizard-certificate-signer" className={styles.input} value={certSigner} onChange={e => { setCertSigner(e.target.value); if (examId) autoPersist() }} placeholder="e.g. Dr. Jane Doe" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Certificate Body Text</label>
-                <textarea className={styles.textarea} rows={3} value={certDescription} onChange={e => { setCertDescription(e.target.value); if (examId) autoPersist() }} />
+                <label className={styles.label} htmlFor="wizard-certificate-description">Certificate Body Text</label>
+                <textarea id="wizard-certificate-description" className={styles.textarea} rows={3} value={certDescription} onChange={e => { setCertDescription(e.target.value); if (examId) autoPersist() }} />
               </div>
               <div className={styles.certPreview}>
                 <div className={styles.certPreviewLabel}>{certTemplate} - {certOrientation}</div>
@@ -2298,7 +2339,7 @@ export default function AdminNewTestWizard() {
               <div key={section.key} className={styles.reviewCard}>
                 <div className={styles.reviewCardHeader}>
                   <div className={styles.reviewCardTitle}>{section.title}</div>
-                  <button type="button" className={styles.reviewEditBtn} onClick={() => setStep(section.editStep)}>
+                  <button type="button" className={styles.reviewEditBtn} onClick={() => goToStep(section.editStep)}>
                     Edit Step {section.editStep + 1}
                   </button>
                 </div>
@@ -2328,15 +2369,15 @@ export default function AdminNewTestWizard() {
             <>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Access Mode</label>
-                  <select className={styles.select} value={accessMode} onChange={e => setAccessMode(e.target.value)}>
+                  <label className={styles.label} htmlFor="wizard-access-mode">Access Mode</label>
+                  <select id="wizard-access-mode" className={styles.select} value={accessMode} onChange={e => setAccessMode(e.target.value)}>
                     <option value="OPEN">Open (anytime)</option>
                     <option value="RESTRICTED">Restricted (by schedule)</option>
                   </select>
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Scheduled Date & Time</label>
-                  <input className={styles.input} type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
+                  <label className={styles.label} htmlFor="wizard-scheduled-at">Scheduled Date & Time</label>
+                  <input id="wizard-scheduled-at" className={styles.input} type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
                 </div>
               </div>
               {sessionRequiresSchedule && !scheduledAt && (
@@ -2382,7 +2423,8 @@ export default function AdminNewTestWizard() {
                 </div>
                 {bulkLearnerFeedback && <div className={styles.bulkSelectionMessage}>{bulkLearnerFeedback}</div>}
               </div>
-              <input className={styles.userSearch} placeholder="Search learners..." value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+              <label className={styles.label} htmlFor="wizard-learner-search">Search learners</label>
+              <input id="wizard-learner-search" className={styles.userSearch} placeholder="Search learners..." value={userSearch} onChange={e => setUserSearch(e.target.value)} />
               <div className={styles.userList}>
                 {filteredUsers.map(u => (
                   <label key={u.id} className={styles.userItem}>
@@ -2473,7 +2515,7 @@ export default function AdminNewTestWizard() {
           <div
             key={s.id}
             className={`${styles.step} ${s.id === step ? styles.stepActive : ''} ${s.id < step ? styles.stepCompleted : ''}`}
-            onClick={() => s.id <= step && setStep(s.id)}
+            onClick={() => s.id <= step && goToStep(s.id)}
           >
             <span className={`${styles.stepNum} ${s.id === step ? styles.stepNumActive : ''} ${s.id < step ? styles.stepNumCompleted : ''}`}>
               {s.id < step ? 'OK' : s.id + 1}
@@ -2510,7 +2552,7 @@ export default function AdminNewTestWizard() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            transition={{ duration: stepTransitionDuration, ease: 'easeOut' }}
           >
             {renderStep()}
           </motion.div>
@@ -2519,7 +2561,11 @@ export default function AdminNewTestWizard() {
 
       {/* Actions */}
       <div className={styles.actions}>
-        <button className={styles.btnBack} onClick={() => setStep(s => s - 1)} disabled={step === 0}>
+        <button
+          className={styles.btnBack}
+          onClick={() => startTransition(() => setStep((current) => current - 1))}
+          disabled={step === 0}
+        >
           Back
         </button>
         {step < STEPS.length - 1 ? (

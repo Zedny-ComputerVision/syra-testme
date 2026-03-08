@@ -48,6 +48,8 @@ describe('AdminCustomReports page', () => {
     render(<AdminCustomReports />)
 
     await waitFor(() => expect(screen.getByText('Physics')).toBeTruthy())
+    expect(screen.getByLabelText('Dataset')).toBeTruthy()
+    expect(screen.getByLabelText('Search')).toBeTruthy()
     expect(previewCustomReport).toHaveBeenCalledWith({
       dataset: 'attempts',
       columns: ['id', 'test_title', 'user_name', 'status', 'score', 'started_at', 'submitted_at'],

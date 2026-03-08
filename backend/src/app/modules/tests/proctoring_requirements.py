@@ -75,7 +75,7 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
 
     camera_required = _read_optional_flag(cfg, "camera_required", "require_camera", "camera_enforce")
     mic_required = _read_optional_flag(cfg, "mic_required", "microphone_required", "require_microphone")
-    fullscreen_required = _read_optional_flag(cfg, "fullscreen_required", "fullscreen_enforce", "require_fullscreen")
+    fullscreen_required = _read_optional_flag(cfg, "fullscreen_enforce", "fullscreen_required", "require_fullscreen")
     lighting_required = _read_optional_flag(cfg, "lighting_required", "require_lighting_check")
 
     face_detection = _read_optional_flag(cfg, "face_detection", "multi_face")

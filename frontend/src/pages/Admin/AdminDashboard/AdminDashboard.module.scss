@@ -1,13 +1,20 @@
-.page { padding: 1.5rem; }
+.page {
+  padding: 1.5rem;
+}
 
-.loading { text-align: center; padding: 3rem; color: var(--color-muted); }
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--color-muted);
+}
 
+/* ---- Buttons ---- */
 .refreshButton,
 .alertButton,
 .linkButton {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
 
   &:disabled {
     cursor: not-allowed;
@@ -21,16 +28,24 @@
   color: var(--color-text);
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  }
 }
 
+/* ---- Alerts ---- */
 .alert {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.65rem 1rem;
+  padding: 0.75rem 1rem;
   margin-bottom: 1rem;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   font-size: 0.85rem;
 }
@@ -53,8 +68,12 @@
   color: inherit;
   padding: 0.35rem 0.75rem;
   white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
 }
 
+/* ---- KPI Grid ---- */
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -67,75 +86,90 @@
   align-items: center;
   gap: 1rem;
   padding: 1.1rem 1.25rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-success-bg);
+    transform: translateY(-3px);
+    box-shadow: var(--card-shadow-hover);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--card-border));
+  }
+
+  &:active {
+    transform: translateY(-1px);
   }
 }
 
 .kpiIcon {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
   flex-shrink: 0;
 }
 
 .kpiIconBlue {
-  background: var(--color-info-bg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-info) 18%, transparent), var(--color-info-bg));
   color: var(--color-info-text);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-info) 20%, transparent);
 }
 
 .kpiIconGreen {
-  background: var(--color-success-bg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 18%, transparent), var(--color-success-bg));
   color: var(--color-success-text);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-success) 20%, transparent);
 }
 
 .kpiIconRed {
-  background: var(--color-danger-bg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-danger) 18%, transparent), var(--color-danger-bg));
   color: var(--color-danger-text);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-danger) 20%, transparent);
 }
 
 .kpiIconViolet {
-  background: var(--color-accent-bg);
-  color: var(--color-accent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 18%, transparent), color-mix(in srgb, var(--color-primary) 8%, transparent));
+  color: var(--color-primary);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .kpiIconAmber {
-  background: var(--color-warning-bg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-warning) 18%, transparent), var(--color-warning-bg));
   color: var(--color-warning-text);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-warning) 20%, transparent);
 }
 
 .kpiIconCyan {
-  background: var(--color-cyan-bg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-cyan) 18%, transparent), var(--color-cyan-bg));
   color: var(--color-cyan);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-cyan) 20%, transparent);
 }
 
 .kpiValue {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 800;
   color: var(--color-text);
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .kpiLabel {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--color-muted);
-  margin-top: 0.2rem;
+  margin-top: 0.25rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  font-weight: 600;
 }
 
+/* ---- Tables Row ---- */
 .tablesRow {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -143,13 +177,17 @@
 }
 
 @media (max-width: 760px) {
-  .tablesRow { grid-template-columns: 1fr; }
+  .tablesRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 .tableCard {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
   overflow: hidden;
 }
 
@@ -159,6 +197,7 @@
   justify-content: space-between;
   padding: 0.85rem 1rem;
   border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-border) 14%, transparent);
 }
 
 .tableCardTitle {
@@ -174,11 +213,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--color-border) 50%, transparent);
-  color: var(--color-muted);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
   font-size: 0.7rem;
   font-weight: 700;
-  padding: 0.1rem 0.45rem;
+  padding: 0.12rem 0.5rem;
   border-radius: 999px;
 }
 
@@ -191,9 +230,15 @@
   cursor: pointer;
   white-space: nowrap;
   padding: 0;
-  &:hover { text-decoration: underline; }
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 0.75;
+    text-decoration: underline;
+  }
 }
 
+/* ---- Table ---- */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -205,21 +250,78 @@
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--color-muted);
   border-bottom: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-border) 35%, transparent);
+  background: color-mix(in srgb, var(--color-border) 22%, transparent);
 }
 
 .table td {
-  padding: 0.6rem 1rem;
+  padding: 0.65rem 1rem;
   font-size: 0.85rem;
   color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
 }
 
-.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr {
+  transition: background 0.12s ease;
 
-.empty { text-align: center; padding: 2rem; color: var(--color-muted); font-size: 0.85rem; }
+  &:hover td {
+    background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  }
+
+  &:last-child td {
+    border-bottom: none;
+  }
+}
+
+.empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+/* ---- Status chips in table ---- */
+.statusChip,
+.statusSUBMITTED,
+.statusGRADED,
+.statusIN_PROGRESS,
+.statusABANDONED {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.statusSUBMITTED {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.statusGRADED {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.statusIN_PROGRESS {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.statusABANDONED {
+  background: color-mix(in srgb, var(--color-border) 50%, transparent);
+  color: var(--color-muted);
+}
+
+.statusChip {
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
+  color: var(--color-muted);
+}
 
 .integrityScore {
   color: var(--color-danger-text);
@@ -232,7 +334,12 @@
   color: var(--color-primary);
   padding: 0;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 700;
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 0.75;
+  }
 }
 
 .mutedCell {

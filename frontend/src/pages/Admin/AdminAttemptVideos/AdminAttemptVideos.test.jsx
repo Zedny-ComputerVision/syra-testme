@@ -75,6 +75,41 @@ describe('AdminAttemptVideos supervision mode', () => {
     await waitFor(() => expect(screen.getByText('No video recordings are saved yet for this attempt.')).toBeTruthy())
   })
 
+  it('keeps video playback available when warning events fail to load', async () => {
+    getAttemptMock.mockResolvedValue({
+      data: {
+        id: 'attempt-7',
+        status: 'SUBMITTED',
+        started_at: '2026-03-07T10:00:00Z',
+        user_name: 'Learner One',
+        test_title: 'Core Cycle Test',
+      },
+    })
+    listAttemptVideosMock.mockResolvedValue({
+      data: [{
+        name: 'attempt-7.webm',
+        url: '/videos/attempt-7.webm',
+        created_at: '2026-03-07T10:05:00Z',
+      }],
+    })
+    getAttemptEventsMock.mockRejectedValue(new Error('events unavailable'))
+
+    render(
+      <MemoryRouter
+        initialEntries={['/admin/videos/attempt-7']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/admin/videos/:attemptId" element={<AdminAttemptVideos />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Warning events could not be loaded. Video playback remains available.')).toBeTruthy())
+    expect(screen.getByRole('link', { name: 'Open file' })).toBeTruthy()
+    expect(screen.getByText('Warnings')).toBeTruthy()
+  })
+
   it('filters the flagged event list by severity', async () => {
     getAttemptMock.mockResolvedValue({
       data: {

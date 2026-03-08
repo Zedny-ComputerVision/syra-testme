@@ -21,6 +21,7 @@
   letter-spacing: 0.04em;
 }
 
+/* ---- Status Dot ---- */
 .dot {
   width: 10px;
   height: 10px;
@@ -28,17 +29,40 @@
   display: inline-block;
 }
 
-.connected { background: var(--color-success); }
-.disconnected { background: var(--color-warning); }
-.closed { background: var(--color-danger); }
+.connected {
+  background: var(--color-success);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 40%, transparent);
+  animation: statusPulse 2s ease-in-out infinite;
+}
 
+.disconnected {
+  background: var(--color-warning);
+}
+
+.closed {
+  background: var(--color-danger);
+}
+
+@keyframes statusPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 40%, transparent);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-success) 0%, transparent);
+    transform: scale(1.2);
+  }
+}
+
+/* ---- Video ---- */
 .videoWrap {
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow: hidden;
   background: #000;
   aspect-ratio: 4 / 3;
   border: 1px solid var(--color-border);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent),
+              0 12px 28px rgba(0, 0, 0, 0.25);
 }
 
 .video {
@@ -64,6 +88,7 @@
   text-align: center;
 }
 
+/* ---- Alerts ---- */
 .alerts {
   display: flex;
   flex-direction: column;
@@ -81,27 +106,46 @@
   letter-spacing: 0.04em;
 }
 
+@keyframes alertSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .alert {
-  padding: 0.5rem 0.65rem;
-  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
   font-size: 0.78rem;
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-border);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  animation: alertSlideIn 0.25s ease;
 }
 
 .alertHIGH {
+  border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
   border-left-color: var(--color-danger);
-  background: var(--color-danger-bg);
+  background: linear-gradient(135deg, var(--color-danger-bg), color-mix(in srgb, var(--color-danger-bg) 70%, transparent));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-danger) 15%, transparent);
 }
 
 .alertMEDIUM {
+  border-color: color-mix(in srgb, var(--color-warning) 40%, var(--color-border));
   border-left-color: var(--color-warning);
-  background: var(--color-warning-bg);
+  background: linear-gradient(135deg, var(--color-warning-bg), color-mix(in srgb, var(--color-warning-bg) 70%, transparent));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
 .alertLOW {
+  border-color: color-mix(in srgb, var(--color-info) 40%, var(--color-border));
   border-left-color: var(--color-info);
-  background: var(--color-info-bg);
+  background: linear-gradient(135deg, var(--color-info-bg), color-mix(in srgb, var(--color-info-bg) 70%, transparent));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-info) 10%, transparent);
 }

@@ -46,6 +46,8 @@ describe('AdminSurveys instructor permissions', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Program Feedback')).toBeTruthy())
+    expect(screen.getByLabelText('Title')).toBeTruthy()
+    expect(screen.getByLabelText('Description')).toBeTruthy()
     expect(screen.getByText('Read-only — only the owner or an admin can edit.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Responses' })).toBeNull()

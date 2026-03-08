@@ -65,7 +65,7 @@ export function getJourneyRequirements(rawConfig) {
 
   let cameraRequired = readOptionalFlag(cfg, ['camera_required', 'require_camera', 'camera_enforce'])
   let micRequired = readOptionalFlag(cfg, ['mic_required', 'microphone_required', 'require_microphone'])
-  let fullscreenRequired = readOptionalFlag(cfg, ['fullscreen_required', 'fullscreen_enforce', 'require_fullscreen'])
+  let fullscreenRequired = readOptionalFlag(cfg, ['fullscreen_enforce', 'fullscreen_required', 'require_fullscreen'])
   let lightingRequired = readOptionalFlag(cfg, ['lighting_required', 'require_lighting_check'])
   let identityRequired = readOptionalFlag(cfg, [
     'identity_required',

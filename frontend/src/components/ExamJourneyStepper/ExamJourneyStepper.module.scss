@@ -1,4 +1,81 @@
-.stepper { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.item, .active { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.6rem; border-radius: 999px; background: color-mix(in srgb, var(--color-text) 6%, transparent); }
-.active { background: var(--color-primary); color: var(--color-button-text); }
-.index { width: 20px; height: 20px; border-radius: 50%; background: color-mix(in srgb, var(--color-text) 12%, transparent); display: grid; place-items: center; font-size: 12px; }
+.stepper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  gap: 0;
+  overflow: auto;
+}
+
+.item,
+.active,
+.done {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 500;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+}
+
+.item {
+  background: color-mix(in srgb, var(--color-border) 50%, transparent);
+  color: var(--color-muted);
+  opacity: 0.7;
+}
+
+.done {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.active {
+  background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent)));
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent),
+              0 4px 14px color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.index {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.item .index,
+.done .index {
+  background: color-mix(in srgb, var(--color-border) 60%, transparent);
+}
+
+.done .index {
+  background: color-mix(in srgb, var(--color-success) 25%, transparent);
+  color: var(--color-success-text);
+}
+
+.connector {
+  flex: 1;
+  height: 2px;
+  min-width: 10px;
+  max-width: 48px;
+  border-radius: 999px;
+  background: var(--color-border);
+  flex-shrink: 1;
+  transition: background 0.3s ease;
+}
+
+.connectorFilled {
+  background: linear-gradient(90deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 60%, var(--color-border)));
+}

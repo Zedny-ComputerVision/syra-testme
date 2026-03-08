@@ -5,6 +5,21 @@ import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import styles from './AdminDashboard.module.scss'
 
+const KpiSvg = ({ d, size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d={d} />
+  </svg>
+)
+
+const ICONS = {
+  users:      'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
+  learner:    'M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z',
+  admin:      'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z',
+  tests:      'M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z',
+  published:  'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
+  attempts:   'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z',
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState({ users: [], exams: [], attempts: [], dashboard: {} })
@@ -104,12 +119,12 @@ export default function AdminDashboard() {
   }
 
   const KPI_CARDS = [
-    { label: 'Total Users', value: totalUsers, icon: 'USR', tone: 'blue', to: '/admin/users' },
-    { label: 'Candidates', value: totalLearners, icon: 'LRN', tone: 'green', to: '/admin/candidates' },
-    { label: 'Admins', value: totalAdmins, icon: 'ADM', tone: 'red', to: '/admin/users' },
-    { label: 'Total Tests', value: totalExams, icon: 'TST', tone: 'violet', to: '/admin/tests' },
-    { label: 'Published Tests', value: activeExams, icon: 'PUB', tone: 'amber', to: '/admin/tests' },
-    { label: 'Total Attempts', value: totalAttempts, icon: 'ATT', tone: 'cyan', to: '/admin/attempt-analysis' },
+    { label: 'Total Users',     value: totalUsers,    iconKey: 'users',     tone: 'Blue',   to: '/admin/users' },
+    { label: 'Candidates',      value: totalLearners, iconKey: 'learner',   tone: 'Green',  to: '/admin/candidates' },
+    { label: 'Admins',          value: totalAdmins,   iconKey: 'admin',     tone: 'Red',    to: '/admin/users' },
+    { label: 'Total Tests',     value: totalExams,    iconKey: 'tests',     tone: 'Violet', to: '/admin/tests' },
+    { label: 'Published Tests', value: activeExams,   iconKey: 'published', tone: 'Amber',  to: '/admin/tests' },
+    { label: 'Total Attempts',  value: totalAttempts, iconKey: 'attempts',  tone: 'Cyan',   to: '/admin/attempt-analysis' },
   ]
 
   if (loading && !hasAnyData) return <div className={styles.loading}>Loading dashboard...</div>
@@ -123,9 +138,10 @@ export default function AdminDashboard() {
           onClick={handleRefresh}
           disabled={loading || refreshing}
         >
-          {refreshing ? 'Refreshing...' : 'Refresh'}
+          {refreshing ? 'Refreshing…' : 'Refresh'}
         </button>
       </AdminPageHeader>
+
       {error && (
         <div className={`${styles.alert} ${styles.alertError}`}>
           <span>{error}</span>
@@ -145,8 +161,15 @@ export default function AdminDashboard() {
 
       <div className={styles.kpiGrid}>
         {KPI_CARDS.map((card) => (
-          <button key={card.label} type="button" className={styles.kpiCard} onClick={() => navigate(card.to)}>
-            <div className={`${styles.kpiIcon} ${styles[`kpiIcon${card.tone[0].toUpperCase()}${card.tone.slice(1)}`]}`}>{card.icon}</div>
+          <button
+            key={card.label}
+            type="button"
+            className={styles.kpiCard}
+            onClick={() => navigate(card.to)}
+          >
+            <div className={`${styles.kpiIcon} ${styles[`kpiIcon${card.tone}`]}`}>
+              <KpiSvg d={ICONS[card.iconKey]} size={22} />
+            </div>
             <div>
               <div className={styles.kpiValue}>{card.value}</div>
               <div className={styles.kpiLabel}>{card.label}</div>
@@ -166,11 +189,17 @@ export default function AdminDashboard() {
             </button>
           </div>
           {riskyAttempts.length === 0 ? (
-            <div className={styles.empty}>No risky attempts.</div>
+            <div className={styles.empty}>No risky attempts detected.</div>
           ) : (
             <table className={styles.table}>
               <thead>
-                <tr><th>Test</th><th>User</th><th>Integrity</th><th>Status</th><th></th></tr>
+                <tr>
+                  <th>Test</th>
+                  <th>User</th>
+                  <th>Integrity</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {riskyAttempts.slice(0, 10).map((attempt) => (
@@ -182,14 +211,18 @@ export default function AdminDashboard() {
                         {Math.max(0, 100 - (attempt.high_violations || 0) * 18 - (attempt.med_violations || 0) * 9)}%
                       </span>
                     </td>
-                    <td>{attempt.status}</td>
+                    <td>
+                      <span className={styles[`status${attempt.status}`] || styles.statusChip}>
+                        {attempt.status}
+                      </span>
+                    </td>
                     <td>
                       <button
                         type="button"
                         className={styles.linkButton}
                         onClick={() => navigate(`/admin/attempt-analysis?id=${attempt.id}`)}
                       >
-                        Analyze
+                        Analyze →
                       </button>
                     </td>
                   </tr>
@@ -213,7 +246,11 @@ export default function AdminDashboard() {
           ) : (
             <table className={styles.table}>
               <thead>
-                <tr><th>Action</th><th>Resource</th><th>Time</th></tr>
+                <tr>
+                  <th>Action</th>
+                  <th>Resource</th>
+                  <th>Time</th>
+                </tr>
               </thead>
               <tbody>
                 {auditLog.slice(0, 10).map((log, index) => (

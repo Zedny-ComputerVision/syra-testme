@@ -1,6 +1,6 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AdminSchedules from './AdminSchedules'
 
@@ -30,21 +30,44 @@ describe('AdminSchedules', () => {
     })
   })
 
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('keeps existing schedules visible when lookup data fails and disables new assignments', async () => {
+    schedulesMock.mockResolvedValueOnce({
+      data: [{
+        id: 'schedule-1',
+        user_name: 'Learner One',
+        test_title: 'Physics Quiz',
+        scheduled_at: '2026-03-08T09:30:00Z',
+        access_mode: 'OPEN',
+        notes: 'Morning lab',
+      }],
+    })
+    allTestsMock.mockRejectedValueOnce(new Error('tests unavailable'))
+    usersMock.mockRejectedValueOnce(new Error('users unavailable'))
+
+    render(<AdminSchedules />)
+
+    await waitFor(() => expect(screen.getByText('Learner One')).toBeTruthy())
+    expect(screen.getByText('Some assignment lookup data could not be loaded. Existing schedules remain visible, but assigning new schedules is temporarily disabled.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '+ Assign' }).disabled).toBe(true)
+  })
+
   it('keeps the assign action disabled until a scheduled time is provided', async () => {
     render(<AdminSchedules />)
 
     await waitFor(() => expect(screen.getByText('No schedules yet.')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: '+ Assign' }))
 
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[0], { target: { value: 'user-1' } })
-    fireEvent.change(selects[1], { target: { value: 'test-1' } })
+    fireEvent.change(screen.getByLabelText('User'), { target: { value: 'user-1' } })
+    fireEvent.change(screen.getByLabelText('Test'), { target: { value: 'test-1' } })
 
     const assignButton = screen.getByRole('button', { name: 'Assign' })
     expect(assignButton.disabled).toBe(true)
 
-    const scheduledInput = document.querySelector('input[type="datetime-local"]')
-    fireEvent.change(scheduledInput, { target: { value: '2026-03-08T09:30' } })
+    fireEvent.change(screen.getByLabelText('Scheduled At'), { target: { value: '2026-03-08T09:30' } })
     expect(screen.getByRole('button', { name: 'Assign' }).disabled).toBe(false)
   })
 

@@ -68,7 +68,7 @@ vi.mock('../../services/proctoring.service', () => ({
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/attempts/attempt-1/take']}>
+    <MemoryRouter initialEntries={['/attempts/attempt-1/take']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/attempts/:attemptId/take" element={<Proctoring />} />
       </Routes>

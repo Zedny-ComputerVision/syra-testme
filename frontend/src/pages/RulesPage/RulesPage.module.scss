@@ -5,11 +5,13 @@
 }
 
 .card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
   padding: 2rem;
   margin-top: 1.5rem;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
 }
 
 .title {
@@ -72,10 +74,18 @@
 }
 
 .summaryCard {
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--color-border) 16%, transparent);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
   padding: 0.8rem 0.9rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--card-shadow-hover);
+  }
 }
 
 .summaryLabel {
@@ -165,15 +175,17 @@
   padding: 0.85rem;
   border: none;
   border-radius: 10px;
-  background: var(--color-primary);
-  color: var(--color-button-text);
+  background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent)));
+  color: #ffffff;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
 
   &:hover:not(:disabled) {
     opacity: 0.9;
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--color-primary) 45%, transparent);
   }
 
   &:active:not(:disabled) {
@@ -183,6 +195,7 @@
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+    box-shadow: none;
   }
 }
 

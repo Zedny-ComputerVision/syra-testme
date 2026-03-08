@@ -38,9 +38,9 @@ describe('AdminGradingScales', () => {
     await waitFor(() => expect(screen.getByText('No grading scales yet.')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: '+ New Scale' }))
-    fireEvent.change(screen.getByPlaceholderText('e.g. Standard Letter Grade'), { target: { value: 'Standard Letter' } })
-    fireEvent.change(screen.getAllByPlaceholderText('Min')[0], { target: { value: '95' } })
-    fireEvent.change(screen.getAllByPlaceholderText('Max')[0], { target: { value: '90' } })
+    fireEvent.change(screen.getByLabelText('Scale Name'), { target: { value: 'Standard Letter' } })
+    fireEvent.change(screen.getByLabelText('Band 1 minimum score'), { target: { value: '95' } })
+    fireEvent.change(screen.getByLabelText('Band 1 maximum score'), { target: { value: '90' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(screen.getByText('Band minimum scores cannot exceed the maximum.')).toBeTruthy())
@@ -53,8 +53,8 @@ describe('AdminGradingScales', () => {
     await waitFor(() => expect(screen.getByText('No grading scales yet.')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: '+ New Scale' }))
-    fireEvent.change(screen.getByPlaceholderText('e.g. Standard Letter Grade'), { target: { value: 'Standard Letter' } })
-    fireEvent.change(screen.getAllByPlaceholderText('Max')[1], { target: { value: '95' } })
+    fireEvent.change(screen.getByLabelText('Scale Name'), { target: { value: 'Standard Letter' } })
+    fireEvent.change(screen.getByLabelText('Band 2 maximum score'), { target: { value: '95' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(screen.getByText('Grade bands cannot overlap.')).toBeTruthy())
@@ -78,7 +78,7 @@ describe('AdminGradingScales', () => {
 
     await waitFor(() => expect(screen.getByText('Standard Letter')).toBeTruthy())
 
-    fireEvent.change(screen.getByPlaceholderText('Search scales...'), {
+    fireEvent.change(screen.getByLabelText('Search scales'), {
       target: { value: 'custom' },
     })
 

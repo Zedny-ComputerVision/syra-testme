@@ -231,14 +231,16 @@ export default function QuestionPoolDetail() {
       {!loading && editingPool && pool && (
         <div className={styles.card}>
           <div className={styles.sectionTitle}>Pool Details</div>
-          <label className={styles.label}>Name</label>
+          <label className={styles.label} htmlFor="pool-detail-name">Name</label>
           <input
+            id="pool-detail-name"
             className={styles.input}
             value={poolForm.name}
             onChange={(event) => setPoolForm((current) => ({ ...current, name: event.target.value }))}
           />
-          <label className={styles.label}>Description</label>
+          <label className={styles.label} htmlFor="pool-detail-description">Description</label>
           <textarea
+            id="pool-detail-description"
             className={styles.textarea}
             rows={3}
             value={poolForm.description}
@@ -257,11 +259,12 @@ export default function QuestionPoolDetail() {
         <div className={styles.card}>
           <div className={styles.sectionTitle}>{editingId ? 'Edit Question' : 'New Question'}</div>
           <form onSubmit={handleSubmit}>
-            <label className={styles.label}>Question Text</label>
-            <textarea className={styles.textarea} rows={3} value={form.text} onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))} required />
+            <label className={styles.label} htmlFor="pool-question-text">Question Text</label>
+            <textarea id="pool-question-text" className={styles.textarea} rows={3} value={form.text} onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))} required />
 
-            <label className={styles.label}>Type</label>
+            <label className={styles.label} htmlFor="pool-question-type">Type</label>
             <select
+              id="pool-question-type"
               className={styles.select}
               value={form.question_type}
               onChange={(event) => setForm((current) => ({
@@ -276,19 +279,19 @@ export default function QuestionPoolDetail() {
 
             {form.question_type === 'MCQ' && (
               <>
-                <label className={styles.label}>Options</label>
+                <label className={styles.label} htmlFor="pool-question-option-0">Options</label>
                 {(form.options || []).map((option, index) => (
-                  <input key={index} className={styles.input} placeholder={`Option ${index + 1}`} value={option} onChange={(event) => setOption(index, event.target.value)} />
+                  <input key={index} id={`pool-question-option-${index}`} className={styles.input} placeholder={`Option ${index + 1}`} value={option} onChange={(event) => setOption(index, event.target.value)} />
                 ))}
-                <label className={styles.label}>Correct Answer</label>
-                <input className={styles.input} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))} placeholder="Must match one option exactly" />
+                <label className={styles.label} htmlFor="pool-question-correct-answer">Correct Answer</label>
+                <input id="pool-question-correct-answer" className={styles.input} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))} placeholder="Must match one option exactly" />
               </>
             )}
 
             {form.question_type === 'TRUEFALSE' && (
               <>
-                <label className={styles.label}>Correct Answer</label>
-                <select className={styles.select} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))}>
+                <label className={styles.label} htmlFor="pool-question-boolean-answer">Correct Answer</label>
+                <select id="pool-question-boolean-answer" className={styles.select} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))}>
                   <option value="">Select...</option>
                   <option value="True">True</option>
                   <option value="False">False</option>
@@ -298,8 +301,8 @@ export default function QuestionPoolDetail() {
 
             {form.question_type === 'TEXT' && (
               <>
-                <label className={styles.label}>Expected Answer</label>
-                <input className={styles.input} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))} />
+                <label className={styles.label} htmlFor="pool-question-expected-answer">Expected Answer</label>
+                <input id="pool-question-expected-answer" className={styles.input} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))} />
               </>
             )}
 

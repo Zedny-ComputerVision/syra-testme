@@ -24,7 +24,7 @@ vi.mock('../../services/auth.service', () => ({
 
 function renderWithRouter(ui, initialEntry = '/') {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter initialEntries={[initialEntry]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="*" element={ui} />
       </Routes>
