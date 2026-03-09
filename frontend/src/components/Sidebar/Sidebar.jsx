@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import useAuth from '../../hooks/useAuth'
+import PrefetchLink from '../common/PrefetchLink/PrefetchLink'
 import styles from './Sidebar.module.scss'
 
 /* ─── Icons (SVG inline for zero-dependency) ─── */
@@ -39,10 +40,10 @@ const ICONS = {
 
 function NavLink({ to, icon, label, active }) {
   return (
-    <Link to={to} className={`${styles.link} ${active ? styles.active : ''}`}>
+    <PrefetchLink to={to} className={`${styles.link} ${active ? styles.active : ''}`}>
       <span className={styles.linkIcon}><Icon d={ICONS[icon] || ICONS.home} /></span>
       <span className={styles.linkLabel}>{label}</span>
-    </Link>
+    </PrefetchLink>
   )
 }
 
@@ -50,7 +51,13 @@ function Section({ label, icon, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className={styles.section}>
-      <button type="button" className={styles.sectionHeader} onClick={() => setOpen(o => !o)}>
+      <button
+        type="button"
+        className={styles.sectionHeader}
+        aria-expanded={open}
+        aria-label={`${open ? 'Collapse' : 'Expand'} ${label} section`}
+        onClick={() => setOpen(o => !o)}
+      >
         <span className={styles.sectionLabel}>{label}</span>
         <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}>
           <Icon d={ICONS.chevron} size={14} />
@@ -81,6 +88,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
   const isAdmin = role === 'ADMIN'
   const isInstructor = role === 'INSTRUCTOR'
   const isSuperAdmin = role === 'ADMIN'
+  const roleLabel = isAdmin ? 'Admin workspace' : isInstructor ? 'Instructor workspace' : 'Learner workspace'
   const dashboardPath = isAdmin ? '/admin/dashboard' : '/'
   const canViewDashboard = hasPermission?.('View Dashboard')
   const canTakeTests = hasPermission?.('Take Tests')
@@ -101,7 +109,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
   useEffect(() => {
     if (mobileOpen && onClose) onClose()
-  }, [location.pathname])
+  }, [location.pathname, mobileOpen, onClose])
 
   function isActive(path) {
     if (path === '/') return location.pathname === '/'
@@ -134,10 +142,15 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
       >
         {/* Brand */}
         <div className={styles.brand}>
-          <Link to="/" className={styles.brandLink}>
+          <PrefetchLink to="/" className={styles.brandLink}>
             <span className={styles.brandLogo}>S</span>
-            <span className={styles.brandText}>SYRA LMS</span>
-          </Link>
+            <span className={styles.brandTextWrap}>
+              <span className={styles.brandKicker}>Assessment platform</span>
+              <span className={styles.brandText}>SYRA LMS</span>
+              <span className={styles.brandSub}>Secure testing, learner progress, and operational control in one place.</span>
+              <span className={styles.rolePill}>{roleLabel}</span>
+            </span>
+          </PrefetchLink>
         </div>
 
         <nav className={styles.nav}>
@@ -166,7 +179,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
                 to="/admin/tests"
                 icon="manageTests"
                 label="Manage Tests"
-                active={location.pathname.startsWith('/admin/tests') || location.pathname.startsWith('/admin/exams')}
+                active={isActive('/admin/tests') || isActive('/admin/exams')}
               />}
               {canEditSupportingTests && <NavLink to="/admin/templates" icon="templates" label="Test Templates" active={isActive('/admin/templates')} />}
               {canManageQuestionPools && <NavLink to="/admin/question-pools" icon="pools" label="Question Pools" active={isActive('/admin/question-pools')} />}
@@ -218,7 +231,11 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <span className={styles.version}>SYRA LMS v1.0</span>
+          <div className={styles.versionRow}>
+            <span className={styles.statusDot} aria-hidden="true" />
+            <span className={styles.version}>SYRA LMS v1.0</span>
+          </div>
+          <span className={styles.footerMeta}>Secure assessment workspace</span>
         </div>
       </motion.aside>
     </>

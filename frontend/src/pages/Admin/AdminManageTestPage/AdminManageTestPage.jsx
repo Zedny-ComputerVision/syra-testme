@@ -1,8 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import useUnsavedChanges from '../../../hooks/useUnsavedChanges'
 import { adminApi } from '../../../services/admin.service'
 import { readBlobErrorMessage } from '../../../utils/httpErrors'
 import { normalizeProctoringConfig } from '../../../utils/proctoringRequirements'
+import { readPaginatedItems } from '../../../utils/pagination'
+import AdministrationTab from './tabs/AdministrationTab'
+import CandidatesTab from './tabs/CandidatesTab'
+import ProctoringTab from './tabs/ProctoringTab'
+import QuestionsTab from './tabs/QuestionsTab'
+import ReportsTab from './tabs/ReportsTab'
+import SessionsTab from './tabs/SessionsTab'
+import SettingsTab from './tabs/SettingsTab'
 import styles from './AdminManageTestPage.module.scss'
 
 const TABS = [
@@ -184,6 +193,17 @@ const EMPTY_COUPON_GENERATOR = {
   discount_type: 'percentage',
   amount: '10',
   expiration_time: '',
+}
+
+const EMPTY_COUPON_FILTERS = {
+  code: '',
+  discount_type: '',
+  amount: '',
+  status: '',
+  expiration_time: '',
+  used_by: '',
+  date_of_use: '',
+  created_by: '',
 }
 
 const EMPTY_CATEGORY_DRAFT = {
@@ -616,6 +636,7 @@ export default function AdminManageTestPage() {
     allow_section_selection: false,
   })
   const settingsFormRef = useRef(settingsForm)
+  const settingsBaselineRef = useRef(JSON.stringify(settingsForm))
   const setSettingsForm = useCallback((updater) => {
     setSettingsFormState((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater
@@ -623,6 +644,7 @@ export default function AdminManageTestPage() {
       return next
     })
   }, [])
+  const serializeSettingsForm = useCallback((form) => JSON.stringify(form), [])
 
   const [editingAccomId, setEditingAccomId] = useState(null)
   const [editingAccomForm, setEditingAccomForm] = useState({ access_mode: 'OPEN', notes: '', scheduled_at: '' })
@@ -642,6 +664,7 @@ export default function AdminManageTestPage() {
   const [attachmentImportError, setAttachmentImportError] = useState('')
   const [showAttachmentImporter, setShowAttachmentImporter] = useState(false)
   const [couponGenerator, setCouponGenerator] = useState(EMPTY_COUPON_GENERATOR)
+  const [couponFilters, setCouponFilters] = useState(EMPTY_COUPON_FILTERS)
   const [couponError, setCouponError] = useState('')
   const [showCouponGenerator, setShowCouponGenerator] = useState(false)
   const [certificateView, setCertificateView] = useState('detail')
@@ -683,9 +706,6 @@ export default function AdminManageTestPage() {
     if (!TABS.some((item) => item.id === nextTab)) return
     const resolvedSection = SETTINGS_SECTION_IDS.includes(nextSection) ? nextSection : DEFAULT_SETTINGS_SECTION
     setTab(nextTab)
-    if (nextTab === 'settings') {
-      setSettingsSection(resolvedSection)
-    }
     const params = new URLSearchParams(location.search)
     if (nextTab === 'settings') params.delete('tab')
     else params.set('tab', nextTab)
@@ -714,7 +734,7 @@ export default function AdminManageTestPage() {
     const externalAttributes = s?.external_attributes && typeof s.external_attributes === 'object' && !Array.isArray(s.external_attributes)
       ? s.external_attributes
       : null
-    setSettingsForm({
+    const nextForm = {
       title: ex?.title || '',
       description: ex?.description || '',
       code: ex?.code || '',
@@ -806,7 +826,9 @@ export default function AdminManageTestPage() {
       creation_type: s?.creation_type || 'Test with sections',
       section_count: s?.section_count != null ? String(s.section_count) : String(ex?.question_count ?? 0),
       allow_section_selection: Boolean(s?.allow_section_selection),
-    })
+    }
+    setSettingsForm(nextForm)
+    settingsBaselineRef.current = serializeSettingsForm(nextForm)
     setShowCategoryPicker(false)
     setCategoryDraft(EMPTY_CATEGORY_DRAFT)
     setCategoryError('')
@@ -845,23 +867,25 @@ export default function AdminManageTestPage() {
       const [{ data: ex }, { data: testData }, { data: attempts }, { data: scheds }, { data: usersData }, { data: questionsData }, { data: catsData }] = await Promise.all([
         adminApi.getTestRuntime(id),
         adminApi.getTest(id),
-        adminApi.attempts(),
+        adminApi.attempts({ exam_id: id, skip: 0, limit: 200 }),
         adminApi.schedules(),
-        adminApi.users(),
+        adminApi.users({ skip: 0, limit: 200 }),
         adminApi.getQuestions(id),
         adminApi.categories(),
       ])
       setCategories(catsData || [])
       const mergedExam = mergeExamAndTest(ex, testData)
       setExam(mergedExam)
-      setUsers(usersData || [])
+      const userItems = readPaginatedItems(usersData)
+      const attemptItems = readPaginatedItems(attempts)
+      setUsers(userItems)
       setQuestions(questionsData || [])
       hydrateSettingsForm(mergedExam)
 
       const examScheds = (scheds || []).filter((s) => String(s.exam_id) === String(id))
       setSessions(examScheds)
-      const userMap = new Map((usersData || []).map((u) => [String(u.id), u]))
-      const examAttempts = (attempts || []).filter((a) => String(a.exam_id) === String(id))
+      const userMap = new Map(userItems.map((u) => [String(u.id), u]))
+      const examAttempts = attemptItems
 
       const stateByAttempt = new Map()
       await Promise.all(examAttempts.map(async (a) => {
@@ -997,6 +1021,34 @@ export default function AdminManageTestPage() {
   }, [questions, questionSearch])
 
   const learners = useMemo(() => (users || []).filter((u) => u.role === 'LEARNER'), [users])
+  const couponRows = Array.isArray(settingsForm.coupon_entries) ? settingsForm.coupon_entries : []
+  const couponStatusOptions = useMemo(
+    () => Array.from(new Set(couponRows.map((row) => String(row.status || 'Draft').trim()).filter(Boolean))),
+    [couponRows],
+  )
+  const filteredCouponRows = useMemo(() => {
+    const normalizedFilters = Object.fromEntries(
+      Object.entries(couponFilters).map(([key, value]) => [key, String(value || '').trim().toLowerCase()]),
+    )
+    return couponRows.filter((row) => {
+      const discountTypeMatches = !normalizedFilters.discount_type || row.discount_type === normalizedFilters.discount_type
+      const statusMatches = !normalizedFilters.status || String(row.status || 'Draft').trim().toLowerCase() === normalizedFilters.status
+      if (!discountTypeMatches || !statusMatches) return false
+      return [
+        ['code', row.code],
+        ['amount', row.amount],
+        ['expiration_time', row.expiration_time],
+        ['used_by', row.used_by],
+        ['date_of_use', row.date_of_use],
+        ['created_by', row.created_by],
+      ].every(([field, value]) => {
+        const filterValue = normalizedFilters[field]
+        if (!filterValue) return true
+        return String(value || '').toLowerCase().includes(filterValue)
+      })
+    })
+  }, [couponFilters, couponRows])
+  const couponHasActiveFilters = Object.values(couponFilters).some((value) => String(value || '').trim())
   const candidateRows = useMemo(() => {
     const sessionOnlyRows = sessions
       .filter((session) => !attemptRows.some((attempt) => String(attempt.sessionId) === String(session.id)))
@@ -1071,7 +1123,7 @@ export default function AdminManageTestPage() {
 
   const handleOpenVideo = (row) => {
     if (rowBusy[row.id] || !row.attemptIdFull) return
-    navigate(`/admin/videos/${row.attemptIdFull}`)
+    navigate(`/admin/attempts/${row.attemptIdFull}/videos`)
   }
 
   const handleOpenResult = (row) => {
@@ -1118,8 +1170,9 @@ export default function AdminManageTestPage() {
     setBulkAction(toPause ? 'pause' : 'resume')
     try {
       for (const r of filteredRows) {
-        if (toPause && !r.paused) await adminApi.pauseAttempt(r.id)
-        if (!toPause && r.paused) await adminApi.resumeAttempt(r.id)
+        if (!r.attemptIdFull) continue
+        if (toPause && !r.paused) await adminApi.pauseAttempt(r.attemptIdFull)
+        if (!toPause && r.paused) await adminApi.resumeAttempt(r.attemptIdFull)
       }
       await loadAll(false)
       withNotice(toPause ? 'Filtered attempts paused.' : 'Filtered attempts resumed.')
@@ -1278,8 +1331,6 @@ export default function AdminManageTestPage() {
       ? {
           name: trimmedTitle,
           description: form.description || null,
-          report_displayed: form.report_displayed,
-          report_content: form.report_content,
         }
       : {
           code: trimmedCode || null,
@@ -1372,7 +1423,6 @@ export default function AdminManageTestPage() {
 
   const handleSettingsMenuClick = (item) => {
     const section = MENU_TO_SECTION[item] || DEFAULT_SETTINGS_SECTION
-    setSettingsSection(section)
     handleTabChange('settings', section)
   }
 
@@ -1566,6 +1616,10 @@ export default function AdminManageTestPage() {
     }
   }
 
+  const settingsDirty = !loading && Boolean(exam) && serializeSettingsForm(settingsForm) !== settingsBaselineRef.current
+
+  useUnsavedChanges(tab === 'settings' && settingsDirty && !savingSettings)
+
   if (loading) return <div className={styles.page}>Loading...</div>
   if (!exam) {
     return (
@@ -1658,12 +1712,12 @@ export default function AdminManageTestPage() {
     setError('')
     setNotice('')
   }
+
   const isBrowserLockdownEnabled = LOCKDOWN_KEYS.some((key) => Boolean(settingsForm.proctoring_config?.[key]))
   const isProctoringEnabled = [...PROCTORING_MONITOR_KEYS, 'lighting_required', 'screen_capture']
     .some((key) => Boolean(settingsForm.proctoring_config?.[key]))
   const translationRows = Array.isArray(settingsForm.test_translations) ? settingsForm.test_translations : []
   const attachmentRows = Array.isArray(settingsForm.attachment_items) ? settingsForm.attachment_items : []
-  const couponRows = Array.isArray(settingsForm.coupon_entries) ? settingsForm.coupon_entries : []
   const selectedCategory = categories.find((category) => String(category.id) === String(settingsForm.category_id || ''))
   const certificatePreview = normalizeCertificatePayload({
     title: settingsForm.certificate_title,
@@ -1674,6 +1728,10 @@ export default function AdminManageTestPage() {
 
   const setCheckboxField = (field) => (e) => setSettingsForm((prev) => ({ ...prev, [field]: e.target.checked }))
   const setTextField = (field) => (e) => setSettingsForm((prev) => ({ ...prev, [field]: e.target.value }))
+  const setCouponFilterField = (field) => (event) => {
+    const value = event.target.value
+    setCouponFilters((prev) => ({ ...prev, [field]: value }))
+  }
   const setCertificateField = (field) => (e) => {
     const value = e.target.value
     setSettingsForm((prev) => {
@@ -1702,6 +1760,16 @@ export default function AdminManageTestPage() {
       proctoring_config: {
         ...(prev.proctoring_config || {}),
         ...Object.fromEntries([...PROCTORING_MONITOR_KEYS, 'lighting_required', 'screen_capture'].map((key) => [key, checked])),
+      },
+    }))
+  }
+  const setProctoringConfigField = (field) => (event) => {
+    const checked = event.target.checked
+    setSettingsForm((prev) => ({
+      ...prev,
+      proctoring_config: {
+        ...(prev.proctoring_config || {}),
+        [field]: checked,
       },
     }))
   }
@@ -2093,7 +2161,14 @@ export default function AdminManageTestPage() {
 
               <div className={styles.sectionCard}>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Test instructions</span>
+                  <span>Instructions heading</span>
+                  <input value={settingsForm.instructions_heading || ''} disabled={lockedExamFields} onChange={setTextField('instructions_heading')} />
+                </label>
+              </div>
+
+              <div className={styles.sectionCard}>
+                <label className={styles.settingsFieldGroup}>
+                  <span>Instructions body</span>
                   <textarea className={styles.settingsEditor} value={settingsForm.instructions_body || ''} disabled={lockedExamFields} onChange={setTextField('instructions_body')} rows={8} />
                 </label>
               </div>
@@ -2181,6 +2256,41 @@ export default function AdminManageTestPage() {
                 </label>
               </div>
               <div className={styles.sectionCard}>
+                <div className={styles.settingsCardHeader}>
+                  {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.review)}
+                  <h4>Proctoring checks</h4>
+                </div>
+                <p className={styles.sectionDescription}>Choose which live checks the system enforces while candidates are taking the test.</p>
+                <div className={styles.settingsTwoColumnChecks}>
+                  <div className={styles.settingsCheckboxList}>
+                    {['lighting_required', 'face_detection', 'multi_face', 'eye_tracking'].map((field) => (
+                      <label key={field} className={styles.settingsInlineCheck}>
+                        <input
+                          type="checkbox"
+                          disabled={lockedExamFields}
+                          checked={Boolean(settingsForm.proctoring_config?.[field])}
+                          onChange={setProctoringConfigField(field)}
+                        />
+                        <span>{PROCTOR_LABELS[field]}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className={styles.settingsCheckboxList}>
+                    {['head_pose_detection', 'audio_detection', 'object_detection', 'screen_capture'].map((field) => (
+                      <label key={field} className={styles.settingsInlineCheck}>
+                        <input
+                          type="checkbox"
+                          disabled={lockedExamFields}
+                          checked={Boolean(settingsForm.proctoring_config?.[field])}
+                          onChange={setProctoringConfigField(field)}
+                        />
+                        <span>{PROCTOR_LABELS[field]}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className={styles.sectionCard}>
                 <label className={styles.settingsFieldGroup}>
                   <span>Network access *</span>
                   <select disabled={lockedExamFields} value={settingsForm.network_access} onChange={setTextField('network_access')}>
@@ -2227,6 +2337,22 @@ export default function AdminManageTestPage() {
                   </label>
                 </div>
               </div>
+              {settingsForm.allow_pause ? (
+                <div className={styles.sectionCard}>
+                  <label className={styles.settingsFieldGroup}>
+                    <span>Pause duration (minutes)</span>
+                    <input type="number" min="1" value={settingsForm.pause_duration_minutes} disabled={lockedExamFields} onChange={setTextField('pause_duration_minutes')} />
+                  </label>
+                </div>
+              ) : null}
+              {settingsForm.allow_retake ? (
+                <div className={styles.sectionCard}>
+                  <label className={styles.settingsFieldGroup}>
+                    <span>Retake cooldown (hours)</span>
+                    <input type="number" min="0" step="1" value={settingsForm.retake_cooldown_hours} disabled={lockedExamFields} onChange={setTextField('retake_cooldown_hours')} />
+                  </label>
+                </div>
+              ) : null}
               <div className={styles.sectionCard}>
                 <label className={styles.settingsInlineCheck}>
                   <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.limited_free_reschedules)} onChange={setCheckboxField('limited_free_reschedules')} />
@@ -2479,7 +2605,7 @@ export default function AdminManageTestPage() {
                 </div>
                 <label className={styles.settingsFieldGroup}>
                   <span>Show report</span>
-                  <select value={settingsForm.report_displayed} disabled={isArchived} onChange={setTextField('report_displayed')}>
+                  <select value={settingsForm.report_displayed} disabled={reportSettingsLocked} onChange={setTextField('report_displayed')}>
                     {REPORT_DISPLAY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
@@ -2504,7 +2630,7 @@ export default function AdminManageTestPage() {
                 </div>
                 <label className={styles.settingsFieldGroup}>
                   <span>Report content *</span>
-                  <select value={settingsForm.report_content} disabled={isArchived} onChange={setTextField('report_content')}>
+                  <select value={settingsForm.report_content} disabled={reportSettingsLocked} onChange={setTextField('report_content')}>
                     {REPORT_CONTENT_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
@@ -2527,6 +2653,28 @@ export default function AdminManageTestPage() {
                       </label>
                     ))}
                   </div>
+                </div>
+              </div>
+
+              <div className={styles.sectionCard}>
+                <div className={styles.settingsCardHeader}>
+                  {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.review)}
+                  <h4>Review options</h4>
+                </div>
+                <div className={styles.settingsCheckboxList}>
+                  <label className={styles.settingsInlineCheck}>
+                    <input type="checkbox" disabled={reportSettingsLocked} checked={Boolean(settingsForm.show_answer_review)} onChange={setCheckboxField('show_answer_review')} />
+                    <span>Allow answer review after submission</span>
+                  </label>
+                  <label className={styles.settingsInlineCheck}>
+                    <input
+                      type="checkbox"
+                      disabled={reportSettingsLocked || !settingsForm.show_answer_review}
+                      checked={Boolean(settingsForm.show_correct_answers)}
+                      onChange={setCheckboxField('show_correct_answers')}
+                    />
+                    <span>Show correct answers in review</span>
+                  </label>
                 </div>
               </div>
 
@@ -2849,22 +2997,39 @@ export default function AdminManageTestPage() {
                   </thead>
                   <tbody>
                     <tr className={styles.tableFilterRow}>
-                      <td><input aria-label="Coupon code filter" placeholder="Search" value="" readOnly /></td>
-                      <td><input aria-label="Discount type filter" placeholder="Select one" value="" readOnly /></td>
-                      <td><input aria-label="Amount filter" placeholder="Search" value="" readOnly /></td>
-                      <td><input aria-label="Status filter" placeholder="Select one" value="" readOnly /></td>
-                      <td><input aria-label="Expiration time filter" placeholder="" value="" readOnly /></td>
-                      <td><input aria-label="Used by filter" placeholder="Search" value="" readOnly /></td>
-                      <td><input aria-label="Date of use filter" placeholder="" value="" readOnly /></td>
-                      <td><input aria-label="Created by filter" placeholder="Search" value="" readOnly /></td>
+                      <td><input aria-label="Coupon code filter" placeholder="Search" value={couponFilters.code} onChange={setCouponFilterField('code')} /></td>
+                      <td>
+                        <select aria-label="Discount type filter" value={couponFilters.discount_type} onChange={setCouponFilterField('discount_type')}>
+                          <option value="">All</option>
+                          <option value="percentage">Percentage</option>
+                          <option value="fixed">Fixed</option>
+                        </select>
+                      </td>
+                      <td><input aria-label="Amount filter" placeholder="Search" value={couponFilters.amount} onChange={setCouponFilterField('amount')} /></td>
+                      <td>
+                        <select aria-label="Status filter" value={couponFilters.status} onChange={setCouponFilterField('status')}>
+                          <option value="">All</option>
+                          {couponStatusOptions.map((status) => (
+                            <option key={status} value={String(status).toLowerCase()}>{status}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td><input aria-label="Expiration time filter" placeholder="Search" value={couponFilters.expiration_time} onChange={setCouponFilterField('expiration_time')} /></td>
+                      <td><input aria-label="Used by filter" placeholder="Search" value={couponFilters.used_by} onChange={setCouponFilterField('used_by')} /></td>
+                      <td><input aria-label="Date of use filter" placeholder="Search" value={couponFilters.date_of_use} onChange={setCouponFilterField('date_of_use')} /></td>
+                      <td><input aria-label="Created by filter" placeholder="Search" value={couponFilters.created_by} onChange={setCouponFilterField('created_by')} /></td>
                       <td />
                     </tr>
                     {couponRows.length === 0 ? (
                       <tr>
                         <td colSpan={9} className={styles.tableEmptyCell}>No coupons created.</td>
                       </tr>
+                    ) : filteredCouponRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className={styles.tableEmptyCell}>No coupons match the current filters.</td>
+                      </tr>
                     ) : (
-                      couponRows.map((row) => (
+                      filteredCouponRows.map((row) => (
                         <tr key={row.id}>
                           <td>{row.code}</td>
                           <td>{row.discount_type === 'percentage' ? 'Percentage' : 'Fixed'}</td>
@@ -2883,7 +3048,7 @@ export default function AdminManageTestPage() {
                   </tbody>
                 </table>
                 <div className={styles.settingsTableFooter}>
-                  <span>Rows: {couponRows.length}</span>
+                  <span>{couponHasActiveFilters ? `Rows: ${filteredCouponRows.length} / ${couponRows.length}` : `Rows: ${couponRows.length}`}</span>
                 </div>
               </div>
             </div>
@@ -3272,7 +3437,12 @@ export default function AdminManageTestPage() {
 
       <div className={styles.tabs}>
         {TABS.map((t) => (
-          <button key={t.id} type="button" className={tab === t.id ? styles.tabActive : ''} onClick={() => handleTabChange(t.id)}>
+          <button
+            key={t.id}
+            type="button"
+            className={tab === t.id ? styles.tabActive : ''}
+            onClick={() => handleTabChange(t.id)}
+          >
             {t.label}
           </button>
         ))}
@@ -3280,30 +3450,42 @@ export default function AdminManageTestPage() {
 
       <div className={styles.content}>
         {tab === 'settings' && (
-          <>
-            <aside className={styles.leftMenu}>
-              {SETTINGS_MENU_ITEMS.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  className={MENU_TO_SECTION[item] === settingsSection ? styles.leftActive : ''}
-                  aria-current={MENU_TO_SECTION[item] === settingsSection ? 'page' : undefined}
-                  onClick={() => handleSettingsMenuClick(item)}
-                >
-                  {item}
-                </button>
-              ))}
-            </aside>
-
-            <section className={styles.main}>
-              {renderSettingsPanel()}
-            </section>
-          </>
+          <SettingsTab
+            settingsMenuItems={SETTINGS_MENU_ITEMS}
+            menuToSection={MENU_TO_SECTION}
+            settingsSection={settingsSection}
+            handleSettingsMenuClick={handleSettingsMenuClick}
+            renderSettingsPanel={renderSettingsPanel}
+          />
         )}
 
         {tab === 'sections' && (
+          <QuestionsTab
+            questions={questions}
+            questionSearch={questionSearch}
+            setQuestionSearch={setQuestionSearch}
+            questionForm={questionForm}
+            lockedExamFields={lockedExamFields}
+            handleQuestionTypeChange={handleQuestionTypeChange}
+            setQuestionForm={setQuestionForm}
+            questionTypes={QUESTION_TYPES}
+            questionBusy={questionBusy}
+            editingQuestionId={editingQuestionId}
+            resetQuestionForm={resetQuestionForm}
+            handleQuestionSubmit={handleQuestionSubmit}
+            filteredQuestions={filteredQuestions}
+            questionTypeOf={questionTypeOf}
+            deletingQuestionBusyId={deletingQuestionBusyId}
+            deleteQuestionId={deleteQuestionId}
+            setDeleteQuestionId={setDeleteQuestionId}
+            startEditQuestion={startEditQuestion}
+            handleDeleteQuestion={handleDeleteQuestion}
+          />
+        )}
+
+        {false && tab === 'sections' && (
           <section className={styles.full}>
-            <div className={styles.tabPanelHeader}>Test Sections — Questions <span className={styles.countPill}>{questions.length}</span></div>
+            <h3 className={styles.tabPanelHeader}>Test Sections — Questions <span className={styles.countPill}>{questions.length}</span></h3>
             <div className={styles.row}>
               <label>Search questions<input placeholder="Search text or type" value={questionSearch} onChange={(e) => setQuestionSearch(e.target.value)} /></label>
               <label>Total questions<input readOnly value={String(questions.length)} /></label>
@@ -3388,8 +3570,26 @@ export default function AdminManageTestPage() {
         )}
 
         {tab === 'sessions' && (
+          <SessionsTab
+            sessions={sessions}
+            sessionForm={sessionForm}
+            setSessionForm={setSessionForm}
+            learners={learners}
+            isArchived={isArchived}
+            sessionFormReady={sessionFormReady}
+            sessionBusy={sessionBusy}
+            handleCreateSession={handleCreateSession}
+            users={users}
+            deleteSessionId={deleteSessionId}
+            deletingSessionBusyId={deletingSessionBusyId}
+            setDeleteSessionId={setDeleteSessionId}
+            handleDeleteSession={handleDeleteSession}
+          />
+        )}
+
+        {false && tab === 'sessions' && (
           <section className={styles.full}>
-            <div className={styles.tabPanelHeader}>Testing Sessions <span className={styles.countPill}>{sessions.length}</span></div>
+            <h3 className={styles.tabPanelHeader}>Testing Sessions <span className={styles.countPill}>{sessions.length}</span></h3>
             <form className={styles.sectionCard} onSubmit={handleCreateSession}>
               <div className={styles.row}>
                 <label>Learner
@@ -3454,8 +3654,25 @@ export default function AdminManageTestPage() {
         )}
 
         {tab === 'candidates' && (
+          <CandidatesTab
+            candidateRows={candidateRows}
+            formatAttemptStatus={formatAttemptStatus}
+            formatScore={formatScore}
+            gradeDrafts={gradeDrafts}
+            setGradeDrafts={setGradeDrafts}
+            rowBusy={rowBusy}
+            handleSaveGrade={handleSaveGrade}
+            handleOpenResult={handleOpenResult}
+            navigate={navigate}
+            handlePauseResume={handlePauseResume}
+            handleOpenVideo={handleOpenVideo}
+            handleOpenReport={handleOpenReport}
+          />
+        )}
+
+        {false && tab === 'candidates' && (
           <section className={styles.full}>
-            <div className={styles.tabPanelHeader}>Candidates <span className={styles.countPill}>{candidateRows.length}</span></div>
+            <h3 className={styles.tabPanelHeader}>Candidates <span className={styles.countPill}>{candidateRows.length}</span></h3>
             <p className={styles.sectionDescription}>
               Assigned learners stay visible here even before they start the test, so the roster and attempt activity are tracked in one place.
             </p>
@@ -3521,8 +3738,48 @@ export default function AdminManageTestPage() {
         )}
 
         {tab === 'proctoring' && (
+          <ProctoringTab
+            exam={exam}
+            sessions={sessions}
+            selectedSession={selectedSession}
+            setSelectedSession={setSelectedSession}
+            monitoringSummaryCards={monitoringSummaryCards}
+            view={view}
+            setView={setView}
+            filteredRows={filteredRows}
+            attemptRows={attemptRows}
+            bulkBusy={bulkBusy}
+            bulkAction={bulkAction}
+            handleBulkPauseResume={handleBulkPauseResume}
+            loadAll={loadAll}
+            loading={loading}
+            clearMonitoringFilters={clearMonitoringFilters}
+            monitoringHasFilters={monitoringHasFilters}
+            navigate={navigate}
+            examId={id}
+            showFilters={showFilters}
+            setShowFilters={setShowFilters}
+            search={search}
+            setSearch={setSearch}
+            rowBusy={rowBusy}
+            handlePauseResume={handlePauseResume}
+            handleOpenReport={handleOpenReport}
+            handleOpenVideo={handleOpenVideo}
+            users={users}
+            editingAccomId={editingAccomId}
+            editingAccomForm={editingAccomForm}
+            setEditingAccomForm={setEditingAccomForm}
+            savingAccomId={savingAccomId}
+            handleSaveAccom={handleSaveAccom}
+            setEditingAccomId={setEditingAccomId}
+            isArchived={isArchived}
+            startEditAccom={startEditAccom}
+          />
+        )}
+
+        {false && tab === 'proctoring' && (
           <section className={styles.full}>
-            <div className={styles.tabPanelHeader}>Proctoring</div>
+            <h3 className={styles.tabPanelHeader}>Proctoring</h3>
             <p className={styles.sectionDescription}>Review monitored attempts, special accommodations, and flagged activity for this test.</p>
             <div className={styles.row}>
               <label>Test<input value={exam.title || ''} readOnly /></label>
@@ -3696,8 +3953,26 @@ export default function AdminManageTestPage() {
         )}
 
         {tab === 'administration' && (
+          <AdministrationTab
+            exam={exam}
+            attemptRows={attemptRows}
+            isArchived={isArchived}
+            deletingExamBusy={deletingExamBusy}
+            handleSettingsSave={handleSettingsSave}
+            isPublished={isPublished}
+            handlePublish={handlePublish}
+            handleClose={handleClose}
+            lockedExamFields={lockedExamFields}
+            navigate={navigate}
+            deleteExamConfirm={deleteExamConfirm}
+            setDeleteExamConfirm={setDeleteExamConfirm}
+            handleDeleteExam={handleDeleteExam}
+          />
+        )}
+
+        {false && tab === 'administration' && (
           <section className={styles.full}>
-            <div className={styles.tabPanelHeader}>Test Administration</div>
+            <h3 className={styles.tabPanelHeader}>Test Administration</h3>
             <div className={styles.sectionCard}>
               <div className={styles.row}>
                 <label>Current status<input value={exam.status || ''} readOnly /></label>
@@ -3724,8 +3999,20 @@ export default function AdminManageTestPage() {
         )}
 
         {tab === 'reports' && (
+          <ReportsTab
+            reportsBusy={reportsBusy}
+            downloadExamCsv={downloadExamCsv}
+            downloadExamPdf={downloadExamPdf}
+            attemptRows={attemptRows}
+            rowBusy={rowBusy}
+            handleOpenReport={handleOpenReport}
+            handleOpenVideo={handleOpenVideo}
+          />
+        )}
+
+        {false && tab === 'reports' && (
           <section className={styles.full}>
-            <div className={styles.tabPanelHeader}>Reports</div>
+            <h3 className={styles.tabPanelHeader}>Reports</h3>
             <div className={styles.sectionCard}>
               <div className={styles.inlineActions}>
                 <button type="button" className={styles.blueBtn} disabled={reportsBusy} onClick={downloadExamCsv}>Download Test CSV</button>

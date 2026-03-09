@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from datetime import datetime, timezone
 
 from ...models import User, RoleEnum, UserPreference
 from ...schemas import (
+    AdminUserPatch,
     AdminPasswordResetRequest,
+    PaginatedResponse,
     UserCreate,
     UserPreferenceRead,
     UserPreferenceUpdate,
@@ -24,6 +26,7 @@ from ..deps import (
     require_permission,
 )
 from ...core.security import hash_password
+from ...services.audit import write_audit_log
 
 router = APIRouter()
 
@@ -74,11 +77,71 @@ def _normalize_user_payload(payload: dict, *, partial: bool) -> dict:
     return cleaned
 
 
-@router.get("/", response_model=list[UserRead])
+def _sort_user_query(query, sort_by: str, sort_dir: str):
+    field_map = {
+        "name": User.name,
+        "email": User.email,
+        "role": User.role,
+        "created_at": User.created_at,
+    }
+    column = field_map.get(sort_by, User.created_at)
+    if sort_dir == "asc":
+        return query.order_by(column.asc(), User.created_at.asc())
+    return query.order_by(column.desc(), User.created_at.desc())
+
+
+def _update_user_record(
+    *,
+    user: User,
+    payload: dict,
+    db: Session,
+    current: User,
+) -> User:
+    previous_role = user.role
+    changed_fields: list[str] = []
+    for field, value in payload.items():
+        if getattr(user, field) != value:
+            setattr(user, field, value)
+            changed_fields.append(field)
+
+    if not changed_fields:
+        return user
+
+    user.updated_at = datetime.now(timezone.utc)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    if "role" in changed_fields and previous_role != user.role:
+        write_audit_log(
+            db,
+            current.id,
+            action="USER_ROLE_CHANGED",
+            resource_type="User",
+            resource_id=str(user.id),
+            detail=f"Role changed from {previous_role.value} to {user.role.value}",
+        )
+
+    write_audit_log(
+        db,
+        current.id,
+        action="USER_UPDATED",
+        resource_type="User",
+        resource_id=str(user.id),
+        detail=f"Updated fields: {', '.join(changed_fields)}",
+    )
+    return user
+
+
+@router.get("/", response_model=PaginatedResponse[UserRead])
 async def list_users(
     role: str | None = None,
     search: str | None = None,
     is_active: bool | None = None,
+    sort_by: str = Query("created_at"),
+    sort_dir: str = Query("desc"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db_dep),
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
@@ -90,11 +153,27 @@ async def list_users(
             pass
     if is_active is not None:
         query = query.where(User.is_active == is_active)
-    users = db.scalars(query.order_by(User.created_at.desc())).all()
     if search:
         q = search.strip().lower()
-        users = [u for u in users if q in (u.name or "").lower() or q in (u.email or "").lower() or q in (u.user_id or "").lower()]
-    return users
+        if q:
+            like = f"%{q}%"
+            query = query.where(
+                or_(
+                    func.lower(User.name).like(like),
+                    func.lower(User.email).like(like),
+                    func.lower(User.user_id).like(like),
+                )
+            )
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    users = db.scalars(
+        _sort_user_query(query, sort_by, sort_dir).offset(skip).limit(limit)
+    ).all()
+    return {
+        "items": users,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.get("/learners", response_model=list[UserRead])
@@ -166,13 +245,30 @@ async def update_user(user_id: str, body: UserUpdate, db: Session = Depends(get_
     payload = _normalize_user_payload(body.model_dump(exclude_unset=True), partial=True)
     _ensure_unique_email(db, payload.get("email"), existing_user_id=user.id)
     _ensure_unique_user_id(db, payload.get("user_id"), existing_user_id=user.id)
-    for field, value in payload.items():
-        setattr(user, field, value)
-    user.updated_at = datetime.now(timezone.utc)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    return _update_user_record(user=user, payload=payload, db=db, current=current)
+
+
+@router.patch("/{user_id}", response_model=UserRead)
+async def patch_user(
+    user_id: str,
+    body: AdminUserPatch,
+    db: Session = Depends(get_db_dep),
+    current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
+):
+    user_pk = parse_uuid_param(user_id, detail="User not found")
+    user = db.get(User, user_pk)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    payload = body.model_dump(exclude_unset=True)
+    if "email" in payload:
+        payload["email"] = _clean_required_text(payload.get("email"), "Email")
+    if "name" in payload:
+        payload["name"] = _clean_required_text(payload.get("name"), "Name")
+    if "user_id" in payload:
+        payload["user_id"] = _clean_required_text(payload.get("user_id"), "User ID")
+    _ensure_unique_email(db, payload.get("email"), existing_user_id=user.id)
+    _ensure_unique_user_id(db, payload.get("user_id"), existing_user_id=user.id)
+    return _update_user_record(user=user, payload=payload, db=db, current=current)
 
 
 @router.patch("/me", response_model=UserRead)
@@ -260,6 +356,14 @@ async def reset_user_password(
     user.updated_at = datetime.now(timezone.utc)
     db.add(user)
     db.commit()
+    write_audit_log(
+        db,
+        current.id,
+        action="PASSWORD_RESET",
+        resource_type="User",
+        resource_id=str(user.id),
+        detail="Password reset by administrator",
+    )
     return Message(detail="Password reset")
 
 

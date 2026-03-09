@@ -35,6 +35,10 @@ const generateReportMock = vi.fn()
 const testReportCsvMock = vi.fn()
 const generateTestReportPdfMock = vi.fn()
 
+vi.mock('../../../hooks/useUnsavedChanges', () => ({
+  default: () => {},
+}))
+
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
     allTests: (...args) => allTestsMock(...args),
@@ -105,7 +109,7 @@ function renderPage(initialEntries = ['/admin/tests/test-1/manage']) {
       <Routes>
         <Route path="/admin/tests/:id/manage" element={<AdminManageTestPage />} />
         <Route path="/admin/tests" element={<div>All tests</div>} />
-        <Route path="/admin/videos/:attemptId" element={<div>Attempt videos route</div>} />
+        <Route path="/admin/attempts/:attemptId/videos" element={<div>Attempt videos route</div>} />
         <Route path="/attempts/:id" element={<div>Attempt result route</div>} />
       </Routes>
     </MemoryRouter>,
@@ -250,6 +254,18 @@ describe('AdminManageTestPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Generate coupons' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create coupon rows' }))
     await screen.findByText('SAVE-001')
+    await screen.findByText('SAVE-003')
+
+    fireEvent.change(screen.getByLabelText('Coupon code filter'), { target: { value: 'save-003' } })
+    expect(screen.getByText('SAVE-003')).toBeTruthy()
+    expect(screen.queryByText('SAVE-001')).toBeNull()
+    expect(screen.getByText('Rows: 1 / 5')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Coupon code filter'), { target: { value: 'missing' } })
+    expect(screen.getByText('No coupons match the current filters.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Coupon code filter'), { target: { value: '' } })
+    await screen.findByText('SAVE-001')
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -282,6 +298,8 @@ describe('AdminManageTestPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Personal report settings' }))
     await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe('?section=personal-report'))
 
+    expect(screen.getByLabelText('Show report').disabled).toBe(true)
+    expect(screen.getByLabelText('Report content *').disabled).toBe(true)
     expect(screen.getByLabelText('Display score').disabled).toBe(true)
     expect(screen.getByLabelText('Configure report lifespan').disabled).toBe(true)
     expect(screen.getByLabelText('Export personal report as Excel file').disabled).toBe(true)
@@ -436,7 +454,8 @@ describe('AdminManageTestPage', () => {
   it('renders only the selected settings page and syncs the section query parameter', async () => {
     renderPage(['/admin/tests/test-1/manage?section=instructions'])
 
-    await screen.findByLabelText('Test instructions')
+    await screen.findByLabelText('Instructions heading')
+    expect(screen.getByLabelText('Instructions body')).toBeTruthy()
     expect(screen.getByTestId('location-search').textContent).toBe('?section=instructions')
     expect(screen.queryByLabelText('Test name *')).toBeNull()
 
@@ -444,7 +463,8 @@ describe('AdminManageTestPage', () => {
 
     await screen.findByLabelText('Test name *')
     await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe(''))
-    expect(screen.queryByLabelText('Test instructions')).toBeNull()
+    expect(screen.queryByLabelText('Instructions heading')).toBeNull()
+    expect(screen.queryByLabelText('Instructions body')).toBeNull()
   })
 
   it('shows a monitoring-specific empty state and restores attempts when filters are cleared', async () => {

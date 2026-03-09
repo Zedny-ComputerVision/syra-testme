@@ -1,18 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
+import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
+import { readPaginatedItems } from '../../../utils/pagination'
 import styles from './AdminAttemptVideos.module.scss'
 
 const WARN_SEVERITIES = new Set(['HIGH', 'MEDIUM'])
-
-function toAbsoluteMediaUrl(path) {
-  if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://')) return path
-  const rawBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/'
-  const apiUrl = new URL(rawBase, window.location.origin)
-  const mediaBase = `${apiUrl.protocol}//${apiUrl.host}`
-  return `${mediaBase}${path.startsWith('/') ? '' : '/'}${path}`
-}
 
 function formatSeconds(sec) {
   if (!Number.isFinite(sec)) return '--:--'
@@ -76,6 +69,8 @@ export default function AdminAttemptVideos() {
   const [error, setError] = useState('')
   const [warning, setWarning] = useState('')
   const [selectedVideoName, setSelectedVideoName] = useState('')
+  const [selectedVideoUrl, setSelectedVideoUrl] = useState('')
+  const [selectedEvidenceUrl, setSelectedEvidenceUrl] = useState('')
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [retryToken, setRetryToken] = useState(0)
@@ -94,10 +89,10 @@ export default function AdminAttemptVideos() {
     let cancelled = false
     setAttemptsLoading(true)
     setError('')
-    adminApi.attempts()
+    adminApi.attempts({ exam_id: examIdFilter, skip: 0, limit: 200 })
       .then(({ data }) => {
         if (cancelled) return
-        const filtered = (data || []).filter(a => String(a.exam_id) === String(examIdFilter))
+        const filtered = readPaginatedItems(data)
         setExamAttempts(filtered)
         if (filtered.length > 0) {
           setSelectedAttemptId((current) => current || String(filtered[0].id))
@@ -205,8 +200,6 @@ export default function AdminAttemptVideos() {
     [videos, selectedVideoName],
   )
 
-  const selectedVideoUrl = selectedVideo ? toAbsoluteMediaUrl(selectedVideo.url) : ''
-
   const warningEvents = useMemo(
     () => (events || []).filter((e) => e && WARN_SEVERITIES.has(e.severity)),
     [events],
@@ -264,6 +257,63 @@ export default function AdminAttemptVideos() {
     () => filteredWarningEvents.find((event) => event.id === selectedEventId) || filteredWarningEvents[0] || null,
     [filteredWarningEvents, selectedEventId],
   )
+
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+    setSelectedVideoUrl('')
+
+    async function loadVideoUrl() {
+      if (!selectedVideo?.url) return
+      try {
+        objectUrl = await fetchAuthenticatedMediaObjectUrl(selectedVideo.url)
+        if (!active) {
+          revokeObjectUrl(objectUrl)
+          return
+        }
+        setSelectedVideoUrl(objectUrl)
+      } catch {
+        if (active) {
+          setWarning((current) => current || 'The selected recording could not be loaded.')
+        }
+      }
+    }
+
+    void loadVideoUrl()
+    return () => {
+      active = false
+      revokeObjectUrl(objectUrl)
+    }
+  }, [selectedVideo?.url])
+
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+    setSelectedEvidenceUrl('')
+
+    async function loadEvidenceUrl() {
+      const evidencePath = selectedEvent?.meta?.evidence
+      if (!evidencePath) return
+      try {
+        objectUrl = await fetchAuthenticatedMediaObjectUrl(evidencePath)
+        if (!active) {
+          revokeObjectUrl(objectUrl)
+          return
+        }
+        setSelectedEvidenceUrl(objectUrl)
+      } catch {
+        if (active) {
+          setWarning((current) => current || 'Evidence screenshots could not be loaded.')
+        }
+      }
+    }
+
+    void loadEvidenceUrl()
+    return () => {
+      active = false
+      revokeObjectUrl(objectUrl)
+    }
+  }, [selectedEvent?.id, selectedEvent?.meta?.evidence])
 
   const warningCounts = useMemo(() => {
     let high = 0
@@ -343,6 +393,18 @@ export default function AdminAttemptVideos() {
     setEventTypeFilter('ALL')
   }
 
+  const goToNextWarning = () => {
+    const idx = selectedEvent ? filteredWarningEvents.indexOf(selectedEvent) : -1
+    const next = filteredWarningEvents[idx + 1]
+    if (next) selectEvent(next)
+  }
+
+  const goToPrevWarning = () => {
+    const idx = selectedEvent ? filteredWarningEvents.indexOf(selectedEvent) : filteredWarningEvents.length
+    const prev = filteredWarningEvents[idx - 1]
+    if (prev) selectEvent(prev)
+  }
+
   const showEmptyAttemptsState = inSupervisionMode && !attemptsLoading && !hasResolvedAttempt && examAttempts.length === 0 && !error
 
   const syncDurationFromVideo = useCallback((videoEl) => {
@@ -401,9 +463,11 @@ export default function AdminAttemptVideos() {
   return (
     <div className={styles.page}>
       <div className={styles.head}>
-        <button type="button" className={styles.backBtn} onClick={() => navigate(-1)}>Back</button>
+        <button type="button" className={styles.backBtn} onClick={() => window.opener ? window.close() : navigate(-1)}>
+          {window.opener ? 'Close tab' : 'Back'}
+        </button>
         <div className={styles.headContent}>
-          <h2>{inSupervisionMode ? 'Supervision Mode' : 'Attempt Recordings'}</h2>
+          <h2>{inSupervisionMode ? 'Supervision Mode' : 'Video Review'}</h2>
           {inSupervisionMode ? (
             <div className={styles.supervisionRow}>
               <label className={styles.supervisionLabel} htmlFor="attempt-videos-candidate-select">Candidate:</label>
@@ -423,11 +487,31 @@ export default function AdminAttemptVideos() {
               )}
             </div>
           ) : (
-            <p>
-              Attempt: <strong>{String(activeAttemptId).slice(0, 8)}</strong>
-              {attempt?.user_name ? ` - User: ${attempt.user_name}` : ''}
-              {attempt?.test_title || attempt?.exam_title ? ` - Test: ${attempt?.test_title || attempt?.exam_title}` : ''}
-            </p>
+            <div className={styles.headMeta}>
+              {attempt?.user_name && (
+                <span className={styles.metaItem}>
+                  <span className={styles.metaLabel}>Candidate</span> {attempt.user_name}
+                </span>
+              )}
+              {(attempt?.test_title || attempt?.exam_title) && (
+                <span className={styles.metaItem}>
+                  <span className={styles.metaLabel}>Test</span> {attempt.test_title || attempt.exam_title}
+                </span>
+              )}
+              <span className={styles.metaItem}>
+                <span className={styles.metaLabel}>Attempt</span> {String(activeAttemptId).slice(0, 8)}
+              </span>
+              {attempt?.status && (
+                <span className={`${styles.statusBadge} ${attempt.status === 'SUBMITTED' || attempt.status === 'GRADED' ? styles.statusDone : attempt.status === 'IN_PROGRESS' ? styles.statusActive : ''}`}>
+                  {attempt.status}
+                </span>
+              )}
+              {attempt?.started_at && (
+                <span className={styles.metaItem}>
+                  <span className={styles.metaLabel}>Started</span> {new Date(attempt.started_at).toLocaleString()}
+                </span>
+              )}
+            </div>
           )}
         </div>
         <div className={styles.headActions}>
@@ -462,15 +546,29 @@ export default function AdminAttemptVideos() {
       ) : (
         <div className={styles.layout}>
           <section className={styles.playerCard}>
-            <div className={styles.summaryGrid}>
-              {videoSummaryCards.map((card) => (
-                <div key={card.label} className={styles.summaryCard}>
-                  <div className={styles.summaryLabel}>{card.label}</div>
-                  <div className={styles.summaryValue}>{card.value}</div>
-                  <div className={styles.summaryHelper}>{card.helper}</div>
-                </div>
-              ))}
+            <div className={styles.statsStrip}>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{videos.length}</span>
+                <span className={styles.statLabel}>Recordings</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{warningCounts.total}</span>
+                <span className={styles.statLabel}>Warnings</span>
+              </div>
+              <div className={`${styles.statItem} ${warningCounts.high > 0 ? styles.statDanger : ''}`}>
+                <span className={styles.statValue}>{warningCounts.high}</span>
+                <span className={styles.statLabel}>High risk</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{warningCounts.medium}</span>
+                <span className={styles.statLabel}>Medium</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{formatSeconds(duration || timelineSegments.safeDuration)}</span>
+                <span className={styles.statLabel}>Timeline span</span>
+              </div>
             </div>
+
             <div className={styles.playerTop}>
               <label>
                 Recording
@@ -487,14 +585,142 @@ export default function AdminAttemptVideos() {
                   ))}
                 </select>
               </label>
-              <a href={selectedVideoUrl} target="_blank" rel="noreferrer">Open file</a>
+              {selectedVideoUrl ? (
+                <a href={selectedVideoUrl} target="_blank" rel="noreferrer">Open file</a>
+              ) : (
+                <span className={styles.loadingFile}>Loading file...</span>
+              )}
             </div>
 
-            <div className={styles.filterRow}>
+            <div className={styles.playerViewport}>
+              {selectedVideoUrl ? (
+                <video
+                  key={selectedVideo?.name}
+                  ref={videoRef}
+                  controls
+                  preload="metadata"
+                  className={styles.video}
+                  onLoadedMetadata={(e) => {
+                    syncDurationFromVideo(e.currentTarget)
+                    probeVideoDuration(e.currentTarget)
+                  }}
+                  onDurationChange={(e) => syncDurationFromVideo(e.currentTarget)}
+                  onTimeUpdate={(e) => {
+                    setCurrentTime(e.currentTarget.currentTime || 0)
+                    syncDurationFromVideo(e.currentTarget)
+                  }}
+                >
+                  <source src={selectedVideoUrl} type="video/mp4" />
+                  <source src={selectedVideoUrl} type="video/webm" />
+                </video>
+              ) : (
+                <div className={styles.videoLoading}>Loading recording...</div>
+              )}
+            </div>
+
+            <div className={styles.timelineWrap}>
+              <div className={styles.timelineHeader}>
+                <strong>Warning Timeline</strong>
+                <div className={styles.timelineNav}>
+                  <button
+                    type="button"
+                    className={styles.navBtn}
+                    onClick={goToPrevWarning}
+                    disabled={!selectedEvent || filteredWarningEvents.indexOf(selectedEvent) <= 0}
+                    title="Previous warning"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.navBtn}
+                    onClick={goToNextWarning}
+                    disabled={!selectedEvent || filteredWarningEvents.indexOf(selectedEvent) >= filteredWarningEvents.length - 1}
+                    title="Next warning"
+                  >
+                    Next
+                  </button>
+                  <div className={styles.timeDisplay}>
+                    <span className={styles.timeNow}>
+                      {formatSeconds(currentTime)} / {formatSeconds(duration || timelineSegments.safeDuration)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={styles.timelineTrack}
+                role="slider"
+                aria-valuemin={0}
+                aria-valuemax={timelineSegments.safeDuration}
+                aria-valuenow={currentTime}
+                aria-label="Video timeline - click to seek"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+                  seekTo(pct * timelineSegments.safeDuration)
+                }}
+              >
+                <div
+                  className={styles.timelineFill}
+                  style={{
+                    width: `${timelineSegments.safeDuration > 0 ? Math.min(100, (currentTime / timelineSegments.safeDuration) * 100) : 0}%`,
+                  }}
+                />
+
+                {filteredWarningEvents.map((event) => {
+                  const pct = timelineSegments.safeDuration > 0
+                    ? Math.min(99.5, Math.max(0.5, (event.second / timelineSegments.safeDuration) * 100))
+                    : 0
+                  return (
+                    <button
+                      key={event.id}
+                      type="button"
+                      className={`${styles.warningTick} ${event.severity === 'HIGH' ? styles.warningTickHigh : styles.warningTickMedium}`}
+                      style={{ left: `${pct}%` }}
+                      title={`${event.severity} - ${event.event_type} - ${formatSeconds(event.second)}`}
+                      onClick={(e) => { e.stopPropagation(); selectEvent(event) }}
+                    />
+                  )
+                })}
+
+                <div
+                  className={styles.playhead}
+                  style={{
+                    left: `${timelineSegments.safeDuration > 0 ? Math.min(100, (currentTime / timelineSegments.safeDuration) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+
+              <div className={styles.timeLabels}>
+                {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
+                  <span
+                    key={pct}
+                    className={pct === 0 ? styles.timeLabelStart : pct === 1 ? styles.timeLabelEnd : ''}
+                    style={{ left: `${pct * 100}%` }}
+                  >
+                    {formatSeconds(pct * timelineSegments.safeDuration)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <aside className={styles.sideCard}>
+            <div className={styles.sideHeader}>
+              <div className={styles.sideHeadLeft}>
+                <h3>Exam Events</h3>
+                <div className={styles.eventCountRow}>
+                  <span className={styles.badgeNeutral}>{warningCounts.total} total</span>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.eventsFilters}>
               <label>
                 Severity
                 <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
-                  <option value="ALL">All</option>
+                  <option value="ALL">All severities</option>
                   <option value="HIGH">High</option>
                   <option value="MEDIUM">Medium</option>
                 </select>
@@ -502,80 +728,15 @@ export default function AdminAttemptVideos() {
               <label>
                 Event type
                 <select value={eventTypeFilter} onChange={(e) => setEventTypeFilter(e.target.value)}>
-                  <option value="ALL">All warnings</option>
+                  <option value="ALL">All types</option>
                   {warningTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </label>
-            </div>
-
-            <video
-              key={selectedVideo?.name}
-              ref={videoRef}
-              controls
-              preload="metadata"
-              className={styles.video}
-              onLoadedMetadata={(e) => {
-                syncDurationFromVideo(e.currentTarget)
-                probeVideoDuration(e.currentTarget)
-              }}
-              onDurationChange={(e) => syncDurationFromVideo(e.currentTarget)}
-              onTimeUpdate={(e) => {
-                setCurrentTime(e.currentTarget.currentTime || 0)
-                syncDurationFromVideo(e.currentTarget)
-              }}
-            >
-              <source src={selectedVideoUrl} type="video/mp4" />
-              <source src={selectedVideoUrl} type="video/webm" />
-            </video>
-
-            <div className={styles.timelineWrap}>
-              <div className={styles.timelineHeader}>
-                <strong>Warning Timeline</strong>
-                <span>{formatSeconds(currentTime)} / {formatSeconds(duration)}</span>
-              </div>
-
-              <div className={styles.timelineGrid}>
-                {timelineSegments.buckets.map((b, i) => {
-                  const className = b.level === 2
-                    ? `${styles.segment} ${styles.segmentHigh}`
-                    : b.level === 1
-                      ? `${styles.segment} ${styles.segmentMedium}`
-                      : styles.segment
-                  const sec = (i / timelineSegments.buckets.length) * timelineSegments.safeDuration
-                  return (
-                    <button
-                      key={`${i}-${b.level}-${b.count}`}
-                      type="button"
-                      className={className}
-                      title={b.count > 0 ? `${b.count} warning(s) around ${formatSeconds(sec)}` : formatSeconds(sec)}
-                      onClick={() => {
-                        seekTo(sec)
-                        const nearest = filteredWarningEvents.reduce((best, event) => {
-                          if (!best) return event
-                          return Math.abs(event.second - sec) < Math.abs(best.second - sec) ? event : best
-                        }, null)
-                        if (nearest) setSelectedEventId(nearest.id)
-                      }}
-                    />
-                  )
-                })}
-              </div>
-
-              <div className={styles.summaryRow}>
-                <span className={styles.badgeNeutral}>Warnings: {warningCounts.total}</span>
-                <span className={styles.badgeHigh}>High: {warningCounts.high}</span>
-                <span className={styles.badgeMedium}>Medium: {warningCounts.medium}</span>
-              </div>
-            </div>
-          </section>
-
-          <aside className={styles.sideCard}>
-            <div className={styles.sideHeader}>
-              <h3>Flagged Events</h3>
               <button type="button" className={styles.clearBtn} onClick={clearFilters} disabled={severityFilter === 'ALL' && eventTypeFilter === 'ALL'}>
                 Clear filters
               </button>
             </div>
+
             {filteredWarningEvents.length === 0 ? (
               <div className={styles.emptySmall}>
                 {warningTimelineEvents.length === 0 ? 'No warning events detected for this attempt.' : 'No warning events match the active filters.'}
@@ -590,8 +751,11 @@ export default function AdminAttemptVideos() {
                       className={`${styles.eventBtn} ${selectedEventId === e.id ? styles.eventBtnActive : ''}`}
                       onClick={() => selectEvent(e)}
                     >
-                      <span className={`${styles.eventSeverity} ${severityClass(e.severity)}`}>{e.severity}</span>
-                      <span className={styles.eventMeta}>{formatSeconds(e.second)} - {e.event_type}</span>
+                      <div className={styles.eventBtnTop}>
+                        <span className={`${styles.eventSeverity} ${severityClass(e.severity)}`}>{e.severity}</span>
+                        <span className={styles.eventTimestamp}>{formatSeconds(e.second)}</span>
+                      </div>
+                      <span className={styles.eventMeta}>{e.event_type}</span>
                       <span className={styles.eventDetail}>{e.detail || 'Warning detected'}</span>
                     </button>
                   ))}
@@ -600,20 +764,42 @@ export default function AdminAttemptVideos() {
                   <div className={styles.eventInspector}>
                     <div className={styles.inspectorHeader}>
                       <span className={`${styles.eventSeverity} ${severityClass(selectedEvent.severity)}`}>{selectedEvent.severity}</span>
-                      <span className={styles.inspectorTime}>{formatSeconds(selectedEvent.second)}</span>
+                      <span className={styles.inspectorTime}>
+                        Event {filteredWarningEvents.indexOf(selectedEvent) + 1} of {filteredWarningEvents.length} - {formatSeconds(selectedEvent.second)}
+                      </span>
                     </div>
                     <div className={styles.inspectorTitle}>{selectedEvent.event_type}</div>
                     <div className={styles.inspectorDetail}>{selectedEvent.detail || 'Warning detected during monitoring.'}</div>
                     <div className={styles.inspectorMeta}>
                       <span>{selectedEvent.occurred_at ? new Date(selectedEvent.occurred_at).toLocaleString() : '-'}</span>
-                      <span>{typeof selectedEvent.ai_confidence === 'number' ? `${Math.round(selectedEvent.ai_confidence * 100)}% confidence` : 'Confidence unavailable'}</span>
+                    </div>
+                    <div className={styles.confidenceWrap}>
+                      {typeof selectedEvent.ai_confidence === 'number' ? (
+                        <>
+                          <div className={styles.confidenceLabel}>
+                            AI Confidence: {Math.round(selectedEvent.ai_confidence * 100)}%
+                          </div>
+                          <div className={styles.confidenceTrack}>
+                            <div
+                              className={styles.confidenceBar}
+                              style={{ width: `${Math.round(selectedEvent.ai_confidence * 100)}%` }}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div className={styles.confidenceLabel}>Confidence unavailable</div>
+                      )}
                     </div>
                     {selectedEvent.meta?.evidence && (
-                      <img
-                        className={styles.inspectorImage}
-                        src={toAbsoluteMediaUrl(selectedEvent.meta.evidence)}
-                        alt={`${selectedEvent.event_type} evidence`}
-                      />
+                      selectedEvidenceUrl ? (
+                        <img
+                          className={styles.inspectorImage}
+                          src={selectedEvidenceUrl}
+                          alt={`${selectedEvent.event_type} evidence`}
+                        />
+                      ) : (
+                        <div className={styles.inspectorImage} />
+                      )
                     )}
                   </div>
                 )}

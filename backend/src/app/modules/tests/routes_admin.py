@@ -1,15 +1,20 @@
+import logging
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ...api.deps import get_db_dep, require_permission
 from ...core.security import hash_password
+from ...services.audit import write_audit_log
+from ...services.notifications import notify_user
+from ...services.report_rendering import render_report_template
+from ...services.sanitization import sanitize_html_fragment, sanitize_instructions
 from ...models import (
     Attempt,
     Course,
@@ -28,6 +33,7 @@ from .schemas import TestCreate, TestDetail, TestListResponse, TestUpdate
 from .proctoring_requirements import normalize_proctoring_config
 
 router = APIRouter(prefix="/admin/tests", tags=["tests"])
+logger = logging.getLogger(__name__)
 
 ADMIN_META_KEY = "_admin_test"
 DEFAULT_SECURITY_SETTINGS = {
@@ -47,6 +53,10 @@ def _format_error_response(exc: HTTPException):
     if isinstance(exc.detail, dict) and "error" in exc.detail:
         return JSONResponse(status_code=exc.status_code, content=exc.detail)
     raise exc
+
+
+def _request_ip(request: Request | None) -> str | None:
+    return getattr(getattr(request, "client", None), "host", None)
 
 
 def http_error(code: str, message: str, details: dict | None = None, status_code: int | None = None):
@@ -238,12 +248,42 @@ def _ensure_node(db: Session, current, node_id=None) -> Node:
 
 def _generate_code(db: Session) -> str:
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    for _ in range(20):
+    for _ in range(10):
         candidate = "".join(alphabet[(uuid.uuid4().int >> (index * 5)) % len(alphabet)] for index in range(8))
-        exists = db.scalars(select(Exam)).all()
-        if all(_code(exam) != candidate for exam in exists):
+        if not _code_exists(db, candidate):
             return candidate
-    http_error("VALIDATION_ERROR", "Unable to generate unique code")
+    http_error("INTERNAL_ERROR", "Unable to generate unique code", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _code_exists(db: Session, candidate: str, *, exclude_exam_id=None) -> bool:
+    dialect_name = getattr(getattr(db, "bind", None), "dialect", None)
+    dialect_name = getattr(dialect_name, "name", None)
+    if dialect_name == "sqlite":
+        query = select(Exam.id).where(func.json_extract(Exam.settings, f"$.{ADMIN_META_KEY}.code") == candidate)
+    else:
+        query = select(Exam.id).where(Exam.settings[ADMIN_META_KEY]["code"].as_string() == candidate)
+    if exclude_exam_id is not None:
+        query = query.where(Exam.id != exclude_exam_id)
+    return db.scalar(query.limit(1)) is not None
+
+
+def _notify_test_published(db: Session, exam: Exam) -> None:
+    user_ids = db.scalars(select(Schedule.user_id).where(Schedule.exam_id == exam.id)).all()
+    seen: set[str] = set()
+    for user_id in user_ids:
+        if not user_id:
+            continue
+        user_key = str(user_id)
+        if user_key in seen:
+            continue
+        seen.add(user_key)
+        notify_user(
+            db,
+            user_id,
+            title="Test published",
+            message=f"{exam.title} is now published and available.",
+            link=f"/tests/{exam.id}",
+        )
 
 
 def _assert_has_questions(exam: Exam):
@@ -305,7 +345,7 @@ def _serialize_detail(exam: Exam) -> TestDetail:
     )
 
 
-def _serialize_list_item(exam: Exam, testing_sessions: int) -> dict:
+def _serialize_list_item(exam: Exam, testing_sessions: int, question_count: int) -> dict:
     category = None
     if exam.category:
         category = {"id": exam.category.id, "name": exam.category.name}
@@ -318,7 +358,7 @@ def _serialize_list_item(exam: Exam, testing_sessions: int) -> dict:
         "category": category,
         "time_limit_minutes": exam.time_limit or 60,
         "testing_sessions": testing_sessions,
-        "question_count": exam.question_count,
+        "question_count": question_count,
         "certificate": exam.certificate,
         "created_at": exam.created_at,
         "updated_at": exam.updated_at,
@@ -364,7 +404,11 @@ async def list_tests(
     try:
         exams = [
             exam
-            for exam in db.scalars(select(Exam).order_by(Exam.created_at.desc())).all()
+            for exam in db.scalars(
+                select(Exam)
+                .options(selectinload(Exam.category))
+                .order_by(Exam.created_at.desc())
+            ).all()
             if not _is_pool_library_exam(exam)
         ]
 
@@ -416,38 +460,65 @@ async def list_tests(
         page = max(page, 1)
         page_size = min(max(page_size, 1), 100)
         page_items = exams[(page - 1) * page_size : page * page_size]
+        page_exam_ids = [exam.id for exam in page_items]
+        session_counts = {}
+        question_counts = {}
+        if page_exam_ids:
+            session_counts = {
+                exam_id: int(count or 0)
+                for exam_id, count in db.execute(
+                    select(Schedule.exam_id, func.count())
+                    .where(Schedule.exam_id.in_(page_exam_ids))
+                    .group_by(Schedule.exam_id)
+                ).all()
+            }
+            question_counts = {
+                exam_id: int(count or 0)
+                for exam_id, count in db.execute(
+                    select(Question.exam_id, func.count())
+                    .where(Question.exam_id.in_(page_exam_ids))
+                    .group_by(Question.exam_id)
+                ).all()
+            }
         items = []
         for exam in page_items:
-            testing_sessions = (
-                db.scalar(select(func.count()).select_from(Schedule).where(Schedule.exam_id == exam.id))
-                or 0
+            items.append(
+                _serialize_list_item(
+                    exam,
+                    int(session_counts.get(exam.id, 0)),
+                    int(question_counts.get(exam.id, 0)),
+                )
             )
-            items.append(_serialize_list_item(exam, int(testing_sessions)))
         return TestListResponse(items=items, page=page, page_size=page_size, total=total)
     except HTTPException as exc:
         return _format_error_response(exc)
 
 
 @router.post("/", response_model=TestDetail, status_code=201)
-async def create_test(body: TestCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Create Tests", RoleEnum.ADMIN))):
+async def create_test(
+    body: TestCreate,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Create Tests", RoleEnum.ADMIN)),
+):
     try:
         now = datetime.now(timezone.utc)
         node = _ensure_node(db, current, body.node_id)
         if body.code:
-            duplicate = [existing.id for existing in db.scalars(select(Exam)).all() if _code(existing) == body.code]
-            if duplicate:
+            normalized_code = body.code.strip()
+            if normalized_code and _code_exists(db, normalized_code):
                 http_error("VALIDATION_ERROR", "Code already exists")
         exam = Exam(
             node_id=node.id,
             title=body.name.strip(),
-            description=body.description,
+            description=sanitize_html_fragment(body.description),
             type=ExamType(body.type.value),
             status=ExamStatus.CLOSED,
             time_limit=body.time_limit_minutes or 60,
             max_attempts=body.attempts_allowed or 1,
             passing_score=body.passing_score,
             proctoring_config=normalize_proctoring_config(body.proctoring_config or {}),
-            settings=body.runtime_settings or {},
+            settings=sanitize_instructions(body.runtime_settings or {}),
             certificate=body.certificate,
             category_id=body.category_id,
             grading_scale_id=body.grading_scale_id,
@@ -459,7 +530,7 @@ async def create_test(body: TestCreate, db: Session = Depends(get_db_dep), curre
         db.flush()
         _mutate_admin_meta(
             exam,
-            code=body.code or None,
+            code=body.code.strip() if body.code else None,
             randomize_questions=True if body.randomize_questions is None else body.randomize_questions,
             report_displayed=(body.report_displayed or ReportDisplayed.IMMEDIATELY_AFTER_GRADING).value,
             report_content=(body.report_content or ReportContent.SCORE_AND_DETAILS).value,
@@ -471,6 +542,15 @@ async def create_test(body: TestCreate, db: Session = Depends(get_db_dep), curre
         db.add(exam)
         db.commit()
         db.refresh(exam)
+        write_audit_log(
+            db,
+            getattr(current, "id", None),
+            action="TEST_CREATED",
+            resource_type="test",
+            resource_id=str(exam.id),
+            detail=f"Created test: {exam.title}",
+            ip_address=_request_ip(request),
+        )
         return _serialize_detail(exam)
     except HTTPException as exc:
         return _format_error_response(exc)
@@ -486,7 +566,13 @@ async def get_test(test_id: str, db: Session = Depends(get_db_dep), current=Depe
 
 
 @router.patch("/{test_id}", response_model=TestDetail)
-async def update_test(test_id: str, body: TestUpdate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
+async def update_test(
+    test_id: str,
+    body: TestUpdate,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN)),
+):
     try:
         exam = _get_exam_or_404(db, test_id)
         payload = body.model_dump(exclude_unset=True, exclude_none=True)
@@ -495,17 +581,11 @@ async def update_test(test_id: str, body: TestUpdate, db: Session = Depends(get_
             exam.title = payload["name"].strip()
         if "code" in payload:
             meta_code = payload["code"].strip() if payload["code"] else None
-            if meta_code:
-                duplicate = [
-                    existing.id
-                    for existing in db.scalars(select(Exam)).all()
-                    if existing.id != exam.id and _code(existing) == meta_code
-                ]
-                if duplicate:
-                    http_error("VALIDATION_ERROR", "Code already exists")
+            if meta_code and _code_exists(db, meta_code, exclude_exam_id=exam.id):
+                http_error("VALIDATION_ERROR", "Code already exists")
             _mutate_admin_meta(exam, code=meta_code)
         if "description" in payload:
-            exam.description = payload["description"]
+            exam.description = sanitize_html_fragment(payload["description"])
         if "type" in payload:
             exam.type = ExamType(payload["type"])
         if "node_id" in payload:
@@ -519,10 +599,14 @@ async def update_test(test_id: str, body: TestUpdate, db: Session = Depends(get_
         if "attempts_allowed" in payload:
             exam.max_attempts = payload["attempts_allowed"]
         if "passing_score" in payload:
+            if payload["passing_score"] is not None and not 0 <= payload["passing_score"] <= 100:
+                http_error("VALIDATION_ERROR", "passing_score must be between 0 and 100")
             exam.passing_score = payload["passing_score"]
         if "runtime_settings" in payload:
             current_admin_meta = deepcopy((exam.settings or {}).get(ADMIN_META_KEY, {}))
-            new_settings = deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+            new_settings = sanitize_instructions(
+                deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+            )
             new_settings[ADMIN_META_KEY] = current_admin_meta
             exam.settings = new_settings
         if "proctoring_config" in payload:
@@ -546,6 +630,15 @@ async def update_test(test_id: str, body: TestUpdate, db: Session = Depends(get_
         db.add(exam)
         db.commit()
         db.refresh(exam)
+        write_audit_log(
+            db,
+            getattr(current, "id", None),
+            action="TEST_UPDATED",
+            resource_type="test",
+            resource_id=str(exam.id),
+            detail=f"Updated test: {exam.title}",
+            ip_address=_request_ip(request),
+        )
         return _serialize_detail(exam)
     except HTTPException as exc:
         return _format_error_response(exc)
@@ -568,55 +661,83 @@ async def publish_test(test_id: str, db: Session = Depends(get_db_dep), current=
             db.add(exam)
             db.commit()
             db.refresh(exam)
+            write_audit_log(
+                db,
+                getattr(current, "id", None),
+                action="TEST_PUBLISHED",
+                resource_type="test",
+                resource_id=str(exam.id),
+                detail=exam.title,
+            )
+            _notify_test_published(db, exam)
         return _serialize_detail(exam)
     except HTTPException as exc:
         return _format_error_response(exc)
 
 
 @router.post("/{test_id}/duplicate", response_model=TestDetail)
-async def duplicate_test(test_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Create Tests", RoleEnum.ADMIN))):
+async def duplicate_test(
+    test_id: str,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Create Tests", RoleEnum.ADMIN)),
+):
     try:
         exam = _get_exam_or_404(db, test_id)
-        now = datetime.now(timezone.utc)
-        new_exam = Exam(
-            node_id=exam.node_id,
-            title=_next_duplicate_title(db, exam),
-            description=exam.description,
-            type=exam.type,
-            status=ExamStatus.CLOSED,
-            time_limit=exam.time_limit,
-            max_attempts=exam.max_attempts,
-            passing_score=exam.passing_score,
-            proctoring_config=deepcopy(exam.proctoring_config),
-            settings=deepcopy(exam.settings),
-            certificate=deepcopy(exam.certificate),
-            category_id=exam.category_id,
-            grading_scale_id=exam.grading_scale_id,
-            created_by_id=getattr(current, "id", None),
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(new_exam)
-        db.flush()
-        for question in exam.questions:
-            db.add(
-                Question(
-                    exam_id=new_exam.id,
-                    text=question.text,
-                    type=question.type,
-                    options=deepcopy(question.options),
-                    correct_answer=question.correct_answer,
-                    points=question.points,
-                    order=question.order,
-                    pool_id=question.pool_id,
-                    created_at=now,
-                    updated_at=now,
-                )
+        try:
+            now = datetime.now(timezone.utc)
+            new_exam = Exam(
+                node_id=exam.node_id,
+                title=_next_duplicate_title(db, exam),
+                description=sanitize_html_fragment(exam.description),
+                type=exam.type,
+                status=ExamStatus.CLOSED,
+                time_limit=exam.time_limit,
+                max_attempts=exam.max_attempts,
+                passing_score=exam.passing_score,
+                proctoring_config=deepcopy(exam.proctoring_config),
+                settings=sanitize_instructions(deepcopy(exam.settings)),
+                certificate=deepcopy(exam.certificate),
+                category_id=exam.category_id,
+                grading_scale_id=exam.grading_scale_id,
+                created_by_id=getattr(current, "id", None),
+                created_at=now,
+                updated_at=now,
             )
-        _mutate_admin_meta(new_exam, code=None, published_at=None, archived_at=None)
-        db.add(new_exam)
-        db.commit()
+            db.add(new_exam)
+            db.flush()
+            for question in exam.questions:
+                db.add(
+                    Question(
+                        exam_id=new_exam.id,
+                        text=question.text,
+                        type=question.type,
+                        options=deepcopy(question.options),
+                        correct_answer=question.correct_answer,
+                        points=question.points,
+                        order=question.order,
+                        pool_id=question.pool_id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            _mutate_admin_meta(new_exam, code=None, published_at=None, archived_at=None)
+            db.add(new_exam)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.error("Test duplication failed: %s", exc, exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to duplicate test")
         db.refresh(new_exam)
+        write_audit_log(
+            db,
+            getattr(current, "id", None),
+            action="TEST_DUPLICATED",
+            resource_type="test",
+            resource_id=str(new_exam.id),
+            detail=f"Duplicated test: {exam.title} -> {new_exam.title}",
+            ip_address=_request_ip(request),
+        )
         return _serialize_detail(new_exam)
     except HTTPException as exc:
         return _format_error_response(exc)
@@ -626,7 +747,8 @@ async def duplicate_test(test_id: str, db: Session = Depends(get_db_dep), curren
 async def archive_test(test_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
     try:
         exam = _get_exam_or_404(db, test_id)
-        if _exam_status(exam) == TestStatus.ARCHIVED:
+        previous_status = _exam_status(exam)
+        if previous_status == TestStatus.ARCHIVED:
             return _serialize_detail(exam)
         now = datetime.now(timezone.utc)
         exam.status = ExamStatus.CLOSED
@@ -635,6 +757,23 @@ async def archive_test(test_id: str, db: Session = Depends(get_db_dep), current=
         db.add(exam)
         db.commit()
         db.refresh(exam)
+        if previous_status == TestStatus.PUBLISHED:
+            write_audit_log(
+                db,
+                getattr(current, "id", None),
+                action="TEST_UNPUBLISHED",
+                resource_type="test",
+                resource_id=str(exam.id),
+                detail=exam.title,
+            )
+        write_audit_log(
+            db,
+            getattr(current, "id", None),
+            action="TEST_ARCHIVED",
+            resource_type="test",
+            resource_id=str(exam.id),
+            detail=exam.title,
+        )
         return _serialize_detail(exam)
     except HTTPException as exc:
         return _format_error_response(exc)
@@ -651,13 +790,26 @@ async def unarchive_test(test_id: str, db: Session = Depends(get_db_dep), curren
         db.add(exam)
         db.commit()
         db.refresh(exam)
+        write_audit_log(
+            db,
+            getattr(current, "id", None),
+            action="TEST_UNARCHIVED",
+            resource_type="test",
+            resource_id=str(exam.id),
+            detail=exam.title,
+        )
         return _serialize_detail(exam)
     except HTTPException as exc:
         return _format_error_response(exc)
 
 
 @router.delete("/{test_id}", status_code=204)
-async def delete_test(test_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Delete Tests", RoleEnum.ADMIN))):
+async def delete_test(
+    test_id: str,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Delete Tests", RoleEnum.ADMIN)),
+):
     try:
         exam = _get_exam_or_404(db, test_id)
         if _exam_status(exam) != TestStatus.DRAFT:
@@ -665,8 +817,30 @@ async def delete_test(test_id: str, db: Session = Depends(get_db_dep), current=D
         attempt_count = db.scalar(select(func.count()).select_from(Attempt).where(Attempt.exam_id == exam.id)) or 0
         if attempt_count > 0:
             http_error("FORBIDDEN", "Cannot delete a test with attempts", status_code=status.HTTP_409_CONFLICT)
+        schedules = db.scalars(select(Schedule).where(Schedule.exam_id == exam.id)).all()
+        for schedule in schedules:
+            if not schedule.user_id:
+                continue
+            notify_user(
+                db,
+                schedule.user_id,
+                "Test Cancelled",
+                f"The test '{exam.title}' has been removed.",
+                "/schedule",
+            )
+        exam_id = str(exam.id)
+        exam_title = exam.title
         db.delete(exam)
         db.commit()
+        write_audit_log(
+            db,
+            getattr(current, "id", None),
+            action="TEST_DELETED",
+            resource_type="test",
+            resource_id=exam_id,
+            detail=f"Deleted test: {exam_title}",
+            ip_address=_request_ip(request),
+        )
         return Response(status_code=204)
     except HTTPException as exc:
         return _format_error_response(exc)
@@ -677,24 +851,25 @@ async def download_report(test_id: str, db: Session = Depends(get_db_dep), curre
     try:
         exam = _get_exam_or_404(db, test_id)
         attempts = db.scalars(
-            select(Attempt).where(Attempt.exam_id == exam.id).order_by(Attempt.created_at.desc())
+            select(Attempt)
+            .options(joinedload(Attempt.user))
+            .where(Attempt.exam_id == exam.id)
+            .order_by(Attempt.created_at.desc())
         ).all()
-        rows = "".join(
-            f"<tr><td>{attempt.user.name if attempt.user else ''}</td><td>{attempt.status}</td><td>{attempt.score if attempt.score is not None else ''}</td></tr>"
-            for attempt in attempts
+        html = render_report_template(
+            "test_report.html",
+            report_title=f"{exam.title} Report",
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            exam_title=exam.title,
+            rows=[
+                {
+                    "user_name": attempt.user.name if attempt.user else "",
+                    "status": getattr(attempt.status, "value", attempt.status),
+                    "score": "" if attempt.score is None else attempt.score,
+                }
+                for attempt in attempts
+            ],
         )
-        html = f"""
-        <html>
-          <body>
-            <h2>{exam.title} Report</h2>
-            <p>Generated at {datetime.now(timezone.utc).isoformat()}</p>
-            <table border="1" cellspacing="0" cellpadding="6">
-              <thead><tr><th>User</th><th>Status</th><th>Score</th></tr></thead>
-              <tbody>{rows or '<tr><td colspan="3">No attempts yet.</td></tr>'}</tbody>
-            </table>
-          </body>
-        </html>
-        """
         return HTMLResponse(content=html, media_type="text/html")
     except HTTPException as exc:
         return _format_error_response(exc)

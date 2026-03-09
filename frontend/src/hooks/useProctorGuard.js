@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 
 export default function useProctorGuard() {
-  const [camera, setCamera] = useState(true)
-  const [mic, setMic] = useState(true)
-  const [visible, setVisible] = useState(true)
+  const [camera] = useState(true)
+  const [mic] = useState(true)
+  const [visible, setVisible] = useState(() => !document.hidden)
 
   useEffect(() => {
     const handle = () => setVisible(!document.hidden)

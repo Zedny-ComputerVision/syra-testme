@@ -30,7 +30,7 @@ async def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), curre
 async def list_nodes(course_id: str | None = None, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Node)
     if course_id:
-        course_pk = parse_uuid_param(course_id, detail="Invalid course_id", status_code=422)
+        course_pk = parse_uuid_param(course_id, detail="Invalid course_id")
         query = query.where(Node.course_id == course_pk)
     if current.role == RoleEnum.LEARNER:
         query = query.join(Course, Node.course_id == Course.id).where(Course.status == CourseStatus.PUBLISHED)

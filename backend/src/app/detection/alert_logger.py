@@ -54,6 +54,7 @@ class AlertLogger:
         """Return all pending events and clear the buffer."""
         events = self._events[:]
         self._events.clear()
+        self._last_fired.clear()
         return events
 
     @property

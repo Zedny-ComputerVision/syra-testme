@@ -1,6 +1,7 @@
 """Head pose estimation with sustained suspicious-pose detection."""
 
 from typing import Optional
+import logging
 
 import cv2
 import numpy as np
@@ -9,6 +10,8 @@ try:
     import mediapipe as mp
 except Exception:  # pragma: no cover - optional dependency in lightweight envs
     mp = None
+
+logger = logging.getLogger(__name__)
 
 
 class HeadPoseDetector:
@@ -37,6 +40,7 @@ class HeadPoseDetector:
         self._consecutive_bad = 0
         self._prev_pitch: float | None = None
         self._prev_yaw: float | None = None
+        self._warned_unavailable = False
         self._mesh = (
             mp.solutions.face_mesh.FaceMesh(static_image_mode=False, refine_landmarks=True, max_num_faces=1)
             if hasattr(mp, "solutions")
@@ -120,6 +124,9 @@ class HeadPoseDetector:
 
     def process(self, frame_bytes: bytes) -> dict | None:
         if self._mesh is None:
+            if not self._warned_unavailable:
+                logger.warning("Head pose model unavailable - detection disabled")
+                self._warned_unavailable = True
             return None
 
         np_arr = np.frombuffer(frame_bytes, np.uint8)

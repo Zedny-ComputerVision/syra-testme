@@ -97,6 +97,15 @@ class TestBase(BaseModel):
             raise ValueError("attempts_allowed must be between 1 and 20")
         return v
 
+    @field_validator("passing_score")
+    @classmethod
+    def validate_passing_score(cls, v: float | None):
+        if v is None:
+            return v
+        if not 0 <= v <= 100:
+            raise ValueError("passing_score must be between 0 and 100")
+        return v
+
 
 class TestCreate(TestBase):
     name: str

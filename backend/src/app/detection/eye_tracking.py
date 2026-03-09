@@ -1,5 +1,6 @@
 """Eye tracking / sustained gaze-away detection using MediaPipe FaceMesh."""
 
+import logging
 import cv2
 import numpy as np
 
@@ -7,6 +8,8 @@ try:
     import mediapipe as mp
 except Exception:  # pragma: no cover - optional dependency in lightweight envs
     mp = None
+
+logger = logging.getLogger(__name__)
 
 
 class EyeTracker:
@@ -35,6 +38,7 @@ class EyeTracker:
         self._prev_left_yaw: float | None = None
         self._prev_right_pitch: float | None = None
         self._prev_right_yaw: float | None = None
+        self._warned_unavailable = False
 
         if hasattr(mp, "solutions"):
             self._mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=False, refine_landmarks=True, max_num_faces=1)
@@ -86,6 +90,9 @@ class EyeTracker:
 
     def process(self, frame_bytes: bytes) -> dict | None:
         if self._mesh is None:
+            if not self._warned_unavailable:
+                logger.warning("Eye tracking model unavailable - detection disabled")
+                self._warned_unavailable = True
             return None
 
         np_arr = np.frombuffer(frame_bytes, np.uint8)
@@ -103,11 +110,15 @@ class EyeTracker:
         left_pitch, left_yaw = self._calculate_eye_gaze(lm, "left")
         right_pitch, right_yaw = self._calculate_eye_gaze(lm, "right")
 
-        bad_left = self._is_out_of_range(left_pitch, left_yaw) and self._is_stable(
-            left_pitch, left_yaw, self._prev_left_pitch, self._prev_left_yaw
+        left_out = self._is_out_of_range(left_pitch, left_yaw)
+        right_out = self._is_out_of_range(right_pitch, right_yaw)
+        bad_left = left_out and (
+            self._prev_left_pitch is None
+            or self._is_stable(left_pitch, left_yaw, self._prev_left_pitch, self._prev_left_yaw)
         )
-        bad_right = self._is_out_of_range(right_pitch, right_yaw) and self._is_stable(
-            right_pitch, right_yaw, self._prev_right_pitch, self._prev_right_yaw
+        bad_right = right_out and (
+            self._prev_right_pitch is None
+            or self._is_stable(right_pitch, right_yaw, self._prev_right_pitch, self._prev_right_yaw)
         )
 
         self._prev_left_pitch = left_pitch
@@ -155,9 +166,3 @@ class EyeTracker:
 
         return None
 
-
-_tracker = EyeTracker()
-
-
-def detect_eye_movement(frame_bytes: bytes) -> dict | None:
-    return _tracker.process(frame_bytes)

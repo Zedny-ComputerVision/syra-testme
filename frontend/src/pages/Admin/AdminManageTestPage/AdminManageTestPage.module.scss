@@ -120,14 +120,14 @@
 .quickActionPrimary {
   background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent)));
   border-color: transparent;
-  color: #ffffff;
+  color: var(--color-button-text);
   box-shadow: 0 3px 10px color-mix(in srgb, var(--color-primary) 30%, transparent);
 
   svg { opacity: 1; }
 
   &:hover {
     background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent)));
-    color: #ffffff;
+    color: var(--color-button-text);
     border-color: transparent;
     box-shadow: 0 5px 16px color-mix(in srgb, var(--color-primary) 40%, transparent);
   }
@@ -141,6 +141,7 @@
   font-size: 1rem;
   font-weight: 700;
   color: var(--color-text);
+  margin-top: 0;
   margin-bottom: 1rem;
   padding-bottom: 0.65rem;
   border-bottom: 2px solid var(--color-border);
@@ -657,7 +658,7 @@
   border-radius: 999px;
   border: 0;
   background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 60%, var(--color-accent)));
-  color: #fff;
+  color: var(--color-button-text);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--color-primary) 26%, transparent);
   cursor: pointer;
   transition: transform 0.15s ease, opacity 0.15s ease;
@@ -866,7 +867,8 @@
   background: color-mix(in srgb, var(--color-border) 14%, transparent);
 }
 
-.tableFilterRow input {
+.tableFilterRow input,
+.tableFilterRow select {
   margin-top: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -1192,7 +1194,7 @@
 /* ---- Action Buttons ---- */
 .greenBtn {
   background: linear-gradient(135deg, var(--color-success), color-mix(in srgb, var(--color-success) 75%, var(--color-primary))) !important;
-  color: #fff !important;
+  color: var(--color-button-text) !important;
   border-color: transparent !important;
   font-weight: 700 !important;
   box-shadow: 0 3px 10px color-mix(in srgb, var(--color-success) 35%, transparent) !important;
@@ -1206,7 +1208,7 @@
 
 .blueBtn {
   background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent))) !important;
-  color: #fff !important;
+  color: var(--color-button-text) !important;
   border-color: transparent !important;
   font-weight: 700 !important;
   box-shadow: 0 3px 10px color-mix(in srgb, var(--color-primary) 35%, transparent) !important;
@@ -1447,7 +1449,7 @@
 
 .viewActive {
   background: var(--color-primary) !important;
-  color: #fff !important;
+  color: var(--color-button-text) !important;
   font-weight: 700 !important;
 }
 

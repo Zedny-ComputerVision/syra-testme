@@ -50,10 +50,3 @@ class AudioMonitor:
                 }
 
         return None
-
-
-_monitor = AudioMonitor()
-
-
-def detect_audio(chunk_bytes: bytes) -> dict | None:
-    return _monitor.process(chunk_bytes)

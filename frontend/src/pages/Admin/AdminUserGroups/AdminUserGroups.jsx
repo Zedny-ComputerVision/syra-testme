@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
+import { readPaginatedItems } from '../../../utils/pagination'
 import styles from './AdminUserGroups.module.scss'
 
 function resolveError(err) {
@@ -48,7 +49,7 @@ export default function AdminUserGroups() {
     try {
       const [groupsRes, usersRes, testsRes, schedulesRes] = await Promise.allSettled([
         adminApi.userGroups(),
-        adminApi.users(),
+        adminApi.users({ role: 'LEARNER', skip: 0, limit: 200 }),
         adminApi.allTests(),
         adminApi.schedules(),
       ])
@@ -66,7 +67,7 @@ export default function AdminUserGroups() {
       }
 
       if (usersRes.status === 'fulfilled') {
-        setUsers((usersRes.value.data || []).filter((user) => user.role === 'LEARNER'))
+        setUsers(readPaginatedItems(usersRes.value.data).filter((user) => user.role === 'LEARNER'))
         setUsersReady(true)
       } else {
         setUsers([])

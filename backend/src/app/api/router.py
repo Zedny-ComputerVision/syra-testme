@@ -15,6 +15,7 @@ from .routes import (
     dashboard,
     proctoring,
     notifications,
+    gdpr,
     surveys,
     user_groups,
     exam_templates,
@@ -46,6 +47,7 @@ router.include_router(question_pools.router, prefix="/question-pools", tags=["qu
 router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 router.include_router(proctoring.router, prefix="/proctoring", tags=["proctoring"])
 router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+router.include_router(gdpr.router, tags=["gdpr"])
 router.include_router(surveys.router, prefix="/surveys", tags=["surveys"])
 router.include_router(user_groups.router, prefix="/user-groups", tags=["user-groups"])
 router.include_router(exam_templates.router, prefix="/exam-templates", tags=["exam-templates"])

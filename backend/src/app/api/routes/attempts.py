@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 import base64
 from pathlib import Path
@@ -13,12 +13,13 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ...models import (
     Attempt,
     AttemptAnswer,
     Exam,
+    GradingScale,
     User,
     Question,
     RoleEnum,
@@ -33,6 +34,7 @@ from ...core.config import get_settings
 from ...schemas import (
     AttemptCreate,
     AttemptResolveRequest,
+    PaginatedResponse,
     AttemptRead,
     AttemptAnswerBase,
     AttemptAnswerRead,
@@ -42,6 +44,7 @@ from ...schemas import (
 from ..deps import ensure_permission, get_current_user, get_db_dep, require_permission, require_role, parse_uuid_param, normalize_utc_datetime
 from ...detection.face_verification import compute_face_signature
 from ...services.crypto_utils import encrypt_bytes
+from ...services.notifications import notify_user
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 
 try:
@@ -51,6 +54,24 @@ except Exception:  # pragma: no cover - optional dependency
 
 router = APIRouter()
 settings = get_settings()
+
+
+def _notify_attempt_result(db: Session, attempt: Attempt, *, result_kind: str) -> None:
+    if attempt.score is None:
+        return
+    exam_title = attempt.exam.title if attempt.exam else "your test"
+    grade_text = f" Grade: {attempt.grade}." if attempt.grade else ""
+    notify_user(
+        db,
+        attempt.user_id,
+        title="Attempt result available",
+        message=(
+            f"Your attempt for {exam_title} has been {result_kind} with a score of "
+            f"{attempt.score:.2f}%."
+            f"{grade_text}"
+        ),
+        link=f"/attempt-result/{attempt.id}",
+    )
 
 
 def _attempt_is_paused(db: Session, attempt_id) -> bool:
@@ -75,7 +96,12 @@ def _attempt_is_paused(db: Session, attempt_id) -> bool:
     return bool(last_state_event and last_state_event.event_type == "ATTEMPT_PAUSED")
 
 
-def _build_attempt_read(attempt: Attempt, *, db: Session | None = None) -> AttemptRead:
+def _build_attempt_read(
+    attempt: Attempt,
+    *,
+    db: Session | None = None,
+    pending_manual_review: bool | None = None,
+) -> AttemptRead:
     exam = attempt.exam
     user = getattr(attempt, "user", None)
     title = getattr(exam, "title", None) if exam else None
@@ -88,6 +114,8 @@ def _build_attempt_read(attempt: Attempt, *, db: Session | None = None) -> Attem
         status=attempt.status,
         paused=_attempt_is_paused(db, attempt.id) if db is not None else False,
         score=attempt.score,
+        grade=attempt.grade,
+        pending_manual_review=pending_manual_review,
         started_at=attempt.started_at,
         submitted_at=attempt.submitted_at,
         identity_verified=attempt.identity_verified,
@@ -149,6 +177,38 @@ def _normalized_text(value) -> str:
     if value is None:
         return ""
     return str(value).strip().lower()
+
+
+def _normalized_sequence(value) -> list[str] | None:
+    if value is None:
+        return []
+    parsed = _parsed_answer_value(value)
+    if isinstance(parsed, list):
+        return [_normalized_text(item) for item in parsed]
+    return None
+
+
+def _normalized_mapping(value) -> dict[str, str] | None:
+    if value is None:
+        return {}
+    parsed = _parsed_answer_value(value)
+    if isinstance(parsed, dict):
+        return {
+            str(key).strip(): _normalized_text(item)
+            for key, item in parsed.items()
+        }
+    return None
+
+
+def _normalized_blank_values(value) -> list[str] | None:
+    if value is None:
+        return []
+    parsed = _parsed_answer_value(value)
+    if isinstance(parsed, list):
+        return [_normalized_text(item) for item in parsed]
+    if isinstance(parsed, str):
+        return [_normalized_text(item) for item in parsed.split("|")]
+    return None
 
 
 def _choice_token(value, options: list[str] | None) -> str:
@@ -300,11 +360,63 @@ def _evaluate_answer(question: Question, submitted_answer):
         actual_tokens = _multi_choice_tokens(submitted_answer, options)
         expected_tokens = _multi_choice_tokens(expected, options)
         is_correct = bool(actual_tokens) and actual_tokens == expected_tokens
+    elif q_type == ExamType.ORDERING:
+        actual_order = _normalized_sequence(submitted_answer)
+        expected_order = _normalized_sequence(expected)
+        if actual_order is None or expected_order is None:
+            is_correct = _normalized_text(submitted_answer) == _normalized_text(expected)
+        else:
+            is_correct = actual_order == expected_order
+    elif q_type == ExamType.MATCHING:
+        actual_pairs = _normalized_mapping(submitted_answer)
+        expected_pairs = _normalized_mapping(expected)
+        if actual_pairs is None or expected_pairs is None:
+            is_correct = _normalized_text(submitted_answer) == _normalized_text(expected)
+        else:
+            is_correct = bool(expected_pairs) and all(
+                actual_pairs.get(key) == value
+                for key, value in expected_pairs.items()
+            )
+    elif q_type == ExamType.FILLINBLANK:
+        actual_values = _normalized_blank_values(submitted_answer)
+        expected_values = _normalized_blank_values(expected)
+        if actual_values is None or expected_values is None:
+            is_correct = _normalized_text(submitted_answer) == _normalized_text(expected)
+        else:
+            is_correct = actual_values == expected_values
+    elif q_type == ExamType.TEXT:
+        is_correct = _normalized_text(submitted_answer) == _normalized_text(expected)
     else:
         is_correct = _normalized_text(submitted_answer) == _normalized_text(expected)
 
     points = float(question.points or 0) if is_correct else 0.0
     return is_correct, points
+
+
+def _grade_label_for_score(exam: Exam | None, score: float | None, db: Session) -> str | None:
+    grading_scale_id = getattr(exam, "grading_scale_id", None) if exam is not None else None
+    if score is None or exam is None or not grading_scale_id:
+        return None
+
+    grading_scale = getattr(exam, "grading_scale", None) or db.get(GradingScale, grading_scale_id)
+    labels = grading_scale.labels if grading_scale and isinstance(grading_scale.labels, list) else []
+    numeric_score = float(score)
+    for band in sorted(labels, key=lambda item: (item.get("min_score", 0), item.get("max_score", 0)), reverse=True):
+        try:
+            min_score = float(band.get("min_score"))
+            max_score = float(band.get("max_score"))
+        except (TypeError, ValueError):
+            continue
+        if min_score <= numeric_score <= max_score:
+            label = str(band.get("label") or "").strip()
+            return label or None
+    return None
+
+
+def _apply_attempt_grade(attempt: Attempt, score: float | None, db: Session) -> str | None:
+    exam = attempt.exam or db.get(Exam, attempt.exam_id)
+    attempt.grade = _grade_label_for_score(exam, score, db)
+    return attempt.grade
 
 
 def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
@@ -318,10 +430,11 @@ def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
         .order_by(Question.order.asc(), Question.created_at.asc())
     ).all()
     if not questions:
-        return {"score": None, "pending_manual_review": False}
+        return {"score": None, "grade": None, "pending_manual_review": False}
 
     total_points = 0.0
     earned_points = 0.0
+    earned_auto_points = 0.0
     pending_manual_review = False
     exam_settings = attempt.exam.settings if attempt.exam else {}
     negative_marking = bool((exam_settings or {}).get("negative_marking"))
@@ -362,17 +475,46 @@ def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
         answer.points_earned = points_earned
         if points_earned is not None:
             earned_points += points_earned
+            earned_auto_points += points_earned
         db.add(answer)
 
     if total_points <= 0:
-        return {"score": None, "pending_manual_review": pending_manual_review}
+        return {"score": None, "grade": None, "pending_manual_review": pending_manual_review}
     if pending_manual_review:
-        return {"score": None, "pending_manual_review": True}
+        partial_score = round((max(earned_auto_points, 0.0) / total_points) * 100, 2)
+        return {"score": partial_score, "grade": None, "pending_manual_review": True}
     earned_points = max(earned_points, 0.0)
+    score = round((earned_points / total_points) * 100, 2)
     return {
-        "score": round((earned_points / total_points) * 100, 2),
+        "score": score,
+        "grade": _grade_label_for_score(attempt.exam, score, db),
         "pending_manual_review": False,
     }
+
+
+def _pending_manual_review_for_attempt(attempt: Attempt, db: Session) -> bool:
+    if attempt.status not in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
+        return False
+    progress = _calculate_attempt_review_progress(attempt, db)
+    return bool(progress["pending_manual_review"])
+
+
+def _pending_manual_review_attempt_ids(db: Session, attempt_ids: list) -> set:
+    if not attempt_ids:
+        return set()
+    answers = db.scalars(
+        select(AttemptAnswer)
+        .options(joinedload(AttemptAnswer.question))
+        .where(
+            AttemptAnswer.attempt_id.in_(attempt_ids),
+            AttemptAnswer.points_earned.is_(None),
+        )
+    ).all()
+    pending_ids = set()
+    for answer in answers:
+        if answer.question and _question_requires_manual_review(answer.question, answer.answer):
+            pending_ids.add(answer.attempt_id)
+    return pending_ids
 
 
 def _apply_admin_grade(attempt: Attempt, *, score: float, db: Session) -> Attempt:
@@ -384,6 +526,7 @@ def _apply_admin_grade(attempt: Attempt, *, score: float, db: Session) -> Attemp
     if attempt.submitted_at is None:
         attempt.submitted_at = datetime.now(timezone.utc)
     attempt.score = round(float(score), 2)
+    _apply_attempt_grade(attempt, attempt.score, db)
     attempt.status = AttemptStatus.GRADED
     db.add(attempt)
     db.commit()
@@ -432,6 +575,7 @@ def _calculate_attempt_review_progress(attempt: Attempt, db: Session) -> dict:
 
     return {
         "score": score,
+        "grade": _grade_label_for_score(attempt.exam, score, db),
         "pending_manual_review": pending_manual_review,
         "manual_total": manual_total,
         "manual_reviewed": manual_reviewed,
@@ -557,38 +701,61 @@ async def resolve_attempt(
     return _build_attempt_read(attempt, db=db)
 
 
-@router.get("/", response_model=list[AttemptRead])
+@router.get("/", response_model=PaginatedResponse[AttemptRead])
 async def list_attempts(
     exam_id: str | None = None,
     user_id: str | None = None,
     status: str | None = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    query = select(Attempt)
+    base_query = select(Attempt)
     if current.role == RoleEnum.LEARNER:
-        query = query.where(Attempt.user_id == current.id)
+        base_query = base_query.where(Attempt.user_id == current.id)
     else:
         ensure_permission(db, current, "View Attempt Analysis")
         if user_id:
             try:
                 from uuid import UUID
-                query = query.where(Attempt.user_id == str(UUID(user_id)))
+                base_query = base_query.where(Attempt.user_id == str(UUID(user_id)))
             except (ValueError, TypeError):
                 pass
     if exam_id:
         try:
             from uuid import UUID
-            query = query.where(Attempt.exam_id == str(UUID(exam_id)))
+            base_query = base_query.where(Attempt.exam_id == str(UUID(exam_id)))
         except (ValueError, TypeError):
             pass
     if status:
         try:
-            query = query.where(Attempt.status == AttemptStatus(status))
+            base_query = base_query.where(Attempt.status == AttemptStatus(status))
         except ValueError:
             pass
-    attempts = db.scalars(query.order_by(Attempt.created_at.desc())).all()
-    return [_build_attempt_read(a, db=db) for a in attempts]
+    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    query = (
+        base_query
+        .options(joinedload(Attempt.exam), joinedload(Attempt.user))
+        .order_by(Attempt.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    attempts = db.scalars(query).all()
+    pending_ids = _pending_manual_review_attempt_ids(db, [attempt.id for attempt in attempts])
+    return {
+        "items": [
+            _build_attempt_read(
+                a,
+                db=db,
+                pending_manual_review=a.id in pending_ids,
+            )
+            for a in attempts
+        ],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.get("/{attempt_id}", response_model=AttemptRead)
@@ -602,7 +769,11 @@ async def get_attempt(
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     _ensure_attempt_access(db, attempt, current)
-    return _build_attempt_read(attempt, db=db)
+    return _build_attempt_read(
+        attempt,
+        db=db,
+        pending_manual_review=_pending_manual_review_for_attempt(attempt, db),
+    )
 
 
 @router.post("/{attempt_id}/answers", response_model=AttemptAnswerRead)
@@ -689,6 +860,10 @@ async def submit_attempt(
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     _ensure_attempt_access(db, attempt, current)
+    if attempt.status in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
+        return _build_attempt_read(attempt, db=db)
+    if attempt.status != AttemptStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="Attempt cannot be submitted in its current state")
     if _attempt_is_paused(db, attempt_pk):
         raise HTTPException(status_code=409, detail="Attempt is paused")
     exam_proctoring = attempt.exam.proctoring_config if attempt.exam else None
@@ -697,17 +872,19 @@ async def submit_attempt(
     if (
         exam_requires_verification
         and not (attempt.id_verified or attempt.identity_verified)
-        and not settings.PRECHECK_ALLOW_TEST_BYPASS
+        and not settings.precheck_test_bypass_enabled
     ):
         raise HTTPException(status_code=400, detail="Pre-test verification required")
     if current.role == RoleEnum.LEARNER:
         score = None  # learners cannot grade
     elif score is not None:
         graded = _apply_admin_grade(attempt, score=score, db=db)
+        _notify_attempt_result(db, graded, result_kind="graded")
         return _build_attempt_read(graded, db=db)
 
     score_result = _auto_score_attempt(attempt, db)
     computed_score = score_result["score"]
+    pending_manual_review = bool(score_result.get("pending_manual_review"))
     attempt.status = AttemptStatus.SUBMITTED
     attempt.submitted_at = datetime.now(timezone.utc)
     if score is None and computed_score is not None:
@@ -716,10 +893,17 @@ async def submit_attempt(
         attempt.score = score
     else:
         attempt.score = None
+    attempt.grade = score_result.get("grade") if attempt.score is not None else None
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
-    return _build_attempt_read(attempt, db=db)
+    if attempt.score is not None and not pending_manual_review:
+        _notify_attempt_result(db, attempt, result_kind="scored")
+    return _build_attempt_read(
+        attempt,
+        db=db,
+        pending_manual_review=pending_manual_review,
+    )
 
 
 @router.post("/{attempt_id}/grade", response_model=AttemptRead)
@@ -734,7 +918,8 @@ async def grade_attempt(
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     graded = _apply_admin_grade(attempt, score=score, db=db)
-    return _build_attempt_read(graded, db=db)
+    _notify_attempt_result(db, graded, result_kind="graded")
+    return _build_attempt_read(graded, db=db, pending_manual_review=False)
 
 
 @router.post("/{attempt_id}/answers/{answer_id}/review", response_model=AttemptAnswerRead)
@@ -802,13 +987,15 @@ async def finalize_attempt_review(
         raise HTTPException(status_code=400, detail="Attempt score could not be finalized")
 
     attempt.score = progress["score"]
+    attempt.grade = progress.get("grade")
     attempt.status = AttemptStatus.GRADED
     if attempt.submitted_at is None:
         attempt.submitted_at = datetime.now(timezone.utc)
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
-    return _build_attempt_read(attempt, db=db)
+    _notify_attempt_result(db, attempt, result_kind="graded")
+    return _build_attempt_read(attempt, db=db, pending_manual_review=False)
 
 
 @router.post("/{attempt_id}/verify-identity", response_model=AttemptRead)
@@ -858,12 +1045,12 @@ def _generate_certificate(attempt: Attempt) -> bytes:
 
     exam = attempt.exam
     user = attempt.user
-    cfg = exam.certificate or {}
+    cfg = exam.certificate if isinstance(exam.certificate, dict) else {}
 
     title = cfg.get("title") or "Certificate of Completion"
     subtitle = cfg.get("subtitle") or ""
-    issuer = cfg.get("issuer") or "SYRA LMS"
-    signer = cfg.get("signer") or "Authorized Signatory"
+    issuer = cfg.get("issuer_name") or cfg.get("issuer") or "SYRA LMS"
+    signer = cfg.get("signer_name") or cfg.get("signer") or "Authorized Signatory"
 
     c.setFont("Helvetica-Bold", 24)
     c.drawCentredString(width / 2, height - 120, title)
@@ -882,7 +1069,11 @@ def _generate_certificate(attempt: Attempt) -> bytes:
 
     c.setFont("Helvetica", 10)
     c.drawCentredString(width / 2, height - 360, f"Score: {attempt.score if attempt.score is not None else 'N/A'}")
-    c.drawCentredString(width / 2, height - 380, f"Date: {attempt.submitted_at.strftime('%Y-%m-%d') if attempt.submitted_at else datetime.now().strftime('%Y-%m-%d')}")
+    c.drawCentredString(
+        width / 2,
+        height - 380,
+        f"Date: {attempt.submitted_at.strftime('%Y-%m-%d') if attempt.submitted_at else datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+    )
 
     c.line(width / 2 - 120, height - 450, width / 2 + 120, height - 450)
     c.setFont("Helvetica-Bold", 12)
@@ -928,6 +1119,9 @@ async def import_attempts(
             created_at=now,
             updated_at=now,
         )
+        attempt.exam = exam
+        attempt.user = user
+        _apply_attempt_grade(attempt, score, db)
         db.add(attempt)
         db.flush()
         created.append(_build_attempt_read(attempt, db=db))
@@ -959,5 +1153,6 @@ async def download_certificate(
 
     pdf_bytes = _generate_certificate(attempt)
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="certificate_{attempt_id}.pdf"'
+        "Content-Disposition": f'attachment; filename="certificate_{attempt_id}.pdf"',
+        "Content-Length": str(len(pdf_bytes)),
     })

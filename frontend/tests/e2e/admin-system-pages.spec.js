@@ -44,8 +44,11 @@ test.describe('Admin system pages', () => {
     await page.reload()
     await expect(page.getByText(email)).toBeVisible()
 
-    await page.goto('/admin/reports')
+    await page.goto('/admin/report-builder')
     await expect(page.getByRole('heading', { name: 'Report Builder' })).toBeVisible()
+
+    await page.goto('/admin/reports')
+    await expect(page.getByRole('heading', { name: 'Scheduled Reports' })).toBeVisible()
 
     const main = page.locator('main')
     await main.getByLabel('Name').fill(scheduleName)
@@ -64,7 +67,7 @@ test.describe('Admin system pages', () => {
     await expect(page.getByText(/Report generated successfully|Report run completed successfully/)).toBeVisible()
     const generatedReportLink = page.getByRole('link', { name: 'Open generated report' })
     await expect(generatedReportLink).toBeVisible()
-    await expect(generatedReportLink).toHaveAttribute('href', /\/reports\//)
+    await expect(generatedReportLink).toHaveAttribute('href', /\/api\/media\/reports\//)
 
     await row.getByRole('button', { name: 'Delete' }).click()
     await row.getByRole('button', { name: 'Confirm delete' }).click()

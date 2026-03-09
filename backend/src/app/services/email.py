@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import re
 import httpx
 import smtplib
@@ -6,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from ..core.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 HTML_TAG_RE = re.compile(r"<[a-zA-Z][^>]*>")
 
 _BASE_STYLE = """
@@ -72,7 +75,7 @@ def get_email_delivery_status() -> tuple[bool, str | None]:
     return False, "Email transport not configured: set BREVO_API_KEY or SMTP settings."
 
 
-async def send_email(subject: str, to: str, content: str):
+async def _send_email_once(subject: str, to: str, content: str) -> None:
     if _brevo_available():
         api_key = (settings.BREVO_API_KEY or "").strip()
         headers = {
@@ -128,6 +131,32 @@ async def send_email(subject: str, to: str, content: str):
         return
 
     raise RuntimeError("Email transport not configured: set BREVO_API_KEY or SMTP settings.")
+
+
+async def send_email(subject: str, to: str, content: str) -> bool:
+    backoff_delays = (1, 2, 4)
+    for attempt_number in range(1, len(backoff_delays) + 2):
+        try:
+            await _send_email_once(subject, to, content)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Email send attempt %s failed for %s: %s",
+                attempt_number,
+                to,
+                exc,
+            )
+            if attempt_number <= len(backoff_delays):
+                await asyncio.sleep(backoff_delays[attempt_number - 1])
+                continue
+            logger.critical(
+                "Email delivery failed after %s attempts for %s: %s",
+                attempt_number,
+                to,
+                exc,
+                exc_info=True,
+            )
+            return False
 
 
 # ── Email templates ──────────────────────────────────────────────────────────

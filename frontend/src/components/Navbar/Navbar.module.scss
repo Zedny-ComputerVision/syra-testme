@@ -83,6 +83,21 @@
   flex: 1;
 }
 
+.searchShortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 45%, transparent);
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .searchIcon {
   display: flex;
   align-items: center;
@@ -194,7 +209,7 @@
 }
 
 .accentChipIndigo {
-  background: #6366f1;
+  background: var(--accent-indigo);
 }
 
 .accentChipCyan {
@@ -202,11 +217,11 @@
 }
 
 .accentChipAmber {
-  background: #f59e0b;
+  background: var(--accent-amber);
 }
 
 .accentChipPink {
-  background: #ec4899;
+  background: var(--accent-pink);
 }
 
 .accentChipActive {
@@ -247,7 +262,7 @@
   height: 17px;
   border-radius: 9px;
   background: var(--color-danger);
-  color: #fff;
+  color: var(--color-button-text);
   font-size: 0.6rem;
   font-weight: 700;
   display: flex;
@@ -476,12 +491,28 @@
 }
 
 .notifItem {
+  width: 100%;
+  display: block;
+  text-align: left;
   padding: 0.7rem 1rem;
   border-bottom: 1px solid var(--color-border);
   transition: background 0.1s;
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  color: inherit;
 
   &:last-child { border-bottom: none; }
   &:hover { background: rgba(0, 0, 0, 0.04); }
+}
+
+.notifItem:disabled {
+  cursor: default;
+}
+
+.notifItemLinked {
+  cursor: pointer;
 }
 
 .notifUnread {
@@ -499,4 +530,35 @@
   font-size: 0.72rem;
   color: var(--color-muted);
   margin-top: 0.2rem;
+}
+
+.notifFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem 0.85rem;
+  border-top: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-border) 18%, transparent);
+}
+
+.notifCount {
+  font-size: 0.74rem;
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.notifClose {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
 }

@@ -60,6 +60,6 @@ export function allowedFeaturesForRole(rows, role) {
 }
 
 export function hasPermission(rows, role, feature) {
-  if (!feature) return true
+  if (!feature) return false
   return allowedFeaturesForRole(rows, role).includes(normalizeFeature(feature))
 }

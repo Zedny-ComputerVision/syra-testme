@@ -23,6 +23,16 @@ const REASON_MESSAGES = {
 }
 
 const toReasonText = (reason) => REASON_MESSAGES[reason] || reason
+const START_ERROR_STORAGE_PREFIX = 'journey_start_error:'
+
+function persistJourneyStartError(testId, message) {
+  if (!message) return
+  try {
+    sessionStorage.setItem(`${START_ERROR_STORAGE_PREFIX}${testId}`, message)
+  } catch {
+    // ignore storage failures and fall back to inline error handling
+  }
+}
 
 export default function VerifyIdentityPage() {
   const { testId } = useParams()
@@ -230,13 +240,14 @@ export default function VerifyIdentityPage() {
   })
 
   const handleUploadSelfie = async (file) => {
-    if (requirements.fullscreenRequired && !document.fullscreenElement) {
-      setFullscreenResumeNeeded(true)
-    }
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setError('Please upload a valid selfie image file.')
+      setFullscreenResumeNeeded(false)
       return
+    }
+    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+      setFullscreenResumeNeeded(true)
     }
     try {
       const dataUrl = await readFileAsDataUrl(file)
@@ -252,13 +263,14 @@ export default function VerifyIdentityPage() {
   }
 
   const handleUploadId = async (file) => {
-    if (requirements.fullscreenRequired && !document.fullscreenElement) {
-      setFullscreenResumeNeeded(true)
-    }
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setError('Please upload a valid ID image file.')
+      setFullscreenResumeNeeded(false)
       return
+    }
+    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+      setFullscreenResumeNeeded(true)
     }
     try {
       const dataUrl = await readFileAsDataUrl(file)
@@ -326,8 +338,21 @@ export default function VerifyIdentityPage() {
       if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop())
       navigate(`/tests/${testId}/rules`)
     } catch (e) {
+      const detail = e.response?.data?.detail || ''
+      if (
+        typeof detail === 'string'
+        && (
+          detail.startsWith('Retake available in ')
+          || detail === 'Retakes are disabled for this test'
+          || detail === 'Max attempts reached'
+        )
+      ) {
+        persistJourneyStartError(testId, detail)
+        navigate(`/tests/${testId}/rules`, { replace: true })
+        return
+      }
       setFailureReasons([])
-      setError(e.response?.data?.detail || 'Failed to verify identity. Please retake your photo and try again.')
+      setError(detail || 'Failed to verify identity. Please retake your photo and try again.')
     } finally {
       setSubmitting(false)
     }

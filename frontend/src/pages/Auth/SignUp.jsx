@@ -81,18 +81,54 @@ export default function SignUp() {
 
   return (
     <div className={styles.page}>
-      <form className={styles.card} onSubmit={submit}>
-        <h1 className={styles.title}>Create Account</h1>
-        <p className={styles.sub}>Self-registration (Learner)</p>
+      <form className={`${styles.card} ${styles.signupCard}`} onSubmit={submit}>
+        <div className={styles.authEyebrow}>Learner onboarding</div>
+        <div className={styles.signupHero}>
+          <div>
+            <h1 className={styles.title}>Create Account</h1>
+            <p className={styles.sub}>Self-registration (Learner)</p>
+          </div>
+          <div className={styles.signupHighlights}>
+            <span className={styles.highlightChip}>Fast setup</span>
+            <span className={styles.highlightChip}>Secure access</span>
+            <span className={styles.highlightChip}>Exam ready</span>
+          </div>
+        </div>
+        <div className={styles.heroNote}>
+          Create your learner account once, then manage tests, schedules, and results from the same workspace.
+        </div>
         {statusLoading && <div className={styles.info}>Checking self-registration availability...</div>}
         {statusError && <div className={styles.error}>{statusError}</div>}
         {!statusLoading && !statusError && !signupAllowed && <div className={styles.error}>Self-registration is currently disabled.</div>}
         {msg && <div className={isError ? styles.error : styles.info}>{msg}</div>}
-        <input className={styles.input} placeholder="Full name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
-        <input className={styles.input} type="email" placeholder="Email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
-        <input className={styles.input} placeholder="Student ID / Username" value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
-        <input className={styles.input} type="password" placeholder="Password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
-        <input className={styles.input} type="password" placeholder="Confirm password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
+        <div className={styles.formStack}>
+          <label className={styles.fieldGroup}>
+            <span className={styles.fieldLabel}>Full name</span>
+            <input className={styles.input} placeholder="Full name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
+          </label>
+          <div className={styles.gridTwo}>
+            <label className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>Email</span>
+              <input className={styles.input} type="email" placeholder="Email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
+            </label>
+            <label className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>Student ID / Username</span>
+              <input className={styles.input} placeholder="Student ID / Username" value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
+            </label>
+          </div>
+          <label className={styles.fieldGroup}>
+            <span className={styles.fieldLabel}>Password</span>
+            <input className={styles.input} type="password" placeholder="Password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
+          </label>
+          <label className={styles.fieldGroup}>
+            <span className={styles.fieldLabel}>Confirm password</span>
+            <input className={styles.input} type="password" placeholder="Confirm password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} required disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} />
+          </label>
+        </div>
+        <div className={styles.helperPanel}>
+          <div className={styles.helperTitle}>Before you continue</div>
+          <div className={styles.helperText}>Use the email and learner ID your institution expects. Passwords must be at least 8 characters.</div>
+        </div>
         <button className={styles.btn} type="submit" disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)}>{loading ? 'Creating...' : 'Sign Up'}</button>
         {(statusError || !signupAllowed) && (
           <button className={styles.secondaryBtn} type="button" onClick={() => void loadSignupStatus()} disabled={statusLoading || loading}>

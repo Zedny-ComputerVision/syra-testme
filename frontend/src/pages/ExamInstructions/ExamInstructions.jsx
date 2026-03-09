@@ -19,7 +19,7 @@ export default function ExamInstructions() {
     setError('')
     getTest(testId)
       .then(({ data }) => setTest(normalizeTest(data)))
-      .catch(() => setError('Failed to load test details'))
+      .catch((err) => setError(err.response?.data?.detail || err.message || 'Failed to load test details'))
       .finally(() => setLoading(false))
   }
 

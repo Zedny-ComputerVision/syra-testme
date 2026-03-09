@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
+import { readPaginatedItems } from '../../../utils/pagination'
 import styles from './AdminSchedules.module.scss'
 
 const EMPTY_FORM = { user_id: '', exam_id: '', scheduled_at: '', access_mode: 'OPEN', notes: '' }
@@ -36,7 +37,7 @@ export default function AdminSchedules() {
       const [sRes, tRes, uRes] = await Promise.allSettled([
         adminApi.schedules(),
         adminApi.allTests(),
-        adminApi.users(),
+        adminApi.users({ skip: 0, limit: 200 }),
       ])
       const failures = []
 
@@ -58,7 +59,7 @@ export default function AdminSchedules() {
       }
 
       if (uRes.status === 'fulfilled') {
-        setUsers(uRes.value.data || [])
+        setUsers(readPaginatedItems(uRes.value.data))
       } else {
         setUsers([])
         failures.push('users')

@@ -76,8 +76,8 @@ describe('AdminAuditLog page', () => {
     render(<AdminAuditLog />)
 
     await waitFor(() => expect(screen.getByText('admin@example.com')).toBeTruthy())
-    expect(screen.getByText('Loaded entries')).toBeTruthy()
-    expect(screen.getByText(/2 entries loaded/)).toBeTruthy()
+    expect(screen.getByText('Matching entries')).toBeTruthy()
+    expect(screen.getByText(/2 matching entries/)).toBeTruthy()
     expect(screen.getByText('Visible on page')).toBeTruthy()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'View detail' })[0])

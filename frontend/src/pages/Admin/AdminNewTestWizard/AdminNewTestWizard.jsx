@@ -1,9 +1,11 @@
-import React, { startTransition, useCallback, useEffect, useRef, useState } from 'react'
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
+import useUnsavedChanges from '../../../hooks/useUnsavedChanges'
 import { adminApi } from '../../../services/admin.service'
 import { generateQuestionsAI } from '../../../services/ai.service'
 import { normalizeProctoringConfig } from '../../../utils/proctoringRequirements'
+import { readPaginatedItems } from '../../../utils/pagination'
 import ExamQuestionPanel from '../ExamQuestionPanel/ExamQuestionPanel'
 import styles from './AdminNewTestWizard.module.scss'
 
@@ -205,6 +207,7 @@ export default function AdminNewTestWizard() {
   const { id: paramId } = useParams()
   const editId = searchParams.get('edit') || paramId
   const autosaveTimerRef = useRef(null)
+  const autosavingRef = useRef(false)
   const prefersReducedMotion = useReducedMotion()
   const stepTransitionDuration = prefersReducedMotion || import.meta.env.MODE === 'test' ? 0 : 0.25
 
@@ -320,6 +323,10 @@ export default function AdminNewTestWizard() {
 
   /* ─── Step 8: Save ─── */
   const [publishStatus, setPublishStatus] = useState('CLOSED')
+  const wizardBaselineRef = useRef('')
+  const [wizardReady, setWizardReady] = useState(!editId)
+  const [wizardBaselineVersion, setWizardBaselineVersion] = useState(0)
+  const [exitingWizard, setExitingWizard] = useState(false)
 
   const toDateTimeLocalValue = (value) => {
     if (!value) return ''
@@ -473,7 +480,7 @@ export default function AdminNewTestWizard() {
       adminApi.categories(),
       adminApi.gradingScales(),
       adminApi.questionPools(),
-      adminApi.users(),
+      adminApi.learnersForScheduling({ is_active: true }),
       adminApi.examTemplates(),
     ]).then((results) => {
       if (cancelled) return
@@ -521,7 +528,8 @@ export default function AdminNewTestWizard() {
   /* ─── Load existing exam for edit ─── */
   useEffect(() => {
     if (!editId) return
-    adminApi.getTest(editId).then(({ data: test }) => {
+    setWizardReady(false)
+    const testRequest = adminApi.getTest(editId).then(({ data: test }) => {
       if (!test) return
       setEditorLocked(test.status && test.status !== 'DRAFT')
       const runtimeSettings = test.runtime_settings || {}
@@ -589,7 +597,11 @@ export default function AdminNewTestWizard() {
         setCertEnabled(false)
       }
     }).catch(() => {})
-    adminApi.getQuestions(editId).then(({ data }) => setQuestions(data || [])).catch(() => {})
+    const questionRequest = adminApi.getQuestions(editId).then(({ data }) => setQuestions(data || [])).catch(() => {})
+    Promise.allSettled([testRequest, questionRequest]).finally(() => {
+      setWizardReady(true)
+      setWizardBaselineVersion((current) => current + 1)
+    })
   }, [editId])
 
   useEffect(() => {
@@ -647,7 +659,7 @@ export default function AdminNewTestWizard() {
     }
   }
 
-  const buildRuntimeSettings = () => ({
+  const runtimeSettings = useMemo(() => ({
       creation_method: method,
       generator_config: method === 'generator' ? {
         strategy: generatorBy,
@@ -677,9 +689,37 @@ export default function AdminNewTestWizard() {
       show_question_scores: showQuestionScores,
       special_accommodations: specialAccommodations,
       special_requests: specialRequests,
-    })
+    }), [
+      method,
+      generatorBy,
+      generatorCount,
+      generatorDifficultyMix,
+      generatorCategories,
+      generatorPools,
+      generatorTagsInclude,
+      generatorTagsExclude,
+      generatorUniquePerCandidate,
+      generatorVersionCount,
+      generatorRandomSeed,
+      generatorPreventReuse,
+      generatorShuffleAnswers,
+      generatorAdaptive,
+      pageFormat,
+      calculatorType,
+      hideMetadata,
+      randomizeQuestions,
+      randomizeAnswers,
+      showProgressBar,
+      negativeMarking,
+      negMarkValue,
+      negMarkType,
+      showFinalScore,
+      showQuestionScores,
+      specialAccommodations,
+      specialRequests,
+    ])
 
-  const buildCertificate = () => (certEnabled ? {
+  const certificatePayload = useMemo(() => (certEnabled ? {
       template: certTemplate,
       orientation: certOrientation,
       title: certTitle,
@@ -687,9 +727,18 @@ export default function AdminNewTestWizard() {
       issuer: certCompany,
       signer: certSigner,
       description: certDescription,
-    } : null)
+    } : null), [
+      certEnabled,
+      certTemplate,
+      certOrientation,
+      certTitle,
+      certSubtitle,
+      certCompany,
+      certSigner,
+      certDescription,
+    ])
 
-  const buildTestPayload = () => ({
+  const testPayload = useMemo(() => ({
     code: examCode || null,
     name: title,
     description,
@@ -701,17 +750,50 @@ export default function AdminNewTestWizard() {
     attempts_allowed: maxAttempts,
     passing_score: passingScore,
     randomize_questions: randomizeQuestions,
-    runtime_settings: buildRuntimeSettings(),
+    runtime_settings: runtimeSettings,
     proctoring_config: normalizeProctoringConfig(proctoring),
-    certificate: buildCertificate(),
-  })
+    certificate: certificatePayload,
+  }), [
+    examCode,
+    title,
+    description,
+    examType,
+    nodeId,
+    categoryId,
+    gradingScaleId,
+    unlimitedTime,
+    timeLimitMinutes,
+    maxAttempts,
+    passingScore,
+    randomizeQuestions,
+    runtimeSettings,
+    proctoring,
+    certificatePayload,
+  ])
+
+  const wizardSnapshot = useMemo(() => JSON.stringify({
+    test: testPayload,
+    schedule: {
+      selectedUsers: [...selectedUsers].map((id) => String(id)).sort(),
+      accessMode,
+      scheduledAt,
+    },
+  }), [testPayload, selectedUsers, accessMode, scheduledAt])
+  const wizardDirty = wizardReady && wizardSnapshot !== wizardBaselineRef.current
+
+  useUnsavedChanges(wizardDirty && !saving && !exitingWizard)
+
+  useEffect(() => {
+    if (!wizardReady) return
+    wizardBaselineRef.current = wizardSnapshot
+  }, [wizardReady, wizardBaselineVersion, wizardSnapshot])
 
   const saveExam = async () => {
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
     }
-    const data = buildTestPayload()
+    const data = testPayload
     let id = examId
     if (examId) {
       await adminApi.updateTest(examId, data)
@@ -720,6 +802,7 @@ export default function AdminNewTestWizard() {
       setExamId(res.data.id)
       id = res.data.id
     }
+    setWizardBaselineVersion((current) => current + 1)
     return id
   }
 
@@ -746,12 +829,16 @@ export default function AdminNewTestWizard() {
     if (!examId || editorLocked) return
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = setTimeout(async () => {
+      if (autosavingRef.current) return
+      autosavingRef.current = true
       try {
         await saveExam()
-      } catch (e) {
+      } catch {
         setPanelError('Autosave failed. Check your connection and try again.')
+      } finally {
+        autosavingRef.current = false
       }
-    }, 250)
+    }, 1500)
   }
 
   const handleNext = async () => {
@@ -882,6 +969,7 @@ export default function AdminNewTestWizard() {
         }
       }
       await loadAssignedSessions(examId)
+      setWizardBaselineVersion((current) => current + 1)
     } catch (e) {
       setPanelError(e.response?.data?.detail || 'Failed to assign sessions. Please try again.')
     } finally {
@@ -894,8 +982,19 @@ export default function AdminNewTestWizard() {
     setSessionBusy(true)
     try {
       await adminApi.deleteSchedule(sessionId)
+      const nextAssigned = assignedSessions.filter((session) => String(session.id) !== String(sessionId))
+      setAssignedSessions(nextAssigned)
       setSelectedUsers((prev) => prev.filter((id) => String(id) !== String(userId)))
-      await loadAssignedSessions(examId)
+      if (nextAssigned.length > 0) {
+        const firstSchedule = nextAssigned[0]
+        setAccessMode(firstSchedule.mode || 'OPEN')
+        const sameScheduleTime = nextAssigned.every((session) => String(session.at || '') === String(firstSchedule.at || ''))
+        setScheduledAt(sameScheduleTime ? toDateTimeLocalValue(firstSchedule.at) : '')
+      } else {
+        setAccessMode('OPEN')
+        setScheduledAt('')
+      }
+      setWizardBaselineVersion((current) => current + 1)
     } catch (e) {
       setPanelError(e.response?.data?.detail || 'Failed to remove the session.')
     } finally {
@@ -925,7 +1024,8 @@ export default function AdminNewTestWizard() {
       if (publishStatus === 'OPEN') {
         await adminApi.publishTest(id)
       }
-      navigate('/admin/tests')
+      setExitingWizard(true)
+      window.location.assign('/admin/tests')
     } catch (e) { setPanelError(e.response?.data?.detail || 'Could not save. Please add questions and try again.') } finally { setSaving(false) }
   }
 
@@ -1326,10 +1426,10 @@ export default function AdminNewTestWizard() {
     if (step !== 2 || !examId) return
     let cancelled = false
     setProctoringLoading(true)
-    Promise.all([adminApi.attempts(), adminApi.schedules()])
+    Promise.all([adminApi.attempts({ exam_id: examId, skip: 0, limit: 200 }), adminApi.schedules()])
       .then(([attemptsRes, schedulesRes]) => {
         if (cancelled) return
-        const attempts = (attemptsRes.data || []).filter((a) => String(a.exam_id) === String(examId))
+        const attempts = readPaginatedItems(attemptsRes.data)
         const sessions = (schedulesRes.data || []).filter((s) => String(s.exam_id) === String(examId))
         setProctoringSessions(sessions)
 
@@ -1375,8 +1475,8 @@ export default function AdminNewTestWizard() {
       if (row.paused) await adminApi.resumeAttempt(row.id)
       else await adminApi.pauseAttempt(row.id)
       // Refresh rows
-      const { data: attempts } = await adminApi.attempts()
-      const filtered = (attempts || []).filter((a) => String(a.exam_id) === String(examId))
+      const { data: attempts } = await adminApi.attempts({ exam_id: examId, skip: 0, limit: 200 })
+      const filtered = readPaginatedItems(attempts)
       setProctoringRows((prev) => prev.map((r) => {
         const updated = filtered.find((a) => String(a.id) === r.id)
         return updated ? { ...r, status: updated.status, paused: row.paused ? false : true } : r
@@ -1393,8 +1493,8 @@ export default function AdminNewTestWizard() {
         if (toPause && !r.paused) await adminApi.pauseAttempt(r.id)
         if (!toPause && r.paused) await adminApi.resumeAttempt(r.id)
       }
-      const { data: attempts } = await adminApi.attempts()
-      const filtered = (attempts || []).filter((a) => String(a.exam_id) === String(examId))
+      const { data: attempts } = await adminApi.attempts({ exam_id: examId, skip: 0, limit: 200 })
+      const filtered = readPaginatedItems(attempts)
       setProctoringRows((prev) => prev.map((r) => {
         const updated = filtered.find((a) => String(a.id) === r.id)
         return updated ? { ...r, status: updated.status } : r

@@ -1,0 +1,8 @@
+{% extends "report_base.html" %}
+{% block content %}
+{% for stat in stats %}
+<div class="card">
+  <strong>{{ stat.label|e }}:</strong> {{ stat.value }}
+</div>
+{% endfor %}
+{% endblock %}

@@ -9,6 +9,7 @@ const attemptsMock = vi.fn()
 const getAttemptMock = vi.fn()
 const getAttemptEventsMock = vi.fn()
 const getAttemptAnswersMock = vi.fn()
+const fetchAuthenticatedMediaObjectUrlMock = vi.fn()
 
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
@@ -19,6 +20,11 @@ vi.mock('../../../services/admin.service', () => ({
   },
 }))
 
+vi.mock('../../../utils/authenticatedMedia', () => ({
+  fetchAuthenticatedMediaObjectUrl: (...args) => fetchAuthenticatedMediaObjectUrlMock(...args),
+  revokeObjectUrl: vi.fn(),
+}))
+
 describe('AdminAttemptAnalysis', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -26,6 +32,7 @@ describe('AdminAttemptAnalysis', () => {
     getAttemptMock.mockResolvedValue({ data: null })
     getAttemptEventsMock.mockResolvedValue({ data: [] })
     getAttemptAnswersMock.mockResolvedValue({ data: [] })
+    fetchAuthenticatedMediaObjectUrlMock.mockResolvedValue('blob:evidence')
   })
 
   afterEach(() => {
@@ -162,7 +169,7 @@ describe('AdminAttemptAnalysis', () => {
           detail: 'Phone detected near frame',
           ai_confidence: 0.95,
           occurred_at: '2026-03-06T08:05:00Z',
-          meta: { evidence: '/media/evidence.png' },
+          meta: { evidence: '/api/media/evidence/event-1.png' },
         },
       ],
     })

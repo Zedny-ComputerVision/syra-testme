@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -27,11 +28,12 @@ except Exception:  # pragma: no cover - optional dependency in lightweight envs
     easyocr = None
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 EVIDENCE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "identity"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 settings = get_settings()
-ALLOW_TEST_BYPASS = bool(settings.PRECHECK_ALLOW_TEST_BYPASS or settings.E2E_SEED_ENABLED)
+ALLOW_TEST_BYPASS = settings.precheck_test_bypass_enabled
 _ID_TOKEN_RE = re.compile(r"[A-Z0-9]{6,24}")
 _HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _TESSERACT_CONFIGURED = False
@@ -174,6 +176,30 @@ def _normalized_id_text(text: str | None) -> str:
     return compact.upper()
 
 
+def _build_id_text_payload(
+    *,
+    ocr_text: dict | None,
+    ocr_candidates: list[str],
+    manual_token: str | None,
+    manual_valid: bool,
+    method: str,
+    ocr_available: bool,
+    requirements=None,
+) -> dict:
+    payload = {
+        "lines": (ocr_text or {}).get("lines", []) if isinstance(ocr_text, dict) else [],
+        "ocr_candidates": ocr_candidates,
+        "manual": manual_token or None,
+        "manual_valid": manual_valid,
+        "method": method,
+        "raw_text": (ocr_text or {}).get("raw", "") if isinstance(ocr_text, dict) else "",
+        "ocr_available": ocr_available,
+    }
+    if requirements is not None:
+        payload["requirements"] = requirements
+    return payload
+
+
 def _looks_like_id_token(token: str) -> bool:
     if not token:
         return False
@@ -277,6 +303,7 @@ async def precheck(
             return default
 
     if ALLOW_TEST_BYPASS and _payload_flag("test_pass", default=False):
+        logger.warning("Identity verification bypassed for attempt %s via test_pass flag", attempt_id)
         attempt.id_verified = True
         attempt.precheck_passed_at = datetime.now(timezone.utc)
         attempt.identity_verified = True
@@ -389,29 +416,29 @@ async def precheck(
         id_path.write_bytes(encrypt_bytes(cv2.imencode(".jpg", id_img)[1].tobytes()))
         attempt.selfie_path = str(selfie_path)
         attempt.id_doc_path = str(id_path)
-        if manual_token:
-            attempt.id_text = {
-                "lines": ocr_text.get("lines", []),
-                "manual": manual_token,
-                "manual_valid": manual_valid,
-                "raw": ocr_text.get("raw", ""),
-                "ocr_candidates": ocr_candidates,
-                "ocr_available": ocr_available,
-            }
-        else:
-            attempt.id_text = {**ocr_text, "ocr_candidates": ocr_candidates, "ocr_available": ocr_available}
+        attempt.id_text = _build_id_text_payload(
+            ocr_text=ocr_text,
+            ocr_candidates=ocr_candidates,
+            manual_token=manual_token,
+            manual_valid=manual_valid,
+            method="manual" if manual_token else "ocr",
+            ocr_available=ocr_available,
+        )
     elif requirements["lighting_required"] and not lighting_ok:
         failure_reasons.append("LOW_LIGHTING")
 
     all_pass = len(failure_reasons) == 0
 
     if not requirements["identity_required"]:
-        attempt.id_text = {
-            "mode": "requirements_only",
-            "manual": manual_token or None,
-            "manual_valid": manual_valid,
-            "requirements": requirements,
-        }
+        attempt.id_text = _build_id_text_payload(
+            ocr_text=None,
+            ocr_candidates=[],
+            manual_token=manual_token,
+            manual_valid=manual_valid,
+            method="manual" if manual_token else "ocr",
+            ocr_available=False,
+            requirements=requirements,
+        )
     attempt.id_verified = all_pass
     attempt.lighting_score = lighting_score
     attempt.precheck_passed_at = datetime.now(timezone.utc) if all_pass else None

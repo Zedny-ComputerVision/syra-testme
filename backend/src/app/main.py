@@ -4,23 +4,24 @@ from contextlib import asynccontextmanager
 import os
 import re
 import sys
+import time
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from slowapi.middleware import SlowAPIMiddleware
 import asyncio
 from datetime import datetime, timezone
 
 from .api.router import router as api_router
+from .api.routes import media
 from .core.config import get_settings
 from .core.limiter import limiter
 from .core.security import verify_token
-from .db import session
-from .db.base import Base
-from .db.session import SessionLocal
-from sqlalchemy import select, text
+from .db.session import SessionLocal, engine
+from sqlalchemy import inspect, select
 from .models import ReportSchedule, SystemSettings
 from .api.routes.report_schedules import report_schedule_due, run_report_schedule
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -29,14 +30,16 @@ logger = logging.getLogger("syra")
 
 settings = get_settings()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/src/app -> backend
-EVIDENCE_DIR = BASE_DIR / "storage" / "evidence"
-REPORTS_DIR = BASE_DIR / "storage" / "reports"
-VIDEOS_DIR = BASE_DIR / "storage" / "videos"
-EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+STORAGE_DIR = BASE_DIR / "storage"
+IDENTITY_DIR = STORAGE_DIR / "identity"
+EVIDENCE_DIR = STORAGE_DIR / "evidence"
+REPORTS_DIR = STORAGE_DIR / "reports"
+VIDEOS_DIR = STORAGE_DIR / "videos"
+for directory in (IDENTITY_DIR, EVIDENCE_DIR, REPORTS_DIR, VIDEOS_DIR):
+    directory.mkdir(parents=True, exist_ok=True)
 
 LOCAL_DEV_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+LEGACY_ALEMBIC_STAMP_REVISION = "202603091130"
 
 
 def _is_local_dev_origin(origin: str) -> bool:
@@ -152,6 +155,10 @@ def _assert_required_api_routes() -> None:
         raise RuntimeError(f"Missing required API routes: {', '.join(missing)}")
 
 
+def _is_test_env() -> bool:
+    return "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+
+
 class TrailingSlashNormalizeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.scope.get("path", "")
@@ -208,7 +215,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -243,76 +250,90 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 
 app.include_router(api_router, prefix="/api")
-
-app.mount("/evidence", StaticFiles(directory=str(EVIDENCE_DIR)), name="evidence")
-app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
-app.mount("/videos", StaticFiles(directory=str(VIDEOS_DIR)), name="videos")
+app.include_router(media.router, prefix="/api/media", tags=["media"])
 
 
-def _run_startup_initialization() -> None:
-    _assert_required_api_routes()
-    try:
-        Base.metadata.create_all(bind=session.engine)
-        logger.info("Database tables created/verified (DB: %s)", settings.DATABASE_URL.split("@")[-1])
-    except Exception as exc:
-        logger.error("DB startup error - check DATABASE_URL in .env: %s", exc)
-
-    # Lightweight column backfill for SQLite deployments (idempotent)
-    if session.engine.dialect.name == "sqlite":
-        def ensure_column(conn, table: str, column: str, ddl: str):
-            cols = [row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).all()]
-            if column not in cols:
-                conn.execute(text(ddl))
-                logger.info("Added missing column %s.%s", table, column)
-
+def _run_alembic_upgrade() -> None:
+    max_retries = 5
+    for attempt_number in range(max_retries):
         try:
-            with session.engine.begin() as conn:
-                ensure_column(conn, "attempts", "face_signature", "ALTER TABLE attempts ADD COLUMN face_signature JSON")
-                ensure_column(conn, "attempts", "base_head_pose", "ALTER TABLE attempts ADD COLUMN base_head_pose JSON")
-                ensure_column(conn, "attempts", "id_doc_path", "ALTER TABLE attempts ADD COLUMN id_doc_path VARCHAR(512)")
-                ensure_column(conn, "attempts", "selfie_path", "ALTER TABLE attempts ADD COLUMN selfie_path VARCHAR(512)")
-                ensure_column(conn, "attempts", "id_text", "ALTER TABLE attempts ADD COLUMN id_text JSON")
-                ensure_column(conn, "attempts", "id_verified", "ALTER TABLE attempts ADD COLUMN id_verified BOOLEAN")
-                ensure_column(conn, "attempts", "lighting_score", "ALTER TABLE attempts ADD COLUMN lighting_score FLOAT")
-                ensure_column(conn, "attempts", "precheck_passed_at", "ALTER TABLE attempts ADD COLUMN precheck_passed_at DATETIME")
-                ensure_column(conn, "exams", "description", "ALTER TABLE exams ADD COLUMN description VARCHAR(4000)")
-                ensure_column(conn, "exams", "settings", "ALTER TABLE exams ADD COLUMN settings JSON")
-                ensure_column(conn, "exams", "certificate", "ALTER TABLE exams ADD COLUMN certificate JSON")
+            alembic_ini = BASE_DIR / "alembic.ini"
+            alembic_dir = BASE_DIR / "alembic"
+            if not alembic_ini.exists() or not alembic_dir.exists():
+                raise RuntimeError("Alembic is not configured. Expected backend/alembic and backend/alembic.ini")
+            alembic_config = Config(str(alembic_ini))
+            alembic_config.set_main_option("script_location", str(alembic_dir))
+            alembic_config.set_main_option("prepend_sys_path", str(BASE_DIR))
+            alembic_config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+            inspector = inspect(engine)
+            table_names = set(inspector.get_table_names())
+            if "alembic_version" not in table_names and {"users", "exams", "attempts", "schedules"}.issubset(table_names):
+                logger.warning(
+                    "Detected legacy schema without Alembic version tracking; stamping revision %s before upgrade",
+                    LEGACY_ALEMBIC_STAMP_REVISION,
+                )
+                command.stamp(alembic_config, LEGACY_ALEMBIC_STAMP_REVISION)
+            command.upgrade(alembic_config, "head")
+            return
         except Exception as exc:
-            logger.warning("Schema backfill skipped: %s", exc)
+            if attempt_number < max_retries - 1:
+                wait_seconds = 2 ** attempt_number
+                logger.warning("Database not ready, retrying in %ds: %s", wait_seconds, exc)
+                time.sleep(wait_seconds)
+            else:
+                logger.error("Database unavailable after %d retries", max_retries)
+                raise
 
-    # Cross-db compatibility backfill for schedules.test_id used by tests scheduling.
-    try:
-        with session.engine.begin() as conn:
-            if session.engine.dialect.name == "postgresql":
-                cols = conn.execute(text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_schema = 'public' AND table_name = 'schedules'"
-                )).scalars().all()
-                if "test_id" not in cols:
-                    conn.execute(text("ALTER TABLE schedules ADD COLUMN test_id UUID"))
-                    logger.info("Added missing column schedules.test_id")
 
-                exam_cols = conn.execute(text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_schema = 'public' AND table_name = 'exams'"
-                )).scalars().all()
-                if "description" not in exam_cols:
-                    conn.execute(text("ALTER TABLE exams ADD COLUMN description VARCHAR(4000)"))
-                    logger.info("Added missing column exams.description")
-                if "settings" not in exam_cols:
-                    conn.execute(text("ALTER TABLE exams ADD COLUMN settings JSONB"))
-                    logger.info("Added missing column exams.settings")
-                if "certificate" not in exam_cols:
-                    conn.execute(text("ALTER TABLE exams ADD COLUMN certificate JSONB"))
-                    logger.info("Added missing column exams.certificate")
-            elif session.engine.dialect.name == "sqlite":
-                cols = [row[1] for row in conn.execute(text("PRAGMA table_info(schedules)")).all()]
-                if "test_id" not in cols:
-                    conn.execute(text("ALTER TABLE schedules ADD COLUMN test_id CHAR(36)"))
-                    logger.info("Added missing column schedules.test_id")
-    except Exception as exc:
-        logger.warning("Schedule schema backfill skipped: %s", exc)
+def _run_retention_cleanup() -> None:
+    retention_targets = (
+        ("identity", IDENTITY_DIR, settings.IDENTITY_RETENTION_DAYS),
+        ("videos", VIDEOS_DIR, settings.PROCTORING_VIDEO_RETENTION_DAYS),
+        ("evidence", EVIDENCE_DIR, settings.PROCTORING_EVIDENCE_RETENTION_DAYS),
+    )
+    now_ts = datetime.now(timezone.utc).timestamp()
+    deleted_counts: dict[str, int] = {}
+
+    for label, directory, retention_days in retention_targets:
+        cutoff = now_ts - (retention_days * 24 * 60 * 60)
+        deleted = 0
+        directory.mkdir(parents=True, exist_ok=True)
+        for file_path in directory.rglob("*"):
+            if not file_path.is_file():
+                continue
+            try:
+                if file_path.stat().st_mtime < cutoff:
+                    file_path.unlink(missing_ok=True)
+                    deleted += 1
+            except FileNotFoundError:
+                continue
+        deleted_counts[label] = deleted
+
+    logger.info(
+        "Retention cleanup completed: identity=%s, videos=%s, evidence=%s",
+        deleted_counts.get("identity", 0),
+        deleted_counts.get("videos", 0),
+        deleted_counts.get("evidence", 0),
+    )
+
+
+def _run_startup_initialization(*, is_test_env: bool) -> None:
+    _assert_required_api_routes()
+    if settings.PRECHECK_ALLOW_TEST_BYPASS:
+        if settings.precheck_test_bypass_enabled:
+            logger.critical("PRECHECK_ALLOW_TEST_BYPASS is enabled - identity verification is disabled!")
+        else:
+            logger.critical(
+                "PRECHECK_ALLOW_TEST_BYPASS is enabled, but bypass remains inactive because E2E_SEED_ENABLED is false"
+            )
+    if is_test_env:
+        logger.info("Skipping automatic Alembic migrations in test environment")
+        return
+    if not settings.AUTO_APPLY_MIGRATIONS:
+        logger.info("Automatic Alembic migrations disabled; run `alembic upgrade head` before starting the app")
+        return
+    _run_alembic_upgrade()
+    logger.info("Alembic migrations applied successfully")
 
 
 async def _schedule_loop():
@@ -331,28 +352,22 @@ async def _schedule_loop():
         await asyncio.sleep(60)
 
 
-async def _purge_identity_loop():
+async def _retention_cleanup_loop():
     while True:
         try:
-            ident_dir = BASE_DIR / "storage" / "identity"
-            ident_dir.mkdir(parents=True, exist_ok=True)
-            cutoff = datetime.now(timezone.utc).timestamp() - 24 * 3600
-            for pattern in ("*.bin", "*.jpg"):
-                for f in ident_dir.glob(pattern):
-                    if f.stat().st_mtime < cutoff:
-                        f.unlink(missing_ok=True)
+            _run_retention_cleanup()
         except Exception as exc:
-            logger.error("Identity purge error: %s", exc)
-        await asyncio.sleep(3600)
+            logger.error("Retention cleanup error: %s", exc)
+        await asyncio.sleep(24 * 60 * 60)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    _run_startup_initialization()
-    is_test_env = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+    is_test_env = _is_test_env()
+    _run_startup_initialization(is_test_env=is_test_env)
     background_tasks = [] if is_test_env else [
         asyncio.create_task(_schedule_loop()),
-        asyncio.create_task(_purge_identity_loop()),
+        asyncio.create_task(_retention_cleanup_loop()),
     ]
     try:
         yield

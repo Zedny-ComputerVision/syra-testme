@@ -1,4 +1,6 @@
 from functools import lru_cache
+import os
+import sys
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -37,6 +39,10 @@ class Settings(BaseSettings):
     E2E_SEED_ENABLED: bool = False
     DEV_LOG_REQUESTS: bool = False
     PRECHECK_ALLOW_TEST_BYPASS: bool = False
+    AUTO_APPLY_MIGRATIONS: bool = True
+    IDENTITY_RETENTION_DAYS: int = Field(default=7, ge=1)
+    PROCTORING_VIDEO_RETENTION_DAYS: int = Field(default=90, ge=1)
+    PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
 
     @field_validator("SECRET_KEY")
     @classmethod
@@ -44,6 +50,17 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters")
         return v
+
+    @property
+    def precheck_test_bypass_enabled(self) -> bool:
+        return bool(
+            self.PRECHECK_ALLOW_TEST_BYPASS
+            and (
+                self.E2E_SEED_ENABLED
+                or "pytest" in sys.modules
+                or "PYTEST_CURRENT_TEST" in os.environ
+            )
+        )
 
 
 @lru_cache

@@ -235,7 +235,7 @@
 .btn {
   border: none;
   background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent)));
-  color: #ffffff;
+  color: var(--color-button-text);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary) 35%, transparent);
 
   &:hover:not(:disabled) {

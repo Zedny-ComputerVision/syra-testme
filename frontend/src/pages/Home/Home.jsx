@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import api from '../../services/api'
 import useAuth from '../../hooks/useAuth'
-import Loader from '../../components/common/Loader/Loader'
+import PrefetchLink from '../../components/common/PrefetchLink/PrefetchLink'
+import Skeleton from '../../components/Skeleton/Skeleton'
+import ScrollReveal from '../../components/ScrollReveal/ScrollReveal'
 import { normalizeSchedule, normalizeAttempt, isAttemptCompletedStatus } from '../../utils/assessmentAdapters'
 import { listAttempts } from '../../services/attempt.service'
+import { preloadRoute } from '../../utils/routePrefetch'
+import { readPaginatedItems } from '../../utils/pagination'
 import styles from './Home.module.scss'
 
 const EMPTY_DASHBOARD = {
@@ -21,6 +24,18 @@ const EMPTY_DASHBOARD = {
 function normalizeDashboardResponse(response) {
   if (!response || typeof response !== 'object') return null
   return typeof response.data === 'object' && response.data !== null ? response.data : null
+}
+
+function formatRelativeSchedule(iso) {
+  if (!iso) return 'No upcoming deadline'
+  const diff = new Date(iso).getTime() - Date.now()
+  const minutes = Math.round(diff / 60000)
+  if (minutes <= 0) return 'Starting now'
+  if (minutes < 60) return `Starts in ${minutes} min`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `Starts in ${hours} hr${hours === 1 ? '' : 's'}`
+  const days = Math.round(hours / 24)
+  return `Starts in ${days} day${days === 1 ? '' : 's'}`
 }
 
 export default function Home() {
@@ -53,8 +68,8 @@ export default function Home() {
 
   const loadAttempts = async () => {
     try {
-      const { data } = await listAttempts()
-      const all = (data || []).map(normalizeAttempt)
+      const { data } = await listAttempts({ skip: 0, limit: 10 })
+      const all = readPaginatedItems(data).map(normalizeAttempt)
       const done = all
         .filter((attempt) => attempt.is_completed || isAttemptCompletedStatus(attempt.status))
         .sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0))
@@ -70,7 +85,28 @@ export default function Home() {
     void loadAttempts()
   }, [])
 
-  if (loading && !dash) return <Loader />
+  if (loading && !dash) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.header}>
+          <Skeleton variant="text" lines={2} className={styles.headerSkeleton} />
+        </div>
+        <div className={styles.statsRow}>
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} variant="card" className={styles.statSkeleton} />
+          ))}
+        </div>
+        <div className={styles.section}>
+          <Skeleton variant="text" className={styles.sectionTitleSkeleton} />
+          <div className={styles.scheduleGrid}>
+            {Array.from({ length: 3 }, (_, index) => (
+              <Skeleton key={index} variant="card" className={styles.scheduleSkeleton} />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const stats = [
     { icon: 'TT', label: 'Total Tests', value: dash?.total_exams ?? 0 },
@@ -79,13 +115,75 @@ export default function Home() {
     { icon: 'IP', label: 'In Progress', value: dash?.in_progress_attempts ?? 0 },
     { icon: 'BS', label: 'Best Score', value: dash?.best_score != null ? `${dash.best_score.toFixed(1)}%` : 'N/A' },
   ]
+  const completionRate = dash?.total_attempts
+    ? Math.round(((dash.completed_attempts || 0) / dash.total_attempts) * 100)
+    : 0
+  const nextSchedule = dash?.upcoming_schedules?.[0] || null
+  const heroMetrics = [
+    { label: 'Average score', value: dash?.average_score != null ? `${dash.average_score.toFixed(1)}%` : 'N/A' },
+    { label: 'Completion rate', value: `${completionRate}%` },
+    { label: 'Upcoming', value: dash?.upcoming_count ?? 0 },
+  ]
+  const progressCards = [
+    {
+      title: 'Continue your momentum',
+      body: (dash?.in_progress_attempts || 0) > 0
+        ? `You have ${dash?.in_progress_attempts} active attempt${dash?.in_progress_attempts === 1 ? '' : 's'} that can be resumed right away.`
+        : 'No live attempt is waiting on you right now. Use this time to review upcoming tests or recent results.',
+      cta: {
+        to: (dash?.in_progress_attempts || 0) > 0 ? '/attempts' : '/tests',
+        label: (dash?.in_progress_attempts || 0) > 0 ? 'Resume attempts' : 'Browse tests',
+      },
+    },
+    {
+      title: 'Next scheduled test',
+      body: nextSchedule
+        ? `${nextSchedule.test_title || nextSchedule.exam_title || 'Upcoming test'} - ${formatRelativeSchedule(nextSchedule.scheduled_at)}`
+        : 'Nothing is on the calendar yet. When an instructor assigns a test, it will appear here.',
+      cta: { to: '/schedule', label: 'Open schedule' },
+    },
+  ]
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <h1 className={styles.heading}>Welcome, {user?.name || 'User'}</h1>
-        <p className={styles.sub}>Here is an overview of your learning progress</p>
-      </div>
+      <ScrollReveal as="section" className={styles.hero}>
+        <div className={styles.heroContent}>
+          <div className={styles.heroEyebrow}>Learner workspace</div>
+          <div className={styles.header}>
+            <h1 className={styles.heading}>Welcome, {user?.name || 'User'}</h1>
+            <p className={styles.sub}>
+              {(dash?.in_progress_attempts || 0) > 0
+                ? `You have ${dash?.in_progress_attempts} in-progress attempt${dash?.in_progress_attempts === 1 ? '' : 's'} and ${dash?.upcoming_count || 0} upcoming scheduled test${(dash?.upcoming_count || 0) === 1 ? '' : 's'}.`
+                : 'Here is an overview of your learning progress, upcoming schedule, and latest results.'}
+            </p>
+          </div>
+          <div className={styles.heroActions}>
+            <PrefetchLink to="/tests" className={styles.primaryAction}>Browse Tests</PrefetchLink>
+            <PrefetchLink to="/attempts" className={styles.secondaryAction}>Review Attempts</PrefetchLink>
+            <PrefetchLink to="/schedule" className={styles.secondaryAction}>Open Schedule</PrefetchLink>
+          </div>
+        </div>
+        <div className={styles.heroPanel}>
+          <div className={styles.heroPanelTitle}>Today at a glance</div>
+          <div className={styles.heroMetricGrid}>
+            {heroMetrics.map((metric) => (
+              <div key={metric.label} className={styles.heroMetric}>
+                <span className={styles.heroMetricValue}>{metric.value}</span>
+                <span className={styles.heroMetricLabel}>{metric.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className={styles.heroCallout}>
+            <span className={styles.heroCalloutLabel}>Next checkpoint</span>
+            <span className={styles.heroCalloutTitle}>
+              {nextSchedule?.test_title || nextSchedule?.exam_title || 'No scheduled test yet'}
+            </span>
+            <span className={styles.heroCalloutMeta}>
+              {nextSchedule ? formatRelativeSchedule(nextSchedule.scheduled_at) : 'Your next assignment will appear here automatically.'}
+            </span>
+          </div>
+        </div>
+      </ScrollReveal>
 
       {error && (
         <div className={styles.errorRow}>
@@ -96,7 +194,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className={styles.statsRow}>
+      <ScrollReveal className={styles.statsRow} delay={60}>
         {stats.map((stat) => (
           <div key={stat.label} className={styles.statCard}>
             <span className={styles.statIcon}>{stat.icon}</span>
@@ -106,10 +204,20 @@ export default function Home() {
             </div>
           </div>
         ))}
-      </div>
+      </ScrollReveal>
+
+      <ScrollReveal className={styles.focusGrid} delay={120}>
+        {progressCards.map((card) => (
+          <div key={card.title} className={styles.focusCard}>
+            <div className={styles.focusTitle}>{card.title}</div>
+            <div className={styles.focusBody}>{card.body}</div>
+            <PrefetchLink to={card.cta.to} className={styles.focusLink}>{card.cta.label}</PrefetchLink>
+          </div>
+        ))}
+      </ScrollReveal>
 
       {dash?.upcoming_schedules?.length > 0 && (
-        <div className={styles.section}>
+        <ScrollReveal className={styles.section} delay={160}>
           <h2 className={styles.sectionTitle}>Upcoming Tests ({dash.upcoming_count})</h2>
           <div className={styles.scheduleGrid}>
             {dash.upcoming_schedules.map((schedule) => {
@@ -137,25 +245,30 @@ export default function Home() {
               )
             })}
           </div>
-        </div>
+        </ScrollReveal>
       )}
 
       {dash?.upcoming_schedules?.length === 0 && (
-        <div className={styles.section}>
+        <ScrollReveal className={styles.section} delay={160}>
           <h2 className={styles.sectionTitle}>Upcoming Tests</h2>
           <div className={styles.emptySchedule}>No upcoming scheduled tests.</div>
-        </div>
+        </ScrollReveal>
       )}
 
       {recentAttempts.length > 0 && (
-        <div className={styles.section}>
+        <ScrollReveal className={styles.section} delay={200}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Recent Attempts</h2>
-            <Link to="/attempts" className={styles.viewAll}>View all -&gt;</Link>
+            <PrefetchLink to="/attempts" className={styles.viewAll}>View all -&gt;</PrefetchLink>
           </div>
           <div className={styles.recentGrid}>
             {recentAttempts.map((attempt) => (
-              <Link key={attempt.id} to={`/attempts/${attempt.id}`} className={styles.recentCard}>
+              <PrefetchLink
+                key={attempt.id}
+                to={`/attempts/${attempt.id}`}
+                className={styles.recentCard}
+                onMouseEnter={() => preloadRoute(`/attempts/${attempt.id}`)}
+              >
                 <div className={styles.recentTitle}>{attempt.test_title || attempt.exam_title || 'Test'}</div>
                 <div className={styles.recentMeta}>
                   {attempt.score != null && (
@@ -167,15 +280,26 @@ export default function Home() {
                     {attempt.started_at ? new Date(attempt.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                   </span>
                 </div>
-              </Link>
+              </PrefetchLink>
             ))}
           </div>
-        </div>
+        </ScrollReveal>
       )}
 
-      <div className={styles.actions}>
-        <Link to="/tests" className={styles.viewAll}>View all tests -&gt;</Link>
-      </div>
+      {recentAttempts.length === 0 && (
+        <ScrollReveal className={styles.section} delay={200}>
+          <div className={styles.emptyRecent}>
+            <div className={styles.emptyRecentTitle}>No recent attempts yet</div>
+            <div className={styles.emptyRecentText}>
+              Your completed attempts will show up here once you start taking tests.
+            </div>
+          </div>
+        </ScrollReveal>
+      )}
+
+      <ScrollReveal className={styles.actions} delay={240}>
+        <PrefetchLink to="/tests" className={styles.viewAll}>View all tests -&gt;</PrefetchLink>
+      </ScrollReveal>
     </div>
   )
 }

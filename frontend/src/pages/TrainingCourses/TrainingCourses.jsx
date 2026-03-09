@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { listTests } from '../../services/test.service'
 import api from '../../services/api'
 import { normalizeTest } from '../../utils/assessmentAdapters'
+import { readPaginatedItems } from '../../utils/pagination'
 import styles from './TrainingCourses.module.scss'
 
 export default function TrainingCourses() {
@@ -22,7 +23,7 @@ export default function TrainingCourses() {
     try {
       const [courseRes, examRes, nodeRes] = await Promise.allSettled([
         api.get('courses/'),
-        listTests(),
+        listTests({ skip: 0, limit: 200 }),
         api.get('nodes/'),
       ])
 
@@ -36,7 +37,7 @@ export default function TrainingCourses() {
       const partialFailures = []
 
       if (examRes.status === 'fulfilled') {
-        nextTests = (examRes.value.data || []).map(normalizeTest)
+        nextTests = readPaginatedItems(examRes.value.data).map(normalizeTest)
       } else {
         partialFailures.push('tests')
       }

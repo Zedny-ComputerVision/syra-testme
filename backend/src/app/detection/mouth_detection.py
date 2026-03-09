@@ -1,5 +1,6 @@
 """Detect speaking (mouth open) using MediaPipe FaceMesh."""
 
+import logging
 import cv2
 import numpy as np
 try:
@@ -7,12 +8,15 @@ try:
 except Exception:  # pragma: no cover - optional dependency in lightweight envs
     mp = None
 
+logger = logging.getLogger(__name__)
+
 
 class MouthMonitor:
     def __init__(self, open_threshold: float = 0.35, consecutive_threshold: int = 6):
         self.open_threshold = open_threshold
         self.consecutive_threshold = consecutive_threshold
         self._consecutive_talking = 0
+        self._warned_unavailable = False
         if hasattr(mp, "solutions"):
             self._mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1)
         else:
@@ -24,6 +28,9 @@ class MouthMonitor:
         if frame is None:
             return None
         if self._mesh is None:
+            if not self._warned_unavailable:
+                logger.warning("Mouth detection model unavailable - detection disabled")
+                self._warned_unavailable = True
             return None
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = self._mesh.process(rgb)
@@ -52,9 +59,3 @@ class MouthMonitor:
             self._consecutive_talking = 0
         return None
 
-
-_monitor = MouthMonitor()
-
-
-def detect_mouth_movement(frame_bytes: bytes) -> dict | None:
-    return _monitor.process(frame_bytes)

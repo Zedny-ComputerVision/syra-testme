@@ -152,14 +152,19 @@ class QuestionPool(Base):
 
 class Exam(Base):
     __tablename__ = "exams"
-    __table_args__ = (UniqueConstraint("node_id", "title", name="uq_exam_node_title"),)
+    __table_args__ = (
+        UniqueConstraint("node_id", "title", name="uq_exam_node_title"),
+        CheckConstraint("time_limit > 0 OR time_limit IS NULL", name="ck_exams_time_limit_positive"),
+        CheckConstraint("passing_score >= 0 AND passing_score <= 100", name="ck_exams_passing_score_range"),
+        CheckConstraint("max_attempts >= 1", name="ck_exams_max_attempts_positive"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     node_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("nodes.id", ondelete="CASCADE"))
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(4000))
     type: Mapped[ExamType] = mapped_column(SAEnum(ExamType), default=ExamType.MCQ, nullable=False)
-    status: Mapped[ExamStatus] = mapped_column(SAEnum(ExamStatus), default=ExamStatus.CLOSED, nullable=False)
+    status: Mapped[ExamStatus] = mapped_column(SAEnum(ExamStatus), default=ExamStatus.CLOSED, nullable=False, index=True)
     time_limit: Mapped[int | None] = mapped_column(Integer)
     max_attempts: Mapped[int] = mapped_column(Integer, default=1)
     passing_score: Mapped[float | None] = mapped_column(Float)
@@ -188,6 +193,8 @@ class Question(Base):
     __tablename__ = "questions"
     __table_args__ = (
         Index("ix_question_exam_order", "exam_id", "order"),
+        CheckConstraint("points >= 0", name="ck_questions_points_non_negative"),
+        CheckConstraint('"order" >= 0', name="ck_questions_order_non_negative"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -198,7 +205,7 @@ class Question(Base):
     correct_answer: Mapped[str | None] = mapped_column(String(255))
     points: Mapped[float] = mapped_column(Float, default=1.0)
     order: Mapped[int] = mapped_column(Integer, default=0)
-    pool_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("question_pools.id"))
+    pool_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("question_pools.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -214,9 +221,10 @@ class Attempt(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"))
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-    status: Mapped[AttemptStatus] = mapped_column(SAEnum(AttemptStatus), default=AttemptStatus.IN_PROGRESS, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    status: Mapped[AttemptStatus] = mapped_column(SAEnum(AttemptStatus), default=AttemptStatus.IN_PROGRESS, nullable=False, index=True)
     score: Mapped[float | None] = mapped_column(Float)
+    grade: Mapped[str | None] = mapped_column(String(100))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     identity_verified: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -265,7 +273,7 @@ class Schedule(Base):
     exam_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), nullable=True)
     test_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("tests.id", ondelete="CASCADE"), nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     access_mode: Mapped[AccessMode] = mapped_column(SAEnum(AccessMode), default=AccessMode.OPEN, nullable=False)
     notes: Mapped[str | None] = mapped_column(String(512))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import Skeleton from '../../../components/Skeleton/Skeleton'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import styles from './AdminExams.module.scss'
 
@@ -360,7 +361,9 @@ export default function AdminExams() {
 
       <div className={styles.tableWrap}>
         {loading ? (
-          <div className={styles.empty}>Loading...</div>
+          <div className={styles.tableSkeleton}>
+            <Skeleton variant="table" rows={6} />
+          </div>
         ) : tests.length === 0 ? (
           <div className={styles.empty}>
             <strong>{hasActiveFilters ? 'No tests match the current filters.' : 'No tests created yet.'}</strong>

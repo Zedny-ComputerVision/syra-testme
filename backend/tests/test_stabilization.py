@@ -263,7 +263,7 @@ def test_list_exams_orders_newest_first():
 
     session = DummySession()
     out = asyncio.run(exams_routes.list_exams(db=session, current=learner))
-    assert out == []
+    assert out == {"items": [], "total": 0, "skip": 0, "limit": 50}
     assert [str(clause) for clause in session.query._order_by_clauses] == [
         "exams.updated_at DESC",
         "exams.created_at DESC",
@@ -459,11 +459,49 @@ def test_auto_score_attempt_keeps_text_answers_pending_manual_review():
     result = attempts_routes._auto_score_attempt(attempt, DummySession())
 
     assert result["pending_manual_review"] is True
-    assert result["score"] is None
+    assert result["score"] == 16.67
     assert text_answer.is_correct is None
     assert text_answer.points_earned is None
     assert mcq_answer.is_correct is True
     assert mcq_answer.points_earned == 1.0
+
+
+def test_evaluate_answer_handles_ordering_matching_and_fill_in_blank_types():
+    ordering_question = Question(
+        id=uuid.uuid4(),
+        exam_id=uuid.uuid4(),
+        text="Sort the items",
+        type=ExamType.ORDERING,
+        correct_answer='["A","B","C"]',
+        points=2,
+        order=0,
+    )
+    matching_question = Question(
+        id=uuid.uuid4(),
+        exam_id=uuid.uuid4(),
+        text="Match the pairs",
+        type=ExamType.MATCHING,
+        correct_answer='{"1":"A","2":"B"}',
+        points=2,
+        order=1,
+    )
+    fill_blank_question = Question(
+        id=uuid.uuid4(),
+        exam_id=uuid.uuid4(),
+        text="Fill the blanks",
+        type=ExamType.FILLINBLANK,
+        correct_answer='["Alpha","Beta"]',
+        points=2,
+        order=2,
+    )
+
+    ordering_result = attempts_routes._evaluate_answer(ordering_question, '["a", "b", "c"]')
+    matching_result = attempts_routes._evaluate_answer(matching_question, '{"2":"b","1":"a"}')
+    fill_blank_result = attempts_routes._evaluate_answer(fill_blank_question, 'alpha|beta')
+
+    assert ordering_result == (True, 2.0)
+    assert matching_result == (True, 2.0)
+    assert fill_blank_result == (True, 2.0)
 
 
 def test_grade_attempt_preserves_original_submission_timestamp():
@@ -1489,8 +1527,8 @@ def test_report_schedule_payload_rejects_invalid_cron_and_email():
             )
         )
     except HTTPException as exc:
-        assert exc.status_code == 400
-        assert exc.detail == "Invalid cron expression"
+        assert exc.status_code == 422
+        assert "Invalid cron expression" in exc.detail
     else:
         raise AssertionError("Expected HTTPException")
 

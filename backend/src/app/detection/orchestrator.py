@@ -13,6 +13,7 @@ Optimisations:
     `_obj_detect_interval` frames (default 3) instead of every frame.
 """
 import math
+import logging
 
 import cv2
 import numpy as np
@@ -28,6 +29,170 @@ from .alert_logger import AlertLogger
 from .face_verification import FaceVerifier
 from .head_pose import HeadPoseDetector
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_ORCHESTRATOR_CONFIG = {
+    "face_detection": True,
+    "multi_face": True,
+    "eye_tracking": True,
+    "mouth_detection": False,
+    "object_detection": True,
+    "audio_detection": True,
+    "head_pose_detection": True,
+    "face_min_confidence": 0.6,
+    "object_detect_interval": 3,
+    "max_face_absence_sec": 3,
+    "eye_deviation_deg": 12,
+    "cheating_consecutive_frames": 5,
+    "eye_consecutive": 5,
+    "eye_pitch_min_rad": -0.5,
+    "eye_pitch_max_rad": 0.2,
+    "eye_yaw_min_rad": None,
+    "eye_yaw_max_rad": None,
+    "eye_change_threshold_rad": 0.2,
+    "mouth_open_threshold": 0.35,
+    "object_confidence_threshold": 0.5,
+    "audio_rms_threshold": 0.08,
+    "audio_consecutive_chunks": 2,
+    "audio_window": 5,
+    "face_signature": None,
+    "face_verify_threshold": 0.15,
+    "face_verify": True,
+    "head_pose_yaw_deg": 20,
+    "head_pose_pitch_deg": 20,
+    "head_pose_consecutive": 5,
+    "head_yaw_min_rad": None,
+    "head_yaw_max_rad": None,
+    "head_pitch_min_rad": None,
+    "head_pitch_max_rad": None,
+    "pose_change_threshold_rad": 0.1,
+    "max_alerts_before_autosubmit": None,
+    "max_score_before_autosubmit": None,
+    "violation_weights": {"HIGH": 3, "MEDIUM": 2, "LOW": 1},
+}
+
+
+def _warn_invalid_config(key: str, value, fallback) -> None:
+    logger.warning("Invalid proctoring config for %s=%r. Using default %r.", key, value, fallback)
+
+
+def _coerce_bool(key: str, value, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    _warn_invalid_config(key, value, default)
+    return default
+
+
+def _coerce_float(key: str, value, default, *, min_value=None, max_value=None, allow_none: bool = False):
+    if value is None and allow_none:
+        return None
+    if value is None:
+        return default
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        _warn_invalid_config(key, value, default)
+        return default
+    if min_value is not None and numeric < min_value:
+        _warn_invalid_config(key, value, default)
+        return default
+    if max_value is not None and numeric > max_value:
+        _warn_invalid_config(key, value, default)
+        return default
+    return numeric
+
+
+def _coerce_int(key: str, value, default, *, min_value=None, allow_none: bool = False):
+    if value is None and allow_none:
+        return None
+    if value is None:
+        return default
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError):
+        _warn_invalid_config(key, value, default)
+        return default
+    if min_value is not None and numeric < min_value:
+        _warn_invalid_config(key, value, default)
+        return default
+    return numeric
+
+
+def _coerce_score_weights(value) -> dict[str, int]:
+    default = DEFAULT_ORCHESTRATOR_CONFIG["violation_weights"]
+    if not isinstance(value, dict):
+        if value is not None:
+            _warn_invalid_config("violation_weights", value, default)
+        return default.copy()
+    normalized: dict[str, int] = {}
+    for severity in ("HIGH", "MEDIUM", "LOW"):
+        normalized[severity] = _coerce_int(
+            f"violation_weights.{severity}",
+            value.get(severity),
+            default[severity],
+            min_value=1,
+        )
+    return normalized
+
+
+def _validate_config(config: dict | None) -> dict:
+    if config is None:
+        return DEFAULT_ORCHESTRATOR_CONFIG.copy()
+    if not isinstance(config, dict):
+        logger.warning("Invalid proctoring config payload %r. Using defaults.", config)
+        return DEFAULT_ORCHESTRATOR_CONFIG.copy()
+
+    validated = DEFAULT_ORCHESTRATOR_CONFIG.copy()
+    for key in (
+        "face_detection",
+        "multi_face",
+        "eye_tracking",
+        "mouth_detection",
+        "object_detection",
+        "audio_detection",
+        "head_pose_detection",
+        "face_verify",
+    ):
+        validated[key] = _coerce_bool(key, config.get(key), DEFAULT_ORCHESTRATOR_CONFIG[key])
+
+    for key in ("face_min_confidence", "object_confidence_threshold"):
+        validated[key] = _coerce_float(key, config.get(key), DEFAULT_ORCHESTRATOR_CONFIG[key], min_value=0.0, max_value=1.0)
+
+    for key in ("max_face_absence_sec", "eye_deviation_deg", "mouth_open_threshold", "audio_rms_threshold", "face_verify_threshold", "pose_change_threshold_rad", "eye_change_threshold_rad"):
+        validated[key] = _coerce_float(key, config.get(key), DEFAULT_ORCHESTRATOR_CONFIG[key], min_value=0.0)
+
+    for key in ("eye_pitch_min_rad", "eye_pitch_max_rad", "eye_yaw_min_rad", "eye_yaw_max_rad", "head_yaw_min_rad", "head_yaw_max_rad", "head_pitch_min_rad", "head_pitch_max_rad"):
+        validated[key] = _coerce_float(key, config.get(key), DEFAULT_ORCHESTRATOR_CONFIG[key], allow_none=True)
+
+    for key in ("object_detect_interval", "cheating_consecutive_frames", "eye_consecutive", "audio_consecutive_chunks", "audio_window", "head_pose_yaw_deg", "head_pose_pitch_deg", "head_pose_consecutive"):
+        validated[key] = _coerce_int(key, config.get(key), DEFAULT_ORCHESTRATOR_CONFIG[key], min_value=1)
+
+    validated["max_alerts_before_autosubmit"] = _coerce_int(
+        "max_alerts_before_autosubmit",
+        config.get("max_alerts_before_autosubmit"),
+        DEFAULT_ORCHESTRATOR_CONFIG["max_alerts_before_autosubmit"],
+        min_value=1,
+        allow_none=True,
+    )
+    validated["max_score_before_autosubmit"] = _coerce_int(
+        "max_score_before_autosubmit",
+        config.get("max_score_before_autosubmit"),
+        DEFAULT_ORCHESTRATOR_CONFIG["max_score_before_autosubmit"],
+        min_value=1,
+        allow_none=True,
+    )
+    validated["face_signature"] = config.get("face_signature")
+    validated["violation_weights"] = _coerce_score_weights(config.get("violation_weights"))
+    return validated
+
 
 class ProctoringOrchestrator:
     def __init__(self, config: dict | None = None):
@@ -37,7 +202,7 @@ class ProctoringOrchestrator:
         self.violation_score = 0
         self.event_counts: dict[str, int] = {}
         self._frame_count = 0
-        cfg = config or {}
+        cfg = _validate_config(config)
 
         self.enable_face_detection = bool(cfg.get("face_detection", True))
         self.enable_multi_face = bool(cfg.get("multi_face", True))

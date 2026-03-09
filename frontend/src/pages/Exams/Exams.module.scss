@@ -1,17 +1,43 @@
 .page {
   padding: 1.75rem 1.5rem 2rem;
-  max-width: 1160px;
+  max-width: 1220px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.15rem;
+  gap: 1.25rem;
 }
 
 .header {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  max-width: 760px;
+  gap: 0.5rem;
+  max-width: none;
+  padding: 1.3rem 1.35rem;
+  border-radius: 26px;
+  border: 1px solid color-mix(in srgb, var(--card-border) 88%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 18%, transparent), transparent 36%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card-bg-strong) 92%, transparent), color-mix(in srgb, var(--card-bg) 88%, transparent));
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
+  position: relative;
+  overflow: hidden;
+}
+
+.header::before {
+  content: 'Learner catalog';
+  display: inline-flex;
+  align-self: flex-start;
+  margin-bottom: 0.3rem;
+  padding: 0.36rem 0.68rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .heading {
@@ -24,9 +50,10 @@
 
 .sub {
   color: var(--color-muted);
-  font-size: 0.97rem;
+  font-size: 0.98rem;
   line-height: 1.55;
   margin: 0;
+  max-width: 48rem;
 }
 
 .error {
@@ -52,11 +79,13 @@
 
 .summaryCard {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 90%, var(--color-primary) 10%), var(--color-surface));
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 12%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card-bg-strong) 94%, transparent), color-mix(in srgb, var(--card-bg) 88%, transparent));
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
   padding: 1.05rem 1.1rem;
-  box-shadow: 0 16px 32px rgba(3, 9, 26, 0.14);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
 }
 
 .summaryLabel {
@@ -88,10 +117,12 @@
   gap: 1rem;
   flex-wrap: wrap;
   padding: 1rem 1.1rem;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--color-surface) 93%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-bg-strong) 94%, transparent), color-mix(in srgb, var(--card-bg) 88%, transparent));
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
 }
 
 .searchGroup {
@@ -112,7 +143,7 @@
   padding: 0.8rem 0.95rem;
   border-radius: 12px;
   border: 1px solid var(--color-border);
-  background: var(--color-input-bg);
+  background: color-mix(in srgb, var(--color-surface) 84%, transparent);
   color: var(--color-text);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
@@ -158,10 +189,11 @@
 }
 
 .emptyState {
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  border: 1px dashed color-mix(in srgb, var(--color-border) 90%, transparent);
+  border-radius: 20px;
   padding: 1.25rem;
-  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-bg-strong) 88%, transparent), color-mix(in srgb, var(--card-bg) 82%, transparent));
 }
 
 .emptyTitle {
@@ -184,13 +216,17 @@
   gap: 1.1rem;
 }
 
+.revealCard {
+  height: 100%;
+}
+
 .card {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at top right, rgba(52, 211, 153, 0.1), transparent 42%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 94%, white 6%), var(--color-surface));
-  border: 1px solid var(--color-border);
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card-bg-strong) 94%, transparent), color-mix(in srgb, var(--card-bg) 88%, transparent));
+  border: 1px solid var(--card-border);
   border-radius: 22px;
   padding: 1.15rem;
   cursor: pointer;
@@ -200,7 +236,8 @@
   flex-direction: column;
   gap: 0.95rem;
   min-height: 290px;
-  box-shadow: 0 18px 36px rgba(2, 7, 24, 0.18);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--card-blur));
 
   &::before {
     content: '';
@@ -208,21 +245,21 @@
     inset: 0 auto auto 0;
     width: 100%;
     height: 4px;
-    background: linear-gradient(90deg, rgba(52, 211, 153, 0.78), rgba(59, 130, 246, 0.56));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 92%, white 8%), color-mix(in srgb, var(--color-accent) 72%, var(--color-primary)));
     opacity: 0.58;
   }
 
   &:hover,
   &:focus-visible {
     transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--color-primary) 56%, var(--color-border));
-    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.12), 0 22px 42px rgba(2, 7, 24, 0.24);
+    border-color: color-mix(in srgb, var(--color-primary) 56%, var(--card-border));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 14%, transparent), var(--card-shadow-hover);
   }
 }
 
 .latestCard {
-  border-color: color-mix(in srgb, var(--color-primary) 54%, var(--color-border));
-  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.16), 0 22px 44px rgba(2, 7, 24, 0.26);
+  border-color: color-mix(in srgb, var(--color-primary) 54%, var(--card-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 14%, transparent), var(--card-shadow-hover);
 }
 
 .cardTop {
@@ -251,8 +288,8 @@
 
 .latestBadge {
   padding: 0.42rem 0.72rem;
-  background: rgba(52, 211, 153, 0.18);
-  color: #d1fae5;
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success-text);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -260,8 +297,8 @@
 
 .freshnessBadge {
   padding: 0.42rem 0.72rem;
-  background: rgba(148, 163, 184, 0.16);
-  color: var(--color-muted);
+  background: color-mix(in srgb, var(--color-border) 42%, transparent);
+  color: color-mix(in srgb, var(--color-muted) 82%, var(--color-text));
   font-weight: 600;
 }
 
@@ -308,8 +345,8 @@
 
 .flowBadge {
   padding: 0.42rem 0.72rem;
-  background: rgba(59, 130, 246, 0.14);
-  color: #bfdbfe;
+  background: color-mix(in srgb, var(--color-info) 16%, transparent);
+  color: var(--color-info-text);
   font-weight: 600;
 }
 
@@ -321,9 +358,9 @@
 
 .contextPill {
   padding: 0.48rem 0.8rem;
-  background: rgba(15, 23, 42, 0.28);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  color: color-mix(in srgb, var(--color-text) 76%, var(--color-muted));
+  background: color-mix(in srgb, var(--color-border) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  color: color-mix(in srgb, var(--color-text) 82%, var(--color-muted));
   font-weight: 600;
 }
 
@@ -337,8 +374,8 @@
   min-width: 0;
   padding: 0.82rem 0.78rem;
   border-radius: 16px;
-  background: rgba(15, 23, 42, 0.22);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: color-mix(in srgb, var(--color-border) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
 }
 
 .metaLabel {
@@ -360,8 +397,8 @@
 .cardInsight {
   padding: 0.92rem 0.95rem;
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.28), rgba(15, 23, 42, 0.18));
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 10%, transparent), color-mix(in srgb, var(--color-border) 18%, transparent));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, var(--color-border));
 }
 
 .insightTitle {
@@ -387,7 +424,7 @@
 }
 
 .cardHint {
-  color: color-mix(in srgb, var(--color-muted) 94%, white 6%);
+  color: color-mix(in srgb, var(--color-muted) 88%, var(--color-text));
   font-size: 0.78rem;
   line-height: 1.5;
   max-width: 14rem;
@@ -395,7 +432,7 @@
 
 .cardAction {
   flex-shrink: 0;
-  color: color-mix(in srgb, var(--color-primary) 78%, white 22%);
+  color: color-mix(in srgb, var(--color-primary) 82%, var(--color-text));
   font-weight: 700;
   font-size: 0.84rem;
   letter-spacing: 0.01em;

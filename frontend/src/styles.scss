@@ -32,6 +32,7 @@
   --color-warning: #f59e0b;
   --color-success: #10b981;
   --color-info: #3b82f6;
+  --color-surface-dark: #0a1226;
   --sidebar-width: 240px;
   --navbar-height: 56px;
   --transition-speed: 0.2s;
@@ -54,6 +55,9 @@
   --color-accent-bg: rgba(71, 85, 105, 0.12);
   --color-cyan: #06b6d4;
   --color-cyan-bg: rgba(6, 182, 212, 0.12);
+  --accent-indigo: #6366f1;
+  --accent-amber: #f59e0b;
+  --accent-pink: #ec4899;
 }
 
 /* ---------- Dark Theme ---------- */
@@ -80,6 +84,7 @@
   --color-warning: #fbbf24;
   --color-success: #34d399;
   --color-info: #60a5fa;
+  --color-surface-dark: #0d1117;
 
   /* Semantic color tokens (dark overrides) */
   --color-button-text: #0b111d;
@@ -115,6 +120,9 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  scroll-padding-top: calc(var(--navbar-height) + 1rem);
 }
 
 body {
@@ -122,6 +130,7 @@ body {
               radial-gradient(circle at 80% 0%, rgba(71, 85, 105, 0.07), transparent 30%),
               linear-gradient(135deg, #e0f2f8, #f8fafc);
   position: relative;
+  min-width: 320px;
 }
 
 [data-theme='dark'] body {
@@ -137,6 +146,18 @@ body::after {
   inset: 0;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+  z-index: 0;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--color-primary) 12%, transparent), transparent 26%),
+    radial-gradient(circle at 82% 10%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 24%),
+    radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 32%);
   z-index: 0;
 }
 
@@ -243,6 +264,8 @@ body {
   line-height: 1.6;
   transition: background-color var(--transition-speed) ease,
     color var(--transition-speed) ease;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -329,14 +352,17 @@ textarea:not([class]):disabled {
   flex-direction: column;
   min-height: 100vh;
   overflow-x: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 .app-shell__content {
   flex: 1;
-  padding: 1.5rem;
+  padding: clamp(1rem, 1.6vw, 1.6rem);
   width: 100%;
-  max-width: 1400px;
+  max-width: 1480px;
   margin: 0 auto;
+  scroll-margin-top: calc(var(--navbar-height) + 1rem);
 }
 
 .app-shell--exam {
@@ -356,27 +382,41 @@ textarea:not([class]):disabled {
 
 /* ---------- Scrollbar Styling ---------- */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg);
+  background: color-mix(in srgb, var(--color-border) 34%, transparent);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-muted);
-  border-radius: 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-muted) 88%, transparent), color-mix(in srgb, var(--color-text) 55%, transparent));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 72%, var(--color-muted)), color-mix(in srgb, var(--color-text) 74%, var(--color-primary)));
+  background-clip: padding-box;
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-muted) var(--color-bg);
+  scrollbar-color: color-mix(in srgb, var(--color-muted) 90%, transparent) color-mix(in srgb, var(--color-border) 34%, transparent);
+}
+
+:target {
+  scroll-margin-top: calc(var(--navbar-height) + 1rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 /* ---------- Selection ---------- */
@@ -413,6 +453,25 @@ textarea:not([class]):disabled {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 1200;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-weight: 700;
+  transform: translateY(-140%);
+  transition: transform 0.16s ease;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 /* ---------- Global Button Utilities ---------- */

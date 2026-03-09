@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
+import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
+import { readPaginatedItems } from '../../../utils/pagination'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import styles from './AdminAttemptAnalysis.module.scss'
 
@@ -16,15 +18,6 @@ function formatConfidence(value) {
   return typeof value === 'number' ? `${Math.round(value * 100)}% confidence` : 'Confidence unavailable'
 }
 
-function toAbsoluteMediaUrl(path) {
-  if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://')) return path
-  const rawBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/'
-  const apiUrl = new URL(rawBase, window.location.origin)
-  const mediaBase = `${apiUrl.protocol}//${apiUrl.host}`
-  return `${mediaBase}${path.startsWith('/') ? '' : '/'}${path}`
-}
-
 function resolveError(err, fallback) {
   return (
     err?.response?.data?.detail ||
@@ -33,6 +26,10 @@ function resolveError(err, fallback) {
     err?.message ||
     fallback
   )
+}
+
+function evidenceKeyForEvent(event, index) {
+  return String(event?.id || event?.meta?.evidence || index)
 }
 
 export default function AdminAttemptAnalysis() {
@@ -49,6 +46,8 @@ export default function AdminAttemptAnalysis() {
   const [detailError, setDetailError] = useState('')
   const [detailWarning, setDetailWarning] = useState('')
   const [selectedEvidence, setSelectedEvidence] = useState(null)
+  const [evidenceUrls, setEvidenceUrls] = useState({})
+  const evidenceUrlsRef = useRef({})
   const [listReloadKey, setListReloadKey] = useState(0)
   const [detailReloadKey, setDetailReloadKey] = useState(0)
 
@@ -60,10 +59,10 @@ export default function AdminAttemptAnalysis() {
       setListError('')
 
       try {
-        const { data } = await adminApi.attempts()
+        const { data } = await adminApi.attempts({ skip: 0, limit: 200 })
         if (cancelled) return
 
-        const rows = data || []
+        const rows = readPaginatedItems(data)
         setAttempts(rows)
 
         if (!searchParams.get('id') && rows.length > 0) {
@@ -146,6 +145,59 @@ export default function AdminAttemptAnalysis() {
       cancelled = true
     }
   }, [selectedId, detailReloadKey])
+
+  useEffect(() => {
+    evidenceUrlsRef.current = evidenceUrls
+  }, [evidenceUrls])
+
+  useEffect(() => {
+    return () => {
+      Object.values(evidenceUrlsRef.current).forEach(revokeObjectUrl)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const evidenceEvents = events.filter((event) => event?.meta?.evidence)
+
+    if (evidenceEvents.length === 0) {
+      setEvidenceUrls((current) => {
+        Object.values(current).forEach(revokeObjectUrl)
+        return {}
+      })
+      return undefined
+    }
+
+    async function loadEvidenceUrls() {
+      const nextEntries = await Promise.all(
+        evidenceEvents.map(async (event, index) => {
+          const key = evidenceKeyForEvent(event, index)
+          try {
+            const url = await fetchAuthenticatedMediaObjectUrl(event.meta.evidence)
+            return [key, url]
+          } catch {
+            return [key, '']
+          }
+        }),
+      )
+
+      if (cancelled) {
+        nextEntries.forEach(([, url]) => revokeObjectUrl(url))
+        return
+      }
+
+      setEvidenceUrls((current) => {
+        Object.values(current).forEach(revokeObjectUrl)
+        return Object.fromEntries(nextEntries)
+      })
+    }
+
+    void loadEvidenceUrls()
+
+    return () => {
+      cancelled = true
+    }
+  }, [events])
 
   useEffect(() => {
     if (!selectedEvidence) return undefined
@@ -443,9 +495,14 @@ export default function AdminAttemptAnalysis() {
                     key={`${event.id || event.occurred_at || index}`}
                     type="button"
                     className={styles.evidenceCard}
+                    aria-label={`Evidence ${index + 1}`}
                     onClick={() => setSelectedEvidence(event)}
                   >
-                    <img className={styles.evidenceImg} src={toAbsoluteMediaUrl(event.meta.evidence)} alt={`Evidence ${index + 1}`} />
+                    {evidenceUrls[evidenceKeyForEvent(event, index)] ? (
+                      <img className={styles.evidenceImg} src={evidenceUrls[evidenceKeyForEvent(event, index)]} alt={`Evidence ${index + 1}`} />
+                    ) : (
+                      <div className={styles.evidenceImg} />
+                    )}
                     <div className={styles.evidenceMeta}>
                       <div className={styles.evidenceMetaTop}>
                         <span className={`${styles.severityBadge} ${getSeverityClass('severity', event.severity, styles)}`}>{event.severity}</span>
@@ -469,11 +526,15 @@ export default function AdminAttemptAnalysis() {
             <button type="button" className={styles.lightboxClose} onClick={() => setSelectedEvidence(null)}>
               Close
             </button>
-            <img
-              className={styles.lightboxImg}
-              src={toAbsoluteMediaUrl(selectedEvidence.meta?.evidence)}
-              alt={`${selectedEvidence.event_type?.replace(/_/g, ' ')} evidence`}
-            />
+            {evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)] ? (
+              <img
+                className={styles.lightboxImg}
+                src={evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)]}
+                alt={`${selectedEvidence.event_type?.replace(/_/g, ' ')} evidence`}
+              />
+            ) : (
+              <div className={styles.lightboxImg} />
+            )}
             <div className={styles.lightboxMeta}>
               <div className={styles.lightboxHeader}>
                 <span className={styles.lightboxTitle}>{selectedEvidence.event_type?.replace(/_/g, ' ')}</span>

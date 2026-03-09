@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...models import GradingScale, RoleEnum
 from ...schemas import GradingScaleBase, GradingScaleRead, Message
+from ...services.audit import write_audit_log
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -63,13 +64,27 @@ def _normalize_scale_payload(body: GradingScaleBase) -> dict:
 
 
 @router.post("/", response_model=GradingScaleRead)
-async def create_scale(body: GradingScaleBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def create_scale(
+    body: GradingScaleBase,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
     payload = _normalize_scale_payload(body)
     _ensure_unique_scale_name(db, payload["name"])
     scale = GradingScale(**payload)
     db.add(scale)
     db.commit()
     db.refresh(scale)
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="GRADING_SCALE_CREATED",
+        resource_type="grading_scale",
+        resource_id=str(scale.id),
+        detail=f"Created grading scale: {scale.name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return scale
 
 
@@ -88,7 +103,13 @@ async def get_scale(scale_id: str, db: Session = Depends(get_db_dep), current=De
 
 
 @router.put("/{scale_id}", response_model=GradingScaleRead)
-async def update_scale(scale_id: str, body: GradingScaleBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def update_scale(
+    scale_id: str,
+    body: GradingScaleBase,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
     scale_pk = parse_uuid_param(scale_id, detail="Not found")
     scale = db.get(GradingScale, scale_pk)
     if not scale:
@@ -100,15 +121,40 @@ async def update_scale(scale_id: str, body: GradingScaleBase, db: Session = Depe
     db.add(scale)
     db.commit()
     db.refresh(scale)
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="GRADING_SCALE_UPDATED",
+        resource_type="grading_scale",
+        resource_id=str(scale.id),
+        detail=f"Updated grading scale: {scale.name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return scale
 
 
 @router.delete("/{scale_id}", response_model=Message)
-async def delete_scale(scale_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN))):
+async def delete_scale(
+    scale_id: str,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN)),
+):
     scale_pk = parse_uuid_param(scale_id, detail="Not found")
     scale = db.get(GradingScale, scale_pk)
     if not scale:
         raise HTTPException(status_code=404, detail="Not found")
+    scale_name = scale.name
+    scale_pk_str = str(scale.id)
     db.delete(scale)
     db.commit()
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="GRADING_SCALE_DELETED",
+        resource_type="grading_scale",
+        resource_id=scale_pk_str,
+        detail=f"Deleted grading scale: {scale_name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return Message(detail="Deleted")

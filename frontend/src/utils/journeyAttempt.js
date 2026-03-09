@@ -23,6 +23,9 @@ export async function resolveAttempt(examId) {
     clearAttemptId()
   }
   const { data } = await resolveAttemptRequest(examId)
+  if (!data || !data.id) {
+    throw new Error('Failed to resolve attempt')
+  }
   setAttemptId(data.id)
   return data.id
 }

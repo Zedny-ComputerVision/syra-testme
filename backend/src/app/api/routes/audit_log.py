@@ -2,20 +2,20 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ...models import AuditLog, RoleEnum
-from ...schemas import AuditLogRead
+from ...schemas import AuditLogRead, PaginatedResponse
 from ..deps import get_db_dep, require_permission
 
 router = APIRouter()
 
 
-@router.get("/", response_model=list[AuditLogRead])
+@router.get("/", response_model=PaginatedResponse[AuditLogRead])
 async def list_audit_logs(
-    limit: int = 200,
-    offset: int = 0,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     q: Optional[str] = Query(None, description="Search in action or resource_id"),
     action: Optional[str] = Query(None, description="Filter by action name"),
     from_date: Optional[datetime] = Query(None, description="Filter logs after this date"),
@@ -37,5 +37,13 @@ async def list_audit_logs(
         query = query.where(AuditLog.created_at <= to_date)
     if user_id:
         query = query.where(AuditLog.user_id == user_id)
-    query = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
-    return db.scalars(query).all()
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    logs = db.scalars(
+        query.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit)
+    ).all()
+    return {
+        "items": logs,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }

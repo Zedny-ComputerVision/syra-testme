@@ -3,22 +3,104 @@
    ============================================================ */
 
 .footer {
-  padding: 1rem 1.25rem;
+  padding: 1.15rem 1.25rem 1.55rem;
   border-top: 1px solid var(--color-border);
-  background-color: var(--color-surface);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 92%, transparent), color-mix(in srgb, var(--color-border) 20%, transparent));
   margin-top: auto;
+  backdrop-filter: blur(12px);
 }
 
 .inner {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 1rem;
   max-width: 1400px;
   margin: 0 auto;
 }
 
+.brandBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.32rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.statusDot {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-success), color-mix(in srgb, var(--color-success) 60%, var(--color-primary)));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success) 16%, transparent);
+}
+
 .copyright {
   font-size: 0.8125rem;
-  color: var(--color-muted);
+  color: color-mix(in srgb, var(--color-muted) 84%, var(--color-text));
   letter-spacing: 0.25px;
+  font-weight: 700;
+}
+
+.caption {
+  font-size: 0.76rem;
+  color: color-mix(in srgb, var(--color-muted) 88%, var(--color-text));
+  max-width: 34rem;
+  line-height: 1.5;
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.footerLink {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.42rem 0.78rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 720px) {
+  .inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .linkRow {
+    justify-content: flex-start;
+  }
 }

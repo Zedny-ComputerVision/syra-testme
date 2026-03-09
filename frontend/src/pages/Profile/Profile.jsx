@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import useAuth from '../../hooks/useAuth'
+import useUnsavedChanges from '../../hooks/useUnsavedChanges'
 import { changePassword, updateProfile } from '../../services/auth.service'
 import styles from './Profile.module.scss'
 
@@ -26,6 +27,12 @@ export default function Profile() {
     name: profileForm.name.trim(),
     email: profileForm.email.trim().toLowerCase(),
   }), [profileForm.email, profileForm.name])
+  const isProfileDirty = editing && (
+    normalizedProfile.name !== (user?.name || '').trim()
+    || normalizedProfile.email !== String(user?.email || '').trim().toLowerCase()
+  )
+
+  useUnsavedChanges(isProfileDirty && !profileSaving)
 
   const handleEditToggle = () => {
     if (profileSaving) return

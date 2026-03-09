@@ -3,6 +3,7 @@ from src.app.main import app
 
 client = TestClient(app)
 
+
 def test_health():
     resp = client.get('/api/health')
     assert resp.status_code == 200

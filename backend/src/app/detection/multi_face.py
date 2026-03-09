@@ -1,10 +1,13 @@
 """Multiple face detection using YOLOv8 face detection."""
 
+import logging
 import time
 import cv2
 import numpy as np
 
 from ._yolo_face import get_face_model
+
+logger = logging.getLogger(__name__)
 
 
 class MultiFaceDetector:
@@ -15,6 +18,7 @@ class MultiFaceDetector:
         self.min_confidence = min_confidence
         self._consecutive_count = 0
         self._last_alert = 0.0
+        self._warned_unavailable = False
 
     def process(self, frame_bytes: bytes) -> dict | None:
         now = time.time()
@@ -28,6 +32,9 @@ class MultiFaceDetector:
 
         model = get_face_model()
         if model is None:
+            if not self._warned_unavailable:
+                logger.warning("Multi-face detection model unavailable - detection disabled")
+                self._warned_unavailable = True
             return None
 
         results = model.predict(frame, verbose=False, conf=self.min_confidence, imgsz=640)
@@ -46,7 +53,7 @@ class MultiFaceDetector:
             if self._consecutive_count >= self.consecutive_threshold:
                 self._last_alert = now
                 self._consecutive_count = 0
-                avg_conf = sum(confidences) / face_count if confidences else 0.8
+                avg_conf = sum(confidences) / face_count if face_count > 0 else 0.0
                 return {
                     "event_type": "MULTIPLE_FACES",
                     "severity": "HIGH",
@@ -57,9 +64,3 @@ class MultiFaceDetector:
             self._consecutive_count = 0
         return None
 
-
-_detector = MultiFaceDetector()
-
-
-def detect_multiple_faces(frame_bytes: bytes) -> dict | None:
-    return _detector.process(frame_bytes)

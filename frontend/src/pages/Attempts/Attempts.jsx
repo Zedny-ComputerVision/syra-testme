@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import Skeleton from '../../components/Skeleton/Skeleton'
 import { listAttempts } from '../../services/attempt.service'
 import { isAttemptCompletedStatus, normalizeAttempt } from '../../utils/assessmentAdapters'
+import { readPaginatedItems } from '../../utils/pagination'
 import styles from './Attempts.module.scss'
 
 const STATUS_CLASSES = {
@@ -33,8 +35,8 @@ export default function Attempts() {
   const loadAttempts = async () => {
     setLoading(true)
     try {
-      const { data } = await listAttempts()
-      setAttempts((data || []).map(normalizeAttempt))
+      const { data } = await listAttempts({ skip: 0, limit: 200 })
+      setAttempts(readPaginatedItems(data).map(normalizeAttempt))
       setLoadError('')
     } catch {
       setLoadError('Failed to load attempts.')
@@ -171,7 +173,9 @@ export default function Attempts() {
 
       <div className={styles.tableWrap}>
         {loading ? (
-          <div className={styles.empty}>Loading...</div>
+          <div className={styles.tableSkeleton}>
+            <Skeleton variant="table" rows={6} />
+          </div>
         ) : loadError ? (
           <div className={styles.errorRow}>
             <div className={styles.empty}>{loadError}</div>

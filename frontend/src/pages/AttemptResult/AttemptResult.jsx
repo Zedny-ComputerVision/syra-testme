@@ -158,8 +158,8 @@ export default function AttemptResult() {
   if (!attempt) return <div className={styles.loading}>Attempt not found.</div>
 
   const score = attempt.score ?? 0
-  const passingScore = exam?.passing_score ?? 60
-  const passed = score >= passingScore
+  const passingScore = exam?.passing_score ?? null
+  const passed = passingScore === null || score >= passingScore
   const totalQ = questions.length
   const correctCount = answers.filter(a => a.is_correct).length
   const incorrectCount = answers.filter(a => a.is_correct === false).length
@@ -170,7 +170,7 @@ export default function AttemptResult() {
   const showScoreReport = examSettings.show_score_report !== false
   const showAnswerReview = Boolean(examSettings.show_answer_review)
   const showCorrectAnswers = Boolean(examSettings.show_correct_answers)
-  const pendingManualReview = attempt.status === 'SUBMITTED' && attempt.score == null
+  const pendingManualReview = attempt.pending_manual_review ?? (attempt.status === 'SUBMITTED' && attempt.score == null)
   const searchParams = new URLSearchParams(location.search)
   const openedFromManageTest = searchParams.get('from') === 'manage-test'
   const returnTestId = searchParams.get('testId')
@@ -240,6 +240,18 @@ export default function AttemptResult() {
     ? Math.max(0, Math.round(((projectedEarnedPoints / totalAvailablePoints) * 100) * 100) / 100)
     : null
   const canShowAnswerReview = openedFromManageTest || (showAnswerReview && !pendingManualReview)
+  const gradeLabel = (() => {
+    if (!passed) return 'Fail'
+    if (passingScore == null) {
+      if (score === 0 && pendingManualReview) return 'Pending Review'
+      if (score === 0) return 'Completed'
+      if (score >= 90) return 'Excellent'
+      if (score >= 80) return 'Very Good'
+      if (score >= 70) return 'Good'
+      return 'Pass'
+    }
+    return score >= 90 ? 'Excellent' : score >= 80 ? 'Very Good' : score >= 70 ? 'Good' : 'Pass'
+  })()
 
   const downloadCertificate = async () => {
     setDownloading(true)
@@ -381,7 +393,7 @@ export default function AttemptResult() {
               </div>
             </div>
             <div className={styles.gradeLabel}>
-              {passed ? (score >= 90 ? 'Excellent' : score >= 80 ? 'Very Good' : score >= 70 ? 'Good' : 'Pass') : 'Fail'}
+              {gradeLabel}
             </div>
           </div>
           <div className={styles.statsRow}>

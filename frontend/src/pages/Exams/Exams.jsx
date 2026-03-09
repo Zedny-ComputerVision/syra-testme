@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listTests } from '../../services/test.service'
 import Loader from '../../components/common/Loader/Loader'
+import ScrollReveal from '../../components/ScrollReveal/ScrollReveal'
 import { normalizeTest } from '../../utils/assessmentAdapters'
+import { readPaginatedItems } from '../../utils/pagination'
+import { preloadRoute } from '../../utils/routePrefetch'
 import styles from './Exams.module.scss'
 
 function sortNewestFirst(items) {
@@ -45,8 +48,8 @@ export default function Exams() {
   const loadTests = () => {
     setLoading(true)
     setError('')
-    listTests()
-      .then(({ data }) => setTests((data || []).map(normalizeTest)))
+    listTests({ skip: 0, limit: 200 })
+      .then(({ data }) => setTests(readPaginatedItems(data).map(normalizeTest)))
       .catch(() => setError('Failed to load tests'))
       .finally(() => setLoading(false))
   }
@@ -81,12 +84,12 @@ export default function Exams() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
+      <ScrollReveal className={styles.header}>
         <h1 className={styles.heading}>Available Tests</h1>
         <p className={styles.sub}>Review readiness details, then open the instructions for any available test.</p>
-      </div>
+      </ScrollReveal>
 
-      <section className={styles.summaryGrid}>
+      <ScrollReveal as="section" className={styles.summaryGrid} delay={60}>
         <article className={styles.summaryCard}>
           <div className={styles.summaryLabel}>Available now</div>
           <div className={styles.summaryValue}>{tests.length}</div>
@@ -107,9 +110,9 @@ export default function Exams() {
           <div className={styles.summaryValue}>{scoredTests}</div>
           <div className={styles.summarySub}>Tests with an explicit passing score</div>
         </article>
-      </section>
+      </ScrollReveal>
 
-      <div className={styles.toolbar}>
+      <ScrollReveal className={styles.toolbar} delay={110}>
         <div className={styles.searchGroup}>
           <label className={styles.filterLabel} htmlFor="tests-search">Search tests</label>
           <input
@@ -134,87 +137,94 @@ export default function Exams() {
             Clear filters
           </button>
         </div>
-      </div>
+      </ScrollReveal>
 
       {error && (
-        <div className={styles.errorRow}>
+        <ScrollReveal className={styles.errorRow} delay={140}>
           <div className={styles.error}>{error}</div>
           <button type="button" className={styles.retryBtn} onClick={loadTests}>
             Retry
           </button>
-        </div>
+        </ScrollReveal>
       )}
 
       {!error && (
-        <div className={styles.filterMeta}>
+        <ScrollReveal className={styles.filterMeta} delay={150}>
           Showing {filteredTests.length} tests across {tests.length} available.
-        </div>
+        </ScrollReveal>
       )}
 
       {!error && tests.length === 0 && (
-        <div className={styles.emptyState}>
+        <ScrollReveal className={styles.emptyState} delay={180}>
           <div className={styles.emptyTitle}>No tests available right now</div>
           <div className={styles.emptyText}>Your assigned tests will appear here as soon as they are published or scheduled.</div>
-        </div>
+        </ScrollReveal>
       )}
 
       {!error && tests.length > 0 && filteredTests.length === 0 && (
-        <div className={styles.emptyState}>
+        <ScrollReveal className={styles.emptyState} delay={180}>
           <div className={styles.emptyTitle}>No tests match the current search</div>
           <div className={styles.emptyText}>Clear the search to restore the full list of available tests.</div>
-        </div>
+        </ScrollReveal>
       )}
 
       <div className={styles.grid}>
         {filteredTests.map((test, index) => (
-          <div
+          <ScrollReveal
             key={test.id}
-            className={`${styles.card} ${index === 0 ? styles.latestCard : ''}`}
-            tabIndex={0}
-            role="button"
-            onClick={() => navigate(`/tests/${test.id}`)}
-            onKeyDown={(event) => event.key === 'Enter' && navigate(`/tests/${test.id}`)}
+            className={styles.revealCard}
+            delay={Math.min(index, 7) * 45}
           >
-            <div className={styles.cardTop}>
-              <div className={styles.cardFlags}>
-                {index === 0 && <span className={styles.latestBadge}>Latest release</span>}
-                <span className={styles.freshnessBadge}>{formatFreshnessLabel(test.updated_at || test.created_at)}</span>
+            <div
+              className={`${styles.card} ${index === 0 ? styles.latestCard : ''}`}
+              tabIndex={0}
+              role="button"
+              onMouseEnter={() => preloadRoute(`/tests/${test.id}`)}
+              onFocus={() => preloadRoute(`/tests/${test.id}`)}
+              onClick={() => navigate(`/tests/${test.id}`)}
+              onKeyDown={(event) => event.key === 'Enter' && navigate(`/tests/${test.id}`)}
+            >
+              <div className={styles.cardTop}>
+                <div className={styles.cardFlags}>
+                  {index === 0 && <span className={styles.latestBadge}>Latest release</span>}
+                  <span className={styles.freshnessBadge}>{formatFreshnessLabel(test.updated_at || test.created_at)}</span>
+                </div>
+                <h3 className={styles.cardTitle}>{test.title}</h3>
               </div>
-              <h3 className={styles.cardTitle}>{test.title}</h3>
-            </div>
-            <div className={styles.cardTypeRow}>
-              <span className={`${styles.badge} ${test.exam_type === 'MCQ' ? styles.badgeMcq : styles.badgeText}`}>
-                {test.exam_type}
-              </span>
-              <span className={styles.flowBadge}>{getAttemptSummary(test)}</span>
-            </div>
-            <div className={styles.courseRow}>
-              <span className={styles.contextPill}>{test.course_title || 'Assigned test'}</span>
-              {test.node_title && <span className={styles.contextPill}>{test.node_title}</span>}
-            </div>
-            <div className={styles.cardMetaGrid}>
-              <div className={styles.metaBlock}>
-                <div className={styles.metaLabel}>Duration</div>
-                <div className={styles.metaValue}>{test.time_limit_minutes ? `${test.time_limit_minutes} min` : 'Untimed'}</div>
+              <div className={styles.cardTypeRow}>
+                <span className={`${styles.badge} ${test.exam_type === 'MCQ' ? styles.badgeMcq : styles.badgeText}`}>
+                  {test.exam_type}
+                </span>
+                <span className={styles.flowBadge}>{getAttemptSummary(test)}</span>
               </div>
-              <div className={styles.metaBlock}>
-                <div className={styles.metaLabel}>Attempts</div>
-                <div className={styles.metaValue}>{test.max_attempts} attempt{test.max_attempts !== 1 ? 's' : ''}</div>
+              <div className={styles.courseRow}>
+                <span className={styles.contextPill}>{test.course_title || 'Assigned test'}</span>
+                {test.node_title && <span className={styles.contextPill}>{test.node_title}</span>}
               </div>
-              <div className={styles.metaBlock}>
-                <div className={styles.metaLabel}>Passing</div>
-                <div className={styles.metaValue}>{test.passing_score != null ? `${test.passing_score}%` : 'No cutoff'}</div>
+              <div className={styles.cardMetaGrid}>
+                <div className={styles.metaBlock}>
+                  <div className={styles.metaLabel}>Duration</div>
+                  <div className={styles.metaValue}>{test.time_limit_minutes ? `${test.time_limit_minutes} min` : 'Untimed'}</div>
+                </div>
+                <div className={styles.metaBlock}>
+                  <div className={styles.metaLabel}>Attempts</div>
+                  <div className={styles.metaValue}>{test.max_attempts} attempt{test.max_attempts !== 1 ? 's' : ''}</div>
+                </div>
+                <div className={styles.metaBlock}>
+                  <div className={styles.metaLabel}>Passing</div>
+                  <div className={styles.metaValue}>{test.passing_score != null ? `${test.passing_score}%` : 'No cutoff'}</div>
+                </div>
+              </div>
+              <div className={styles.cardInsight}>
+                <div className={styles.insightTitle}>What opens next</div>
+                <div className={styles.insightText}>Instructions, readiness checks, identity verification, and the monitored test flow.</div>
+              </div>
+              <div className={styles.cardFooter}>
+                <span className={styles.cardHint}>{index === 0 ? 'Newest available test is pinned first.' : 'Ready whenever you are.'}</span>
+                <span className={styles.cardAction}>Open test flow</span>
               </div>
             </div>
-            <div className={styles.cardInsight}>
-              <div className={styles.insightTitle}>What opens next</div>
-              <div className={styles.insightText}>Instructions, readiness checks, identity verification, and the monitored test flow.</div>
-            </div>
-            <div className={styles.cardFooter}>
-              <span className={styles.cardHint}>{index === 0 ? 'Newest available test is pinned first.' : 'Ready whenever you are.'}</span>
-              <span className={styles.cardAction}>Open test flow</span>
-            </div>
-          </div>
+          </ScrollReveal>
         ))}
       </div>
     </div>

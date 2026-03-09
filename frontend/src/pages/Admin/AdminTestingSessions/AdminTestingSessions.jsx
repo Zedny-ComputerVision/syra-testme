@@ -15,6 +15,14 @@ function resolveError(err, fallback) {
   )
 }
 
+function utcToLocalDatetimeInput(utcString) {
+  if (!utcString) return ''
+  const date = new Date(utcString)
+  const offset = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - offset * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
 export default function AdminTestingSessions() {
   const { hasPermission } = useAuth()
   const [sessions, setSessions] = useState([])
@@ -177,9 +185,7 @@ export default function AdminTestingSessions() {
 
   const openEdit = (session) => {
     setEditId(session.id)
-    const localDt = session.scheduled_at
-      ? new Date(session.scheduled_at).toISOString().slice(0, 16)
-      : ''
+    const localDt = utcToLocalDatetimeInput(session.scheduled_at)
     setEditForm({ scheduled_at: localDt, access_mode: session.access_mode || 'OPEN', notes: session.notes || '' })
     setEditError('')
     setEditModal(true)

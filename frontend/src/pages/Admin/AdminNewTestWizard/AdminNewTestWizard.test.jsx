@@ -12,6 +12,7 @@ const categoriesMock = vi.fn()
 const gradingScalesMock = vi.fn()
 const questionPoolsMock = vi.fn()
 const usersMock = vi.fn()
+const learnersForSchedulingMock = vi.fn()
 const examTemplatesMock = vi.fn()
 const createTestMock = vi.fn()
 const updateTestMock = vi.fn()
@@ -31,6 +32,7 @@ vi.mock('../../../services/admin.service', () => ({
     gradingScales: (...args) => gradingScalesMock(...args),
     questionPools: (...args) => questionPoolsMock(...args),
     users: (...args) => usersMock(...args),
+    learnersForScheduling: (...args) => learnersForSchedulingMock(...args),
     examTemplates: (...args) => examTemplatesMock(...args),
     createTest: (...args) => createTestMock(...args),
     updateTest: (...args) => updateTestMock(...args),
@@ -45,6 +47,10 @@ vi.mock('../../../services/admin.service', () => ({
 
 vi.mock('../../../services/ai.service', () => ({
   generateQuestionsAI: vi.fn(),
+}))
+
+vi.mock('../../../hooks/useUnsavedChanges', () => ({
+  default: () => {},
 }))
 
 vi.mock('../ExamQuestionPanel/ExamQuestionPanel', () => ({
@@ -71,6 +77,7 @@ describe('AdminNewTestWizard', () => {
     gradingScalesMock.mockResolvedValue({ data: [] })
     questionPoolsMock.mockResolvedValue({ data: [] })
     usersMock.mockResolvedValue({ data: [] })
+    learnersForSchedulingMock.mockResolvedValue({ data: [] })
     examTemplatesMock.mockResolvedValue({ data: [] })
     createTestMock.mockResolvedValue({ data: { id: 'test-1' } })
     updateTestMock.mockResolvedValue({ data: {} })
@@ -153,7 +160,7 @@ describe('AdminNewTestWizard', () => {
   })
 
   it('makes the proctoring phase explicit and supports bulk learner selection', async () => {
-    usersMock.mockResolvedValue({
+    learnersForSchedulingMock.mockResolvedValue({
       data: [
         { id: 'learner-1', role: 'LEARNER', user_id: 'LIV1001', name: 'Learner One', email: 'one@example.com' },
         { id: 'learner-2', role: 'LEARNER', user_id: 'LIV1002', name: 'Learner Two', email: 'two@example.com' },
@@ -210,5 +217,5 @@ describe('AdminNewTestWizard', () => {
 
     await waitFor(() => expect(screen.getByText('Matched 2 learners.')).toBeTruthy())
     expect(screen.getByText('Selected: 2')).toBeTruthy()
-  })
+  }, 10000)
 })

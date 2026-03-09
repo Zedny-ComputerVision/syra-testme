@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
+import { readPaginatedItems } from '../../../utils/pagination'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
 import styles from './AdminCourses.module.scss'
@@ -52,7 +53,7 @@ export default function AdminCourses() {
     try {
       const [coursesRes, testsRes] = await Promise.allSettled([
         adminApi.courses(),
-        isAdmin ? adminApi.allTests() : adminApi.exams(),
+        isAdmin ? adminApi.allTests() : adminApi.exams({ skip: 0, limit: 200 }),
       ])
       if (coursesRes.status !== 'fulfilled') {
         setCourses([])
@@ -65,7 +66,7 @@ export default function AdminCourses() {
       const courseList = coursesRes.value.data || []
       setCourses(courseList)
       if (testsRes.status === 'fulfilled') {
-        const testRows = isAdmin ? (testsRes.value.data?.items || []) : (testsRes.value.data || [])
+        const testRows = isAdmin ? (testsRes.value.data?.items || []) : readPaginatedItems(testsRes.value.data)
         setAllTests(testRows.map(normalizeAdminTest))
       } else {
         setAllTests([])

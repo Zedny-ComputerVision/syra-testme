@@ -8,6 +8,24 @@ const AUTH_ENDPOINTS = ['auth/login', 'auth/signup', 'auth/setup', 'auth/refresh
 const api = axios.create({ baseURL })
 let refreshPromise = null
 
+function normalizeValidationFields(detail) {
+  if (!Array.isArray(detail)) return {}
+
+  return detail.reduce((fields, item) => {
+    const loc = Array.isArray(item?.loc) ? item.loc : []
+    const path = loc
+      .filter((segment) => segment !== 'body' && segment !== 'query' && segment !== 'path')
+      .map((segment) => String(segment))
+      .join('.')
+
+    if (path && !fields[path]) {
+      fields[path] = item?.msg || 'Invalid value.'
+    }
+
+    return fields
+  }, {})
+}
+
 function readTokens() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
@@ -68,6 +86,16 @@ api.interceptors.response.use(
     const original = err.config || {}
     const url = String(original.url || '')
     const isAuthEndpoint = AUTH_ENDPOINTS.some((path) => url.includes(path))
+
+    if (status === 422) {
+      const fields = normalizeValidationFields(err.response?.data?.detail)
+      err.validation = {
+        fields,
+        message: 'Validation failed',
+      }
+      err.fields = fields
+      err.message = 'Validation failed'
+    }
 
     if (status !== 401 || isAuthEndpoint) {
       return Promise.reject(err)

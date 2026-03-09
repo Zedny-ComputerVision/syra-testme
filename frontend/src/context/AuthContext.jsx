@@ -13,6 +13,22 @@ const STORAGE_KEY = 'syra_tokens';
 const rawBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/';
 const apiBaseURL = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
 
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function safeRemoveItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore storage failures
+  }
+}
+
 /**
  * Safely parse stored tokens from localStorage.
  * Returns null when nothing is stored or when JSON is corrupt.
@@ -27,7 +43,7 @@ function loadStoredTokens() {
     }
     return null;
   } catch {
-    localStorage.removeItem(STORAGE_KEY);
+    safeRemoveItem(STORAGE_KEY);
     return null;
   }
 }
@@ -107,7 +123,7 @@ export function AuthProvider({ children }) {
       const refreshed = await refreshAccessToken(tokens);
       if (!refreshed) {
         if (!cancelled) {
-          localStorage.removeItem(STORAGE_KEY);
+          safeRemoveItem(STORAGE_KEY);
           setTokens(null);
           setUser(null);
           setLoading(false);
@@ -115,7 +131,7 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
+      safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
       if (!cancelled) {
         setTokens(refreshed);
         setUser(decodeUser(refreshed.access_token));
@@ -165,7 +181,7 @@ export function AuthProvider({ children }) {
    * @param {{ access_token: string, refresh_token?: string }} payload
    */
   const login = useCallback((payload) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    safeSetItem(STORAGE_KEY, JSON.stringify(payload));
     setUser(decodeUser(payload.access_token));
     setLoading(false);
     setTokens(payload);
@@ -176,12 +192,19 @@ export function AuthProvider({ children }) {
    * Clear all auth state and redirect-worthy data.
    */
   const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    const accessToken = tokens?.access_token;
+    if (accessToken) {
+      const logoutUrl = new URL('auth/logout', apiBaseURL).toString();
+      void axios.post(logoutUrl, null, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => {});
+    }
+    safeRemoveItem(STORAGE_KEY);
     setTokens(null);
     setUser(null);
     setLoading(false);
     setPermissionRows(DEFAULT_PERMISSION_ROWS);
-  }, []);
+  }, [tokens]);
 
   /**
    * Update stored tokens (e.g. after a token refresh).
@@ -189,7 +212,7 @@ export function AuthProvider({ children }) {
    */
   const updateTokens = useCallback((newTokens) => {
     const merged = { ...(tokens || {}), ...(newTokens || {}) };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    safeSetItem(STORAGE_KEY, JSON.stringify(merged));
     setUser(decodeUser(merged.access_token));
     setTokens(merged);
   }, [tokens]);
@@ -227,7 +250,7 @@ export function AuthProvider({ children }) {
       permissionRows,
       hasPermission,
     }),
-    [user, setUser, tokens, loading, isAuthenticated, login, logout, updateTokens, hasRole, permissionRows, hasPermission]
+    [user, tokens, loading, isAuthenticated, login, logout, updateTokens, hasRole, permissionRows, hasPermission]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

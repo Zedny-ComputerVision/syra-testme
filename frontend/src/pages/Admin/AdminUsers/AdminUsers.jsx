@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import useAuth from '../../../hooks/useAuth'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import { readPaginatedItems, readPaginatedTotal } from '../../../utils/pagination'
 import styles from './AdminUsers.module.scss'
 
 const EMPTY_FORM = { user_id: '', name: '', email: '', password: '', role: 'LEARNER', is_active: true }
@@ -38,11 +39,21 @@ function validateUserForm(form, isCreate) {
   return ''
 }
 
+function mapSortOption(sortOption) {
+  if (sortOption === 'name_asc') return { sort_by: 'name', sort_dir: 'asc' }
+  if (sortOption === 'name_desc') return { sort_by: 'name', sort_dir: 'desc' }
+  if (sortOption === 'email_asc') return { sort_by: 'email', sort_dir: 'asc' }
+  if (sortOption === 'role_asc') return { sort_by: 'role', sort_dir: 'asc' }
+  if (sortOption === 'created_asc') return { sort_by: 'created_at', sort_dir: 'asc' }
+  return { sort_by: 'created_at', sort_dir: 'desc' }
+}
+
 export default function AdminUsers() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const searchParamValue = searchParams.get('search') || ''
   const [users, setUsers] = useState([])
+  const [totalUsers, setTotalUsers] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
@@ -53,6 +64,7 @@ export default function AdminUsers() {
   const [selected, setSelected] = useState([])
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [fieldErrors, setFieldErrors] = useState({})
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [sortBy, setSortBy] = useState('created_desc')
@@ -66,59 +78,54 @@ export default function AdminUsers() {
   const isAdmin = user?.role === 'ADMIN'
   const modalBusy = saving || resetPwSaving
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setLoadError('')
     try {
-      const { data } = await adminApi.users()
-      const nextUsers = data || []
+      const { sort_by, sort_dir } = mapSortOption(sortBy)
+      const params = {
+        skip: (page - 1) * pageSize,
+        limit: pageSize,
+        sort_by,
+        sort_dir,
+      }
+      if (search.trim()) params.search = search.trim()
+      if (roleFilter !== 'All') params.role = roleFilter
+      if (statusFilter === 'Active') params.is_active = true
+      if (statusFilter === 'Inactive') params.is_active = false
+
+      const { data } = await adminApi.users(params)
+      const nextUsers = readPaginatedItems(data)
+      const nextTotal = readPaginatedTotal(data)
       setUsers(nextUsers)
+      setTotalUsers(nextTotal)
       setSelected((prev) => prev.filter((id) => nextUsers.some((nextUser) => nextUser.id === id)))
       setError('')
     } catch (err) {
       setUsers([])
+      setTotalUsers(0)
       setLoadError(resolveError(err) || 'Could not load users.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, pageSize, roleFilter, search, sortBy, statusFilter])
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [load])
 
   useEffect(() => {
     setSearch(searchParamValue)
     setPage(1)
   }, [searchParamValue])
 
-  const filtered = users.filter((listedUser) => {
-    const query = search.trim().toLowerCase()
-    const matchSearch = !query
-      || listedUser.user_id?.toLowerCase().includes(query)
-      || listedUser.name?.toLowerCase().includes(query)
-      || listedUser.email?.toLowerCase().includes(query)
-    const matchRole = roleFilter === 'All' || listedUser.role === roleFilter
-    const matchStatus = statusFilter === 'All' || (statusFilter === 'Active' ? listedUser.is_active !== false : listedUser.is_active === false)
-    return matchSearch && matchRole && matchStatus
-  })
-
-  const sortedFiltered = [...filtered].sort((a, b) => {
-    if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '')
-    if (sortBy === 'email_asc') return (a.email || '').localeCompare(b.email || '')
-    if (sortBy === 'role_asc') return (a.role || '').localeCompare(b.role || '')
-    if (sortBy === 'created_desc') return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-    if (sortBy === 'created_asc') return new Date(a.created_at || 0) - new Date(b.created_at || 0)
-    return (a.name || '').localeCompare(b.name || '')
-  })
-
-  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / pageSize))
-  const pageUsers = sortedFiltered.slice((page - 1) * pageSize, page * pageSize)
+  const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize))
+  const pageUsers = users
   const activeUsers = users.filter((listedUser) => listedUser.is_active !== false).length
   const inactiveUsers = Math.max(users.length - activeUsers, 0)
   const hasActiveFilters = Boolean(search.trim() || roleFilter !== 'All' || statusFilter !== 'All')
   const summaryCards = [
-    { label: 'Loaded users', value: users.length, sub: 'All user records currently available' },
-    { label: 'Visible rows', value: sortedFiltered.length, sub: hasActiveFilters ? 'Current filters applied' : 'Showing the full user list' },
-    { label: 'Active users', value: activeUsers, sub: `${inactiveUsers} inactive account${inactiveUsers !== 1 ? 's' : ''}` },
+    { label: 'Matching users', value: totalUsers, sub: hasActiveFilters ? 'Server-side filters are active' : 'All users matching the current sort' },
+    { label: 'Users on page', value: users.length, sub: `Page ${page} of ${totalPages}` },
+    { label: 'Active on page', value: activeUsers, sub: `${inactiveUsers} inactive account${inactiveUsers !== 1 ? 's' : ''} on this page` },
     { label: isAdmin ? 'Selected users' : 'Your access', value: isAdmin ? selected.length : 'Read-only', sub: isAdmin ? 'Bulk actions use the current page selection' : 'Mutation controls stay hidden for non-admins' },
   ]
   const roleSummary = SUMMARY_ROLES.map((role) => ({
@@ -129,7 +136,7 @@ export default function AdminUsers() {
   const exportCSV = () => {
     const rows = [
       ['User ID', 'Name', 'Email', 'Role', 'Status'],
-      ...sortedFiltered.map((u) => [u.user_id || '', u.name || '', u.email || '', u.role || '', u.is_active !== false ? 'Active' : 'Inactive']),
+      ...pageUsers.map((u) => [u.user_id || '', u.name || '', u.email || '', u.role || '', u.is_active !== false ? 'Active' : 'Inactive']),
     ]
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -171,6 +178,7 @@ export default function AdminUsers() {
 
   const openCreate = () => {
     setForm({ ...EMPTY_FORM })
+    setFieldErrors({})
     setShowResetPw(false)
     setResetPwValue('')
     setError('')
@@ -187,6 +195,7 @@ export default function AdminUsers() {
       role: listedUser.role || 'LEARNER',
       is_active: listedUser.is_active !== false,
     })
+    setFieldErrors({})
     setShowResetPw(false)
     setResetPwValue('')
     setError('')
@@ -217,12 +226,14 @@ export default function AdminUsers() {
   const handleSave = async () => {
     const validationError = validateUserForm(form, modal === 'create')
     if (validationError) {
+      setFieldErrors({})
       setError(validationError)
       return
     }
     setSaving(true)
     setError('')
     setNotice('')
+    setFieldErrors({})
     try {
       const payload = {
         ...form,
@@ -234,13 +245,23 @@ export default function AdminUsers() {
         await adminApi.createUser(payload)
         setNotice('User created.')
       } else {
-        const { password, ...rest } = payload
-        await adminApi.updateUser(modal.id, password ? payload : rest)
+        await adminApi.updateUser(modal.id, {
+          user_id: payload.user_id,
+          name: payload.name,
+          email: payload.email,
+          role: payload.role,
+          is_active: payload.is_active,
+        })
         setNotice('User updated.')
       }
       setModal(null)
-      await load()
+      if (page !== 1) {
+        setPage(1)
+      } else {
+        await load()
+      }
     } catch (err) {
+      setFieldErrors(err.validation?.fields || {})
       setError(resolveError(err) || 'Could not save user changes.')
     } finally {
       setSaving(false)
@@ -255,7 +276,11 @@ export default function AdminUsers() {
       await adminApi.deleteUser(id)
       setDeleteId(null)
       setNotice('User deleted.')
-      await load()
+      if (page > 1 && users.length === 1) {
+        setPage(page - 1)
+      } else {
+        await load()
+      }
     } catch (err) {
       setError(resolveError(err) || 'Could not delete user.')
     } finally {
@@ -276,7 +301,11 @@ export default function AdminUsers() {
       }
     }
     setSelected([])
-    await load()
+    if (page > 1 && selected.length === users.length) {
+      setPage(page - 1)
+    } else {
+      await load()
+    }
     if (failed > 0) {
       setError(`${failed} user(s) could not be deleted.`)
     } else {
@@ -347,7 +376,7 @@ export default function AdminUsers() {
             <option value={25}>25 / page</option>
             <option value={50}>50 / page</option>
           </select>
-          <button type="button" className={styles.exportBtn} onClick={exportCSV} disabled={sortedFiltered.length === 0}>
+          <button type="button" className={styles.exportBtn} onClick={exportCSV} disabled={pageUsers.length === 0}>
             Export CSV
           </button>
         </div>
@@ -359,7 +388,7 @@ export default function AdminUsers() {
             Clear filters
           </button>
           <div className={styles.filterMeta}>
-            Showing {sortedFiltered.length} matching user{sortedFiltered.length !== 1 ? 's' : ''} across {users.length} loaded.
+            Showing {users.length} user{users.length !== 1 ? 's' : ''} on this page across {totalUsers} matching.
           </div>
         </div>
       </div>
@@ -376,6 +405,14 @@ export default function AdminUsers() {
       <div className={styles.tableWrap}>
         {loading ? (
           <div className={styles.empty}>Loading user profiles...</div>
+        ) : totalUsers === 0 && hasActiveFilters ? (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyTitle}>No matches</div>
+            <div className={styles.emptyText}>No users match the current filters. Clear the filters to see the full directory again.</div>
+            <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>
+              Clear filters
+            </button>
+          </div>
         ) : users.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyTitle}>No users yet</div>
@@ -416,8 +453,20 @@ export default function AdminUsers() {
                   {isAdmin && (
                     <td>
                       <div className={styles.actionBtns}>
-                        <button type="button" className={styles.actionBtn} onClick={() => openEdit(listedUser)} disabled={deleteBusyId === listedUser.id}>Edit</button>
-                        <button type="button" className={styles.actionBtnDanger} onClick={() => setDeleteId(listedUser.id)} disabled={deleteBusyId === listedUser.id}>
+                        <button
+                          type="button"
+                          className={styles.actionBtn}
+                          onClick={() => openEdit(listedUser)}
+                          disabled={deleteBusyId === listedUser.id}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.actionBtnDanger}
+                          onClick={() => setDeleteId(listedUser.id)}
+                          disabled={deleteBusyId === listedUser.id}
+                        >
                           {deleteBusyId === listedUser.id ? 'Deleting...' : 'Delete'}
                         </button>
                       </div>
@@ -432,7 +481,7 @@ export default function AdminUsers() {
 
       {totalPages > 1 && (
         <div className={styles.pagination}>
-          <span className={styles.pageInfo}>{sortedFiltered.length} user{sortedFiltered.length !== 1 ? 's' : ''} | Page {page} of {totalPages}</span>
+          <span className={styles.pageInfo}>{totalUsers} matching user{totalUsers !== 1 ? 's' : ''} | Page {page} of {totalPages}</span>
           <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage((value) => value - 1)}>Previous</button>
           <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage((value) => value + 1)}>Next</button>
         </div>
@@ -445,13 +494,42 @@ export default function AdminUsers() {
             {['user_id', 'name', 'email'].map((field) => (
               <div key={field} className={styles.formGroup}>
                 <label className={styles.label}>{field === 'user_id' ? 'User ID' : field.charAt(0).toUpperCase() + field.slice(1)}</label>
-                <input className={styles.input} value={form[field]} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} />
+                <input
+                  className={`${styles.input} ${fieldErrors[field] ? styles.inputInvalid : ''}`}
+                  aria-invalid={fieldErrors[field] ? 'true' : 'false'}
+                  value={form[field]}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, [field]: event.target.value }))
+                    setFieldErrors((current) => {
+                      if (!current[field]) return current
+                      const next = { ...current }
+                      delete next[field]
+                      return next
+                    })
+                  }}
+                />
+                {fieldErrors[field] && <div className={styles.fieldError}>{fieldErrors[field]}</div>}
               </div>
             ))}
             {modal === 'create' && (
               <div className={styles.formGroup}>
                 <label className={styles.label}>Password</label>
-                <input type="password" className={styles.input} value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
+                <input
+                  type="password"
+                  className={`${styles.input} ${fieldErrors.password ? styles.inputInvalid : ''}`}
+                  aria-invalid={fieldErrors.password ? 'true' : 'false'}
+                  value={form.password}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, password: event.target.value }))
+                    setFieldErrors((current) => {
+                      if (!current.password) return current
+                      const next = { ...current }
+                      delete next.password
+                      return next
+                    })
+                  }}
+                />
+                {fieldErrors.password && <div className={styles.fieldError}>{fieldErrors.password}</div>}
               </div>
             )}
             {modal !== 'create' && (
@@ -487,9 +565,23 @@ export default function AdminUsers() {
             )}
             <div className={styles.formGroup}>
               <label className={styles.label}>Role</label>
-              <select className={styles.select} value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}>
+              <select
+                className={`${styles.select} ${fieldErrors.role ? styles.inputInvalid : ''}`}
+                aria-invalid={fieldErrors.role ? 'true' : 'false'}
+                value={form.role}
+                onChange={(event) => {
+                  setForm((current) => ({ ...current, role: event.target.value }))
+                  setFieldErrors((current) => {
+                    if (!current.role) return current
+                    const next = { ...current }
+                    delete next.role
+                    return next
+                  })
+                }}
+              >
                 {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
               </select>
+              {fieldErrors.role && <div className={styles.fieldError}>{fieldErrors.role}</div>}
             </div>
             <div className={styles.formGroup}>
               <label className={styles.checkboxLabel}>

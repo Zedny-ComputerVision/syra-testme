@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
 import styles from './AdminReports.module.scss'
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
@@ -35,6 +36,7 @@ export default function AdminReports() {
   const [runningId, setRunningId] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState('')
+  const [openingNoticeLink, setOpeningNoticeLink] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('ALL')
 
@@ -141,6 +143,23 @@ export default function AdminReports() {
     }
   }
 
+  const handleOpenGeneratedReport = async () => {
+    if (!noticeLink) return
+    setOpeningNoticeLink(true)
+    try {
+      const objectUrl = await fetchAuthenticatedMediaObjectUrl(noticeLink)
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        setError('Popup blocked. Allow pop-ups to open the generated report.')
+      }
+      window.setTimeout(() => revokeObjectUrl(objectUrl), 60_000)
+    } catch {
+      setError('Could not open the generated report.')
+    } finally {
+      setOpeningNoticeLink(false)
+    }
+  }
+
   const loadSubscribers = async () => {
     setLoadingSubs(true)
     try {
@@ -229,7 +248,7 @@ export default function AdminReports() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Report Builder" subtitle="Schedule automated proctoring and test reports" />
+      <AdminPageHeader title="Scheduled Reports" subtitle="Schedule automated proctoring and test reports" />
       <section className={styles.summaryGrid}>
         {summaryCards.map((card) => (
           <article key={card.label} className={styles.summaryCard}>
@@ -248,7 +267,17 @@ export default function AdminReports() {
             <div className={styles.notice}>
               <div>{notice}</div>
               {noticeLink && (
-                <a href={noticeLink} target="_blank" rel="noreferrer">Open generated report</a>
+                <a
+                  href={noticeLink}
+                  className={styles.hintBtn}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void handleOpenGeneratedReport()
+                  }}
+                  aria-disabled={openingNoticeLink ? 'true' : 'false'}
+                >
+                  {openingNoticeLink ? 'Opening report...' : 'Open generated report'}
+                </a>
               )}
             </div>
           )}

@@ -75,13 +75,16 @@ test.describe('Admin New Test Wizard end-to-end', () => {
     await page.getByRole('button', { name: /Next/i }).click()
 
     // Step 1 - Method
+    await expect(page.getByRole('heading', { name: 'Test Creation Method' })).toBeVisible()
     await page.getByRole('button', { name: /Next/i }).click()
 
-    // Step 2 - Settings
+    // Step 2 - Proctoring & settings
+    await expect(page.getByRole('heading', { name: 'Proctoring & Test Settings' })).toBeVisible()
     await page.fill('input[name="time_limit"]', '20')
     await page.getByRole('button', { name: /Next/i }).click()
 
-    // Step 3 - Questions (auto-save only, no UI question creation)
+    // Step 3 - Questions
+    await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
     await page.getByRole('button', { name: /Add Single Choice/i }).click()
     await page.fill('input[placeholder="Enter question..."]', 'Warm-up question')
     await page.fill('input[placeholder="Option A"]', 'Option A')

@@ -300,7 +300,7 @@
 
 .qNumActive {
   background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 70%, var(--color-accent)));
-  color: #ffffff;
+  color: var(--color-button-text);
   border-color: var(--color-primary);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
 }

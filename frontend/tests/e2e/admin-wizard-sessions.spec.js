@@ -16,10 +16,12 @@ test.describe('Admin New Test Wizard session editing', () => {
     })
 
     const usersRes = await api.get('users/')
-    const users = await usersRes.json()
+    const usersBody = await usersRes.json()
+    const users = usersBody.items || usersBody
     const learnerOneUser = users.find((user) => user.user_id === learnerOne.user_id)
     const learnerTwoUser = users.find((user) => user.user_id === learnerTwo.user_id)
     if (!learnerOneUser || !learnerTwoUser) throw new Error('Learner fixture lookup failed')
+    const scheduledAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
     const testRes = await api.post('admin/tests', {
       data: {
@@ -51,7 +53,7 @@ test.describe('Admin New Test Wizard session editing', () => {
       data: {
         exam_id: createdTest.id,
         user_id: learnerOneUser.id,
-        scheduled_at: '2026-03-06T12:00:00Z',
+        scheduled_at: scheduledAt,
         access_mode: 'RESTRICTED',
       },
     })
@@ -78,12 +80,14 @@ test.describe('Admin New Test Wizard session editing', () => {
     await page.getByRole('button', { name: /Save assignments/i }).click()
     await expect.poll(async () => {
       const schedulesRes = await api.get('schedules/')
-      const schedules = await schedulesRes.json()
+      const schedulesBody = await schedulesRes.json()
+      const schedules = schedulesBody.items || schedulesBody
       return schedules.filter((schedule) => String(schedule.exam_id) === String(createdTest.id))
     }, { timeout: 15000 }).toHaveLength(1)
 
     const schedulesRes = await api.get('schedules/')
-    const schedules = await schedulesRes.json()
+    const schedulesBody = await schedulesRes.json()
+    const schedules = schedulesBody.items || schedulesBody
     const testSchedules = schedules.filter((schedule) => String(schedule.exam_id) === String(createdTest.id))
     expect(String(testSchedules[0].user_id)).toBe(String(learnerTwoUser.id))
   })

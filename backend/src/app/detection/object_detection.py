@@ -1,5 +1,6 @@
 """Forbidden object detection using YOLOv8 nano."""
 
+import logging
 import cv2
 import numpy as np
 
@@ -10,6 +11,7 @@ except Exception:  # pragma: no cover - optional dependency in lightweight envs
 
 FORBIDDEN_LABELS = {"cell phone", "book", "laptop"}
 _model = None
+logger = logging.getLogger(__name__)
 
 
 class ObjectDetector:
@@ -17,6 +19,7 @@ class ObjectDetector:
         self.forbidden_labels = forbidden_labels or FORBIDDEN_LABELS
         self.confidence_threshold = confidence_threshold
         self._model = None
+        self._warned_unavailable = False
 
     def _get_model(self):
         global _model
@@ -34,6 +37,9 @@ class ObjectDetector:
             return []
         model = self._get_model()
         if model is None:
+            if not self._warned_unavailable:
+                logger.warning("Object detection model unavailable - detection disabled")
+                self._warned_unavailable = True
             return []
 
         results = model.predict(frame, verbose=False, conf=self.confidence_threshold, imgsz=416)
@@ -49,10 +55,3 @@ class ObjectDetector:
                         "confidence": float(conf),
                     })
         return alerts
-
-
-_detector = ObjectDetector()
-
-
-def detect_forbidden_objects(frame_bytes: bytes) -> list[dict]:
-    return _detector.process(frame_bytes)

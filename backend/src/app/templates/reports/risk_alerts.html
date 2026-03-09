@@ -1,0 +1,31 @@
+{% extends "report_base.html" %}
+{% block content %}
+<table>
+  <thead>
+    <tr>
+      <th>Attempt</th>
+      <th>User</th>
+      <th>Test</th>
+      <th>High Alerts</th>
+      <th>Medium Alerts</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.attempt_id|e }}</td>
+        <td>{{ row.user_name|e }}</td>
+        <td>{{ row.test_title|e }}</td>
+        <td>{{ row.high_alerts }}</td>
+        <td>{{ row.medium_alerts }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="5">No alert data found.</td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,16 +1,42 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import Schedule, RoleEnum, Exam
+from ...models import Attempt, AttemptStatus, Schedule, RoleEnum, Exam
 from ...modules.tests.models import Test
 from ...schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
 from ...services.audit import write_audit_log
-from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
+from ...services.notifications import notify_user
+from ..deps import ensure_permission, get_current_user, get_db_dep, normalize_utc_datetime, parse_uuid_param, require_permission
 
 router = APIRouter()
+
+
+def _validate_schedule_time(scheduled_at: datetime | None) -> None:
+    normalized = normalize_utc_datetime(scheduled_at)
+    if normalized and normalized < datetime.now(timezone.utc) - timedelta(minutes=1):
+        raise HTTPException(status_code=422, detail="Cannot schedule in the past")
+
+
+def _schedule_title(schedule: Schedule) -> str:
+    exam = schedule.exam
+    test = getattr(schedule, "test", None)
+    return getattr(exam, "title", None) or getattr(test, "name", None) or "Scheduled test"
+
+
+def _notify_schedule_change(db: Session, schedule: Schedule, *, updated: bool) -> None:
+    scheduled_at = schedule.scheduled_at.isoformat() if schedule.scheduled_at else "unspecified time"
+    title = "Schedule updated" if updated else "Schedule created"
+    action = "updated" if updated else "scheduled"
+    notify_user(
+        db,
+        schedule.user_id,
+        title=title,
+        message=f"{_schedule_title(schedule)} has been {action} for {scheduled_at}.",
+        link="/schedule",
+    )
 
 
 def _build(schedule: Schedule) -> ScheduleRead:
@@ -86,6 +112,7 @@ async def create_schedule(body: ScheduleBase, db: Session = Depends(get_db_dep),
         existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.test_id == body.test_id))
     if existing:
         raise HTTPException(status_code=409, detail="Schedule already exists")
+    _validate_schedule_time(body.scheduled_at)
     now = datetime.now(timezone.utc)
     s = Schedule(**body.model_dump(), created_at=now, updated_at=now)
     db.add(s)
@@ -99,6 +126,7 @@ async def create_schedule(body: ScheduleBase, db: Session = Depends(get_db_dep),
         resource_id=str(s.id),
         detail=f"exam={s.exam_id}; user={s.user_id}; mode={s.access_mode.value}",
     )
+    _notify_schedule_change(db, s, updated=False)
     return _build(s)
 
 
@@ -151,6 +179,7 @@ async def update_schedule(
         resource_id=str(s.id),
         detail=f"mode={s.access_mode.value}; scheduled_at={scheduled_at_str}",
     )
+    _notify_schedule_change(db, s, updated=True)
     return _build(s)
 
 
@@ -160,6 +189,17 @@ async def delete_schedule(schedule_id: str, db: Session = Depends(get_db_dep), c
     s = db.get(Schedule, schedule_pk)
     if not s:
         raise HTTPException(status_code=404, detail="Not found")
+    active_attempt = db.scalar(
+        select(Attempt.id)
+        .where(
+            Attempt.exam_id == s.exam_id,
+            Attempt.user_id == s.user_id,
+            Attempt.status == AttemptStatus.IN_PROGRESS,
+        )
+        .limit(1)
+    )
+    if active_attempt:
+        raise HTTPException(status_code=409, detail="Cannot delete schedule while user has an active attempt")
     detail = f"exam={s.exam_id}; user={s.user_id}"
     db.delete(s)
     db.commit()

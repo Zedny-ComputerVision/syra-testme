@@ -149,6 +149,10 @@
   backdrop-filter: blur(var(--card-blur));
 }
 
+.tableSkeleton {
+  padding: 1rem;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

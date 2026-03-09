@@ -8,6 +8,14 @@
   color: var(--color-muted);
 }
 
+.kpiSkeleton {
+  min-height: 4.9rem;
+}
+
+.tableBodySkeleton {
+  padding: 1rem;
+}
+
 /* ---- Buttons ---- */
 .refreshButton,
 .alertButton,

@@ -238,11 +238,11 @@
 }
 
 .heatmapCool {
-  background: #3b82f6;
+  background: var(--color-info, #3b82f6);
 }
 
 .heatmapWarm {
-  background: #fbbf24;
+  background: var(--color-warning, #fbbf24);
 }
 
 .heatmapHot {
@@ -445,7 +445,7 @@
   height: 140px;
   object-fit: cover;
   display: block;
-  background: #000;
+  background: var(--color-surface-dark, #0a1226);
 }
 
 .evidenceMeta {
@@ -515,7 +515,7 @@
   max-height: 68vh;
   object-fit: contain;
   border-radius: 14px;
-  background: #000;
+  background: var(--color-surface-dark, #0a1226);
 }
 
 .lightboxMeta {

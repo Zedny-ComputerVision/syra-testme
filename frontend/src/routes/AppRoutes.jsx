@@ -1,67 +1,81 @@
-import React, { useState, useEffect } from 'react'
-import { createBrowserRouter, RouterProvider, Navigate, useLocation, useParams } from 'react-router-dom'
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import useAuth from '../hooks/useAuth'
-import Sidebar from '../components/Sidebar/Sidebar'
-import Navbar from '../components/Navbar/Navbar'
+import { createBrowserRouter, Navigate, RouterProvider, useLocation, useParams } from 'react-router-dom'
+import ErrorBoundary from '../components/ErrorBoundary/ErrorBoundary'
 import Footer from '../components/Footer/Footer'
+import Navbar from '../components/Navbar/Navbar'
+import ScrollProgress from '../components/ScrollProgress/ScrollProgress'
+import ScrollRestoration from '../components/ScrollRestoration/ScrollRestoration'
+import ScrollTopButton from '../components/ScrollTopButton/ScrollTopButton'
+import Sidebar from '../components/Sidebar/Sidebar'
 import Loader from '../components/common/Loader/Loader'
+import useAuth from '../hooks/useAuth'
 import api from '../services/api'
+import { preloadRoutes } from '../utils/routePrefetch'
 
-/* ── Learner Pages ── */
-import Login from '../pages/Login/Login'
-import Home from '../pages/Home/Home'
-import Exams from '../pages/Exams/Exams'
-import ExamInstructions from '../pages/ExamInstructions/ExamInstructions'
-import ForgotPassword from '../pages/Auth/ForgotPassword'
-import ResetPassword from '../pages/Auth/ResetPassword'
-import ChangePassword from '../pages/Auth/ChangePassword'
-import SignUp from '../pages/Auth/SignUp'
-import SystemCheckPage from '../pages/SystemCheckPage/SystemCheckPage'
-import VerifyIdentityPage from '../pages/VerifyIdentityPage/VerifyIdentityPage'
-import RulesPage from '../pages/RulesPage/RulesPage'
-import Proctoring from '../pages/Proctoring/Proctoring'
-import Attempts from '../pages/Attempts/Attempts'
-import AttemptResult from '../pages/AttemptResult/AttemptResult'
-import Schedule from '../pages/Schedule/Schedule'
-import Profile from '../pages/Profile/Profile'
-import NotFound from '../pages/NotFound/NotFound'
-import AccessDenied from '../pages/AccessDenied/AccessDenied'
+function lazyPage(importer, options = {}) {
+  const LazyComponent = lazy(importer)
+  const { fullPage = false, label = 'Loading page...' } = options
 
-/* ── Admin Pages ── */
-import AdminDashboard from '../pages/Admin/AdminDashboard/AdminDashboard'
-import AdminExams from '../pages/Admin/AdminExams/AdminExams'
-import AdminNewTestWizard from '../pages/Admin/AdminNewTestWizard/AdminNewTestWizard'
-import AdminCategories from '../pages/Admin/AdminCategories/AdminCategories'
-import AdminGradingScales from '../pages/Admin/AdminGradingScales/AdminGradingScales'
-import AdminQuestionPools from '../pages/Admin/AdminQuestionPools/AdminQuestionPools'
-import AdminTestingSessions from '../pages/Admin/AdminTestingSessions/AdminTestingSessions'
-import AdminCandidates from '../pages/Admin/AdminCandidates/AdminCandidates'
-import AdminAttemptAnalysis from '../pages/Admin/AdminAttemptAnalysis/AdminAttemptAnalysis'
-import AdminRolesPermissions from '../pages/Admin/AdminRolesPermissions/AdminRolesPermissions'
-import AdminUsers from '../pages/Admin/AdminUsers/AdminUsers'
-import AdminTemplates from '../pages/Admin/AdminTemplates/AdminTemplates'
-import AdminCertificates from '../pages/Admin/AdminCertificates/AdminCertificates'
-import AdminReports from '../pages/Admin/AdminReports/AdminReports'
-import AdminCourses from '../pages/Admin/AdminCourses/AdminCourses'
-import AdminUserGroups from '../pages/Admin/AdminUserGroups/AdminUserGroups'
-import AdminSettings from '../pages/Admin/AdminSettings/AdminSettings'
-import AdminSurveys from '../pages/Admin/AdminSurveys/AdminSurveys'
-import AdminAttemptVideos from '../pages/Admin/AdminAttemptVideos/AdminAttemptVideos'
-import AdminManageTestPage from '../pages/Admin/AdminManageTestPage/AdminManageTestPage'
-import QuestionPoolDetail from '../pages/Admin/QuestionPoolDetail/QuestionPoolDetail'
-import TrainingCourses from '../pages/TrainingCourses/TrainingCourses'
-import MySurveys from '../pages/MySurveys/MySurveys'
-import AdminPredefinedReports from '../pages/Admin/AdminPredefinedReports/AdminPredefinedReports'
-import AdminFavoriteReports from '../pages/Admin/AdminFavoriteReports/AdminFavoriteReports'
-import AdminIntegrations from '../pages/Admin/AdminIntegrations/AdminIntegrations'
-import AdminMaintenance from '../pages/Admin/AdminMaintenance/AdminMaintenance'
-import AdminSubscribers from '../pages/Admin/AdminSubscribers/AdminSubscribers'
-import AdminCustomReports from '../pages/Admin/AdminCustomReports/AdminCustomReports'
-import AdminAuditLog from '../pages/Admin/AdminAuditLog/AdminAuditLog'
-import Maintenance from '../pages/Maintenance/Maintenance'
+  return function LazyPage(props) {
+    return (
+      <Suspense fallback={<Loader fullPage={fullPage} label={label} />}>
+        <LazyComponent {...props} />
+      </Suspense>
+    )
+  }
+}
 
-/* ── ProtectedRoute ── */
+const Login = lazyPage(() => import('../pages/Login/Login'), { fullPage: true, label: 'Loading sign-in...' })
+const Home = lazyPage(() => import('../pages/Home/Home'), { label: 'Loading dashboard...' })
+const Exams = lazyPage(() => import('../pages/Exams/Exams'), { label: 'Loading tests...' })
+const ExamInstructions = lazyPage(() => import('../pages/ExamInstructions/ExamInstructions'), { label: 'Loading instructions...' })
+const ForgotPassword = lazyPage(() => import('../pages/Auth/ForgotPassword'), { fullPage: true, label: 'Loading recovery...' })
+const ResetPassword = lazyPage(() => import('../pages/Auth/ResetPassword'), { fullPage: true, label: 'Loading reset form...' })
+const ChangePassword = lazyPage(() => import('../pages/Auth/ChangePassword'), { label: 'Loading password settings...' })
+const SignUp = lazyPage(() => import('../pages/Auth/SignUp'), { fullPage: true, label: 'Loading signup...' })
+const SystemCheckPage = lazyPage(() => import('../pages/SystemCheckPage/SystemCheckPage'), { label: 'Loading system check...' })
+const VerifyIdentityPage = lazyPage(() => import('../pages/VerifyIdentityPage/VerifyIdentityPage'), { label: 'Loading identity check...' })
+const RulesPage = lazyPage(() => import('../pages/RulesPage/RulesPage'), { label: 'Loading rules...' })
+const Proctoring = lazyPage(() => import('../pages/Proctoring/Proctoring'), { label: 'Loading test session...' })
+const Attempts = lazyPage(() => import('../pages/Attempts/Attempts'), { label: 'Loading attempts...' })
+const AttemptResult = lazyPage(() => import('../pages/AttemptResult/AttemptResult'), { label: 'Loading results...' })
+const Schedule = lazyPage(() => import('../pages/Schedule/Schedule'), { label: 'Loading schedule...' })
+const Profile = lazyPage(() => import('../pages/Profile/Profile'), { label: 'Loading profile...' })
+const NotFound = lazyPage(() => import('../pages/NotFound/NotFound'), { fullPage: true, label: 'Loading page...' })
+const AccessDenied = lazyPage(() => import('../pages/AccessDenied/AccessDenied'), { label: 'Checking access...' })
+const AdminDashboard = lazyPage(() => import('../pages/Admin/AdminDashboard/AdminDashboard'), { label: 'Loading admin dashboard...' })
+const AdminExams = lazyPage(() => import('../pages/Admin/AdminExams/AdminExams'), { label: 'Loading tests...' })
+const AdminNewTestWizard = lazyPage(() => import('../pages/Admin/AdminNewTestWizard/AdminNewTestWizard'), { label: 'Loading test editor...' })
+const AdminCategories = lazyPage(() => import('../pages/Admin/AdminCategories/AdminCategories'), { label: 'Loading categories...' })
+const AdminGradingScales = lazyPage(() => import('../pages/Admin/AdminGradingScales/AdminGradingScales'), { label: 'Loading grading scales...' })
+const AdminQuestionPools = lazyPage(() => import('../pages/Admin/AdminQuestionPools/AdminQuestionPools'), { label: 'Loading question pools...' })
+const AdminTestingSessions = lazyPage(() => import('../pages/Admin/AdminTestingSessions/AdminTestingSessions'), { label: 'Loading sessions...' })
+const AdminCandidates = lazyPage(() => import('../pages/Admin/AdminCandidates/AdminCandidates'), { label: 'Loading candidates...' })
+const AdminAttemptAnalysis = lazyPage(() => import('../pages/Admin/AdminAttemptAnalysis/AdminAttemptAnalysis'), { label: 'Loading attempt analysis...' })
+const AdminRolesPermissions = lazyPage(() => import('../pages/Admin/AdminRolesPermissions/AdminRolesPermissions'), { label: 'Loading role permissions...' })
+const AdminUsers = lazyPage(() => import('../pages/Admin/AdminUsers/AdminUsers'), { label: 'Loading users...' })
+const AdminTemplates = lazyPage(() => import('../pages/Admin/AdminTemplates/AdminTemplates'), { label: 'Loading templates...' })
+const AdminCertificates = lazyPage(() => import('../pages/Admin/AdminCertificates/AdminCertificates'), { label: 'Loading certificates...' })
+const AdminReports = lazyPage(() => import('../pages/Admin/AdminReports/AdminReports'), { label: 'Loading reports...' })
+const AdminCourses = lazyPage(() => import('../pages/Admin/AdminCourses/AdminCourses'), { label: 'Loading courses...' })
+const AdminUserGroups = lazyPage(() => import('../pages/Admin/AdminUserGroups/AdminUserGroups'), { label: 'Loading groups...' })
+const AdminSettings = lazyPage(() => import('../pages/Admin/AdminSettings/AdminSettings'), { label: 'Loading settings...' })
+const AdminSurveys = lazyPage(() => import('../pages/Admin/AdminSurveys/AdminSurveys'), { label: 'Loading surveys...' })
+const AdminAttemptVideos = lazyPage(() => import('../pages/Admin/AdminAttemptVideos/AdminAttemptVideos'), { label: 'Loading recordings...' })
+const AdminManageTestPage = lazyPage(() => import('../pages/Admin/AdminManageTestPage/AdminManageTestPage'), { label: 'Loading manage test...' })
+const QuestionPoolDetail = lazyPage(() => import('../pages/Admin/QuestionPoolDetail/QuestionPoolDetail'), { label: 'Loading pool details...' })
+const TrainingCourses = lazyPage(() => import('../pages/TrainingCourses/TrainingCourses'), { label: 'Loading training...' })
+const MySurveys = lazyPage(() => import('../pages/MySurveys/MySurveys'), { label: 'Loading surveys...' })
+const AdminPredefinedReports = lazyPage(() => import('../pages/Admin/AdminPredefinedReports/AdminPredefinedReports'), { label: 'Loading predefined reports...' })
+const AdminFavoriteReports = lazyPage(() => import('../pages/Admin/AdminFavoriteReports/AdminFavoriteReports'), { label: 'Loading favorites...' })
+const AdminIntegrations = lazyPage(() => import('../pages/Admin/AdminIntegrations/AdminIntegrations'), { label: 'Loading integrations...' })
+const AdminMaintenance = lazyPage(() => import('../pages/Admin/AdminMaintenance/AdminMaintenance'), { label: 'Loading maintenance...' })
+const AdminSubscribers = lazyPage(() => import('../pages/Admin/AdminSubscribers/AdminSubscribers'), { label: 'Loading subscribers...' })
+const AdminCustomReports = lazyPage(() => import('../pages/Admin/AdminCustomReports/AdminCustomReports'), { label: 'Loading custom reports...' })
+const AdminAuditLog = lazyPage(() => import('../pages/Admin/AdminAuditLog/AdminAuditLog'), { label: 'Loading audit log...' })
+const Maintenance = lazyPage(() => import('../pages/Maintenance/Maintenance'), { fullPage: true, label: 'Loading maintenance notice...' })
+
 function ProtectedRoute({ children, roles, permission }) {
   const { user, loading, hasPermission } = useAuth()
 
@@ -76,7 +90,6 @@ function ProtectedRoute({ children, roles, permission }) {
   return children
 }
 
-/* ── Shell (Sidebar + Navbar + Footer wrapper) ── */
 function Shell({ children }) {
   const { user } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -86,21 +99,52 @@ function Shell({ children }) {
   const isLegacyExamMode = ['/exam/', '/system-check/', '/verify-identity/', '/rules/']
     .some((prefix) => location.pathname.startsWith(prefix))
   const isTestJourneyMode = /^\/tests\/[^/]+(\/(system-check|verify-identity|rules))?$/.test(location.pathname)
-  const isExamMode = isAttemptTakeMode || isLegacyExamMode || isTestJourneyMode
+  const isVideoReviewMode = /^\/admin\/(videos|attempts\/[^/]+\/videos)/.test(location.pathname)
+  const isExamMode = isAttemptTakeMode || isLegacyExamMode || isTestJourneyMode || isVideoReviewMode
+  const warmRoutes = useMemo(() => {
+    if (!user) return []
+    if (user.role === 'ADMIN') {
+      return ['/admin/tests', '/admin/users', '/admin/candidates', '/admin/reports']
+    }
+    if (user.role === 'INSTRUCTOR') {
+      return ['/admin/tests', '/admin/candidates', '/admin/users']
+    }
+    return ['/tests', '/attempts', '/schedule', '/profile']
+  }, [user])
 
   useEffect(() => {
     async function loadSettings() {
       try {
         const { data } = await api.get('admin-settings/maintenance/public')
         setMaintenance({ mode: data.mode, banner: data.banner })
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
+
     loadSettings()
     const id = setInterval(loadSettings, 120000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!user || isExamMode || warmRoutes.length === 0) {
+      return undefined
+    }
+
+    const warm = () => preloadRoutes(warmRoutes)
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(warm, { timeout: 1500 })
+      return () => window.cancelIdleCallback(handle)
+    }
+
+    const timeoutId = window.setTimeout(warm, 600)
+    return () => window.clearTimeout(timeoutId)
+  }, [isExamMode, user, warmRoutes])
 
   if (!user) return children
 
@@ -115,34 +159,40 @@ function Shell({ children }) {
   }
 
   return (
-    <div className={`app-shell ${isExamMode ? 'app-shell--exam' : ''}`}>
-      {maintenance.mode !== 'off' && (
-        <div className="maintenance-banner">
-          {maintenance.banner || 'Maintenance in progress'}
+    <>
+      <a href="#app-main-content" className="skip-link">Skip to content</a>
+      <ScrollRestoration />
+      {!isExamMode && <ScrollProgress />}
+      <div className={`app-shell ${isExamMode ? 'app-shell--exam' : ''}`}>
+        {maintenance.mode !== 'off' && (
+          <div className="maintenance-banner">
+            {maintenance.banner || 'Maintenance in progress'}
+          </div>
+        )}
+        {!isExamMode && <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />}
+        <div className="app-shell__main">
+          {!isExamMode && <Navbar onMenuToggle={() => setMobileOpen((prev) => !prev)} />}
+          <AnimatePresence mode="wait">
+            <motion.main
+              key={location.pathname}
+              id="app-main-content"
+              className={`app-shell__content ${isExamMode ? 'app-shell__content--exam' : 'glass'}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            >
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </motion.main>
+          </AnimatePresence>
+          {!isExamMode && <Footer />}
         </div>
-      )}
-      {!isExamMode && <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />}
-      <div className="app-shell__main">
-        {!isExamMode && <Navbar onMenuToggle={() => setMobileOpen(prev => !prev)} />}
-        <AnimatePresence mode="wait">
-          <motion.main
-            key={location.pathname}
-            className={`app-shell__content ${isExamMode ? 'app-shell__content--exam' : 'glass'}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
-          >
-            {children}
-          </motion.main>
-        </AnimatePresence>
-        {!isExamMode && <Footer />}
       </div>
-    </div>
+      {!isExamMode && <ScrollTopButton />}
+    </>
   )
 }
 
-/* ── AuthPage helper ── */
 function AuthPage({ children, roles, permission }) {
   return (
     <ProtectedRoute roles={roles} permission={permission}>
@@ -237,7 +287,6 @@ const router = createBrowserRouter(
     { path: '/access-denied', element: withAuth(<AccessDenied />) },
     { path: '/maintenance', element: <Maintenance /> },
 
-    // Learner
     { path: '/', element: withAuth(<HomeRoute />, undefined, 'View Dashboard') },
     { path: '/tests', element: withAuth(<Exams />, undefined, 'Take Tests') },
     { path: '/tests/:testId', element: withAuth(<ExamInstructions />) },
@@ -259,11 +308,9 @@ const router = createBrowserRouter(
     { path: '/schedule', element: withAuth(<Schedule />, undefined, 'View Own Schedule') },
     { path: '/profile', element: withAuth(<Profile />) },
 
-    // Admin Dashboard
     { path: '/admin', element: withAuth(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
     { path: '/admin/dashboard', element: withAuth(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
 
-    // Tests (legacy compatibility redirects)
     { path: '/admin/tests', element: withAuth(<AdminExams />, ADMIN_ROLES, 'Edit Tests') },
     { path: '/admin/tests/:id', element: <LegacyTestDetailRedirect /> },
     { path: '/admin/tests/:id/manage', element: withAuth(<AdminManageTestPage />, ADMIN_ROLES, 'Edit Tests') },
@@ -283,17 +330,14 @@ const router = createBrowserRouter(
     { path: '/admin/question-pools', element: withAuth(<AdminQuestionPools />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Question Pools') },
     { path: '/admin/question-pools/:id', element: withAuth(<QuestionPoolDetail />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Question Pools') },
 
-    // Testing Center
     { path: '/admin/sessions', element: withAuth(<AdminTestingSessions />, ADMIN_OR_INSTRUCTOR_ROLES, 'Assign Schedules') },
     { path: '/admin/schedules', element: <Navigate to="/admin/sessions" replace /> },
     { path: '/admin/candidates', element: withAuth(<AdminCandidates />, ANALYSIS_ROLES, 'View Attempt Analysis') },
     { path: '/admin/attempt-analysis', element: withAuth(<AdminAttemptAnalysis />, ANALYSIS_ROLES, 'View Attempt Analysis') },
 
-    // Users
     { path: '/admin/users', element: withAuth(<AdminUsers />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Users') },
     { path: '/admin/roles', element: withAuth(<AdminRolesPermissions />, SUPER_ADMIN, 'Manage Roles') },
 
-    // Templates / Certificates / Reports
     { path: '/admin/templates', element: withAuth(<AdminTemplates />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
     { path: '/admin/certificates', element: withAuth(<AdminCertificates />, ADMIN_ROLES, 'Edit Tests') },
     { path: '/admin/reports', element: withAuth(<AdminReports />, ADMIN_ROLES, 'Generate Reports') },

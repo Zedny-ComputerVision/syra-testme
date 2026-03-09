@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ...models import Question, Exam, RoleEnum
 from ...schemas import QuestionCreate, QuestionRead, QuestionBase, Message
+from ...services.sanitization import sanitize_question_payload
 from ..deps import ensure_permission, get_current_user, get_db_dep, learner_can_access_exam, require_permission
 
 router = APIRouter()
@@ -27,7 +28,7 @@ async def create_question(body: QuestionCreate, db: Session = Depends(get_db_dep
     if current.role == RoleEnum.INSTRUCTOR and exam.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
     now = datetime.now(timezone.utc)
-    q = Question(**body.model_dump(), created_at=now, updated_at=now)
+    q = Question(**sanitize_question_payload(body.model_dump()), created_at=now, updated_at=now)
     db.add(q)
     db.commit()
     db.refresh(q)
@@ -81,7 +82,7 @@ async def update_question(question_id: str, body: QuestionBase, db: Session = De
         raise HTTPException(status_code=403, detail="Not allowed")
     protected = {"exam_id", "created_at"}
     now = datetime.now(timezone.utc)
-    for field, value in body.model_dump().items():
+    for field, value in sanitize_question_payload(body.model_dump()).items():
         if field not in protected:
             setattr(q, field, value)
     q.updated_at = now

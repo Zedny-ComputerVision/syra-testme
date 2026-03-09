@@ -1,0 +1,28 @@
+{% extends "report_base.html" %}
+{% block content %}
+<div class="meta">Exam: {{ exam_title|e }}</div>
+<table>
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Status</th>
+      <th>Score</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.user_name|e }}</td>
+        <td>{{ row.status|e }}</td>
+        <td>{{ row.score }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="3">No attempts yet.</td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}

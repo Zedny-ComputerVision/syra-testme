@@ -65,7 +65,7 @@ describe('Home page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
-    await waitFor(() => expect(screen.getByText('Biology Quiz')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText('Biology Quiz').length).toBeGreaterThan(0))
   })
 
   it('falls back cleanly when the dashboard endpoint resolves without a payload', async () => {

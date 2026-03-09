@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { adminApi } from '../../../services/admin.service'
+import { readPaginatedItems, readPaginatedTotal } from '../../../utils/pagination'
 import styles from './AdminAuditLog.module.scss'
 
 const PAGE_SIZE = 50
@@ -34,6 +35,7 @@ function downloadCsv(rows) {
 
 export default function AdminAuditLog() {
   const [logs, setLogs] = useState([])
+  const [totalLogs, setTotalLogs] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [page, setPage] = useState(0)
@@ -49,30 +51,30 @@ export default function AdminAuditLog() {
     setError(null)
     try {
       const params = {
-        limit: 200,
-        offset: 0,
+        skip: page * PAGE_SIZE,
+        limit: PAGE_SIZE,
       }
       if (q.trim()) params.q = q.trim()
       if (action) params.action = action
       if (fromDate) params.from_date = new Date(fromDate).toISOString()
       if (toDate) params.to_date = new Date(`${toDate}T23:59:59`).toISOString()
       const res = await adminApi.auditLog(params)
-      setLogs(res.data || [])
+      setLogs(readPaginatedItems(res.data))
+      setTotalLogs(readPaginatedTotal(res.data))
       setExpanded(null)
-      setPage(0)
     } catch (e) {
       setError(e?.response?.data?.detail || 'Failed to load audit logs.')
     } finally {
       setLoading(false)
     }
-  }, [q, action, fromDate, toDate])
+  }, [action, fromDate, page, q, toDate])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const paginated = logs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-  const totalPages = Math.ceil(logs.length / PAGE_SIZE)
+  const paginated = logs
+  const totalPages = Math.max(1, Math.ceil(totalLogs / PAGE_SIZE))
   const hasActiveFilters = Boolean(q.trim() || action || fromDate || toDate)
   const visibleEntries = paginated.length
   const uniqueActors = new Set(logs.map((log) => log.user?.email || log.user_id).filter(Boolean)).size
@@ -84,6 +86,7 @@ export default function AdminAuditLog() {
     setFromDate('')
     setToDate('')
     setExpanded(null)
+    setPage(0)
   }
 
   return (
@@ -91,7 +94,7 @@ export default function AdminAuditLog() {
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>Audit Log</h1>
-          <p className={styles.subtitle}>{logs.length} entries loaded</p>
+          <p className={styles.subtitle}>{totalLogs} matching entries</p>
         </div>
         <div className={styles.headerActions}>
           {hasActiveFilters && (
@@ -125,12 +128,12 @@ export default function AdminAuditLog() {
           type="text"
           placeholder="Search action or resource ID..."
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQ(e.target.value); setPage(0) }}
         />
         <select
           className={styles.filterSelect}
           value={action}
-          onChange={(e) => setAction(e.target.value)}
+          onChange={(e) => { setAction(e.target.value); setPage(0) }}
         >
           <option value="">All actions</option>
           {ACTION_TYPES.map((item) => (
@@ -143,23 +146,23 @@ export default function AdminAuditLog() {
             type="date"
             className={styles.dateInput}
             value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
+            onChange={(e) => { setFromDate(e.target.value); setPage(0) }}
           />
           <label className={styles.dateLabel}>To</label>
           <input
             type="date"
             className={styles.dateInput}
             value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
+            onChange={(e) => { setToDate(e.target.value); setPage(0) }}
           />
         </div>
       </div>
 
       <div className={styles.summaryGrid}>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>Loaded entries</div>
-          <div className={styles.summaryValue}>{logs.length}</div>
-        </div>
+          <div className={styles.summaryCard}>
+          <div className={styles.summaryLabel}>Matching entries</div>
+            <div className={styles.summaryValue}>{totalLogs}</div>
+          </div>
         <div className={styles.summaryCard}>
           <div className={styles.summaryLabel}>Visible on page</div>
           <div className={styles.summaryValue}>{visibleEntries}</div>
@@ -249,7 +252,7 @@ export default function AdminAuditLog() {
       {totalPages > 1 && (
         <div className={styles.pagination}>
           <span className={styles.pageInfo}>
-            Page {page + 1} of {totalPages} ({logs.length} total)
+            Page {page + 1} of {totalPages} ({totalLogs} matching)
           </span>
           <button
             type="button"
@@ -263,7 +266,7 @@ export default function AdminAuditLog() {
             type="button"
             className={styles.pageBtn}
             onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
-            disabled={page >= totalPages - 1}
+            disabled={page >= totalPages - 1 || totalPages === 0}
           >
             Next
           </button>

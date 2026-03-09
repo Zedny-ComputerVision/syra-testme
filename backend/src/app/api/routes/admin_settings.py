@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ...models import SystemSettings, RoleEnum
 from ...schemas import SystemSettingRead, SystemSettingUpdate, Message
+from ...services.audit import write_audit_log
 from ..deps import (
     DEFAULT_PERMISSION_ROWS,
     canonicalize_permission_rows,
@@ -47,6 +48,55 @@ def _normalize_permissions_config(raw_value: str | None) -> str:
             "learner": bool(row.get("learner")),
         })
     return json.dumps(canonicalize_permission_rows(normalized))
+
+
+def _role_permission_sets(raw_value: str | None) -> dict[str, set[str]]:
+    try:
+        parsed = DEFAULT_PERMISSION_ROWS if not raw_value else json.loads(raw_value)
+    except Exception:
+        parsed = DEFAULT_PERMISSION_ROWS
+    normalized = canonicalize_permission_rows(parsed)
+    role_map = {
+        RoleEnum.ADMIN.value: set(),
+        RoleEnum.INSTRUCTOR.value: set(),
+        RoleEnum.LEARNER.value: set(),
+    }
+    field_map = {
+        RoleEnum.ADMIN.value: "admin",
+        RoleEnum.INSTRUCTOR.value: "instructor",
+        RoleEnum.LEARNER.value: "learner",
+    }
+    for row in normalized:
+        feature = row.get("feature")
+        if not feature:
+            continue
+        for role_name, field_name in field_map.items():
+            if row.get(field_name) is True:
+                role_map[role_name].add(feature)
+    return role_map
+
+
+def _write_role_permission_audit_logs(db: Session, current, previous_value: str | None, next_value: str | None) -> None:
+    previous = _role_permission_sets(previous_value)
+    current_sets = _role_permission_sets(next_value)
+    for role_name in (RoleEnum.ADMIN.value, RoleEnum.INSTRUCTOR.value, RoleEnum.LEARNER.value):
+        added = sorted(current_sets[role_name] - previous[role_name])
+        removed = sorted(previous[role_name] - current_sets[role_name])
+        if not added and not removed:
+            continue
+        detail_parts = [f"role={role_name}"]
+        if added:
+            detail_parts.append(f"added={', '.join(added)}")
+        if removed:
+            detail_parts.append(f"removed={', '.join(removed)}")
+        write_audit_log(
+            db,
+            getattr(current, "id", None),
+            action="ROLE_PERMISSIONS_UPDATED",
+            resource_type="role",
+            resource_id=role_name,
+            detail="; ".join(detail_parts),
+        )
 
 
 def _ensure_setting_access(db: Session, current, key: str):
@@ -124,7 +174,7 @@ async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depe
         body = SystemSettingUpdate(value=_normalize_integrations_config(body.value))
     elif key == "subscribers":
         try:
-            parsed = [] if not body.value else __import__("json").loads(body.value)
+            parsed = [] if not body.value else json.loads(body.value)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid JSON for subscribers")
         if not isinstance(parsed, list):
@@ -156,6 +206,7 @@ async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depe
         body = SystemSettingUpdate(value=_normalize_permissions_config(body.value))
 
     setting = db.scalar(select(SystemSettings).where(SystemSettings.key == key))
+    previous_value = setting.value if setting else None
     if not setting:
         setting = SystemSettings(key=key, value=body.value)
         db.add(setting)
@@ -164,6 +215,8 @@ async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depe
         db.add(setting)
     db.commit()
     db.refresh(setting)
+    if key == PERMISSIONS_CONFIG_KEY and previous_value != setting.value:
+        _write_role_permission_audit_logs(db, current, previous_value, setting.value)
     return setting
 
 

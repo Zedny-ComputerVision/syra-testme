@@ -5,6 +5,7 @@ import useAuth from '../../../hooks/useAuth'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import { readBlobErrorMessage } from '../../../utils/httpErrors'
+import { readPaginatedItems } from '../../../utils/pagination'
 import styles from './AdminCandidates.module.scss'
 
 const BASE_TABS = ['Test Attempts', 'Proctoring', 'Imported Results']
@@ -89,12 +90,18 @@ function getDuration(attempt) {
   return `${Math.max(0, Math.floor(ms / 60000))}m`
 }
 
-function getStatusCount(filterName, attempts) {
+function getStatusCount(filterName, attempts, passingScoreMap = {}) {
   if (filterName === 'All') return attempts.length
   if (filterName === 'Attempted') return attempts.filter((attempt) => !!attempt.submitted_at).length
-  if (filterName === 'Passed') return attempts.filter((attempt) => attempt.score != null && attempt.score >= 60).length
-  if (filterName === 'Failed') return attempts.filter((attempt) => attempt.score != null && attempt.score < 60).length
-  return attempts.filter((attempt) => attempt.score == null).length
+  if (filterName === 'Passed') return attempts.filter((attempt) => {
+    const threshold = passingScoreMap[attempt.exam_id] ?? 60
+    return !attempt.pending_manual_review && attempt.score != null && attempt.score >= threshold
+  }).length
+  if (filterName === 'Failed') return attempts.filter((attempt) => {
+    const threshold = passingScoreMap[attempt.exam_id] ?? 60
+    return !attempt.pending_manual_review && attempt.score != null && attempt.score < threshold
+  }).length
+  return attempts.filter((attempt) => attempt.score == null || attempt.pending_manual_review).length
 }
 
 function getSortLabel(sortField, sortDir, field) {
@@ -124,6 +131,7 @@ export default function AdminCandidates() {
   const [tab, setTab] = useState('Test Attempts')
   const [attempts, setAttempts] = useState([])
   const [tests, setTests] = useState([])
+  const [passingScoreMap, setPassingScoreMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [examFilter, setExamFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -156,8 +164,8 @@ export default function AdminCandidates() {
     setLoading(true)
     setLoadError('')
     try {
-      const { data } = await adminApi.attempts()
-      const baseAttempts = data || []
+      const { data } = await adminApi.attempts({ skip: 0, limit: 200 })
+      const baseAttempts = readPaginatedItems(data)
       const enriched = await Promise.all(baseAttempts.map(async (attempt) => {
         try {
           const { data: events } = await adminApi.getAttemptEvents(attempt.id)
@@ -180,11 +188,20 @@ export default function AdminCandidates() {
         }))
       })
 
+      let scoreMap = {}
+      try {
+        const { data: testsData } = await adminApi.tests({ page_size: 500 })
+        ;(testsData?.items || []).forEach((t) => {
+          if (t.id && t.passing_score != null) scoreMap[t.id] = t.passing_score
+        })
+      } catch { /* non-critical */ }
       setAttempts(enriched)
       setTests(Array.from(uniqueTests.values()))
+      setPassingScoreMap(scoreMap)
     } catch (error) {
       setAttempts([])
       setTests([])
+      setPassingScoreMap({})
       setLoadError(error.response?.data?.detail || 'Failed to load candidates data')
     } finally {
       setLoading(false)
@@ -210,9 +227,9 @@ export default function AdminCandidates() {
     const matchDateTo = !dateTo || new Date(attempt.started_at) <= new Date(`${dateTo}T23:59:59`)
     let matchStatus = true
     if (statusFilter === 'Attempted') matchStatus = !!attempt.submitted_at
-    else if (statusFilter === 'Passed') matchStatus = attempt.score != null && attempt.score >= 60
-    else if (statusFilter === 'Failed') matchStatus = attempt.score != null && attempt.score < 60
-    else if (statusFilter === 'Not Graded') matchStatus = attempt.score == null
+    else if (statusFilter === 'Passed') { const t = passingScoreMap[attempt.exam_id] ?? 60; matchStatus = !attempt.pending_manual_review && attempt.score != null && attempt.score >= t }
+    else if (statusFilter === 'Failed') { const t = passingScoreMap[attempt.exam_id] ?? 60; matchStatus = !attempt.pending_manual_review && attempt.score != null && attempt.score < t }
+    else if (statusFilter === 'Not Graded') matchStatus = attempt.score == null || attempt.pending_manual_review
     return matchExam && matchSearch && matchDateFrom && matchDateTo && matchStatus
   })
 
@@ -526,7 +543,7 @@ export default function AdminCandidates() {
                 }}
               >
                 {filterName}
-                <span className={styles.statusCount}>{getStatusCount(filterName, attempts)}</span>
+                <span className={styles.statusCount}>{getStatusCount(filterName, attempts, passingScoreMap)}</span>
               </button>
             ))}
           </div>

@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from slowapi.util import get_remote_address
@@ -19,8 +20,6 @@ from ...models import User, RoleEnum, SystemSettings
 from ...schemas import (
     Token, TokenRefresh, UserCreate, UserRead, Message, LoginRequest, RefreshRequest,
     ChangePasswordRequest, ResetPasswordRequest, ForgotPasswordRequest,
-    Message,
-    UserCreate,
 )
 from pydantic import BaseModel, EmailStr, field_validator
 
@@ -67,10 +66,31 @@ from ...services.email import (
     send_admin_setup_email,
     send_password_changed_email,
 )
+from ...services.audit import write_audit_log
 
 router = APIRouter()
 settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _run_email_background_task(email_task, *args):
+    asyncio.run(email_task(*args))
+
+
+def _bg_send_admin_setup_email(user):
+    _run_email_background_task(send_admin_setup_email, user)
+
+
+def _bg_send_welcome_email(user):
+    _run_email_background_task(send_welcome_email, user)
+
+
+def _bg_send_password_changed_email(user):
+    _run_email_background_task(send_password_changed_email, user)
+
+
+def _bg_send_password_reset_email(user, token: str):
+    _run_email_background_task(send_password_reset_email, user, token)
 
 
 @router.post("/setup", response_model=UserRead)
@@ -88,7 +108,7 @@ async def setup_admin(body: UserCreate, background: BackgroundTasks, db: Session
     db.add(user)
     db.commit()
     db.refresh(user)
-    background.add_task(send_admin_setup_email, user)
+    background.add_task(_bg_send_admin_setup_email, user)
     return user
 
 
@@ -103,7 +123,8 @@ async def signup_status(db: Session = Depends(get_db_dep)):
 
 
 @router.post("/signup", response_model=Message)
-async def signup(body: SignupRequest, background: BackgroundTasks, db: Session = Depends(get_db_dep)):
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
+async def signup(request: Request, body: SignupRequest, background: BackgroundTasks, db: Session = Depends(get_db_dep)):
     if not _signup_allowed(db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Self sign-up disabled")
     existing = db.scalar(select(User).where((User.email == body.email) | (User.user_id == body.user_id)))
@@ -119,14 +140,15 @@ async def signup(body: SignupRequest, background: BackgroundTasks, db: Session =
     db.add(user)
     db.commit()
     db.refresh(user)
-    background.add_task(send_welcome_email, user)
+    background.add_task(_bg_send_welcome_email, user)
     return Message(detail="Signup successful. Please check your email and log in.")
 
 
 @router.post("/login", response_model=Token)
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
 async def login(request: Request, body: LoginRequest, db: Session = Depends(get_db_dep)):
-    stmt = select(User).where(User.email == body.email)
+    email = str(body.email).strip().lower()
+    stmt = select(User).where(User.email == email)
     user = db.scalar(stmt)
     if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -140,6 +162,15 @@ async def login(request: Request, body: LoginRequest, db: Session = Depends(get_
         email=user.email,
     )
     refresh_token = create_refresh_token(str(user.id))
+    write_audit_log(
+        db,
+        user.id,
+        action="USER_LOGIN",
+        resource_type="user",
+        resource_id=str(user.id),
+        detail="Successful login",
+        ip_address=request.client.host if request.client else None,
+    )
     return Token(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -175,6 +206,24 @@ async def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/logout", response_model=Message)
+async def logout(
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current_user: User = Depends(get_current_user),
+):
+    write_audit_log(
+        db,
+        current_user.id,
+        action="USER_LOGOUT",
+        resource_type="user",
+        resource_id=str(current_user.id),
+        detail="User logged out",
+        ip_address=request.client.host if request.client else None,
+    )
+    return Message(detail="Logged out")
+
+
 @router.post("/change-password", response_model=Message)
 async def change_password(
     body: ChangePasswordRequest,
@@ -187,12 +236,20 @@ async def change_password(
     current_user.hashed_password = hash_password(body.new_password)
     db.add(current_user)
     db.commit()
-    background.add_task(send_password_changed_email, current_user)
+    write_audit_log(
+        db,
+        current_user.id,
+        action="PASSWORD_CHANGED",
+        resource_type="user",
+        resource_id=str(current_user.id),
+        detail="Password changed by authenticated user",
+    )
+    background.add_task(_bg_send_password_changed_email, current_user)
     return Message(detail="Password updated")
 
 
 @router.post("/forgot-password", status_code=202, response_model=Message)
-@limiter.limit(settings.RATE_LIMIT_FORGOT)
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
 async def forgot_password(request: Request, body: ForgotPasswordRequest, background: BackgroundTasks, db: Session = Depends(get_db_dep)):
     email_ready, email_error = get_email_delivery_status()
     if not email_ready:
@@ -200,10 +257,11 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, backgro
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=email_error or "Password reset is temporarily unavailable.",
         )
-    user = db.scalar(select(User).where(User.email == body.email))
+    email = str(body.email).strip().lower()
+    user = db.scalar(select(User).where(User.email == email))
     if user:
         token = create_password_reset_token(str(user.id))
-        background.add_task(send_password_reset_email, user, token)
+        background.add_task(_bg_send_password_reset_email, user, token)
     return Message(detail="If the email exists, a reset link was sent")
 
 
@@ -225,4 +283,12 @@ async def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_d
     user.hashed_password = hash_password(body.new_password)
     db.add(user)
     db.commit()
+    write_audit_log(
+        db,
+        user.id,
+        action="PASSWORD_RESET",
+        resource_type="user",
+        resource_id=str(user.id),
+        detail="Password reset via token",
+    )
     return Message(detail="Password reset successful")

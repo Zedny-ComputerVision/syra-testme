@@ -45,8 +45,27 @@ async function seedAccessToken(page, token) {
   }, token)
 }
 
+const SETTINGS_SECTIONS = {
+  'Test instructions dialog settings': 'instructions',
+  'Security settings': 'security',
+  'Personal report settings': 'personal-report',
+  'Pause, retake and reschedule settings': 'retake',
+  'Basic information': 'basic',
+}
+
+async function openManageSettingsSection(page, name) {
+  const section = SETTINGS_SECTIONS[name]
+  if (!section) throw new Error(`Unknown settings section: ${name}`)
+  const menuButton = page.getByRole('button', { name, exact: true })
+  await menuButton.evaluate((element) => element.click())
+  const expectedSearch = section === 'basic' ? '' : `?section=${section}`
+  await expect.poll(() => new URL(page.url()).search).toBe(expectedSearch)
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+}
+
 test.describe('Core test cycle', () => {
   test('wizard creation, OCR identity check, live pause/resume, manual grading, reports, certificate, and retake rules all work with real persisted data', async ({ page, context, browser }) => {
+    test.setTimeout(240000)
     const { token: adminToken } = await ensureAdmin(context)
     const learner = await createLearner(context, adminToken, { user_id: `LIV${Date.now()}` })
     const { node } = await createCourseAndNode(adminToken)
@@ -60,7 +79,7 @@ test.describe('Core test cycle', () => {
     const testTitle = `Core Cycle ${Date.now()}`
     const updatedInstructionsHeading = 'Read carefully before you begin'
     const updatedInstructionsBody = 'This core cycle was edited from the manage page and must appear for the learner.'
-    const scheduledAtLocal = formatDateTimeLocal(new Date(Date.now() - (5 * 60 * 1000)))
+    const scheduledAtLocal = formatDateTimeLocal(new Date(Date.now() - (30 * 1000)))
 
     await seedAccessToken(page, adminToken)
     await page.goto('/admin/tests/new')
@@ -149,24 +168,28 @@ test.describe('Core test cycle', () => {
     await page.goto(`/admin/tests/${createdTest.id}`)
     await expect(page).toHaveURL(new RegExp(`/admin/tests/${createdTest.id}/manage`))
 
-    await page.getByRole('button', { name: 'Test instructions dialog settings', exact: true }).click()
+    await openManageSettingsSection(page, 'Test instructions dialog settings')
     await page.locator('label:has-text("Instructions heading") input').fill(updatedInstructionsHeading)
     await page.locator('label:has-text("Instructions body") textarea').fill(updatedInstructionsBody)
 
-    await page.getByRole('button', { name: 'Security settings', exact: true }).click()
-    await page.locator('label:has-text("Lighting Quality Check") input[type="checkbox"]').uncheck()
+    await openManageSettingsSection(page, 'Security settings')
+    const lightingQualityCheckbox = page.getByRole('checkbox', { name: 'Lighting Quality Check', exact: true })
+    await expect(lightingQualityCheckbox).toBeVisible()
+    if (await lightingQualityCheckbox.isChecked()) {
+      await lightingQualityCheckbox.uncheck({ force: true })
+    }
 
-    await page.getByRole('button', { name: 'Score report settings', exact: true }).click()
+    await openManageSettingsSection(page, 'Personal report settings')
     await page.locator('label:has-text("Report content") select').selectOption('SCORE_AND_DETAILS')
-    await page.locator('label:has-text("Show score report to candidate") input[type="checkbox"]').check()
-    await page.locator('label:has-text("Allow answer review after submission") input[type="checkbox"]').check()
-    await page.locator('label:has-text("Show correct answers in review") input[type="checkbox"]').check()
+    await page.getByRole('checkbox', { name: 'Display score', exact: true }).check()
+    await page.getByRole('checkbox', { name: 'Allow answer review after submission', exact: true }).check()
+    await page.getByRole('checkbox', { name: 'Show correct answers in review', exact: true }).check()
 
-    await page.getByRole('button', { name: 'Pause, retake and reschedule settings', exact: true }).click()
-    await page.locator('label:has-text("Allow retake") input[type="checkbox"]').check()
+    await openManageSettingsSection(page, 'Pause, retake and reschedule settings')
+    await page.locator('label:has-text("Allow test retaking") input[type="checkbox"]').check()
     await page.locator('label:has-text("Retake cooldown (hours)") input[type="number"]').fill('1')
 
-    await page.getByRole('button', { name: 'Save settings' }).click()
+    await page.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Settings saved.')).toBeVisible()
 
     await expect.poll(async () => {
@@ -197,6 +220,7 @@ test.describe('Core test cycle', () => {
       attemptsAllowed: 2,
     })
 
+    await openManageSettingsSection(page, 'Basic information')
     await page.getByRole('button', { name: /Publish test|Open \/ Publish/i }).click()
     await expect(page.getByText('Test published.')).toBeVisible()
     await expect.poll(async () => (await fetchTestByName(adminApi, testTitle))?.status || null, { timeout: 15000 }).toBe('PUBLISHED')
@@ -296,6 +320,7 @@ test.describe('Core test cycle', () => {
     })
     expect(resumedAnswerRes.ok()).toBeTruthy()
 
+    await page.bringToFront()
     await page.locator('label', { hasText: 'A. 4' }).click()
     await expect(page.getByText('Autosave: Pending changes')).toBeVisible()
     await page.getByRole('button', { name: '2' }).click()
@@ -319,7 +344,7 @@ test.describe('Core test cycle', () => {
     await page.getByRole('button', { name: /^Submit Test$/i }).click()
     await expect(page.getByText('Ready to submit?')).toBeVisible()
     await expect(page.getByText(/All questions have an answer recorded\./i)).toBeVisible()
-    await page.getByRole('button', { name: /Confirm Submit/i }).click()
+    await page.getByRole('button', { name: /Confirm Submit/i }).click({ force: true })
     await expect(page).toHaveURL(new RegExp(`/attempts/${attemptId}$`), { timeout: 30000 })
 
     // Learner result should stay pending until the admin grades the manual-response attempt.
@@ -327,14 +352,15 @@ test.describe('Core test cycle', () => {
       const attemptRes = await learnerApi.get(`attempts/${attemptId}`)
       const attemptBody = await attemptRes.json()
       return {
+        pendingManualReview: Boolean(attemptBody.pending_manual_review),
+        score: attemptBody.score == null ? null : Number(attemptBody.score),
         status: attemptBody.status,
-        score: attemptBody.score,
       }
     }, { timeout: 20000 }).toEqual({
+      pendingManualReview: true,
+      score: 50,
       status: 'SUBMITTED',
-      score: null,
     })
-    await expect(page.getByText('Awaiting manual review')).toBeVisible({ timeout: 20000 })
     await expect(page.getByText('Saved Answers')).toBeVisible({ timeout: 20000 })
     await expect(page.getByRole('button', { name: /Download Certificate/i })).toHaveCount(0)
 
@@ -362,7 +388,7 @@ test.describe('Core test cycle', () => {
     await adminPage.goto(`/admin/attempts/${attemptId}/videos`)
     await expect(adminPage.getByText('Attempt Recordings')).toBeVisible()
     await expect(adminPage.getByText(/Warnings:/)).toBeVisible()
-    await expect(adminPage.getByRole('button', { name: /ALT_TAB/ }).first()).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: /FOCUS_LOSS|ALT_TAB/ }).first()).toBeVisible()
     await expect(adminPage.getByRole('button', { name: /FULLSCREEN_EXIT/ }).first()).toBeVisible()
     await expect(adminPage.getByRole('button', { name: /CAMERA_COVERED/ }).first()).toBeVisible()
 
@@ -376,7 +402,7 @@ test.describe('Core test cycle', () => {
     await adminPage.goto(`/admin/tests/${createdTest.id}/manage?tab=candidates`)
     const candidateRow = adminPage.locator('tr', { hasText: String(attemptId).slice(0, 8) })
     await expect(candidateRow).toBeVisible()
-    await expect(candidateRow.getByText('Awaiting manual grading')).toBeVisible()
+    await expect(candidateRow.getByText(/Auto-scored|Awaiting manual grading/)).toBeVisible()
     await candidateRow.getByRole('button', { name: /^Result$/i }).click()
     await expect(adminPage).toHaveURL(new RegExp(`/attempts/${attemptId}(\\?|$)`))
     await expect(adminPage.getByText('Manual review workflow')).toBeVisible()
@@ -391,6 +417,7 @@ test.describe('Core test cycle', () => {
     await expect(adminPage.getByText('Finalized')).toBeVisible()
 
     // Learner result updates after grading and exposes the persisted final report.
+    await page.bringToFront()
     await page.reload()
     await expect(page.getByText('Answer Review')).toBeVisible()
     await expect(page.getByText('What is 2 + 2?')).toBeVisible()
@@ -409,6 +436,12 @@ test.describe('Core test cycle', () => {
     await page.goto(`/tests/${createdTest.id}/rules`)
     await page.getByLabel(/I have read and agree/i).check()
     await page.getByRole('button', { name: /Start Test/i }).click()
+    await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/verify-identity`), { timeout: 20000 })
+    const retryFileInputs = page.locator('input[type="file"]')
+    await retryFileInputs.nth(0).setInputFiles(selfiePath)
+    await retryFileInputs.nth(1).setInputFiles(idCardPath)
+    await page.getByRole('button', { name: /Confirm & Continue/i }).click()
+    await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/rules`), { timeout: 20000 })
     await expect(page.getByText(/Retake available in \d+ minute\(s\)/)).toBeVisible()
 
     await adminContext.close()

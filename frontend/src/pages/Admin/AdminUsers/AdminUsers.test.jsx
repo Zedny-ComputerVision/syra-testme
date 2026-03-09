@@ -7,6 +7,14 @@ import AdminUsers from './AdminUsers'
 
 const usersMock = vi.fn()
 const useAuthMock = vi.fn()
+const baseUser = {
+  id: 'user-1',
+  user_id: 'learner01',
+  name: 'Learner One',
+  email: 'learner01@example.com',
+  role: 'LEARNER',
+  is_active: true,
+}
 
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
@@ -25,17 +33,17 @@ describe('AdminUsers permission modes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    usersMock.mockResolvedValue({
-      data: [
-        {
-          id: 'user-1',
-          user_id: 'learner01',
-          name: 'Learner One',
-          email: 'learner01@example.com',
-          role: 'LEARNER',
-          is_active: true,
+    usersMock.mockImplementation((params = {}) => {
+      const matchesSearch = !params.search || baseUser.name.toLowerCase().includes(String(params.search).toLowerCase())
+      const items = matchesSearch ? [baseUser] : []
+      return Promise.resolve({
+        data: {
+          items,
+          total: items.length,
+          skip: params.skip ?? 0,
+          limit: params.limit ?? 10,
         },
-      ],
+      })
     })
   })
 
@@ -60,16 +68,12 @@ describe('AdminUsers permission modes', () => {
     usersMock
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce({
-        data: [
-          {
-            id: 'user-1',
-            user_id: 'learner01',
-            name: 'Learner One',
-            email: 'learner01@example.com',
-            role: 'LEARNER',
-            is_active: true,
-          },
-        ],
+        data: {
+          items: [baseUser],
+          total: 1,
+          skip: 0,
+          limit: 10,
+        },
       })
 
     render(

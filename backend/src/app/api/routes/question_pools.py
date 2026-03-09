@@ -1,22 +1,31 @@
 import random
+import logging
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from ...models import Course, CourseStatus, Exam, ExamStatus, ExamType, Node, Question, QuestionPool, RoleEnum
 from ...schemas import Message, QuestionBase, QuestionPoolCreate, QuestionPoolRead, QuestionRead
+from ...services.audit import write_audit_log
+from ...services.sanitization import sanitize_question_payload
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _is_pool_library_exam(exam: Exam, pool_id) -> bool:
     settings = exam.settings if isinstance(exam.settings, dict) else {}
     raw = settings.get("_pool_library")
     return isinstance(raw, dict) and str(raw.get("pool_id")) == str(pool_id)
+
+
+def _looks_like_pool_library_exam(exam: Exam, pool_id) -> bool:
+    expected_prefix = f"Pool Library {str(pool_id)[:8]}"
+    return str(getattr(exam, "title", "") or "").startswith(expected_prefix)
 
 
 def _ensure_pool_library_exam(db: Session, current, pool: QuestionPool) -> Exam:
@@ -85,6 +94,13 @@ def _find_pool_library_exam(db: Session, pool_id) -> Exam | None:
     return None
 
 
+def _find_corrupted_pool_library_exam(db: Session, pool_id) -> Exam | None:
+    for exam in db.scalars(select(Exam).order_by(Exam.created_at)).all():
+        if _looks_like_pool_library_exam(exam, pool_id) and not _is_pool_library_exam(exam, pool_id):
+            return exam
+    return None
+
+
 def _load_pool_questions(db: Session, pool_id):
     direct_questions = db.scalars(
         select(Question).where(Question.pool_id == pool_id).order_by(Question.order.asc(), Question.created_at.asc())
@@ -92,8 +108,20 @@ def _load_pool_questions(db: Session, pool_id):
     if direct_questions:
         return direct_questions
 
+    # Pool questions are stored in hidden exams to preserve the legacy schema until
+    # the system can move to a dedicated junction-table design.
     library_exam = _find_pool_library_exam(db, pool_id)
     if not library_exam:
+        corrupted_exam = _find_corrupted_pool_library_exam(db, pool_id)
+        if corrupted_exam:
+            logger.warning(
+                "Question pool %s has a hidden library exam %s with missing or corrupt _pool_library metadata",
+                pool_id,
+                getattr(corrupted_exam, "id", None),
+            )
+        return []
+    if not _is_pool_library_exam(library_exam, pool_id):
+        logger.warning("Question pool %s library exam metadata is invalid", pool_id)
         return []
     return db.scalars(
         select(Question).where(Question.exam_id == library_exam.id).order_by(Question.order.asc(), Question.created_at.asc())
@@ -113,6 +141,7 @@ def _serialize_pool(pool: QuestionPool, db: Session) -> QuestionPoolRead:
 @router.post("/", response_model=QuestionPoolRead)
 async def create_pool(
     body: QuestionPoolCreate,
+    request: Request,
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
@@ -127,6 +156,15 @@ async def create_pool(
     db.add(pool)
     db.commit()
     db.refresh(pool)
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="QUESTION_POOL_CREATED",
+        resource_type="question_pool",
+        resource_id=str(pool.id),
+        detail=f"Created question pool: {pool.name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return _serialize_pool(pool, db)
 
 
@@ -149,6 +187,7 @@ async def get_pool(pool_id: str, db: Session = Depends(get_db_dep), current=Depe
 async def update_pool(
     pool_id: str,
     body: QuestionPoolCreate,
+    request: Request,
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
@@ -164,6 +203,15 @@ async def update_pool(
     db.add(pool)
     db.commit()
     db.refresh(pool)
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="QUESTION_POOL_UPDATED",
+        resource_type="question_pool",
+        resource_id=str(pool.id),
+        detail=f"Updated question pool: {pool.name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return _serialize_pool(pool, db)
 
 
@@ -193,13 +241,14 @@ async def create_pool_question(
     library_exam = _ensure_pool_library_exam(db, current, pool)
     next_order = db.scalar(select(func.max(Question.order)).where(Question.pool_id == pool_pk)) or 0
     now = datetime.now(timezone.utc)
+    payload = sanitize_question_payload(body.model_dump())
     question = Question(
         exam_id=library_exam.id,
-        text=body.text,
-        type=body.type,
-        options=body.options,
-        correct_answer=body.correct_answer,
-        points=body.points,
+        text=payload["text"],
+        type=payload["type"],
+        options=payload.get("options"),
+        correct_answer=payload.get("correct_answer"),
+        points=payload["points"],
         order=next_order + 1,
         pool_id=pool_pk,
         created_at=now,
@@ -231,11 +280,12 @@ async def update_pool_question(
     if not question or question.pool_id != pool_pk:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    question.text = body.text
-    question.type = body.type
-    question.options = body.options
-    question.correct_answer = body.correct_answer
-    question.points = body.points
+    payload = sanitize_question_payload(body.model_dump())
+    question.text = payload["text"]
+    question.type = payload["type"]
+    question.options = payload.get("options")
+    question.correct_answer = payload.get("correct_answer")
+    question.points = payload["points"]
     question.updated_at = datetime.now(timezone.utc)
     db.add(question)
     db.commit()
@@ -303,13 +353,29 @@ async def seed_exam_from_pool(
 
 
 @router.delete("/{pool_id}", response_model=Message)
-async def delete_pool(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def delete_pool(
+    pool_id: str,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
     pool_pk = parse_uuid_param(pool_id, detail="Not found")
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
         raise HTTPException(status_code=404, detail="Not found")
     if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
+    pool_name = pool.name
+    pool_pk_str = str(pool.id)
     db.delete(pool)
     db.commit()
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="QUESTION_POOL_DELETED",
+        resource_type="question_pool",
+        resource_id=pool_pk_str,
+        detail=f"Deleted question pool: {pool_name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return Message(detail="Deleted")

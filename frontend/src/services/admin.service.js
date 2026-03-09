@@ -1,12 +1,10 @@
 import api from './api'
 
-const listTestRuntime = () => api.get('exams/')
+const listTestRuntime = (params) => api.get('exams/', { params })
 const getTestRuntime = (id) => api.get(`exams/${id}`)
 const createTestRuntime = (data) => api.post('exams/', data)
 const updateTestRuntime = (id, data) => api.put(`exams/${id}`, data)
 const deleteTestRuntime = (id) => api.delete(`exams/${id}`)
-const downloadLegacyExamReportCsv = (examId) => api.get(`reports/exam/${examId}`, { responseType: 'blob' })
-const downloadLegacyExamReportPdf = (examId) => api.get(`reports/exam/${examId}/pdf`, { responseType: 'blob' })
 
 export const adminApi = {
   // Canonical admin tests
@@ -82,11 +80,11 @@ export const adminApi = {
   deleteQuestion: (id) => api.delete(`questions/${id}`),
 
   // Users
-  users: () => api.get('users/'),
+  users: (params) => api.get('users/', { params }),
   learnersForScheduling: (params) => api.get('users/learners', { params }),
   getUser: (id) => api.get(`users/${id}`),
   createUser: (data) => api.post('users/', data),
-  updateUser: (id, data) => api.put(`users/${id}`, data),
+  updateUser: (id, data) => api.patch(`users/${id}`, data),
   deleteUser: (id) => api.delete(`users/${id}`),
   resetUserPassword: (id, new_password) => api.post(`users/${id}/reset-password`, { new_password }),
   getMyPreference: (key) => api.get(`users/me/preferences/${key}`),
@@ -106,7 +104,7 @@ export const adminApi = {
   deleteNode: (id) => api.delete(`nodes/${id}`),
 
   // Attempts / Analysis
-  attempts: () => api.get('attempts/'),
+  attempts: (params) => api.get('attempts/', { params }),
   getAttempt: (id) => api.get(`attempts/${id}`),
   importAttempts: (rows) => api.post('attempts/import', rows),
   getAttemptEvents: (attemptId) => api.get(`proctoring/${attemptId}/events`),
@@ -117,8 +115,6 @@ export const adminApi = {
   getAttemptAnswers: (attemptId) => api.get(`attempts/${attemptId}/answers`),
   testReportCsv: (testId) => api.get(`reports/test/${testId}`, { responseType: 'blob' }),
   generateTestReportPdf: (testId) => api.get(`reports/test/${testId}/pdf`, { responseType: 'blob' }),
-  examReportCsv: downloadLegacyExamReportCsv,
-  generateExamReportPdf: downloadLegacyExamReportPdf,
   gradeAttempt: (id, score) => api.post(`attempts/${id}/grade`, null, { params: { score } }),
 
   // Dashboard

@@ -36,7 +36,7 @@ async function createAndPublishTest(token, name) {
 }
 
 test.describe('Admin test edit lock rules', () => {
-  test('published test keeps locked fields disabled and allows report fields', async ({ page, context }) => {
+  test('published test keeps locked settings disabled, including report controls', async ({ page, context }) => {
     const { token } = await ensureAdmin(context)
     const name = `UI Edit Locks ${Date.now()}`
     const testId = await createAndPublishTest(token, name)
@@ -57,21 +57,21 @@ test.describe('Admin test edit lock rules', () => {
     await expect(nameInput).toBeEnabled()
 
     await page.getByRole('button', { name: 'Duration and layout', exact: true }).click()
-    const timeLimitInput = page.locator('label:has-text("Time limit (minutes)") input').first()
-    await expect(timeLimitInput).toBeVisible()
+    const durationTypeSelect = page.getByRole('combobox', { name: 'Duration type' })
+    const calculatorTypeSelect = page.getByRole('combobox', { name: 'Calculator type' })
+    await expect(durationTypeSelect).toBeVisible()
+    await expect(durationTypeSelect).toBeDisabled()
+    await expect(calculatorTypeSelect).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Score report settings', exact: true }).click()
+    await page.getByRole('button', { name: 'Personal report settings', exact: true }).click()
     const reportContentSelect = page.locator('label:has-text("Report content") select').first()
-    await expect(reportContentSelect).toBeEnabled()
-    await reportContentSelect.selectOption('SCORE_ONLY')
-    await expect(reportContentSelect).toHaveValue('SCORE_ONLY')
-    await page.getByRole('button', { name: 'Save settings' }).click()
-    await expect(page.getByText('Settings saved.')).toBeVisible()
+    await expect(reportContentSelect).toBeVisible()
+    await expect(reportContentSelect).toBeDisabled()
 
     const detailRes = await api.get(`admin/tests/${testId}`)
     if (!detailRes.ok()) throw new Error(`fetch detail failed: ${detailRes.status()} ${await detailRes.text()}`)
     const detail = await detailRes.json()
-    expect(detail.report_content).toBe('SCORE_ONLY')
+    expect(detail.report_content).toBe('SCORE_AND_DETAILS')
     expect(detail.time_limit_minutes).toBe(60)
   })
 })

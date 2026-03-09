@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getAttempt } from '../../services/attempt.service'
 import { getTest } from '../../services/test.service'
-import { setAttemptId, clearAttemptId } from '../../utils/attemptSession'
+import { getAttemptId, setAttemptId, clearAttemptId } from '../../utils/attemptSession'
 import { resolveAttempt } from '../../utils/journeyAttempt'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
@@ -18,6 +18,18 @@ const FALLBACK_RULES = [
   'Any suspicious behavior will be flagged and recorded.',
   'Violations may result in test termination or score invalidation.',
 ]
+const START_ERROR_STORAGE_PREFIX = 'journey_start_error:'
+
+function consumeJourneyStartError(testId) {
+  try {
+    const key = `${START_ERROR_STORAGE_PREFIX}${testId}`
+    const message = sessionStorage.getItem(key) || ''
+    if (message) sessionStorage.removeItem(key)
+    return message
+  } catch {
+    return ''
+  }
+}
 
 export default function RulesPage() {
   const { testId } = useParams()
@@ -86,6 +98,14 @@ export default function RulesPage() {
     void loadRules()
   }, [testId])
 
+  useEffect(() => {
+    if (configLoading) return
+    const pendingStartError = consumeJourneyStartError(testId)
+    if (pendingStartError) {
+      setError(pendingStartError)
+    }
+  }, [configLoading, testId])
+
   const handleStart = async () => {
     if (!systemCheckSatisfied) {
       setError('Complete the system check in this browser session before starting the test.')
@@ -104,17 +124,42 @@ export default function RulesPage() {
     setLoading(true)
     setError('')
     try {
-      let attemptId = await resolveAttempt(testId)
-      let { data: currentAttempt } = await getAttempt(attemptId)
-      if (String(currentAttempt.exam_id) !== String(testId) || currentAttempt.status !== 'IN_PROGRESS') {
-        clearAttemptId()
-        attemptId = await resolveAttempt(testId)
-        const refreshed = await getAttempt(attemptId)
-        currentAttempt = refreshed.data
+      let attemptId = getAttemptId()
+      let currentAttempt = null
+
+      if (attemptId) {
+        try {
+          const existingAttempt = await getAttempt(attemptId)
+          if (
+            String(existingAttempt.data?.exam_id) === String(testId)
+            && existingAttempt.data?.status === 'IN_PROGRESS'
+          ) {
+            currentAttempt = existingAttempt.data
+          } else {
+            clearAttemptId()
+            attemptId = null
+          }
+        } catch {
+          clearAttemptId()
+          attemptId = null
+        }
       }
-      if (requirements.identityRequired && !(currentAttempt.identity_verified || currentAttempt.id_verified)) {
+
+      if (requirements.identityRequired && !(currentAttempt?.identity_verified || currentAttempt?.id_verified)) {
         navigate(`/tests/${testId}/verify-identity`)
         return
+      }
+
+      if (!currentAttempt) {
+        attemptId = await resolveAttempt(testId)
+        let { data } = await getAttempt(attemptId)
+        if (String(data.exam_id) !== String(testId) || data.status !== 'IN_PROGRESS') {
+          clearAttemptId()
+          attemptId = await resolveAttempt(testId)
+          const refreshed = await getAttempt(attemptId)
+          data = refreshed.data
+        }
+        currentAttempt = data
       }
       setAttemptId(attemptId)
 

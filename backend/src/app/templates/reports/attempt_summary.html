@@ -1,0 +1,31 @@
+{% extends "report_base.html" %}
+{% block content %}
+<table>
+  <thead>
+    <tr>
+      <th>Attempt ID</th>
+      <th>Test</th>
+      <th>User</th>
+      <th>Score</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if rows %}
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.attempt_id|e }}</td>
+        <td>{{ row.test_title|e }}</td>
+        <td>{{ row.user_name|e }}</td>
+        <td>{{ row.score }}</td>
+        <td>{{ row.status|e }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="5">No attempts found.</td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}

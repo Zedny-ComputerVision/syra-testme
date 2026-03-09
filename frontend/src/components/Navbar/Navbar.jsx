@@ -28,15 +28,68 @@ export default function Navbar({ onMenuToggle }) {
   const menuRef = useRef(null)
   const bellRef = useRef(null)
   const searchRef = useRef(null)
+  const searchInputRef = useRef(null)
   const searchDebounce = useRef(null)
+  const latestSearchRequest = useRef(0)
 
   useEffect(() => {
     if (!user) return
-    getUnreadCount().then(({ data }) => setUnread(data?.count || 0)).catch(() => {})
+    let cancelled = false
+    const loadUnread = async () => {
+      if (document.visibilityState === 'hidden') {
+        return
+      }
+      try {
+        const { data } = await getUnreadCount()
+        if (!cancelled) {
+          setUnread(data?.count || 0)
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    void loadUnread()
+    const intervalId = window.setInterval(() => {
+      void loadUnread()
+    }, 30000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
   }, [user])
 
   useEffect(() => () => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current)
+  }, [])
+
+  useEffect(() => {
+    const handleShortcut = (event) => {
+      const target = event.target
+      const isTypingTarget = target instanceof HTMLElement && (
+        target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT'
+        || target.isContentEditable
+      )
+
+      if (event.key === '/' && !isTypingTarget) {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select?.()
+        return
+      }
+
+      if (event.key === 'Escape') {
+        setSearchOpen(false)
+        setNotifOpen(false)
+        setUserMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
   }, [])
 
   // Close dropdowns on outside click
@@ -79,11 +132,34 @@ export default function Navbar({ onMenuToggle }) {
 
   const performSearch = useCallback(async (q) => {
     const query = q.trim()
-    if (!query) { setResults([]); setSearchOpen(false); return }
+    if (!query) {
+      latestSearchRequest.current += 1
+      setResults([])
+      setSearchOpen(false)
+      setSearching(false)
+      return
+    }
+    if (query.length < 2) {
+      latestSearchRequest.current += 1
+      setResults([{
+        type: 'Tip',
+        label: 'Keep typing to search',
+        meta: 'Search starts after 2 characters',
+      }])
+      setSearchOpen(true)
+      setSearching(false)
+      return
+    }
+
+    const requestId = latestSearchRequest.current + 1
+    latestSearchRequest.current = requestId
     setSearching(true)
     setSearchOpen(true)
     try {
       const { data } = await searchAll(query)
+      if (requestId !== latestSearchRequest.current) {
+        return
+      }
       const examResults = (data.exams || []).map((e) => ({
         type: 'Test',
         label: e.title,
@@ -114,9 +190,13 @@ export default function Navbar({ onMenuToggle }) {
           : [{ type: 'Info', label: 'No results found', meta: `for "${query}"` }],
       )
     } catch (e) {
-      setResults([{ type: 'Error', label: 'Search failed', meta: 'Try again' }])
+      if (requestId === latestSearchRequest.current) {
+        setResults([{ type: 'Error', label: 'Search failed', meta: 'Try again' }])
+      }
     } finally {
-      setSearching(false)
+      if (requestId === latestSearchRequest.current) {
+        setSearching(false)
+      }
     }
   }, [isAdmin, isPrivileged])
 
@@ -131,6 +211,12 @@ export default function Navbar({ onMenuToggle }) {
     e.preventDefault()
     if (searchDebounce.current) clearTimeout(searchDebounce.current)
     performSearch(searchQuery)
+  }
+
+  const handleNotificationClick = (notification) => {
+    if (!notification?.link) return
+    setNotifOpen(false)
+    navigate(notification.link)
   }
 
   const accents = [
@@ -159,6 +245,7 @@ export default function Navbar({ onMenuToggle }) {
         </span>
         <form onSubmit={handleSearchSubmit} className={styles.searchForm}>
           <input
+            ref={searchInputRef}
             className={styles.searchInput}
             placeholder="Search tests, attempts, users..."
             value={searchQuery}
@@ -166,6 +253,7 @@ export default function Navbar({ onMenuToggle }) {
             onFocus={() => { if (results.length > 0) setSearchOpen(true) }}
           />
         </form>
+        <span className={styles.searchShortcut} aria-hidden="true">/</span>
         <AnimatePresence>
           {searchOpen && results.length > 0 && (
             <motion.div
@@ -226,6 +314,7 @@ export default function Navbar({ onMenuToggle }) {
               key={a.key}
               className={`${styles.accentChip} ${a.toneClass} ${accent === a.key ? styles.accentChipActive : ''}`}
               onClick={() => setAccent(a.key)}
+              aria-label={`Use ${a.key} accent`}
               title={`Use ${a.key} accent`}
               type="button"
             />
@@ -233,7 +322,13 @@ export default function Navbar({ onMenuToggle }) {
         </div>
 
         {/* Theme toggle */}
-        <button className={styles.iconBtn} onClick={toggleTheme} title={isDark ? 'Light mode' : 'Dark mode'} type="button">
+        <button
+          className={styles.iconBtn}
+          onClick={toggleTheme}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={isDark ? 'Light mode' : 'Dark mode'}
+          type="button"
+        >
           {isDark ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -247,7 +342,13 @@ export default function Navbar({ onMenuToggle }) {
 
         {/* Notification bell */}
         <div className={styles.bellWrap} ref={bellRef}>
-          <button className={styles.iconBtn} onClick={openNotifications} title="Notifications" type="button">
+          <button
+            className={styles.iconBtn}
+            onClick={openNotifications}
+            aria-label="Open notifications"
+            title="Notifications"
+            type="button"
+          >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 01-3.46 0"/>
             </svg>
@@ -268,16 +369,28 @@ export default function Navbar({ onMenuToggle }) {
                   <div className={styles.notifEmpty}>No notifications</div>
                 ) : (
                   notifications.map((n, i) => (
-                    <div key={n.id || i} className={`${styles.notifItem} ${!n.is_read ? styles.notifUnread : ''}`}>
+                    <button
+                      key={n.id || i}
+                      type="button"
+                      className={`${styles.notifItem} ${!n.is_read ? styles.notifUnread : ''} ${n.link ? styles.notifItemLinked : ''}`}
+                      onClick={() => handleNotificationClick(n)}
+                      disabled={!n.link}
+                    >
                       <div className={styles.notifMsg}>{n.message || n.title || 'Notification'}</div>
                       {n.created_at && (
                         <div className={styles.notifTime}>
                           {new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </div>
                       )}
-                    </div>
+                    </button>
                   ))
                 )}
+              </div>
+              <div className={styles.notifFooter}>
+                <span className={styles.notifCount}>{unread > 0 ? `${unread} unread` : 'All caught up'}</span>
+                <button type="button" className={styles.notifClose} onClick={() => setNotifOpen(false)}>
+                  Close
+                </button>
               </div>
             </div>
           )}

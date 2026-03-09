@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import Skeleton from '../../../components/Skeleton/Skeleton'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
+import { readPaginatedItems, readPaginatedTotal } from '../../../utils/pagination'
 import styles from './AdminDashboard.module.scss'
 
 const KpiSvg = ({ d, size = 20 }) => (
@@ -22,7 +24,14 @@ const ICONS = {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const [stats, setStats] = useState({ users: [], exams: [], attempts: [], dashboard: {} })
+  const [stats, setStats] = useState({
+    users: [],
+    exams: [],
+    attempts: [],
+    userTotal: 0,
+    attemptTotal: 0,
+    dashboard: {},
+  })
   const [auditLog, setAuditLog] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -47,10 +56,10 @@ export default function AdminDashboard() {
     setWarning('')
 
     const results = await Promise.allSettled([
-      adminApi.users(),
-      adminApi.attempts(),
+      adminApi.users({ skip: 0, limit: 200 }),
+      adminApi.attempts({ skip: 0, limit: 200 }),
       adminApi.dashboard(),
-      adminApi.auditLog({ limit: 10 }),
+      adminApi.auditLog({ skip: 0, limit: 10 }),
       adminApi.allTests(),
     ])
 
@@ -58,7 +67,7 @@ export default function AdminDashboard() {
 
     const [usersRes, attemptsRes, dashboardRes, auditRes, testsRes] = results
     const failedPanels = results.filter((result) => result.status === 'rejected').length
-    const baseAttempts = attemptsRes.status === 'fulfilled' ? attemptsRes.value.data || [] : []
+    const baseAttempts = attemptsRes.status === 'fulfilled' ? readPaginatedItems(attemptsRes.value.data) : []
     const enrichedAttempts = await Promise.all(
       baseAttempts.map(async (attempt) => {
         try {
@@ -74,13 +83,19 @@ export default function AdminDashboard() {
 
     if (!mountedRef.current) return
 
+    const userRows = usersRes.status === 'fulfilled' ? readPaginatedItems(usersRes.value.data) : []
+    const userTotal = usersRes.status === 'fulfilled' ? readPaginatedTotal(usersRes.value.data) : 0
+    const attemptTotal = attemptsRes.status === 'fulfilled' ? readPaginatedTotal(attemptsRes.value.data) : 0
+
     setStats({
-      users: usersRes.status === 'fulfilled' ? usersRes.value.data || [] : [],
+      users: userRows,
       exams: testsRes.status === 'fulfilled' ? (testsRes.value.data?.items || []).map(normalizeAdminTest) : [],
       attempts: enrichedAttempts,
+      userTotal,
+      attemptTotal,
       dashboard: dashboardRes.status === 'fulfilled' ? dashboardRes.value.data || {} : {},
     })
-    setAuditLog(auditRes.status === 'fulfilled' ? auditRes.value.data || [] : [])
+    setAuditLog(auditRes.status === 'fulfilled' ? readPaginatedItems(auditRes.value.data) : [])
 
     if (failedPanels === results.length) {
       setError('Failed to load dashboard data.')
@@ -100,12 +115,12 @@ export default function AdminDashboard() {
     }
   }, [])
 
-  const totalUsers = stats.users.length
+  const totalUsers = stats.userTotal || stats.dashboard.total_users || stats.users.length
   const totalLearners = stats.users.filter((user) => user.role === 'LEARNER').length
   const totalAdmins = stats.users.filter((user) => user.role === 'ADMIN').length
   const totalExams = stats.exams.length > 0 ? stats.exams.length : stats.dashboard.total_exams || 0
   const activeExams = stats.exams.filter((test) => test.status === 'PUBLISHED').length
-  const totalAttempts = stats.attempts.length > 0 ? stats.attempts.length : stats.dashboard.total_attempts || 0
+  const totalAttempts = stats.attemptTotal || stats.dashboard.total_attempts || stats.attempts.length
 
   const riskyAttempts = stats.attempts.filter((attempt) => (attempt.high_violations || 0) > 0 || (attempt.med_violations || 0) >= 2)
 
@@ -127,7 +142,40 @@ export default function AdminDashboard() {
     { label: 'Total Attempts',  value: totalAttempts, iconKey: 'attempts',  tone: 'Cyan',   to: '/admin/attempt-analysis' },
   ]
 
-  if (loading && !hasAnyData) return <div className={styles.loading}>Loading dashboard...</div>
+  if (loading && !hasAnyData) {
+    return (
+      <div className={styles.page}>
+        <AdminPageHeader title="Admin Dashboard" subtitle="System overview and analytics">
+          <button type="button" className={styles.refreshButton} disabled>
+            Refresh
+          </button>
+        </AdminPageHeader>
+        <div className={styles.kpiGrid}>
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton key={index} variant="card" className={styles.kpiSkeleton} />
+          ))}
+        </div>
+        <div className={styles.tablesRow}>
+          <div className={styles.tableCard}>
+            <div className={styles.tableCardHeader}>
+              <div className={styles.tableCardTitle}>Risky Attempts</div>
+            </div>
+            <div className={styles.tableBodySkeleton}>
+              <Skeleton variant="table" rows={5} />
+            </div>
+          </div>
+          <div className={styles.tableCard}>
+            <div className={styles.tableCardHeader}>
+              <div className={styles.tableCardTitle}>Recent Activity</div>
+            </div>
+            <div className={styles.tableBodySkeleton}>
+              <Skeleton variant="table" rows={5} />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.page}>

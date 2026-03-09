@@ -403,6 +403,17 @@
   border-color: var(--color-primary);
 }
 
+.inputInvalid {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 16%, transparent);
+}
+
+.fieldError {
+  margin-top: 0.35rem;
+  color: var(--color-danger-text);
+  font-size: 0.78rem;
+}
+
 .select {
   appearance: none;
 

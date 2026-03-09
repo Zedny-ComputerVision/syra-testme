@@ -2,7 +2,7 @@ import api from './api'
 
 export const createAttempt = (exam_id) => api.post('attempts/', { exam_id })
 export const resolveAttempt = (exam_id) => api.post('attempts/resolve', { exam_id })
-export const listAttempts = () => api.get('attempts/')
+export const listAttempts = (params) => api.get('attempts/', { params })
 export const getAttempt = (id) => api.get(`attempts/${id}`)
 export const submitAnswer = (attemptId, question_id, answer) =>
   api.post(`attempts/${attemptId}/answers`, { question_id, answer })

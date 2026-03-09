@@ -42,7 +42,7 @@ test.describe('Route smoke coverage', () => {
       ['/admin/roles', /Roles & Permissions/],
       ['/admin/templates', /Test Templates/],
       ['/admin/certificates', /Certificates/],
-      ['/admin/reports', /Report Builder/],
+      ['/admin/reports', /Scheduled Reports/],
       ['/admin/courses', /Training Courses/],
       ['/admin/user-groups', /User Groups/],
       ['/admin/settings', /Admin Settings/],

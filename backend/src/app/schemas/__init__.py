@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Generic, Optional, TypeVar
 from uuid import UUID
 
 from pydantic import AliasChoices, BaseModel, Field, EmailStr, field_validator, model_validator
@@ -34,6 +34,16 @@ class RefreshRequest(BaseModel):
 
 class Message(BaseModel):
     detail: str
+
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    skip: int
+    limit: int
 
 
 class ReportScheduleRunResult(BaseModel):
@@ -75,6 +85,14 @@ class UserRead(UserBase):
 
 
 class UserUpdate(BaseModel):
+    user_id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[RoleEnum] = None
+    is_active: Optional[bool] = None
+
+
+class AdminUserPatch(BaseModel):
     user_id: Optional[str] = None
     name: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -220,14 +238,16 @@ class QuestionBase(BaseModel):
     @classmethod
     @field_validator("points")
     def validate_points(cls, v: float):
-        if v is None or v <= 0:
-            raise ValueError("points must be positive")
+        if v is None or v < 0:
+            raise ValueError("points must be greater than or equal to 0")
         return v
 
     @classmethod
     @field_validator("order")
     def validate_order(cls, v: int):
-        return max(0, v)
+        if v < 0:
+            raise ValueError("order must be greater than or equal to 0")
+        return v
 
     @classmethod
     def _validate_mcq(cls, values):
@@ -282,6 +302,27 @@ class ExamBase(BaseModel):
     settings: Optional[dict] = None
     certificate: Optional[dict] = None
 
+    @field_validator("time_limit")
+    @classmethod
+    def validate_exam_base_time_limit(cls, value: int | None):
+        if value is not None and value <= 0:
+            raise ValueError("time_limit_minutes must be greater than 0")
+        return value
+
+    @field_validator("passing_score")
+    @classmethod
+    def validate_exam_base_passing_score(cls, value: float | None):
+        if value is not None and not 0 <= value <= 100:
+            raise ValueError("passing_score must be between 0 and 100")
+        return value
+
+    @field_validator("max_attempts")
+    @classmethod
+    def validate_exam_base_max_attempts(cls, value: int):
+        if value < 1:
+            raise ValueError("max_attempts must be at least 1")
+        return value
+
 
 class ExamCreate(ExamBase):
     questions: Optional[list[QuestionCreate]] = None
@@ -303,6 +344,27 @@ class ExamUpdate(BaseModel):
     description: Optional[str] = None
     settings: Optional[dict] = None
     certificate: Optional[dict] = None
+
+    @field_validator("time_limit")
+    @classmethod
+    def validate_exam_update_time_limit(cls, value: int | None):
+        if value is not None and value <= 0:
+            raise ValueError("time_limit_minutes must be greater than 0")
+        return value
+
+    @field_validator("passing_score")
+    @classmethod
+    def validate_exam_update_passing_score(cls, value: float | None):
+        if value is not None and not 0 <= value <= 100:
+            raise ValueError("passing_score must be between 0 and 100")
+        return value
+
+    @field_validator("max_attempts")
+    @classmethod
+    def validate_exam_update_max_attempts(cls, value: int | None):
+        if value is not None and value < 1:
+            raise ValueError("max_attempts must be at least 1")
+        return value
 
 
 class ExamRead(ExamBase):
@@ -336,6 +398,8 @@ class AttemptRead(AttemptBase):
     status: AttemptStatus
     paused: bool = False
     score: Optional[float]
+    grade: Optional[str] = None
+    pending_manual_review: Optional[bool] = None
     started_at: Optional[datetime]
     submitted_at: Optional[datetime]
     identity_verified: bool

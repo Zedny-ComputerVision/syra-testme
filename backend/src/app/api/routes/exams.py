@@ -1,16 +1,16 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ...models import Exam, Node, RoleEnum, ExamStatus, Course, CourseStatus, Question
-from ...schemas import ExamCreate, ExamRead, ExamUpdate, Message
+from ...schemas import ExamCreate, ExamRead, ExamUpdate, Message, PaginatedResponse
 from ..deps import ensure_permission, get_current_user, get_db_dep, learner_can_access_exam, require_permission
 from ...modules.tests.proctoring_requirements import normalize_proctoring_config
-import json
+from ...services.sanitization import sanitize_exam_payload
 
 router = APIRouter()
 
@@ -65,6 +65,15 @@ DEFAULT_PROCTORING = {
 }
 
 
+def _pagination_value(value, default: int) -> int:
+    if isinstance(value, int):
+        return value
+    try:
+        return int(getattr(value, "default", default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _assert_has_questions(db: Session, exam_id):
     count = db.scalar(select(func.count()).select_from(Question).where(Question.exam_id == exam_id))
     if not count:
@@ -115,23 +124,49 @@ def _exam_read(exam: Exam) -> ExamRead:
     )
 
 
-@router.get("/", response_model=list[ExamRead])
-async def list_exams(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    query = select(Exam).order_by(Exam.updated_at.desc(), Exam.created_at.desc())
+@router.get("/", response_model=PaginatedResponse[ExamRead])
+async def list_exams(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    skip = max(0, _pagination_value(skip, 0))
+    limit = max(1, min(_pagination_value(limit, 50), 200))
+
+    query = (
+        select(Exam)
+        .options(joinedload(Exam.node).joinedload(Node.course), joinedload(Exam.category))
+        .order_by(Exam.updated_at.desc(), Exam.created_at.desc())
+    )
     if current.role == RoleEnum.LEARNER:
         query = query.where(Exam.status == ExamStatus.OPEN)
+        exams = db.scalars(query).all()
+        exams = [exam for exam in exams if learner_can_access_exam(db, exam, current)]
+        page_items = exams[skip: skip + limit]
+        return {
+            "items": [_exam_read(ex) for ex in page_items],
+            "total": len(exams),
+            "skip": skip,
+            "limit": limit,
+        }
     else:
         ensure_permission(db, current, "Edit Tests")
-    exams = db.scalars(query).all()
-    if current.role == RoleEnum.LEARNER:
-        exams = [exam for exam in exams if learner_can_access_exam(db, exam, current)]
-    return [_exam_read(ex) for ex in exams]
+    total = db.scalar(select(func.count()).select_from(select(Exam).subquery())) or 0
+    exams = db.scalars(query.offset(skip).limit(limit)).all()
+    return {
+        "items": [_exam_read(ex) for ex in exams],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.post("/", response_model=ExamRead)
 async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Create Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     # Accept either explicit node_id or fall back to the oldest node/course.
     now = datetime.now(timezone.utc)
+    payload = sanitize_exam_payload(body.model_dump(exclude={"questions"}))
     if not body.title or not body.title.strip():
         raise HTTPException(status_code=422, detail="Title is required")
     if body.time_limit is not None and body.time_limit <= 0:
@@ -140,6 +175,8 @@ async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), curre
         raise HTTPException(status_code=422, detail="time_limit exceeds maximum (600 minutes)")
     if body.max_attempts is not None and body.max_attempts < 1:
         raise HTTPException(status_code=422, detail="max_attempts must be at least 1")
+    if body.passing_score is not None and not 0 <= body.passing_score <= 100:
+        raise HTTPException(status_code=422, detail="passing_score must be between 0 and 100")
     if body.status == ExamStatus.OPEN:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Test must have at least one question before publishing")
 
@@ -170,15 +207,15 @@ async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), curre
 
     exam = Exam(
         node_id=node_id,
-        title=body.title,
-        description=body.description,
+        title=body.title.strip(),
+        description=payload.get("description"),
         type=body.type,
         status=body.status,
         time_limit=body.time_limit,
         max_attempts=body.max_attempts,
         passing_score=body.passing_score,
         proctoring_config=normalize_proctoring(body.proctoring_config),
-        settings=body.settings,
+        settings=payload.get("settings"),
         certificate=body.certificate,
         category_id=body.category_id,
         grading_scale_id=body.grading_scale_id,
@@ -221,11 +258,13 @@ async def update_exam(exam_id: str, body: ExamUpdate, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Test not found")
     if current.role == RoleEnum.INSTRUCTOR and exam.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
-    data = body.model_dump(exclude_unset=True)
+    data = sanitize_exam_payload(body.model_dump(exclude_unset=True))
     if not data:
         return _exam_read(exam)
     if "title" in data and not data["title"].strip():
         raise HTTPException(status_code=422, detail="Title is required")
+    if "title" in data:
+        data["title"] = data["title"].strip()
     if "time_limit" in data:
         tl = data["time_limit"]
         if tl is not None and tl <= 0:
@@ -236,6 +275,10 @@ async def update_exam(exam_id: str, body: ExamUpdate, db: Session = Depends(get_
         ma = data["max_attempts"]
         if ma is not None and ma < 1:
             raise HTTPException(status_code=422, detail="max_attempts must be at least 1")
+    if "passing_score" in data:
+        ps = data["passing_score"]
+        if ps is not None and not 0 <= ps <= 100:
+            raise HTTPException(status_code=422, detail="passing_score must be between 0 and 100")
 
     for field, value in data.items():
         if field == "node_id":

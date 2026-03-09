@@ -18,6 +18,10 @@ vi.mock('../../services/auth.service', () => ({
   changePassword: (...args) => changePasswordMock(...args),
 }))
 
+vi.mock('../../hooks/useUnsavedChanges', () => ({
+  default: () => {},
+}))
+
 describe('Profile page', () => {
   beforeEach(() => {
     vi.clearAllMocks()

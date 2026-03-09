@@ -9,6 +9,7 @@ const attemptsMock = vi.fn()
 const getAttemptMock = vi.fn()
 const listAttemptVideosMock = vi.fn()
 const getAttemptEventsMock = vi.fn()
+const fetchAuthenticatedMediaObjectUrlMock = vi.fn()
 
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
@@ -19,6 +20,11 @@ vi.mock('../../../services/admin.service', () => ({
   },
 }))
 
+vi.mock('../../../utils/authenticatedMedia', () => ({
+  fetchAuthenticatedMediaObjectUrl: (...args) => fetchAuthenticatedMediaObjectUrlMock(...args),
+  revokeObjectUrl: vi.fn(),
+}))
+
 describe('AdminAttemptVideos supervision mode', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -26,6 +32,7 @@ describe('AdminAttemptVideos supervision mode', () => {
     getAttemptMock.mockResolvedValue({ data: null })
     listAttemptVideosMock.mockResolvedValue({ data: [] })
     getAttemptEventsMock.mockResolvedValue({ data: [] })
+    fetchAuthenticatedMediaObjectUrlMock.mockResolvedValue('blob:media')
   })
 
   afterEach(() => {

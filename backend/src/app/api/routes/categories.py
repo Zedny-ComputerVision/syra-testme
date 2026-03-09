@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...models import Category, RoleEnum
 from ...schemas import CategoryBase, CategoryRead, Message
+from ...services.audit import write_audit_log
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -38,13 +39,27 @@ def _normalize_category_payload(body: CategoryBase) -> dict:
 
 
 @router.post("/", response_model=CategoryRead)
-async def create_category(body: CategoryBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def create_category(
+    body: CategoryBase,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
     payload = _normalize_category_payload(body)
     _ensure_unique_category_name(db, payload["name"])
     cat = Category(**payload)
     db.add(cat)
     db.commit()
     db.refresh(cat)
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="CATEGORY_CREATED",
+        resource_type="category",
+        resource_id=str(cat.id),
+        detail=f"Created category: {cat.name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return cat
 
 
@@ -63,7 +78,13 @@ async def get_category(category_id: str, db: Session = Depends(get_db_dep), curr
 
 
 @router.put("/{category_id}", response_model=CategoryRead)
-async def update_category(category_id: str, body: CategoryBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+async def update_category(
+    category_id: str,
+    body: CategoryBase,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
     category_pk = parse_uuid_param(category_id, detail="Not found")
     cat = db.get(Category, category_pk)
     if not cat:
@@ -75,15 +96,40 @@ async def update_category(category_id: str, body: CategoryBase, db: Session = De
     db.add(cat)
     db.commit()
     db.refresh(cat)
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="CATEGORY_UPDATED",
+        resource_type="category",
+        resource_id=str(cat.id),
+        detail=f"Updated category: {cat.name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return cat
 
 
 @router.delete("/{category_id}", response_model=Message)
-async def delete_category(category_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN))):
+async def delete_category(
+    category_id: str,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN)),
+):
     category_pk = parse_uuid_param(category_id, detail="Not found")
     cat = db.get(Category, category_pk)
     if not cat:
         raise HTTPException(status_code=404, detail="Not found")
+    category_name = cat.name
+    category_pk_str = str(cat.id)
     db.delete(cat)
     db.commit()
+    write_audit_log(
+        db,
+        getattr(current, "id", None),
+        action="CATEGORY_DELETED",
+        resource_type="category",
+        resource_id=category_pk_str,
+        detail=f"Deleted category: {category_name}",
+        ip_address=getattr(getattr(request, "client", None), "host", None),
+    )
     return Message(detail="Deleted")

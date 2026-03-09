@@ -78,10 +78,9 @@ function useAutoSave(attemptId, delay = 2000) {
       for (const [qId, ans] of Object.entries(entries)) {
         try {
           await submitAnswer(attemptId, qId, serializeAnswer(ans))
-        } catch (e) {
+        } catch {
           failedEntries[qId] = ans
           hadFailure = true
-          console.error('Auto-save failed for', qId, e)
         }
       }
       if (hadFailure) {
@@ -106,10 +105,9 @@ function useAutoSave(attemptId, delay = 2000) {
     for (const [qId, ans] of Object.entries(entries)) {
       try {
         await submitAnswer(attemptId, qId, serializeAnswer(ans))
-      } catch (e) {
+      } catch {
         failedEntries[qId] = ans
         hadFailure = true
-        console.error('Flush failed for', qId, e)
       }
     }
     if (hadFailure) {
@@ -161,6 +159,8 @@ export default function Proctoring() {
   const uploadTasksRef = useRef(new Set())
   const uploadedChunksRef = useRef(0)
   const wsWarnedRef = useRef(false)
+  const lastToastBlursRef = useRef(0)
+  const timerExpiredRef = useRef(false)
   const [reloadKey, setReloadKey] = useState(0)
 
   // Load attempt, exam, and questions
@@ -231,22 +231,6 @@ export default function Proctoring() {
     }
   }, [proctorStatus])
 
-  // Countdown timer
-  useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0) return
-    const interval = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(interval)
-          handleSubmit()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [timeLeft !== null])
-
   // Fullscreen enforcement
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -277,33 +261,30 @@ export default function Proctoring() {
         const recorder = new MediaRecorder(cameraStream, { mimeType })
         recorder.ondataavailable = async (event) => {
           if (!videoSessionIdRef.current || !event.data || event.data.size === 0) return
-          const currentIdx = videoChunkIndexRef.current++
-          try {
-            let task = null
-            task = uploadProctoringVideoChunk(attemptId, videoSessionIdRef.current, currentIdx, event.data)
-              .then(() => {
+          const chunkIdx = videoChunkIndexRef.current++
+          const sessionId = videoSessionIdRef.current
+          const blob = event.data
+          const uploadWithRetry = async () => {
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                await uploadProctoringVideoChunk(attemptId, sessionId, chunkIdx, blob)
                 uploadedChunksRef.current += 1
-              })
-              .catch((e) => {
-                console.error('Video chunk upload failed', e)
-                setRecordingStatus('failed')
-              })
-              .finally(() => {
-                uploadTasksRef.current.delete(task)
-              })
-            uploadTasksRef.current.add(task)
-            await task
-          } catch (e) {
-            console.error('Video chunk upload failed', e)
+                return
+              } catch {
+                if (attempt < 2) await new Promise((r) => setTimeout(r, 800))
+              }
+            }
             setRecordingStatus('failed')
           }
+          const task = uploadWithRetry().finally(() => uploadTasksRef.current.delete(task))
+          uploadTasksRef.current.add(task)
+          await task
         }
         recorder.onerror = () => setRecordingStatus('failed')
         recorder.start(2000)
         recorderRef.current = recorder
         setRecordingStatus('recording')
-      } catch (e) {
-        console.error('Recorder start failed', e)
+      } catch {
         setRecordingStatus('failed')
       }
     }
@@ -382,8 +363,7 @@ export default function Proctoring() {
       recorderRef.current = null
       uploadedChunksRef.current = 0
       uploadTasksRef.current.clear()
-    } catch (e) {
-      console.error('Video finalize failed', e)
+    } catch {
       setRecordingStatus('failed')
     } finally {
       finalizingVideoRef.current = false
@@ -412,6 +392,28 @@ export default function Proctoring() {
       setSubmitting(false)
     }
   }, [attemptId, flush, navigate, stopAndFinalizeRecording, submitting])
+
+  // Countdown timer
+  useEffect(() => {
+    if (timeLeft === null || timeLeft <= 0) return
+    const interval = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          timerExpiredRef.current = true
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [timeLeft !== null, handleSubmit])
+
+  useEffect(() => {
+    if (timeLeft !== 0 || !timerExpiredRef.current) return
+    timerExpiredRef.current = false
+    void handleSubmit()
+  }, [timeLeft, handleSubmit])
 
   const handleViolation = useCallback((event) => {
     if (event.severity === 'HIGH' || event.severity === 'MEDIUM') {
@@ -487,11 +489,13 @@ export default function Proctoring() {
     const max = proctorCfg.max_tab_blurs
     if (max && tabBlurs > max) {
       setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: 'Too many tab switches' })
-      handleSubmit()
-    } else if (tabBlurs > 0 && proctorCfg.tab_switch_detect) {
+      lastToastBlursRef.current = tabBlurs
+      void handleSubmit()
+    } else if (tabBlurs > 0 && tabBlurs !== lastToastBlursRef.current && proctorCfg.tab_switch_detect) {
+      lastToastBlursRef.current = tabBlurs
       setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: `Tab switches: ${tabBlurs}` })
     }
-  }, [tabBlurs, proctorCfg.max_tab_blurs, proctorCfg.tab_switch_detect])
+  }, [handleSubmit, tabBlurs, proctorCfg.max_tab_blurs, proctorCfg.tab_switch_detect])
 
   // Copy/paste block
   useEffect(() => {

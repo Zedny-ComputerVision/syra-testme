@@ -1,10 +1,13 @@
 """Face presence detector using YOLOv8 face detection."""
 
+import logging
 import time
 import cv2
 import numpy as np
 
 from ._yolo_face import get_face_model
+
+logger = logging.getLogger(__name__)
 
 
 class FaceDetector:
@@ -13,6 +16,7 @@ class FaceDetector:
         self.min_confidence = min_confidence
         self._last_seen: float | None = None
         self._disappeared_since: float | None = None
+        self._warned_unavailable = False
 
     def process(self, frame_bytes: bytes) -> dict | None:
         now = time.time()
@@ -23,6 +27,9 @@ class FaceDetector:
 
         model = get_face_model()
         if model is None:
+            if not self._warned_unavailable:
+                logger.warning("Face detection model unavailable - detection disabled")
+                self._warned_unavailable = True
             return None
 
         results = model.predict(frame, verbose=False, conf=self.min_confidence, imgsz=640)
@@ -60,9 +67,3 @@ class FaceDetector:
             }
         return None
 
-
-_detector = FaceDetector()
-
-
-def detect_face(frame_bytes: bytes) -> dict | None:
-    return _detector.process(frame_bytes)

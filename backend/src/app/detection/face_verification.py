@@ -1,5 +1,6 @@
 """Face verification using lightweight FaceMesh landmark embeddings."""
 
+import logging
 import cv2
 import numpy as np
 from typing import Optional
@@ -8,6 +9,9 @@ try:
     import mediapipe as mp
 except Exception:  # pragma: no cover - optional dependency in lightweight envs
     mp = None
+
+logger = logging.getLogger(__name__)
+_signature_warned_unavailable = False
 
 
 def _landmark_vector(landmarks) -> Optional[np.ndarray]:
@@ -27,11 +31,15 @@ def _landmark_vector(landmarks) -> Optional[np.ndarray]:
 
 def compute_face_signature(frame_bytes: bytes) -> Optional[list[float]]:
     """Return a normalized landmark embedding list or None if no face."""
+    global _signature_warned_unavailable
     np_arr = np.frombuffer(frame_bytes, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if frame is None:
         return None
     if mp is None or not hasattr(mp, "solutions"):
+        if not _signature_warned_unavailable:
+            logger.warning("Face verification MediaPipe unavailable - signature extraction disabled")
+            _signature_warned_unavailable = True
         return None
     mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=True, refine_landmarks=True, max_num_faces=1)
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -48,7 +56,7 @@ def cosine_distance(v1: np.ndarray, v2: np.ndarray) -> float:
     denom = np.linalg.norm(v1) * np.linalg.norm(v2)
     if denom == 0:
         return 1.0
-    return float(1.0 - np.dot(v1, v2) / denom)
+    return float(np.clip(1.0 - np.dot(v1, v2) / denom, 0.0, 1.0))
 
 
 class FaceVerifier:
@@ -64,9 +72,15 @@ class FaceVerifier:
         self._mismatching = False
         self._consecutive_mismatches = 0
         self._consecutive_required = 2
+        self._warned_unavailable = False
 
     def process(self, frame_bytes: bytes) -> dict | None:
-        if not self.enabled or self.baseline is None or self._mesh is None:
+        if not self.enabled or self.baseline is None:
+            return None
+        if self._mesh is None:
+            if not self._warned_unavailable:
+                logger.warning("Face verification model unavailable - detection disabled")
+                self._warned_unavailable = True
             return None
         np_arr = np.frombuffer(frame_bytes, np.uint8)
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -103,5 +117,4 @@ class FaceVerifier:
                 "confidence": max(0.5, 1 - dist),
                 "meta": {"distance": dist},
             }
-        self._mismatching = False
         return None

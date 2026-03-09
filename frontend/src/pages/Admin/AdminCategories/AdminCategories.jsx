@@ -15,7 +15,7 @@ const EMPTY = { name: '', type: 'TEST', description: '' }
 const PAGE_SIZE = 10
 
 function resolveError(err, fallback) {
-  return err?.response?.data?.detail || fallback
+  return err?.validation?.message || err?.response?.data?.detail || fallback
 }
 
 export default function AdminCategories() {
@@ -25,6 +25,7 @@ export default function AdminCategories() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(EMPTY)
+  const [fieldErrors, setFieldErrors] = useState({})
   const [modalError, setModalError] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -112,6 +113,7 @@ export default function AdminCategories() {
 
   const openCreate = () => {
     setForm(EMPTY)
+    setFieldErrors({})
     setModalError('')
     setModal('create')
   }
@@ -122,6 +124,7 @@ export default function AdminCategories() {
       type: category.type || 'TEST',
       description: category.description || '',
     })
+    setFieldErrors({})
     setModalError('')
     setModal(category)
   }
@@ -130,6 +133,7 @@ export default function AdminCategories() {
     if (saving) return
     setModal(null)
     setModalError('')
+    setFieldErrors({})
   }
 
   const handleSave = async () => {
@@ -140,6 +144,7 @@ export default function AdminCategories() {
     }
 
     if (!payload.name) {
+      setFieldErrors({})
       setModalError('Category name is required.')
       return
     }
@@ -147,6 +152,7 @@ export default function AdminCategories() {
     setSaving(true)
     setModalError('')
     setNotice('')
+    setFieldErrors({})
     try {
       if (modal === 'create') {
         await adminApi.createCategory(payload)
@@ -158,6 +164,7 @@ export default function AdminCategories() {
       setModal(null)
       await load()
     } catch (err) {
+      setFieldErrors(err?.validation?.fields || {})
       setModalError(resolveError(err, 'Failed to save category.'))
     } finally {
       setSaving(false)
@@ -335,19 +342,64 @@ export default function AdminCategories() {
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="category-name">Name</label>
-              <input id="category-name" className={styles.input} value={form.name} onChange={(event) => setForm((currentForm) => ({ ...currentForm, name: event.target.value }))} />
+              <input
+                id="category-name"
+                className={`${styles.input} ${fieldErrors.name ? styles.inputInvalid : ''}`}
+                aria-invalid={fieldErrors.name ? 'true' : 'false'}
+                value={form.name}
+                onChange={(event) => {
+                  setForm((currentForm) => ({ ...currentForm, name: event.target.value }))
+                  setFieldErrors((current) => {
+                    if (!current.name) return current
+                    const next = { ...current }
+                    delete next.name
+                    return next
+                  })
+                }}
+              />
+              {fieldErrors.name && <div className={styles.fieldError}>{fieldErrors.name}</div>}
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="category-type">Type</label>
-              <select id="category-type" className={styles.select} value={form.type} onChange={(event) => setForm((currentForm) => ({ ...currentForm, type: event.target.value }))}>
+              <select
+                id="category-type"
+                className={`${styles.select} ${fieldErrors.type ? styles.inputInvalid : ''}`}
+                aria-invalid={fieldErrors.type ? 'true' : 'false'}
+                value={form.type}
+                onChange={(event) => {
+                  setForm((currentForm) => ({ ...currentForm, type: event.target.value }))
+                  setFieldErrors((current) => {
+                    if (!current.type) return current
+                    const next = { ...current }
+                    delete next.type
+                    return next
+                  })
+                }}
+              >
                 {CATEGORY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
+              {fieldErrors.type && <div className={styles.fieldError}>{fieldErrors.type}</div>}
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="category-description">Description</label>
-              <input id="category-description" className={styles.input} value={form.description} onChange={(event) => setForm((currentForm) => ({ ...currentForm, description: event.target.value }))} />
+              <input
+                id="category-description"
+                className={`${styles.input} ${fieldErrors.description ? styles.inputInvalid : ''}`}
+                aria-invalid={fieldErrors.description ? 'true' : 'false'}
+                value={form.description}
+                onChange={(event) => {
+                  setForm((currentForm) => ({ ...currentForm, description: event.target.value }))
+                  setFieldErrors((current) => {
+                    if (!current.description) return current
+                    const next = { ...current }
+                    delete next.description
+                    return next
+                  })
+                }}
+              />
+              {fieldErrors.description && <div className={styles.fieldError}>{fieldErrors.description}</div>}
             </div>
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnCancel} onClick={close} disabled={saving}>Cancel</button>
