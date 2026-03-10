@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ...models import User, UserGroup, RoleEnum
 from ...schemas import UserGroupCreate, UserGroupRead, UserRead, Message
+from ...services.normalized_relations import replace_user_group_members, serialize_user_group_member_ids
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -68,25 +69,39 @@ def _normalize_group_payload(db: Session, body: UserGroupCreate) -> dict:
     }
 
 
+def _build_group_read(group: UserGroup) -> UserGroupRead:
+    return UserGroupRead(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        member_ids=serialize_user_group_member_ids(group),
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+    )
+
+
 @router.post("/", response_model=UserGroupRead)
 async def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
     payload = _normalize_group_payload(db, body)
     _ensure_unique_group_name(db, payload["name"])
+    member_ids = payload.pop("member_ids", [])
     group = UserGroup(**payload)
+    replace_user_group_members(group, member_ids)
     db.add(group)
     db.commit()
     db.refresh(group)
-    return group
+    return _build_group_read(group)
 
 
 @router.get("/", response_model=list[UserGroupRead])
 async def list_groups(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
-    return db.scalars(select(UserGroup).order_by(UserGroup.created_at.desc())).all()
+    groups = db.scalars(select(UserGroup).order_by(UserGroup.created_at.desc())).all()
+    return [_build_group_read(group) for group in groups]
 
 
 @router.get("/{group_id}", response_model=UserGroupRead)
 async def get_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
-    return _get_group_or_404(db, group_id)
+    return _build_group_read(_get_group_or_404(db, group_id))
 
 
 @router.put("/{group_id}", response_model=UserGroupRead)
@@ -96,11 +111,11 @@ async def update_group(group_id: str, body: UserGroupCreate, db: Session = Depen
     _ensure_unique_group_name(db, payload["name"], existing_group_id=group.id)
     group.name = payload["name"]
     group.description = payload["description"]
-    group.member_ids = payload["member_ids"]
+    replace_user_group_members(group, payload["member_ids"])
     db.add(group)
     db.commit()
     db.refresh(group)
-    return group
+    return _build_group_read(group)
 
 
 @router.delete("/{group_id}", response_model=Message)
@@ -118,7 +133,7 @@ async def list_group_members(
     current=Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
 ):
     group = _get_group_or_404(db, group_id)
-    member_ids = [str(member_id) for member_id in (group.member_ids or [])]
+    member_ids = serialize_user_group_member_ids(group)
     if not member_ids:
         return []
     user_ids = [parse_uuid_param(member_id, detail="User not found") for member_id in member_ids]
@@ -147,12 +162,12 @@ async def add_group_member(
             status_code=422,
             detail="Only learners can be added to groups",
         )
-    member_ids = [str(member_id) for member_id in (group.member_ids or [])]
+    member_ids = serialize_user_group_member_ids(group)
     normalized_user_id = str(user.id)
     if normalized_user_id in member_ids:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already in group")
     member_ids.append(normalized_user_id)
-    group.member_ids = member_ids
+    replace_user_group_members(group, member_ids)
     db.add(group)
     db.commit()
     return Message(detail="Member added")
@@ -167,11 +182,11 @@ async def remove_group_member(
 ):
     group = _get_group_or_404(db, group_id)
     user_pk = parse_uuid_param(user_id, detail="User not found")
-    member_ids = [str(member_id) for member_id in (group.member_ids or [])]
+    member_ids = serialize_user_group_member_ids(group)
     normalized_user_id = str(user_pk)
     if normalized_user_id not in member_ids:
         raise HTTPException(status_code=404, detail="Member not found")
-    group.member_ids = [member_id for member_id in member_ids if member_id != normalized_user_id]
+    replace_user_group_members(group, [member_id for member_id in member_ids if member_id != normalized_user_id])
     db.add(group)
     db.commit()
     return Message(detail="Member removed")

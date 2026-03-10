@@ -60,9 +60,7 @@ vi.mock('../../services/test.service', () => ({
 }))
 
 vi.mock('../../services/proctoring.service', () => ({
-  startProctoringVideo: vi.fn(),
-  uploadProctoringVideoChunk: vi.fn(),
-  finalizeProctoringVideo: vi.fn(),
+  uploadProctoringVideo: vi.fn(),
   proctoringPing: vi.fn(),
 }))
 

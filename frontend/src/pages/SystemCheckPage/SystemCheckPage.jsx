@@ -5,6 +5,7 @@ import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyS
 import { getTest } from '../../services/test.service'
 import { normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
+import { requestEntireScreenShare } from '../../utils/screenCapture'
 import styles from './SystemCheckPage.module.scss'
 
 export default function SystemCheckPage() {
@@ -12,6 +13,7 @@ export default function SystemCheckPage() {
   const navigate = useNavigate()
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const screenStreamRef = useRef(null)
   const canvasRef = useRef(null)
   const micStreamRef = useRef(null)
   const micAudioCtxRef = useRef(null)
@@ -24,6 +26,7 @@ export default function SystemCheckPage() {
   const [micLevel, setMicLevel] = useState(0)
   const [lighting, setLighting] = useState('pending')
   const [lightingScore, setLightingScore] = useState(0)
+  const [screenShare, setScreenShare] = useState('pending')
   const [proctorCfg, setProctorCfg] = useState({})
   const [requirements, setRequirements] = useState(getJourneyRequirements({}))
   const [configLoading, setConfigLoading] = useState(true)
@@ -54,6 +57,13 @@ export default function SystemCheckPage() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
+    }
+  }, [])
+
+  const stopScreenShareCheck = useCallback(() => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop())
+      screenStreamRef.current = null
     }
   }, [])
 
@@ -141,6 +151,28 @@ export default function SystemCheckPage() {
     setFullscreen(document.fullscreenElement ? 'passed' : 'pending')
   }, [])
 
+  const checkScreenShare = useCallback(async (required) => {
+    stopScreenShareCheck()
+    if (!required) {
+      setScreenShare('passed')
+      return
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setScreenShare('failed')
+      return
+    }
+    setScreenShare('checking')
+    try {
+      const stream = await requestEntireScreenShare()
+      screenStreamRef.current = stream
+      setScreenShare('passed')
+    } catch {
+      setScreenShare('failed')
+    } finally {
+      stopScreenShareCheck()
+    }
+  }, [stopScreenShareCheck])
+
   const requestFullscreen = useCallback(async () => {
     if (!requirements.fullscreenRequired) return
     if (!document.documentElement.requestFullscreen) {
@@ -181,6 +213,11 @@ export default function SystemCheckPage() {
       await checkCamera(requirements.cameraRequired)
       await checkMic(requirements.micRequired)
       checkFullscreen(requirements.fullscreenRequired)
+      if (requirements.screenRequired) {
+        await checkScreenShare(true)
+      } else {
+        setScreenShare('passed')
+      }
       if (!requirements.lightingRequired) {
         setLighting('passed')
         setLightingScore(1)
@@ -201,6 +238,8 @@ export default function SystemCheckPage() {
     requirements.fullscreenRequired,
     requirements.lightingRequired,
     requirements.micRequired,
+    requirements.screenRequired,
+    checkScreenShare,
   ])
 
   useEffect(() => {
@@ -216,6 +255,7 @@ export default function SystemCheckPage() {
     checkCamera(requirements.cameraRequired)
     checkMic(requirements.micRequired)
     checkFullscreen(requirements.fullscreenRequired)
+    setScreenShare(requirements.screenRequired ? 'pending' : 'passed')
     if (!requirements.lightingRequired) {
       setLighting('passed')
       setLightingScore(1)
@@ -228,6 +268,7 @@ export default function SystemCheckPage() {
     requirements.micRequired,
     requirements.fullscreenRequired,
     requirements.lightingRequired,
+    requirements.screenRequired,
     checkCamera,
     checkMic,
     checkFullscreen,
@@ -285,9 +326,10 @@ export default function SystemCheckPage() {
   useEffect(() => {
     return () => {
       stopCamera()
+      stopScreenShareCheck()
       stopMicMonitor()
     }
-  }, [stopCamera, stopMicMonitor])
+  }, [stopCamera, stopMicMonitor, stopScreenShareCheck])
 
   const allPassed = useMemo(() => {
     if (configLoading || configError) return false
@@ -295,6 +337,7 @@ export default function SystemCheckPage() {
       (!requirements.cameraRequired || camera === 'passed') &&
       (!requirements.micRequired || mic === 'passed') &&
       (!requirements.fullscreenRequired || fullscreen === 'passed') &&
+      (!requirements.screenRequired || screenShare === 'passed') &&
       (!requirements.lightingRequired || lighting === 'passed')
     )
   }, [
@@ -304,10 +347,12 @@ export default function SystemCheckPage() {
     fullscreen,
     lighting,
     mic,
+    screenShare,
     requirements.cameraRequired,
     requirements.micRequired,
     requirements.fullscreenRequired,
     requirements.lightingRequired,
+    requirements.screenRequired,
   ])
 
   const renderIcon = (state) => {
@@ -324,6 +369,7 @@ export default function SystemCheckPage() {
       mic_ok: !requirements.micRequired || mic === 'passed',
       cam_ok: !requirements.cameraRequired || camera === 'passed',
       fs_ok: !requirements.fullscreenRequired || fullscreen === 'passed',
+      screen_ok: !requirements.screenRequired || screenShare === 'passed',
       lighting_score: lightingScore,
       requirements,
     }
@@ -427,12 +473,32 @@ export default function SystemCheckPage() {
           </motion.div>
 
           {proctorCfg.screen_capture && (
-            <motion.div className={styles.checkRow} whileHover={{ translateY: -2 }} transition={{ duration: 0.15 }}>
+            <motion.div
+              className={`${styles.checkRow} ${screenShare === 'passed' ? styles.passed : screenShare === 'failed' ? styles.failed : ''}`}
+              whileHover={{ translateY: -2 }}
+              transition={{ duration: 0.15 }}
+            >
               <div className={styles.checkInfo}>
-                <span className={styles.iconPending}>&#9679;</span>
+                {renderIcon(screenShare)}
                 <span>Screen Share Permission</span>
               </div>
-              <p className={styles.hint}>You will be asked to share your screen when the test starts.</p>
+              <button
+                type="button"
+                className={styles.inlineBtn}
+                onClick={() => void checkScreenShare(true)}
+                disabled={screenShare === 'checking'}
+              >
+                {screenShare === 'passed'
+                  ? 'Screen Share Ready'
+                  : screenShare === 'checking'
+                    ? 'Requesting Screen...'
+                    : 'Share Entire Screen'}
+              </button>
+              {screenShare !== 'passed' && (
+                <p className={styles.hint}>
+                  Entire-screen sharing is required. Choose your full desktop in the browser picker before continuing.
+                </p>
+              )}
             </motion.div>
           )}
         </div>

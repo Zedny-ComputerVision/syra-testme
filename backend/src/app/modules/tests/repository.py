@@ -4,6 +4,7 @@ from typing import Iterable, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ...services.normalized_relations import set_test_ui_config, test_ui_config
 from .enums import TestStatus, TestType
 from .models import Test, TestSettings
 
@@ -60,10 +61,12 @@ class TestRepository:
         return items, total or 0
 
     def create(self, test_data: dict, settings_data: dict) -> Test:
+        ui_config = test_data.pop("ui_config", None)
         test = Test(**test_data)
         if getattr(test, "id", None) is None:
             import uuid as _uuid
             test.id = _uuid.uuid4()
+        set_test_ui_config(test, ui_config)
         settings = TestSettings(test_id=test.id, **settings_data)
         test.settings = settings
         self.db.add(test)
@@ -71,8 +74,11 @@ class TestRepository:
         return test
 
     def update(self, test: Test, data: dict) -> Test:
+        ui_config = data.pop("ui_config", None) if "ui_config" in data else None
         for field, value in data.items():
             setattr(test, field, value)
+        if ui_config is not None:
+            set_test_ui_config(test, ui_config)
         self.db.add(test)
         self.db.flush()
         return test
@@ -89,11 +95,11 @@ class TestRepository:
             randomize_questions=test.randomize_questions,
             report_displayed=test.report_displayed,
             report_content=test.report_content,
-            ui_config=test.ui_config,
         )
         if getattr(new_test, "id", None) is None:
             import uuid as _uuid
             new_test.id = _uuid.uuid4()
+        set_test_ui_config(new_test, test_ui_config(test))
         new_settings = TestSettings(
             test_id=new_test.id,
             fullscreen_required=settings.fullscreen_required,

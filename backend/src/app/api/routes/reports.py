@@ -14,10 +14,10 @@ from io import BytesIO
 from ...models import RoleEnum, Exam, Attempt, User, AttemptStatus, ProctoringEvent, SeverityEnum, ExamStatus
 from ...schemas import CustomReportExportRequest, CustomReportPreview
 from ...services.audit import write_audit_log
+from ...services.normalized_relations import ADMIN_META_KEY, exam_archived_at, exam_code, is_exam_pool_library
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
-ADMIN_META_KEY = "_admin_test"
 CUSTOM_REPORT_DATASETS = {
     "attempts": ["id", "test_title", "user_name", "status", "score", "started_at", "submitted_at"],
     "tests": ["id", "name", "code", "status", "type", "time_limit_minutes", "question_count", "course_title"],
@@ -46,24 +46,16 @@ def _csv_response(rows: list[dict], filename: str, columns: list[str] | None = N
     )
 
 
-def _admin_meta(exam: Exam) -> dict:
-    settings = exam.settings if isinstance(exam.settings, dict) else {}
-    meta = settings.get(ADMIN_META_KEY)
-    return meta.copy() if isinstance(meta, dict) else {}
-
-
 def _is_pool_library_exam(exam: Exam) -> bool:
-    settings = exam.settings if isinstance(exam.settings, dict) else {}
-    return bool(settings.get("_pool_library"))
+    return is_exam_pool_library(exam)
 
 
 def _test_code(exam: Exam) -> str:
-    return str(_admin_meta(exam).get("code") or "")
+    return str(exam_code(exam) or "")
 
 
 def _test_status(exam: Exam) -> str:
-    meta = _admin_meta(exam)
-    if meta.get("archived_at"):
+    if exam_archived_at(exam):
         return "ARCHIVED"
     if exam.status == ExamStatus.OPEN:
         return "PUBLISHED"

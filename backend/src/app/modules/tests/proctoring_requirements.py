@@ -77,6 +77,7 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
     mic_required = _read_optional_flag(cfg, "mic_required", "microphone_required", "require_microphone")
     fullscreen_required = _read_optional_flag(cfg, "fullscreen_enforce", "fullscreen_required", "require_fullscreen")
     lighting_required = _read_optional_flag(cfg, "lighting_required", "require_lighting_check")
+    screen_required = _read_optional_flag(cfg, "screen_capture", "screen_required", "require_screen_share")
 
     face_detection = _read_optional_flag(cfg, "face_detection", "multi_face")
     audio_detection = _read_optional_flag(cfg, "audio_detection")
@@ -109,6 +110,7 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
         or mic_required
         or fullscreen_required
         or lighting_required
+        or screen_required
     )
 
     return {
@@ -118,6 +120,7 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
         "mic_required": bool(mic_required),
         "fullscreen_required": bool(fullscreen_required),
         "lighting_required": bool(lighting_required),
+        "screen_required": bool(screen_required),
     }
 
 
@@ -131,6 +134,7 @@ def normalize_proctoring_config(proctoring_config: Mapping[str, Any] | None) -> 
         "mic_required": requirements["mic_required"],
         "fullscreen_required": requirements["fullscreen_required"],
         "lighting_required": requirements["lighting_required"],
+        "screen_required": requirements["screen_required"],
         "fullscreen_enforce": requirements["fullscreen_required"],
         "face_verify": requirements["identity_required"],
     })

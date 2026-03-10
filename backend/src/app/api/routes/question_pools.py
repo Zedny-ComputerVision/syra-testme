@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ...models import Course, CourseStatus, Exam, ExamStatus, ExamType, Node, Question, QuestionPool, RoleEnum
 from ...schemas import Message, QuestionBase, QuestionPoolCreate, QuestionPoolRead, QuestionRead
 from ...services.audit import write_audit_log
+from ...services.normalized_relations import is_exam_pool_library, set_exam_library_pool
 from ...services.sanitization import sanitize_question_payload
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
@@ -18,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def _is_pool_library_exam(exam: Exam, pool_id) -> bool:
-    settings = exam.settings if isinstance(exam.settings, dict) else {}
-    raw = settings.get("_pool_library")
-    return isinstance(raw, dict) and str(raw.get("pool_id")) == str(pool_id)
+    return is_exam_pool_library(exam, pool_id)
 
 
 def _looks_like_pool_library_exam(exam: Exam, pool_id) -> bool:
@@ -78,10 +77,11 @@ def _ensure_pool_library_exam(db: Session, current, pool: QuestionPool) -> Exam:
         time_limit=60,
         max_attempts=1,
         created_by_id=current.id,
-        settings={"_pool_library": {"pool_id": str(pool.id)}},
+        library_pool_id=pool.id,
         created_at=now,
         updated_at=now,
     )
+    set_exam_library_pool(exam, pool.id)
     db.add(exam)
     db.flush()
     return exam

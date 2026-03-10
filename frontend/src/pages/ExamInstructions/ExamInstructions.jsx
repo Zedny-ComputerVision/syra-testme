@@ -60,7 +60,11 @@ export default function ExamInstructions() {
         'Close all other browser tabs and applications',
         'Have your ID ready for identity verification',
         ...((requirements.systemCheckRequired || requirements.identityRequired)
-          ? ['Allow camera and microphone access when prompted']
+          ? [
+              requirements.screenRequired
+                ? 'Allow camera, microphone, and entire-screen sharing when prompted'
+                : 'Allow camera and microphone access when prompted',
+            ]
           : []),
         'Do not navigate away from the test page',
       ]
@@ -84,7 +88,11 @@ export default function ExamInstructions() {
     {
       label: 'Monitoring',
       value: hasProctoring ? 'Proctored' : 'Standard',
-      helper: hasProctoring ? 'Camera and microphone permissions will be requested.' : 'No proctoring checks are enabled for this test.',
+      helper: hasProctoring
+        ? requirements.screenRequired
+          ? 'Camera, microphone, and entire-screen sharing will be requested.'
+          : 'Camera and microphone permissions will be requested.'
+        : 'No proctoring checks are enabled for this test.',
     },
     {
       label: 'Attempt policy',
@@ -150,11 +158,12 @@ export default function ExamInstructions() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <div>
+          <div>
               <strong>This test is proctored.</strong> Your camera and microphone will be monitored.
+              {requirements.screenRequired ? ' Entire-screen sharing is also required.' : ''}
               Make sure you are in a quiet, well-lit environment.
-            </div>
           </div>
+        </div>
         )}
 
         <div className={styles.instructions}>

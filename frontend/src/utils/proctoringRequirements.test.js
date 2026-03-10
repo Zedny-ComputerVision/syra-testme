@@ -21,4 +21,17 @@ describe('proctoringRequirements', () => {
     expect(normalized.fullscreen_enforce).toBe(false)
     expect(normalized.fullscreen_required).toBe(false)
   })
+
+  it('treats screen capture as a required system-check gate', () => {
+    const requirements = getJourneyRequirements({
+      screen_capture: true,
+    })
+    const normalized = normalizeProctoringConfig({
+      screen_capture: true,
+    })
+
+    expect(requirements.screenRequired).toBe(true)
+    expect(requirements.systemCheckRequired).toBe(true)
+    expect(normalized.screen_required).toBe(true)
+  })
 })

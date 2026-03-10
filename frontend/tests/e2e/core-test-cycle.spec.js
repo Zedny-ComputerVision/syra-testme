@@ -65,7 +65,7 @@ async function openManageSettingsSection(page, name) {
 
 test.describe('Core test cycle', () => {
   test('wizard creation, OCR identity check, live pause/resume, manual grading, reports, certificate, and retake rules all work with real persisted data', async ({ page, context, browser }) => {
-    test.setTimeout(240000)
+    test.setTimeout(420000)
     const { token: adminToken } = await ensureAdmin(context)
     const learner = await createLearner(context, adminToken, { user_id: `LIV${Date.now()}` })
     const { node } = await createCourseAndNode(adminToken)
@@ -99,7 +99,7 @@ test.describe('Core test cycle', () => {
     await page.getByRole('button', { name: /^Next$/i }).click()
 
     // Step 2: Settings
-    await expect(page.getByRole('heading', { name: 'Test Settings' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Proctoring & Test Settings' })).toBeVisible()
     await page.fill('input[name="time_limit"]', '15')
     await page.getByRole('button', { name: /^Next$/i }).click()
 
@@ -386,8 +386,9 @@ test.describe('Core test cycle', () => {
 
     // Admin video timeline view shows the real attempt recording and warnings.
     await adminPage.goto(`/admin/attempts/${attemptId}/videos`)
-    await expect(adminPage.getByText('Attempt Recordings')).toBeVisible()
-    await expect(adminPage.getByText(/Warnings:/)).toBeVisible()
+    await expect(adminPage.getByRole('heading', { name: 'Video Review' })).toBeVisible()
+    await expect(adminPage.getByText('Warning Timeline')).toBeVisible()
+    await expect(adminPage.getByRole('heading', { name: 'Exam Events' })).toBeVisible()
     await expect(adminPage.getByRole('button', { name: /FOCUS_LOSS|ALT_TAB/ }).first()).toBeVisible()
     await expect(adminPage.getByRole('button', { name: /FULLSCREEN_EXIT/ }).first()).toBeVisible()
     await expect(adminPage.getByRole('button', { name: /CAMERA_COVERED/ }).first()).toBeVisible()

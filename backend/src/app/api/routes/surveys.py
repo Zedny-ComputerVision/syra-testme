@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ...models import Survey, SurveyResponse, RoleEnum
 from ...schemas import SurveyCreate, SurveyUpdate, SurveyRead, SurveyResponseCreate, SurveyResponseRead, Message
+from ...services.normalized_relations import replace_survey_questions, serialize_survey_questions
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -66,14 +67,29 @@ def _normalize_survey_payload(payload: dict, *, partial: bool) -> dict:
     return cleaned
 
 
+def _build_survey_read(survey: Survey) -> SurveyRead:
+    return SurveyRead(
+        id=survey.id,
+        title=survey.title,
+        description=survey.description,
+        questions=serialize_survey_questions(survey),
+        is_active=survey.is_active,
+        created_by_id=survey.created_by_id,
+        created_at=survey.created_at,
+        updated_at=survey.updated_at,
+    )
+
+
 @router.post("/", response_model=SurveyRead)
 async def create_survey(body: SurveyCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     payload = _normalize_survey_payload(body.model_dump(), partial=False)
+    questions = payload.pop("questions", [])
     survey = Survey(created_by_id=current.id, **payload)
+    replace_survey_questions(survey, questions)
     db.add(survey)
     db.commit()
     db.refresh(survey)
-    return survey
+    return _build_survey_read(survey)
 
 
 @router.get("/", response_model=list[SurveyRead])
@@ -83,7 +99,8 @@ async def list_surveys(db: Session = Depends(get_db_dep), current=Depends(get_cu
         query = query.where(Survey.is_active == True)
     else:
         ensure_permission(db, current, "Edit Tests")
-    return db.scalars(query.order_by(Survey.created_at.desc())).all()
+    surveys = db.scalars(query.order_by(Survey.created_at.desc())).all()
+    return [_build_survey_read(survey) for survey in surveys]
 
 
 @router.get("/{survey_id}", response_model=SurveyRead)
@@ -96,7 +113,7 @@ async def get_survey(survey_id: str, db: Session = Depends(get_db_dep), current=
         raise HTTPException(status_code=404, detail="Survey not found")
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
-    return survey
+    return _build_survey_read(survey)
 
 
 @router.put("/{survey_id}", response_model=SurveyRead)
@@ -113,12 +130,15 @@ async def update_survey(
     if current.role == RoleEnum.INSTRUCTOR and survey.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
     payload = _normalize_survey_payload(body.model_dump(exclude_unset=True), partial=True)
+    questions = payload.pop("questions", None)
     for field, value in payload.items():
         setattr(survey, field, value)
+    if questions is not None:
+        replace_survey_questions(survey, questions)
     db.add(survey)
     db.commit()
     db.refresh(survey)
-    return survey
+    return _build_survey_read(survey)
 
 
 @router.delete("/{survey_id}", response_model=Message)

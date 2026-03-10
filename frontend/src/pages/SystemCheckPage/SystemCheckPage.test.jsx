@@ -7,6 +7,18 @@ import SystemCheckPage from './SystemCheckPage'
 
 const getTestMock = vi.fn()
 const getUserMediaMock = vi.fn()
+const getDisplayMediaMock = vi.fn()
+
+function createDisplayStream(displaySurface = 'monitor') {
+  const videoTrack = {
+    stop: vi.fn(),
+    getSettings: vi.fn(() => ({ displaySurface })),
+  }
+  return {
+    getTracks: vi.fn(() => [videoTrack]),
+    getVideoTracks: vi.fn(() => [videoTrack]),
+  }
+}
 
 function MotionDiv({ children, initial, animate, exit, transition, whileHover, whileTap, ...props }) {
   return <div {...props}>{children}</div>
@@ -58,6 +70,7 @@ describe('SystemCheckPage', () => {
       configurable: true,
       value: {
         getUserMedia: getUserMediaMock,
+        getDisplayMedia: getDisplayMediaMock,
       },
     })
   })
@@ -119,5 +132,60 @@ describe('SystemCheckPage', () => {
     })
     await waitFor(() => expect(video.srcObject).toBe(stream))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(false))
+  })
+
+  it('requires entire-screen sharing before continue is enabled', async () => {
+    const displayStream = createDisplayStream('monitor')
+    getUserMediaMock.mockResolvedValue({ getTracks: vi.fn(() => []) })
+    getDisplayMediaMock.mockResolvedValue(displayStream)
+    getTestMock.mockResolvedValueOnce({
+      data: {
+        id: 'test-1',
+        proctoring_config: {
+          camera_required: false,
+          mic_required: false,
+          fullscreen_required: false,
+          lighting_required: false,
+          screen_capture: true,
+        },
+      },
+    })
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Waiting for checks...' }).disabled).toBe(true))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share Entire Screen' }))
+
+    await waitFor(() => expect(getDisplayMediaMock).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(false))
+  })
+
+  it('rejects window-only sharing when entire-screen capture is required', async () => {
+    const displayStream = createDisplayStream('window')
+    getUserMediaMock.mockResolvedValue({ getTracks: vi.fn(() => []) })
+    getDisplayMediaMock.mockResolvedValue(displayStream)
+    getTestMock.mockResolvedValueOnce({
+      data: {
+        id: 'test-1',
+        proctoring_config: {
+          camera_required: false,
+          mic_required: false,
+          fullscreen_required: false,
+          lighting_required: false,
+          screen_capture: true,
+        },
+      },
+    })
+
+    renderPage()
+
+    const shareButton = await waitFor(() => screen.getByRole('button', { name: 'Share Entire Screen' }))
+    fireEvent.click(shareButton)
+
+    await waitFor(() => expect(getDisplayMediaMock).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Waiting for checks...' }).disabled).toBe(true))
+    expect(displayStream.getTracks).toHaveBeenCalled()
+    expect(displayStream.getTracks()[0].stop).toHaveBeenCalled()
   })
 })

@@ -6,7 +6,7 @@ import ViolationToast from '../../components/ViolationToast/ViolationToast'
 import useAuth from '../../hooks/useAuth'
 import { getAttempt, getAttemptAnswers, submitAnswer, submitAttempt } from '../../services/attempt.service'
 import { getTestQuestions, getTest } from '../../services/test.service'
-import { finalizeProctoringVideo, proctoringPing, startProctoringVideo, uploadProctoringVideoChunk } from '../../services/proctoring.service'
+import { proctoringPing, uploadProctoringVideo } from '../../services/proctoring.service'
 import { normalizeQuestion, normalizeTest } from '../../utils/assessmentAdapters'
 import { normalizeProctoringConfig } from '../../utils/proctoringRequirements'
 import styles from './Proctoring.module.scss'
@@ -30,6 +30,26 @@ const DEFAULT_PROCTORING = {
   audio_window: 5,
   screenshot_interval_sec: 60,
   max_tab_blurs: 3,
+}
+
+function createRecordingController(source) {
+  return {
+    source,
+    recorder: null,
+    sessionId: null,
+    mimeType: 'video/webm',
+    finalizing: false,
+    finalized: false,
+    chunks: [],
+    bytesRecorded: 0,
+  }
+}
+
+function createVideoSessionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '')
+  }
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`
 }
 
 function serializeAnswer(answer) {
@@ -143,21 +163,22 @@ export default function Proctoring() {
   const [tabBlurs, setTabBlurs] = useState(0)
   const [loading, setLoading] = useState(true)
   const [cameraStream, setCameraStream] = useState(null)
-  const [recordingStatus, setRecordingStatus] = useState('idle')
+  const [screenStream, setScreenStream] = useState(null)
+  const [cameraRecordingStatus, setCameraRecordingStatus] = useState('idle')
+  const [screenRecordingStatus, setScreenRecordingStatus] = useState('disabled')
+  const [screenShareBusy, setScreenShareBusy] = useState(false)
+  const [screenShareRequestReady, setScreenShareRequestReady] = useState(false)
   const [proctorStatus, setProctorStatus] = useState('connecting')
   const [cameraDark, setCameraDark] = useState(false)
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
   const wsConnectedRef = useRef(false)
+  const screenShareRequestRef = useRef(null)
+  const screenShareEstablishedRef = useRef(false)
+  const screenShareLossHandledRef = useRef(false)
 
   const { save, flush, saveState, lastSavedAt, saveError } = useAutoSave(attemptId)
-  const recorderRef = useRef(null)
-  const videoSessionIdRef = useRef(null)
-  const videoChunkIndexRef = useRef(0)
-  const videoMimeRef = useRef('video/webm')
-  const finalizingVideoRef = useRef(false)
-  const videoFinalizedRef = useRef(false)
-  const uploadTasksRef = useRef(new Set())
-  const uploadedChunksRef = useRef(0)
+  const cameraRecordingRef = useRef(createRecordingController('camera'))
+  const screenRecordingRef = useRef(createRecordingController('screen'))
   const wsWarnedRef = useRef(false)
   const lastToastBlursRef = useRef(0)
   const timerExpiredRef = useRef(false)
@@ -242,84 +263,91 @@ export default function Proctoring() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
-  useEffect(() => {
-    if (!attemptId || !cameraStream || !window.MediaRecorder) return
-    if (recorderRef.current) return
-    let cancelled = false
-
-    const startRecorder = async () => {
-      try {
-        const mimeType = pickRecorderMimeType()
-        videoMimeRef.current = mimeType
-        const { data } = await startProctoringVideo(attemptId, mimeType)
-        if (cancelled) return
-        videoFinalizedRef.current = false
-        videoSessionIdRef.current = data?.session_id
-        videoChunkIndexRef.current = 0
-        uploadedChunksRef.current = 0
-        uploadTasksRef.current.clear()
-        const recorder = new MediaRecorder(cameraStream, { mimeType })
-        recorder.ondataavailable = async (event) => {
-          if (!videoSessionIdRef.current || !event.data || event.data.size === 0) return
-          const chunkIdx = videoChunkIndexRef.current++
-          const sessionId = videoSessionIdRef.current
-          const blob = event.data
-          const uploadWithRetry = async () => {
-            for (let attempt = 0; attempt < 3; attempt++) {
-              try {
-                await uploadProctoringVideoChunk(attemptId, sessionId, chunkIdx, blob)
-                uploadedChunksRef.current += 1
-                return
-              } catch {
-                if (attempt < 2) await new Promise((r) => setTimeout(r, 800))
-              }
-            }
-            setRecordingStatus('failed')
-          }
-          const task = uploadWithRetry().finally(() => uploadTasksRef.current.delete(task))
-          uploadTasksRef.current.add(task)
-          await task
-        }
-        recorder.onerror = () => setRecordingStatus('failed')
-        recorder.start(2000)
-        recorderRef.current = recorder
-        setRecordingStatus('recording')
-      } catch {
-        setRecordingStatus('failed')
-      }
-    }
-
-    startRecorder()
-    return () => {
-      cancelled = true
-    }
-  }, [attemptId, cameraStream])
-
   const handleAnswer = (questionId, answer) => {
     setShowSubmitConfirm(false)
     setAnswers(prev => ({ ...prev, [questionId]: answer }))
     save(questionId, answer)
   }
 
-  const pickRecorderMimeType = () => {
-    const candidates = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-    ]
+  const setRecordingStatusForSource = useCallback((source, value) => {
+    if (source === 'screen') {
+      setScreenRecordingStatus(value)
+      return
+    }
+    setCameraRecordingStatus(value)
+  }, [])
+
+  const registerScreenShareRequest = useCallback((requestFn) => {
+    screenShareRequestRef.current = requestFn || null
+    setScreenShareRequestReady(Boolean(requestFn))
+  }, [])
+
+  const requestRequiredScreenShare = useCallback(async () => {
+    const requestFn = screenShareRequestRef.current
+    if (!requestFn || screenShareBusy) return
+    setScreenShareBusy(true)
+    setScreenRecordingStatus('checking')
+    try {
+      await requestFn()
+    } catch {
+      setScreenRecordingStatus('failed')
+    } finally {
+      setScreenShareBusy(false)
+    }
+  }, [screenShareBusy])
+
+  const pickRecorderMimeType = (stream) => {
+    const hasAudio = Boolean(stream?.getAudioTracks?.().length)
+    const candidates = hasAudio
+      ? [
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm',
+        ]
+      : [
+          'video/webm;codecs=vp9',
+          'video/webm;codecs=vp8',
+          'video/webm',
+        ]
     const supported = candidates.find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m))
     return supported || 'video/webm'
   }
 
-  const stopAndFinalizeRecording = useCallback(async () => {
-    const recorder = recorderRef.current
-    const sessionId = videoSessionIdRef.current
-    if (!recorder || !sessionId) return
-    if (finalizingVideoRef.current) return
-    if (videoFinalizedRef.current) return
-    finalizingVideoRef.current = true
-    setRecordingStatus('saving')
-    if (recorder.state !== 'inactive') {
+  const startRecordingSession = useCallback(async (stream, source) => {
+    if (!attemptId || !stream || !window.MediaRecorder) return
+    const recording = source === 'screen' ? screenRecordingRef.current : cameraRecordingRef.current
+    if (recording.recorder || recording.sessionId || recording.finalizing) return
+    try {
+      const mimeType = pickRecorderMimeType(stream)
+      recording.mimeType = mimeType
+      recording.finalized = false
+      recording.sessionId = createVideoSessionId()
+      recording.chunks = []
+      recording.bytesRecorded = 0
+      const recorder = new MediaRecorder(stream, { mimeType })
+      recorder.ondataavailable = (event) => {
+        if (!recording.sessionId || !event.data || event.data.size === 0) return
+        recording.chunks.push(event.data)
+        recording.bytesRecorded += event.data.size
+      }
+      recorder.onerror = () => setRecordingStatusForSource(source, 'failed')
+      recorder.start(2000)
+      recording.recorder = recorder
+      setRecordingStatusForSource(source, 'recording')
+    } catch {
+      setRecordingStatusForSource(source, 'failed')
+    }
+  }, [attemptId, setRecordingStatusForSource])
+
+  const stopAndFinalizeSingleRecording = useCallback(async (source) => {
+    const recording = source === 'screen' ? screenRecordingRef.current : cameraRecordingRef.current
+    const recorder = recording.recorder
+    const sessionId = recording.sessionId
+    if (!recorder && !sessionId) return
+    if (recording.finalizing || recording.finalized) return
+    recording.finalizing = true
+    setRecordingStatusForSource(source, 'saving')
+    if (recorder && recorder.state !== 'inactive') {
       await new Promise((resolve) => {
         const timeout = setTimeout(resolve, 3000)
         recorder.addEventListener('stop', () => {
@@ -330,25 +358,20 @@ export default function Proctoring() {
         recorder.stop()
       })
     }
-    for (let i = 0; i < 8 && uploadTasksRef.current.size === 0 && uploadedChunksRef.current < 1; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 120))
-    }
-    const pending = Array.from(uploadTasksRef.current)
-    if (pending.length > 0) {
-      await Promise.allSettled(pending)
-    }
-    if (uploadedChunksRef.current < 1) {
-      setRecordingStatus('failed')
-      finalizingVideoRef.current = false
+    if (!recording.chunks.length || !sessionId) {
+      setRecordingStatusForSource(source, 'failed')
+      recording.finalizing = false
       return
     }
 
-    const extension = videoMimeRef.current.includes('mp4') ? 'mp4' : 'webm'
+    const extension = recording.mimeType.includes('mp4') ? 'mp4' : 'webm'
+    const filename = `${attemptId}_${source}_${sessionId}.${extension}`
+    const blob = new Blob(recording.chunks, { type: recording.mimeType || `video/${extension}` })
     try {
       let lastError = null
       for (let i = 0; i < 3; i += 1) {
         try {
-          await finalizeProctoringVideo(attemptId, sessionId, extension)
+          await uploadProctoringVideo(attemptId, sessionId, source, filename, blob)
           lastError = null
           break
         } catch (e) {
@@ -357,18 +380,48 @@ export default function Proctoring() {
         }
       }
       if (lastError) throw lastError
-      setRecordingStatus('saved')
-      videoFinalizedRef.current = true
-      videoSessionIdRef.current = null
-      recorderRef.current = null
-      uploadedChunksRef.current = 0
-      uploadTasksRef.current.clear()
+      setRecordingStatusForSource(source, 'saved')
+      recording.finalized = true
+      recording.sessionId = null
+      recording.recorder = null
+      recording.chunks = []
+      recording.bytesRecorded = 0
     } catch {
-      setRecordingStatus('failed')
+      setRecordingStatusForSource(source, 'failed')
     } finally {
-      finalizingVideoRef.current = false
+      recording.finalizing = false
     }
-  }, [attemptId])
+  }, [attemptId, setRecordingStatusForSource])
+
+  const stopAndFinalizeRecordings = useCallback(async () => {
+    await stopAndFinalizeSingleRecording('camera')
+    if (proctorCfg.screen_capture) {
+      await stopAndFinalizeSingleRecording('screen')
+    }
+  }, [proctorCfg.screen_capture, stopAndFinalizeSingleRecording])
+
+  useEffect(() => {
+    if (!proctorCfg.screen_capture) {
+      setScreenRecordingStatus('disabled')
+      screenShareEstablishedRef.current = false
+      screenShareLossHandledRef.current = false
+      return
+    }
+    setScreenRecordingStatus((current) => {
+      if (current === 'recording' || current === 'saving' || current === 'saved') return current
+      return screenStream ? 'ready' : 'waiting'
+    })
+  }, [proctorCfg.screen_capture, screenStream])
+
+  useEffect(() => {
+    if (!attemptId || !cameraStream || !window.MediaRecorder) return
+    void startRecordingSession(cameraStream, 'camera')
+  }, [attemptId, cameraStream, startRecordingSession])
+
+  useEffect(() => {
+    if (!attemptId || !proctorCfg.screen_capture || !screenStream || !window.MediaRecorder) return
+    void startRecordingSession(screenStream, 'screen')
+  }, [attemptId, proctorCfg.screen_capture, screenStream, startRecordingSession])
 
   const handleSubmitRequest = () => {
     setShowSubmitConfirm(true)
@@ -381,7 +434,7 @@ export default function Proctoring() {
     setSubmitError('')
     try {
       await flush()
-      await stopAndFinalizeRecording()
+      await stopAndFinalizeRecordings()
       await submitAttempt(attemptId)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {})
@@ -391,7 +444,29 @@ export default function Proctoring() {
       setSubmitError(e.response?.data?.detail || 'Submission failed. Please try again.')
       setSubmitting(false)
     }
-  }, [attemptId, flush, navigate, stopAndFinalizeRecording, submitting])
+  }, [attemptId, flush, navigate, stopAndFinalizeRecordings, submitting])
+
+  useEffect(() => {
+    if (!proctorCfg.screen_capture) {
+      screenShareEstablishedRef.current = false
+      screenShareLossHandledRef.current = false
+      return
+    }
+    if (screenStream) {
+      screenShareEstablishedRef.current = true
+      screenShareLossHandledRef.current = false
+      return
+    }
+    if (loading || submitting) return
+    if (!screenShareEstablishedRef.current || screenShareLossHandledRef.current) return
+    screenShareLossHandledRef.current = true
+    setToast({
+      severity: 'HIGH',
+      event_type: 'SCREEN_SHARE_LOST',
+      detail: 'Screen sharing stopped. The attempt will be submitted.',
+    })
+    void handleSubmit()
+  }, [handleSubmit, loading, proctorCfg.screen_capture, screenStream, submitting])
 
   // Countdown timer
   useEffect(() => {
@@ -527,16 +602,20 @@ export default function Proctoring() {
   useEffect(() => {
     const onBeforeUnload = () => {
       try {
-        const recorder = recorderRef.current
-        if (recorder && recorder.state !== 'inactive') recorder.stop()
+        const recorders = [cameraRecordingRef.current, screenRecordingRef.current]
+        for (const recording of recorders) {
+          if (recording?.recorder && recording.recorder.state !== 'inactive') {
+            recording.recorder.stop()
+          }
+        }
       } catch (_) {}
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload)
-      stopAndFinalizeRecording().catch(() => {})
+      stopAndFinalizeRecordings().catch(() => {})
     }
-  }, [stopAndFinalizeRecording])
+  }, [stopAndFinalizeRecordings])
 
   if (loading) {
     return (
@@ -567,6 +646,34 @@ export default function Proctoring() {
   const unansweredCount = questions.length - answeredCount
   const progressPct = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0
   const showProgressBar = exam?.settings?.show_progress_bar !== false
+  const recordingBadgeClass = (status) => {
+    if (status === 'saved' || status === 'recording') return styles.badgeConnected
+    if (status === 'ready' || status === 'waiting' || status === 'checking' || status === 'saving' || status === 'disabled') return styles.badgePending
+    return styles.badgeDisconnected
+  }
+  const proctorPane = (
+    <aside className={`${styles.proctorPane} glass`} aria-label="Proctoring panel">
+      <ProctorOverlay
+        attemptId={attemptId}
+        token={tokens?.access_token}
+        config={proctorCfg}
+        onViolation={handleViolation}
+        onForcedSubmit={handleSubmit}
+        onStreamReady={setCameraStream}
+        onScreenStreamReady={setScreenStream}
+        onRegisterScreenShareRequest={registerScreenShareRequest}
+        onStatusChange={setProctorStatus}
+        onCameraStateChange={setCameraDark}
+      />
+    </aside>
+  )
+  const toastNode = (
+    <AnimatePresence>
+      {toast && (
+        <ViolationToast event={toast} onClose={() => setToast(null)} />
+      )}
+    </AnimatePresence>
+  )
 
   if (!currentQ) {
     return (
@@ -577,6 +684,33 @@ export default function Proctoring() {
             Back to Attempts
           </button>
         </div>
+        {proctorPane}
+        {toastNode}
+      </div>
+    )
+  }
+
+  if (proctorCfg.screen_capture && !screenStream) {
+    return (
+      <div className={styles.page}>
+        <div className={`${styles.examPane} ${styles.centerState}`}>
+          <div className={styles.warningBanner}>
+            Screen sharing is required for this test. Choose your entire screen in the browser picker before the attempt can continue.
+          </div>
+          <p className={styles.stateMessage}>
+            The test stays blocked until desktop sharing is active. If screen sharing stops after the test starts, the attempt is submitted automatically.
+          </p>
+          <button
+            type="button"
+            className={styles.retryBtn}
+            onClick={() => void requestRequiredScreenShare()}
+            disabled={!screenShareRequestReady || screenShareBusy}
+          >
+            {screenShareBusy ? 'Requesting Screen Share...' : screenRecordingStatus === 'failed' ? 'Retry Screen Share' : 'Share Entire Screen'}
+          </button>
+        </div>
+        {proctorPane}
+        {toastNode}
       </div>
     )
   }
@@ -603,8 +737,16 @@ export default function Proctoring() {
             <span className={proctorStatus === 'connected' ? styles.badgeConnected : styles.badgeDisconnected}>
               Proctoring: {proctorStatus}
             </span>
-            <span className={recordingStatus === 'saved' ? styles.badgeConnected : styles.badgeDisconnected}>
-              Recording: {recordingStatus}
+            <span className={recordingBadgeClass(cameraRecordingStatus)}>
+              Camera: {cameraRecordingStatus}
+            </span>
+            {proctorCfg.screen_capture && (
+              <span className={recordingBadgeClass(screenRecordingStatus)}>
+                Screen: {screenRecordingStatus}
+              </span>
+            )}
+            <span className={styles.recordingHint}>
+              Saved recordings appear after submit in Manage Tests - Proctoring - Video
             </span>
             <span
               className={
@@ -618,9 +760,6 @@ export default function Proctoring() {
               }
             >
               {autosaveLabel()}
-            </span>
-            <span className={styles.recordingHint}>
-              Video appears after submit in Manage Tests - Proctoring - Video
             </span>
             <div className={`${styles.timer} glass ${timeLeft !== null && timeLeft <= 300 ? styles.timerDanger : ''}`}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -825,26 +964,8 @@ export default function Proctoring() {
         )}
       </div>
 
-      {/* Right proctoring sidebar */}
-      <aside className={`${styles.proctorPane} glass`} aria-label="Proctoring panel">
-        <ProctorOverlay
-          attemptId={attemptId}
-          token={tokens?.access_token}
-          config={proctorCfg}
-          onViolation={handleViolation}
-          onForcedSubmit={handleSubmit}
-          onStreamReady={setCameraStream}
-          onStatusChange={setProctorStatus}
-          onCameraStateChange={setCameraDark}
-        />
-      </aside>
-
-      {/* Violation Toast */}
-      <AnimatePresence>
-        {toast && (
-          <ViolationToast event={toast} onClose={() => setToast(null)} />
-        )}
-      </AnimatePresence>
+      {proctorPane}
+      {toastNode}
     </div>
   )
 }

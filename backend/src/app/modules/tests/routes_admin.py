@@ -13,6 +13,24 @@ from ...api.deps import get_db_dep, require_permission
 from ...core.security import hash_password
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_user
+from ...services.normalized_relations import (
+    exam_archived_at,
+    exam_certificate,
+    exam_code,
+    exam_proctoring,
+    exam_published_at,
+    exam_randomize_questions,
+    exam_report_content,
+    exam_report_displayed,
+    exam_runtime_settings,
+    exam_security_settings,
+    exam_ui_config,
+    is_exam_pool_library,
+    mutate_exam_admin_meta,
+    set_exam_certificate,
+    set_exam_proctoring,
+    set_exam_runtime_settings,
+)
 from ...services.report_rendering import render_report_template
 from ...services.sanitization import sanitize_html_fragment, sanitize_instructions
 from ...models import (
@@ -20,6 +38,7 @@ from ...models import (
     Course,
     CourseStatus,
     Exam,
+    ExamAdminConfig,
     ExamStatus,
     ExamType,
     Node,
@@ -72,16 +91,8 @@ def http_error(code: str, message: str, details: dict | None = None, status_code
     )
 
 
-def _admin_meta(exam: Exam) -> dict:
-    settings = exam.settings if isinstance(exam.settings, dict) else {}
-    meta = settings.get(ADMIN_META_KEY)
-    return meta.copy() if isinstance(meta, dict) else {}
-
-
 def _is_pool_library_exam(exam: Exam) -> bool:
-    settings = exam.settings if isinstance(exam.settings, dict) else {}
-    raw = settings.get("_pool_library")
-    return bool(raw)
+    return is_exam_pool_library(exam)
 
 
 def _deep_merge(target: dict, source: dict):
@@ -94,8 +105,7 @@ def _deep_merge(target: dict, source: dict):
 
 
 def _exam_status(exam: Exam) -> TestStatus:
-    meta = _admin_meta(exam)
-    if meta.get("archived_at"):
+    if exam_archived_at(exam):
         return TestStatus.ARCHIVED
     if exam.status == ExamStatus.OPEN:
         return TestStatus.PUBLISHED
@@ -103,87 +113,47 @@ def _exam_status(exam: Exam) -> TestStatus:
 
 
 def _security_settings(exam: Exam) -> dict:
-    meta = _admin_meta(exam)
     payload = deepcopy(DEFAULT_SECURITY_SETTINGS)
-    _deep_merge(payload, meta.get("settings") or {})
+    _deep_merge(payload, exam_security_settings(exam))
     return payload
 
 
 def _runtime_settings(exam: Exam) -> dict:
-    settings = deepcopy(exam.settings or {})
-    settings.pop(ADMIN_META_KEY, None)
-    settings.pop("_pool_library", None)
-    return settings
+    return exam_runtime_settings(exam)
 
 
 def _report_displayed(exam: Exam) -> ReportDisplayed:
-    raw = _admin_meta(exam).get("report_displayed") or ReportDisplayed.IMMEDIATELY_AFTER_GRADING.value
-    try:
-        return ReportDisplayed(raw)
-    except ValueError:
-        return ReportDisplayed.IMMEDIATELY_AFTER_GRADING
+    return exam_report_displayed(exam)
 
 
 def _report_content(exam: Exam) -> ReportContent:
-    raw = _admin_meta(exam).get("report_content") or ReportContent.SCORE_AND_DETAILS.value
-    try:
-        return ReportContent(raw)
-    except ValueError:
-        return ReportContent.SCORE_AND_DETAILS
+    return exam_report_content(exam)
 
 
 def _ui_config(exam: Exam) -> dict:
-    raw = _admin_meta(exam).get("ui_config") or {}
     payload = deepcopy(DEFAULT_UI_CONFIG)
-    if isinstance(raw, dict):
-        _deep_merge(payload, raw)
+    _deep_merge(payload, exam_ui_config(exam))
     return payload
 
 
 def _code(exam: Exam) -> str | None:
-    return _admin_meta(exam).get("code")
+    return exam_code(exam)
 
 
 def _published_at(exam: Exam):
-    raw = _admin_meta(exam).get("published_at")
-    if not raw:
-        return None
-    if isinstance(raw, datetime):
-        return raw
-    try:
-        return datetime.fromisoformat(raw)
-    except ValueError:
-        return None
+    return exam_published_at(exam)
 
 
 def _archived_at(exam: Exam):
-    raw = _admin_meta(exam).get("archived_at")
-    if not raw:
-        return None
-    if isinstance(raw, datetime):
-        return raw
-    try:
-        return datetime.fromisoformat(raw)
-    except ValueError:
-        return None
+    return exam_archived_at(exam)
 
 
 def _randomize_questions(exam: Exam) -> bool:
-    return bool(_admin_meta(exam).get("randomize_questions", True))
+    return exam_randomize_questions(exam)
 
 
 def _mutate_admin_meta(exam: Exam, **updates):
-    settings = deepcopy(exam.settings or {})
-    meta = settings.get(ADMIN_META_KEY)
-    if not isinstance(meta, dict):
-        meta = {}
-    for key, value in updates.items():
-        if value is None:
-            meta.pop(key, None)
-        else:
-            meta[key] = value
-    settings[ADMIN_META_KEY] = meta
-    exam.settings = settings
+    mutate_exam_admin_meta(exam, **updates)
 
 
 def _ensure_owner_id(db: Session, current) -> uuid.UUID:
@@ -256,12 +226,32 @@ def _generate_code(db: Session) -> str:
 
 
 def _code_exists(db: Session, candidate: str, *, exclude_exam_id=None) -> bool:
+    query = select(ExamAdminConfig.exam_id).where(ExamAdminConfig.code == candidate)
+    if exclude_exam_id is not None:
+        query = query.where(ExamAdminConfig.exam_id != exclude_exam_id)
+    if db.scalar(query.limit(1)) is not None:
+        return True
+
     dialect_name = getattr(getattr(db, "bind", None), "dialect", None)
     dialect_name = getattr(dialect_name, "name", None)
     if dialect_name == "sqlite":
-        query = select(Exam.id).where(func.json_extract(Exam.settings, f"$.{ADMIN_META_KEY}.code") == candidate)
+        query = (
+            select(Exam.id)
+            .outerjoin(ExamAdminConfig, ExamAdminConfig.exam_id == Exam.id)
+            .where(
+                ExamAdminConfig.exam_id.is_(None),
+                func.json_extract(Exam.settings, f"$.{ADMIN_META_KEY}.code") == candidate,
+            )
+        )
     else:
-        query = select(Exam.id).where(Exam.settings[ADMIN_META_KEY]["code"].as_string() == candidate)
+        query = (
+            select(Exam.id)
+            .outerjoin(ExamAdminConfig, ExamAdminConfig.exam_id == Exam.id)
+            .where(
+                ExamAdminConfig.exam_id.is_(None),
+                Exam.settings[ADMIN_META_KEY]["code"].as_string() == candidate,
+            )
+        )
     if exclude_exam_id is not None:
         query = query.where(Exam.id != exclude_exam_id)
     return db.scalar(query.limit(1)) is not None
@@ -334,8 +324,8 @@ def _serialize_detail(exam: Exam) -> TestDetail:
             "ui_config": _ui_config(exam),
             "settings": _security_settings(exam),
             "runtime_settings": _runtime_settings(exam),
-            "proctoring_config": exam.proctoring_config or {},
-            "certificate": exam.certificate,
+            "proctoring_config": exam_proctoring(exam),
+            "certificate": exam_certificate(exam),
             "question_count": exam.question_count or 0,
             "created_at": exam.created_at,
             "updated_at": exam.updated_at,
@@ -359,7 +349,7 @@ def _serialize_list_item(exam: Exam, testing_sessions: int, question_count: int)
         "time_limit_minutes": exam.time_limit or 60,
         "testing_sessions": testing_sessions,
         "question_count": question_count,
-        "certificate": exam.certificate,
+        "certificate": exam_certificate(exam),
         "created_at": exam.created_at,
         "updated_at": exam.updated_at,
     }
@@ -517,9 +507,6 @@ async def create_test(
             time_limit=body.time_limit_minutes or 60,
             max_attempts=body.attempts_allowed or 1,
             passing_score=body.passing_score,
-            proctoring_config=normalize_proctoring_config(body.proctoring_config or {}),
-            settings=sanitize_instructions(body.runtime_settings or {}),
-            certificate=body.certificate,
             category_id=body.category_id,
             grading_scale_id=body.grading_scale_id,
             created_by_id=getattr(current, "id", None),
@@ -528,6 +515,9 @@ async def create_test(
         )
         db.add(exam)
         db.flush()
+        set_exam_proctoring(exam, normalize_proctoring_config(body.proctoring_config or {}))
+        set_exam_runtime_settings(exam, sanitize_instructions(body.runtime_settings or {}))
+        set_exam_certificate(exam, body.certificate)
         _mutate_admin_meta(
             exam,
             code=body.code.strip() if body.code else None,
@@ -603,16 +593,16 @@ async def update_test(
                 http_error("VALIDATION_ERROR", "passing_score must be between 0 and 100")
             exam.passing_score = payload["passing_score"]
         if "runtime_settings" in payload:
-            current_admin_meta = deepcopy((exam.settings or {}).get(ADMIN_META_KEY, {}))
-            new_settings = sanitize_instructions(
-                deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+            set_exam_runtime_settings(
+                exam,
+                sanitize_instructions(
+                    deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+                ),
             )
-            new_settings[ADMIN_META_KEY] = current_admin_meta
-            exam.settings = new_settings
         if "proctoring_config" in payload:
-            exam.proctoring_config = normalize_proctoring_config(payload["proctoring_config"])
+            set_exam_proctoring(exam, normalize_proctoring_config(payload["proctoring_config"]))
         if "certificate" in payload:
-            exam.certificate = payload["certificate"]
+            set_exam_certificate(exam, payload["certificate"])
         meta_updates = {}
         if "randomize_questions" in payload:
             meta_updates["randomize_questions"] = payload["randomize_questions"]
@@ -695,9 +685,6 @@ async def duplicate_test(
                 time_limit=exam.time_limit,
                 max_attempts=exam.max_attempts,
                 passing_score=exam.passing_score,
-                proctoring_config=deepcopy(exam.proctoring_config),
-                settings=sanitize_instructions(deepcopy(exam.settings)),
-                certificate=deepcopy(exam.certificate),
                 category_id=exam.category_id,
                 grading_scale_id=exam.grading_scale_id,
                 created_by_id=getattr(current, "id", None),
@@ -706,6 +693,9 @@ async def duplicate_test(
             )
             db.add(new_exam)
             db.flush()
+            set_exam_proctoring(new_exam, deepcopy(exam_proctoring(exam)))
+            set_exam_runtime_settings(new_exam, sanitize_instructions(deepcopy(exam_runtime_settings(exam))))
+            set_exam_certificate(new_exam, deepcopy(exam_certificate(exam)))
             for question in exam.questions:
                 db.add(
                     Question(

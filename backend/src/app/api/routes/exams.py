@@ -10,6 +10,7 @@ from ...models import Exam, Node, RoleEnum, ExamStatus, Course, CourseStatus, Qu
 from ...schemas import ExamCreate, ExamRead, ExamUpdate, Message, PaginatedResponse
 from ..deps import ensure_permission, get_current_user, get_db_dep, learner_can_access_exam, require_permission
 from ...modules.tests.proctoring_requirements import normalize_proctoring_config
+from ...services.normalized_relations import exam_certificate, exam_proctoring, exam_runtime_settings, set_exam_certificate, set_exam_proctoring, set_exam_runtime_settings
 from ...services.sanitization import sanitize_exam_payload
 
 router = APIRouter()
@@ -110,10 +111,10 @@ def _exam_read(exam: Exam) -> ExamRead:
         time_limit=exam.time_limit,
         max_attempts=exam.max_attempts,
         passing_score=exam.passing_score,
-        proctoring_config=exam.proctoring_config,
+        proctoring_config=exam_proctoring(exam),
         description=exam.description,
-        settings=exam.settings,
-        certificate=exam.certificate,
+        settings=exam_runtime_settings(exam),
+        certificate=exam_certificate(exam),
         category_id=exam.category_id,
         grading_scale_id=exam.grading_scale_id,
         category_name=category_name,
@@ -214,15 +215,15 @@ async def create_exam(body: ExamCreate, db: Session = Depends(get_db_dep), curre
         time_limit=body.time_limit,
         max_attempts=body.max_attempts,
         passing_score=body.passing_score,
-        proctoring_config=normalize_proctoring(body.proctoring_config),
-        settings=payload.get("settings"),
-        certificate=body.certificate,
         category_id=body.category_id,
         grading_scale_id=body.grading_scale_id,
         created_at=now,
         updated_at=now,
     )
     exam.created_by_id = current.id
+    set_exam_proctoring(exam, normalize_proctoring(body.proctoring_config))
+    set_exam_runtime_settings(exam, payload.get("settings"))
+    set_exam_certificate(exam, body.certificate)
     db.add(exam)
     try:
         db.commit()
@@ -289,7 +290,14 @@ async def update_exam(exam_id: str, body: ExamUpdate, db: Session = Depends(get_
             exam.node_id = value
             continue
         if field == "proctoring_config":
-            value = normalize_proctoring(value)
+            set_exam_proctoring(exam, normalize_proctoring(value))
+            continue
+        if field == "settings":
+            set_exam_runtime_settings(exam, value)
+            continue
+        if field == "certificate":
+            set_exam_certificate(exam, value)
+            continue
         setattr(exam, field, value)
     exam.updated_at = datetime.now(timezone.utc)
     target_status = data.get("status", exam.status)

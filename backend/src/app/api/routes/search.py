@@ -3,14 +3,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...models import Attempt, Exam, ExamStatus, RoleEnum, User
+from ...services.normalized_relations import is_exam_pool_library
 from ..deps import get_current_user, get_db_dep, learner_can_access_exam, load_permission_rows, permission_allowed
 
 router = APIRouter()
 
 
 def _is_pool_library_exam(exam: Exam) -> bool:
-    settings = exam.settings if isinstance(exam.settings, dict) else {}
-    return bool(settings.get("_pool_library"))
+    return is_exam_pool_library(exam)
 
 
 @router.get("/")

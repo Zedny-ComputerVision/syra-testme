@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     Index,
     text,
@@ -89,6 +90,17 @@ class User(Base):
 
     courses = relationship("Course", back_populates="creator")
     attempts = relationship("Attempt", back_populates="user")
+    question_pools = relationship("QuestionPool", back_populates="creator")
+    created_exams = relationship("Exam", back_populates="creator")
+    schedules = relationship("Schedule", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")
+    audit_logs = relationship("AuditLog", back_populates="user")
+    created_surveys = relationship("Survey", back_populates="creator")
+    survey_responses = relationship("SurveyResponse", back_populates="user")
+    preferences = relationship("UserPreference", back_populates="user")
+    exam_templates = relationship("ExamTemplate", back_populates="creator")
+    report_schedules = relationship("ReportSchedule", back_populates="creator")
+    group_memberships = relationship("UserGroupMember", back_populates="user", cascade="all, delete-orphan")
 
 
 class Course(Base):
@@ -128,6 +140,9 @@ class Category(Base):
     type: Mapped[CategoryType] = mapped_column(SAEnum(CategoryType), default=CategoryType.TEST, nullable=False)
     description: Mapped[str | None] = mapped_column(String(1024))
 
+    exams = relationship("Exam", back_populates="category")
+    tests = relationship("Test", back_populates="category")
+
 
 class GradingScale(Base):
     __tablename__ = "grading_scales"
@@ -135,6 +150,8 @@ class GradingScale(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     labels: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    exams = relationship("Exam", back_populates="grading_scale")
 
 
 class QuestionPool(Base):
@@ -147,7 +164,9 @@ class QuestionPool(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    creator = relationship("User", back_populates="question_pools")
     questions = relationship("Question", back_populates="pool")
+    library_exams = relationship("Exam", back_populates="library_pool", foreign_keys="Exam.library_pool_id")
 
 
 class Exam(Base):
@@ -172,6 +191,7 @@ class Exam(Base):
     settings: Mapped[dict | None] = mapped_column(JSON)
     certificate: Mapped[dict | None] = mapped_column(JSON)
     category_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"))
+    library_pool_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("question_pools.id", ondelete="SET NULL"), index=True)
     grading_scale_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("grading_scales.id"))
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -180,9 +200,15 @@ class Exam(Base):
     node = relationship("Node", back_populates="exams")
     questions = relationship("Question", back_populates="exam", cascade="all, delete-orphan")
     attempts = relationship("Attempt", back_populates="exam")
-    category = relationship("Category")
-    grading_scale = relationship("GradingScale")
-    creator = relationship("User")
+    schedules = relationship("Schedule", back_populates="exam")
+    category = relationship("Category", back_populates="exams")
+    library_pool = relationship("QuestionPool", back_populates="library_exams", foreign_keys=[library_pool_id])
+    grading_scale = relationship("GradingScale", back_populates="exams")
+    creator = relationship("User", back_populates="created_exams")
+    admin_config = relationship("ExamAdminConfig", back_populates="exam", uselist=False, cascade="all, delete-orphan")
+    runtime_config_rel = relationship("ExamRuntimeConfig", back_populates="exam", uselist=False, cascade="all, delete-orphan")
+    certificate_config_rel = relationship("ExamCertificateConfig", back_populates="exam", uselist=False, cascade="all, delete-orphan")
+    proctoring_config_rel = relationship("ExamProctoringConfig", back_populates="exam", uselist=False, cascade="all, delete-orphan")
 
     @hybrid_property
     def question_count(self):
@@ -211,6 +237,7 @@ class Question(Base):
 
     exam = relationship("Exam", back_populates="questions")
     pool = relationship("QuestionPool", back_populates="questions")
+    attempt_answers = relationship("AttemptAnswer", back_populates="question")
 
 
 class Attempt(Base):
@@ -259,7 +286,7 @@ class AttemptAnswer(Base):
     points_earned: Mapped[float | None] = mapped_column(Float)
 
     attempt = relationship("Attempt", back_populates="answers")
-    question = relationship("Question")
+    question = relationship("Question", back_populates="attempt_answers")
 
 
 class Schedule(Base):
@@ -279,9 +306,9 @@ class Schedule(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    exam = relationship("Exam")
-    test = relationship("Test")
-    user = relationship("User")
+    exam = relationship("Exam", back_populates="schedules")
+    test = relationship("Test", back_populates="schedules")
+    user = relationship("User", back_populates="schedules")
 
 
 class ProctoringEvent(Base):
@@ -313,7 +340,7 @@ class Notification(Base):
     link: Mapped[str | None] = mapped_column(String(512))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    user = relationship("User")
+    user = relationship("User", back_populates="notifications")
 
 
 class AuditLog(Base):
@@ -328,7 +355,7 @@ class AuditLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(45))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    user = relationship("User")
+    user = relationship("User", back_populates="audit_logs")
 
 
 class Survey(Base):
@@ -343,7 +370,9 @@ class Survey(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    creator = relationship("User", back_populates="created_surveys")
     responses = relationship("SurveyResponse", back_populates="survey", cascade="all, delete-orphan")
+    question_items = relationship("SurveyQuestion", back_populates="survey", cascade="all, delete-orphan", order_by="SurveyQuestion.position")
 
 
 class SurveyResponse(Base):
@@ -356,7 +385,7 @@ class SurveyResponse(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     survey = relationship("Survey", back_populates="responses")
-    user = relationship("User")
+    user = relationship("User", back_populates="survey_responses")
 
 
 class UserGroup(Base):
@@ -368,6 +397,8 @@ class UserGroup(Base):
     member_ids: Mapped[list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    member_links = relationship("UserGroupMember", back_populates="group", cascade="all, delete-orphan", order_by="UserGroupMember.position")
 
 
 class UserPreference(Base):
@@ -381,7 +412,7 @@ class UserPreference(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    user = relationship("User")
+    user = relationship("User", back_populates="preferences")
 
 
 class ExamTemplate(Base):
@@ -394,6 +425,8 @@ class ExamTemplate(Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    creator = relationship("User", back_populates="exam_templates")
 
 
 class ReportSchedule(Base):
@@ -409,6 +442,255 @@ class ReportSchedule(Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    creator = relationship("User", back_populates="report_schedules")
+
+
+class SurveyQuestion(Base):
+    __tablename__ = "survey_questions"
+    __table_args__ = (
+        UniqueConstraint("survey_id", "position", name="uq_survey_question_survey_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    survey_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("surveys.id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    text: Mapped[str] = mapped_column(String(2048), nullable=False)
+    question_type: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    survey = relationship("Survey", back_populates="question_items")
+    options = relationship("SurveyQuestionOption", back_populates="question", cascade="all, delete-orphan", order_by="SurveyQuestionOption.position")
+
+
+class SurveyQuestionOption(Base):
+    __tablename__ = "survey_question_options"
+    __table_args__ = (
+        UniqueConstraint("survey_question_id", "position", name="uq_survey_question_option_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    survey_question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("survey_questions.id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    text: Mapped[str] = mapped_column(String(1024), nullable=False)
+
+    question = relationship("SurveyQuestion", back_populates="options")
+
+
+class UserGroupMember(Base):
+    __tablename__ = "user_group_members"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", name="uq_user_group_member_group_user"),
+        UniqueConstraint("group_id", "position", name="uq_user_group_member_group_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    group = relationship("UserGroup", back_populates="member_links")
+    user = relationship("User", back_populates="group_memberships")
+
+
+class ExamAdminConfig(Base):
+    __tablename__ = "exam_admin_configs"
+
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), primary_key=True)
+    code: Mapped[str | None] = mapped_column(String(32), unique=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    randomize_questions: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    report_displayed: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'IMMEDIATELY_AFTER_GRADING'"))
+    report_content: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'SCORE_AND_DETAILS'"))
+    fullscreen_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    tab_switch_detect: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    camera_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    mic_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    violation_threshold_warn: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("3"))
+    violation_threshold_autosubmit: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("6"))
+
+    exam = relationship("Exam", back_populates="admin_config")
+    ui_columns = relationship("ExamUiColumn", back_populates="admin_config", cascade="all, delete-orphan", order_by="ExamUiColumn.position")
+
+
+class ExamUiColumn(Base):
+    __tablename__ = "exam_ui_columns"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "position", name="uq_exam_ui_column_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exam_admin_configs.exam_id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    column_key: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    admin_config = relationship("ExamAdminConfig", back_populates="ui_columns")
+
+
+class ExamRuntimeConfig(Base):
+    __tablename__ = "exam_runtime_configs"
+
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), primary_key=True)
+    instructions: Mapped[str | None] = mapped_column(String(4000))
+    instructions_heading: Mapped[str | None] = mapped_column(String(512))
+    instructions_body: Mapped[str | None] = mapped_column(String(8000))
+    completion_message: Mapped[str | None] = mapped_column(String(4000))
+    instructions_require_acknowledgement: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    show_test_instructions: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    show_score_report: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    show_answer_review: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    show_correct_answers: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    allow_retake: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    retake_cooldown_hours: Mapped[float | None] = mapped_column(Float)
+    auto_logout_after_finish_or_pause: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    creation_method: Mapped[str | None] = mapped_column(String(128))
+    score_report_include_certificate_status: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+    exam = relationship("Exam", back_populates="runtime_config_rel")
+    instruction_items = relationship("ExamRuntimeInstructionItem", back_populates="runtime_config", cascade="all, delete-orphan", order_by="ExamRuntimeInstructionItem.position")
+    translations = relationship("ExamRuntimeTranslation", back_populates="runtime_config", cascade="all, delete-orphan", order_by="ExamRuntimeTranslation.locale")
+    extra_settings = relationship("ExamRuntimeExtraSetting", back_populates="runtime_config", cascade="all, delete-orphan", order_by="ExamRuntimeExtraSetting.path")
+
+
+class ExamRuntimeInstructionItem(Base):
+    __tablename__ = "exam_runtime_instruction_items"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "position", name="uq_exam_runtime_instruction_item_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exam_runtime_configs.exam_id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    text: Mapped[str] = mapped_column(String(2048), nullable=False)
+
+    runtime_config = relationship("ExamRuntimeConfig", back_populates="instruction_items")
+
+
+class ExamRuntimeTranslation(Base):
+    __tablename__ = "exam_runtime_translations"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "locale", name="uq_exam_runtime_translation_locale"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exam_runtime_configs.exam_id", ondelete="CASCADE"), nullable=False, index=True)
+    locale: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(4000))
+    instructions_body: Mapped[str | None] = mapped_column(String(4000))
+    completion_message: Mapped[str | None] = mapped_column(String(4000))
+
+    runtime_config = relationship("ExamRuntimeConfig", back_populates="translations")
+
+
+class ExamRuntimeExtraSetting(Base):
+    __tablename__ = "exam_runtime_extra_settings"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "path", name="uq_exam_runtime_extra_setting_path"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exam_runtime_configs.exam_id", ondelete="CASCADE"), nullable=False, index=True)
+    path: Mapped[str] = mapped_column(String(512), nullable=False)
+    value_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    string_value: Mapped[str | None] = mapped_column(Text)
+    integer_value: Mapped[int | None] = mapped_column(Integer)
+    float_value: Mapped[float | None] = mapped_column(Float)
+    boolean_value: Mapped[bool | None] = mapped_column(Boolean)
+
+    runtime_config = relationship("ExamRuntimeConfig", back_populates="extra_settings")
+
+
+class ExamCertificateConfig(Base):
+    __tablename__ = "exam_certificate_configs"
+
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), primary_key=True)
+    title: Mapped[str | None] = mapped_column(String(255))
+    subtitle: Mapped[str | None] = mapped_column(String(512))
+    issuer: Mapped[str | None] = mapped_column(String(255))
+    signer: Mapped[str | None] = mapped_column(String(255))
+
+    exam = relationship("Exam", back_populates="certificate_config_rel")
+
+
+class ExamProctoringConfig(Base):
+    __tablename__ = "exam_proctoring_configs"
+
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), primary_key=True)
+    face_detection: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    multi_face: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    audio_detection: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    object_detection: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    eye_tracking: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    head_pose_detection: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    mouth_detection: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    face_verify: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    fullscreen_enforce: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    tab_switch_detect: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    screen_capture: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    copy_paste_block: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    eye_deviation_deg: Mapped[float | None] = mapped_column(Float)
+    mouth_open_threshold: Mapped[float | None] = mapped_column(Float)
+    audio_rms_threshold: Mapped[float | None] = mapped_column(Float)
+    max_face_absence_sec: Mapped[int | None] = mapped_column(Integer)
+    max_tab_blurs: Mapped[int | None] = mapped_column(Integer)
+    max_alerts_before_autosubmit: Mapped[int | None] = mapped_column(Integer)
+    max_fullscreen_exits: Mapped[int | None] = mapped_column(Integer)
+    max_alt_tabs: Mapped[int | None] = mapped_column(Integer)
+    lighting_min_score: Mapped[float | None] = mapped_column(Float)
+    face_verify_id_threshold: Mapped[float | None] = mapped_column(Float)
+    max_score_before_autosubmit: Mapped[int | None] = mapped_column(Integer)
+    frame_interval_ms: Mapped[int | None] = mapped_column(Integer)
+    audio_chunk_ms: Mapped[int | None] = mapped_column(Integer)
+    screenshot_interval_sec: Mapped[int | None] = mapped_column(Integer)
+    face_verify_threshold: Mapped[float | None] = mapped_column(Float)
+    cheating_consecutive_frames: Mapped[int | None] = mapped_column(Integer)
+    head_pose_consecutive: Mapped[int | None] = mapped_column(Integer)
+    eye_consecutive: Mapped[int | None] = mapped_column(Integer)
+    object_confidence_threshold: Mapped[float | None] = mapped_column(Float)
+    audio_consecutive_chunks: Mapped[int | None] = mapped_column(Integer)
+    audio_window: Mapped[int | None] = mapped_column(Integer)
+    head_pose_yaw_deg: Mapped[float | None] = mapped_column(Float)
+    head_pose_pitch_deg: Mapped[float | None] = mapped_column(Float)
+    head_pitch_min_rad: Mapped[float | None] = mapped_column(Float)
+    head_pitch_max_rad: Mapped[float | None] = mapped_column(Float)
+    head_yaw_min_rad: Mapped[float | None] = mapped_column(Float)
+    head_yaw_max_rad: Mapped[float | None] = mapped_column(Float)
+    eye_pitch_min_rad: Mapped[float | None] = mapped_column(Float)
+    eye_pitch_max_rad: Mapped[float | None] = mapped_column(Float)
+    eye_yaw_min_rad: Mapped[float | None] = mapped_column(Float)
+    eye_yaw_max_rad: Mapped[float | None] = mapped_column(Float)
+    pose_change_threshold_rad: Mapped[float | None] = mapped_column(Float)
+    eye_change_threshold_rad: Mapped[float | None] = mapped_column(Float)
+    identity_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    camera_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    mic_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    fullscreen_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    lighting_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    access_mode: Mapped[str | None] = mapped_column(String(64))
+
+    exam = relationship("Exam", back_populates="proctoring_config_rel")
+    alert_rules = relationship("ExamProctoringAlertRule", back_populates="proctoring_config", cascade="all, delete-orphan", order_by="ExamProctoringAlertRule.position")
+
+
+class ExamProctoringAlertRule(Base):
+    __tablename__ = "exam_proctoring_alert_rules"
+    __table_args__ = (
+        UniqueConstraint("exam_id", "position", name="uq_exam_proctoring_alert_rule_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("exam_proctoring_configs.exam_id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    rule_key: Mapped[str | None] = mapped_column(String(128))
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    threshold: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    severity: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'MEDIUM'"))
+    action: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'WARN'"))
+    message: Mapped[str | None] = mapped_column(String(2048))
+
+    proctoring_config = relationship("ExamProctoringConfig", back_populates="alert_rules")
 
 
 class SystemSettings(Base):

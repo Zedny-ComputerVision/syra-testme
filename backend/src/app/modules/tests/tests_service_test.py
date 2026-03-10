@@ -230,3 +230,22 @@ def test_proctoring_requirements_prefer_fullscreen_enforce_alias():
 
     assert normalized["fullscreen_enforce"] is False
     assert normalized["fullscreen_required"] is False
+
+
+def test_proctoring_requirements_treat_screen_capture_as_required_gate():
+    requirements = get_proctoring_requirements(
+        {
+            "screen_capture": True,
+        }
+    )
+
+    assert requirements["screen_required"] is True
+    assert requirements["system_check_required"] is True
+
+    normalized = normalize_proctoring_config(
+        {
+            "screen_capture": True,
+        }
+    )
+
+    assert normalized["screen_required"] is True

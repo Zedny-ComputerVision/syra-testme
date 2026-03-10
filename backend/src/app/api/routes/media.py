@@ -66,7 +66,10 @@ async def get_video(
     db: Session = Depends(get_db_dep),
     current_user: User = Depends(get_current_user),
 ):
-    return _serve_media_file(VIDEO_DIR, filename, db, current_user)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Local proctoring video serving has been removed. Use the Cloudflare playback URL returned by /proctoring/{attempt_id}/videos.",
+    )
 
 
 @router.get("/evidence/{filename}")

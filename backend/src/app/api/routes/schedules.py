@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ...models import Attempt, AttemptStatus, Schedule, RoleEnum, Exam
 from ...modules.tests.models import Test
 from ...schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
+from ...services.normalized_relations import exam_certificate, exam_proctoring, exam_runtime_settings
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_user
 from ..deps import ensure_permission, get_current_user, get_db_dep, normalize_utc_datetime, parse_uuid_param, require_permission
@@ -87,10 +88,10 @@ def _build_exam(exam: Exam) -> ExamRead:
         time_limit=exam.time_limit,
         max_attempts=exam.max_attempts,
         passing_score=exam.passing_score,
-        proctoring_config=exam.proctoring_config,
+        proctoring_config=exam_proctoring(exam),
         description=exam.description,
-        settings=exam.settings,
-        certificate=exam.certificate,
+        settings=exam_runtime_settings(exam),
+        certificate=exam_certificate(exam),
         category_id=exam.category_id,
         grading_scale_id=exam.grading_scale_id,
         category_name=category_name,

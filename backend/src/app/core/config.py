@@ -4,9 +4,23 @@ import sys
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_PLACEHOLDER_API_KEYS = {
+    "",
+    "change-me",
+    "none",
+    "null",
+    "your-openai-key",
+    "your-openai-key-optional",
+}
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     DATABASE_URL: str = Field(default="postgresql://postgres:password@localhost:5432/syra_lms")
     SECRET_KEY: str = Field(..., min_length=32)
@@ -43,6 +57,10 @@ class Settings(BaseSettings):
     IDENTITY_RETENTION_DAYS: int = Field(default=7, ge=1)
     PROCTORING_VIDEO_RETENTION_DAYS: int = Field(default=90, ge=1)
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
+    PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
+    CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="http://209.38.218.224:8010")
+    CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
+    CLOUDFLARE_MEDIA_WATERMARK_UID: str | None = None
 
     @field_validator("SECRET_KEY")
     @classmethod
@@ -50,6 +68,26 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters")
         return v
+
+    @field_validator("PROCTORING_VIDEO_STORAGE_PROVIDER")
+    @classmethod
+    def normalize_video_storage_provider(cls, value: str) -> str:
+        normalized = str(value or "local").strip().lower()
+        if normalized not in {"local", "cloudflare"}:
+            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be either 'local' or 'cloudflare'")
+        return normalized
+
+    @field_validator("OPENAI_API_KEY", mode="before")
+    @classmethod
+    def normalize_openai_api_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+        if normalized.lower() in _PLACEHOLDER_API_KEYS or normalized.lower().startswith("your-openai-key"):
+            return None
+        return normalized
 
     @property
     def precheck_test_bypass_enabled(self) -> bool:

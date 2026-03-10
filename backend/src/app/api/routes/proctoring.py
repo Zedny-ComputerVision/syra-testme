@@ -7,8 +7,7 @@ import time
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import shutil
-from uuid import uuid4
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -20,21 +19,19 @@ from ...api.deps import ensure_permission, get_current_user, get_db_dep, require
 from ...core.security import verify_token
 from ...core.config import get_settings
 from ...models import Attempt, Notification, ProctoringEvent, SeverityEnum, RoleEnum, AttemptStatus, SystemSettings, User
+from ...services.normalized_relations import exam_proctoring
 from ...schemas import ProctoringEventRead, Message, ProctoringPingResponse
 from ...detection.orchestrator import ProctoringOrchestrator
 from ...reporting.report_generator import generate_html_report
 from ...services.integrations import send_proctoring_integration_event
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
+from ...services.cloudflare_media import cloudflare_video_storage_enabled, upload_video_content_to_cloudflare
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 
 router = APIRouter()
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
-VIDEO_DIR = BASE_STORAGE_DIR / "videos"
-VIDEO_CHUNKS_DIR = BASE_STORAGE_DIR / "video_chunks"
-MAX_VIDEO_CHUNK_BYTES = 5 * 1024 * 1024
-MAX_VIDEO_CAPTURE_BYTES = 500 * 1024 * 1024
 HEARTBEAT_INTERVAL_SECONDS = 30
 INACTIVITY_TIMEOUT_SECONDS = 60
 ADMIN_PROCTORING_NOTIFICATION_WINDOW = timedelta(minutes=5)
@@ -49,18 +46,149 @@ SEVERITY_MAP = {
 settings = get_settings()
 
 
-def _validate_video_content_type(content_type: str | None) -> None:
-    normalized = (content_type or "").lower()
-    if normalized.startswith("video/") or normalized == "application/octet-stream":
-        return
-    raise HTTPException(
-        status_code=415,
-        detail="Invalid video chunk content type. Expected video/* or application/octet-stream.",
+def _normalize_video_source(value: object) -> str:
+    normalized = str(value or "camera").strip().lower()
+    if normalized in {"camera", "screen"}:
+        return normalized
+    return "camera"
+
+
+def _video_filename(attempt_id: str, session_id: str, source: str, extension: str) -> str:
+    safe_source = _normalize_video_source(source)
+    return f"{attempt_id}_{safe_source}_{session_id}.{extension}"
+
+
+def _is_absolute_http_url(value: object) -> bool:
+    raw = str(value or "").strip()
+    if not raw:
+        return False
+    parsed = urlparse(raw)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = None) -> dict[str, object] | None:
+    if not isinstance(meta, dict):
+        return None
+
+    url = str(meta.get("playback_url") or meta.get("url") or "").strip()
+    name = str(meta.get("name") or "").strip()
+    provider = str(meta.get("provider") or "").strip().lower()
+    if provider and provider != "cloudflare":
+        return None
+    if not _is_absolute_http_url(url):
+        return None
+
+    created_at = meta.get("created_at")
+    if not created_at and occurred_at:
+        created_at = occurred_at.isoformat()
+
+    item: dict[str, object] = {
+        "name": name or (str(meta.get("uid") or "").strip() or url.rstrip("/").rsplit("/", 1)[-1] or "recording"),
+        "url": url,
+        "size": int(meta.get("size") or 0),
+        "source": _normalize_video_source(meta.get("source")),
+        "created_at": created_at,
+        "provider": "cloudflare",
+    }
+
+    for key in ("uid", "status", "thumbnail", "duration", "session_id", "playback_type"):
+        if meta.get(key) not in (None, ""):
+            item[key] = meta.get(key)
+
+    if "ready_to_stream" in meta:
+        item["ready_to_stream"] = bool(meta.get("ready_to_stream"))
+
+    return item
+
+
+def _saved_video_events(db: Session, attempt_id: str) -> list[ProctoringEvent]:
+    return list(
+        db.scalars(
+            select(ProctoringEvent)
+            .where(
+                ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+                ProctoringEvent.event_type == "VIDEO_SAVED",
+            )
+            .order_by(ProctoringEvent.occurred_at.desc())
+        )
     )
 
 
-def _combined_chunk_size(chunk_dir: Path) -> int:
-    return sum(path.stat().st_size for path in chunk_dir.glob("*.part") if path.is_file())
+def _find_saved_video_file_info(db: Session, attempt_id: str, session_id: str, source: str) -> dict[str, object] | None:
+    normalized_source = _normalize_video_source(source)
+    for event in _saved_video_events(db, attempt_id):
+        info = _normalize_saved_video_meta(event.meta, event.occurred_at)
+        if not info:
+            continue
+        if str(info.get("session_id") or "") == session_id and _normalize_video_source(info.get("source")) == normalized_source:
+            return info
+    return None
+
+
+def _build_registered_video_info(
+    attempt_id: str,
+    payload: Mapping[str, object] | None,
+    *,
+    session_id: str,
+    source: str,
+) -> dict[str, object]:
+    raw = dict(payload or {})
+    remote = raw.get("remote")
+    remote = remote if isinstance(remote, dict) else {}
+    playback_url = str(raw.get("playback_url") or raw.get("url") or remote.get("playback_url") or remote.get("url") or "").strip()
+    uid = str(raw.get("uid") or remote.get("uid") or "").strip()
+    name = str(raw.get("name") or remote.get("name") or "").strip()
+    if not playback_url:
+        raise HTTPException(status_code=400, detail="playback_url is required")
+    if not _is_absolute_http_url(playback_url):
+        raise HTTPException(status_code=400, detail="playback_url must be an absolute Cloudflare URL")
+    provider = str(raw.get("provider") or remote.get("provider") or "cloudflare").strip().lower()
+    if provider != "cloudflare":
+        raise HTTPException(status_code=400, detail="provider must be cloudflare")
+    if not name:
+        extension = str(raw.get("extension") or "webm").replace(".", "").lower() or "webm"
+        name = _video_filename(attempt_id, session_id, source, extension)
+
+    playback_type = str(raw.get("playback_type") or "").strip().lower()
+    if not playback_type:
+        playback_type = "hls" if playback_url.endswith(".m3u8") else "direct"
+
+    status = str(raw.get("status") or remote.get("status") or "").strip().lower()
+    ready_to_stream = raw.get("ready_to_stream")
+    if ready_to_stream is None:
+        ready_to_stream = remote.get("ready_to_stream")
+    if ready_to_stream is None:
+        ready_to_stream = bool(playback_url)
+
+    created_at = raw.get("created_at") or remote.get("created_at") or remote.get("created")
+    if not created_at:
+        created_at = datetime.now(timezone.utc).isoformat()
+
+    file_info: dict[str, object] = {
+        "provider": "cloudflare",
+        "name": name,
+        "url": playback_url,
+        "playback_url": playback_url,
+        "playback_type": playback_type,
+        "size": int(raw.get("size") or remote.get("size") or 0),
+        "source": source,
+        "session_id": session_id,
+        "created_at": created_at,
+        "ready_to_stream": bool(ready_to_stream),
+        "status": status or ("ready" if ready_to_stream else "processing"),
+    }
+
+    thumbnail = raw.get("thumbnail") or remote.get("thumbnail")
+    duration = raw.get("duration") or remote.get("duration")
+    if uid:
+        file_info["uid"] = uid
+    if thumbnail:
+        file_info["thumbnail"] = thumbnail
+    if duration not in (None, ""):
+        file_info["duration"] = duration
+    if remote:
+        file_info["remote"] = remote
+    return file_info
 
 
 def _load_integrations_config(db: Session) -> dict:
@@ -364,7 +492,7 @@ async def proctoring_ping(
         rule_result = _apply_alert_rules(
             db,
             attempt,
-            attempt.exam.proctoring_config if attempt.exam else {},
+            exam_proctoring(attempt.exam) if attempt.exam else {},
             ev,
             history_events,
             now,
@@ -395,19 +523,10 @@ async def start_video_capture(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    _attempt_or_forbidden(attempt_id, db, current)
-    mime_type = (payload or {}).get("mime_type") or "video/webm"
-    session_id = uuid4().hex
-    chunk_dir = VIDEO_CHUNKS_DIR / attempt_id / session_id
-    chunk_dir.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "attempt_id": attempt_id,
-        "session_id": session_id,
-        "mime_type": mime_type,
-        "started_at": datetime.now(timezone.utc).isoformat(),
-    }
-    (chunk_dir / "meta.json").write_text(json.dumps(meta))
-    return {"detail": "started", "session_id": session_id}
+    raise HTTPException(
+        status_code=410,
+        detail="Chunked local video capture has been removed. Upload the finalized video through /video/upload.",
+    )
 
 
 @router.post("/{attempt_id}/video/chunk", response_model=Message)
@@ -419,22 +538,10 @@ async def upload_video_chunk(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    _attempt_or_forbidden(attempt_id, db, current)
-    chunk_dir = VIDEO_CHUNKS_DIR / attempt_id / session_id
-    chunk_dir.mkdir(parents=True, exist_ok=True)
-    _validate_video_content_type(chunk.content_type)
-    content = await chunk.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty chunk")
-    if len(content) > MAX_VIDEO_CHUNK_BYTES:
-        raise HTTPException(status_code=413, detail="Video chunk exceeds the 5MB limit")
-    part_path = chunk_dir / f"{chunk_index:08d}.part"
-    previous_size = part_path.stat().st_size if part_path.exists() else 0
-    projected_total = _combined_chunk_size(chunk_dir) - previous_size + len(content)
-    if projected_total > MAX_VIDEO_CAPTURE_BYTES:
-        raise HTTPException(status_code=413, detail="Combined video upload exceeds the 500MB limit")
-    part_path.write_bytes(content)
-    return Message(detail="chunk saved")
+    raise HTTPException(
+        status_code=410,
+        detail="Chunked local video capture has been removed. Upload the finalized video through /video/upload.",
+    )
 
 
 @router.post("/{attempt_id}/video/finalize")
@@ -444,83 +551,125 @@ async def finalize_video_capture(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
+    raise HTTPException(
+        status_code=410,
+        detail="Local video finalize has been removed. Upload the finalized video through /video/upload.",
+    )
+
+
+@router.post("/{attempt_id}/video/upload")
+async def upload_video_capture(
+    attempt_id: str,
+    request: Request,
+    session_id: str,
+    source: str = "camera",
+    filename: str | None = None,
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
     _attempt_or_forbidden(attempt_id, db, current)
-    session_id = payload.get("session_id")
-    extension = (payload.get("extension") or "webm").replace(".", "").lower()
+    if not cloudflare_video_storage_enabled():
+        raise HTTPException(status_code=503, detail="Cloudflare video storage is not enabled")
+
+    normalized_source = _normalize_video_source(source)
+    session_id = str(session_id or "").strip()
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
-    if extension not in {"webm", "mp4", "mkv"}:
-        raise HTTPException(status_code=400, detail="Unsupported extension")
 
-    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"{attempt_id}_{session_id}.{extension}"
-    output_path = VIDEO_DIR / filename
-    chunk_dir = VIDEO_CHUNKS_DIR / attempt_id / session_id
+    existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, normalized_source)
+    if existing_file_info:
+        return {"detail": "video already uploaded", "file": existing_file_info}
 
-    # Idempotency guard: if this session is already finalized, don't overwrite
-    # the existing media file with late-arriving chunks.
-    if output_path.exists():
-        file_info = {
-            "name": filename,
-            "url": f"/api/media/videos/{filename}",
-            "size": output_path.stat().st_size,
-        }
-        try:
-            if chunk_dir.exists():
-                shutil.rmtree(chunk_dir)
-                parent = chunk_dir.parent
-                if parent.exists() and not any(parent.iterdir()):
-                    parent.rmdir()
-        except Exception:
-            pass
-        return {"detail": "video already finalized", "file": file_info}
+    content_type = str(request.headers.get("content-type") or "application/octet-stream").split(";", 1)[0].strip().lower()
+    if not (content_type.startswith("video/") or content_type == "application/octet-stream"):
+        raise HTTPException(status_code=415, detail="Invalid video upload content type")
 
-    if not chunk_dir.exists():
-        raise HTTPException(status_code=404, detail="Video session not found")
+    content = await request.body()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty video upload")
 
-    parts = sorted(chunk_dir.glob("*.part"))
-    if not parts:
-        # Chunks may still be arriving when finalize is called; allow a short grace period.
-        for _ in range(8):
-            await asyncio.sleep(0.25)
-            parts = sorted(chunk_dir.glob("*.part"))
-            if parts:
-                break
-    if not parts:
-        raise HTTPException(status_code=404, detail="No chunks uploaded")
-    if sum(part.stat().st_size for part in parts) > MAX_VIDEO_CAPTURE_BYTES:
-        raise HTTPException(status_code=413, detail="Combined video upload exceeds the 500MB limit")
+    extension = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else (
+        "mp4" if "mp4" in content_type else "webm"
+    )
+    safe_filename = filename or _video_filename(attempt_id, session_id, normalized_source, extension)
 
-    with output_path.open("wb") as out:
-        for part in parts:
-            out.write(part.read_bytes())
+    try:
+        remote = await upload_video_content_to_cloudflare(
+            content,
+            filename=safe_filename,
+            source=normalized_source,
+            content_type=content_type,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Cloudflare video upload failed: {exc}") from exc
 
-    file_info = {
-        "name": filename,
-        "url": f"/api/media/videos/{filename}",
-        "size": output_path.stat().st_size,
-    }
-
+    file_info = _build_registered_video_info(
+        attempt_id,
+        {
+            "session_id": session_id,
+            "source": normalized_source,
+            "extension": extension,
+            "name": remote.get("name") or safe_filename,
+            "url": remote.get("url") or remote.get("playback_url"),
+            "playback_url": remote.get("playback_url") or remote.get("url"),
+            "playback_type": remote.get("playback_type"),
+            "thumbnail": remote.get("thumbnail"),
+            "uid": remote.get("uid"),
+            "status": remote.get("status"),
+            "ready_to_stream": remote.get("ready_to_stream"),
+            "duration": remote.get("duration"),
+            "size": remote.get("size") or len(content),
+            "created_at": remote.get("created_at"),
+            "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
+        },
+        session_id=session_id,
+        source=normalized_source,
+    )
     event = ProctoringEvent(
         attempt_id=attempt_id,
         event_type="VIDEO_SAVED",
         severity=SeverityEnum.LOW,
-        detail="Proctoring video saved",
+        detail=f"Proctoring {normalized_source} video saved",
         meta=file_info,
         occurred_at=datetime.now(timezone.utc),
     )
     db.add(event)
     db.commit()
+    return {"detail": "video uploaded", "file": file_info}
 
-    try:
-        shutil.rmtree(chunk_dir)
-        parent = chunk_dir.parent
-        if parent.exists() and not any(parent.iterdir()):
-            parent.rmdir()
-    except Exception:
-        pass
 
-    return {"detail": "video finalized", "file": file_info}
+@router.post("/{attempt_id}/video/register")
+async def register_video_capture(
+    attempt_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+    if not cloudflare_video_storage_enabled():
+        raise HTTPException(status_code=503, detail="Cloudflare video storage is not enabled")
+
+    session_id = str(payload.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    source = _normalize_video_source(payload.get("source"))
+
+    existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, source)
+    if existing_file_info:
+        return {"detail": "video already registered", "file": existing_file_info}
+
+    file_info = _build_registered_video_info(attempt_id, payload, session_id=session_id, source=source)
+    event = ProctoringEvent(
+        attempt_id=attempt_id,
+        event_type="VIDEO_SAVED",
+        severity=SeverityEnum.LOW,
+        detail=f"Proctoring {source} video saved",
+        meta=file_info,
+        occurred_at=datetime.now(timezone.utc),
+    )
+    db.add(event)
+    db.commit()
+    return {"detail": "video registered", "file": file_info}
 
 
 @router.post("/{attempt_id}/pause", response_model=Message)
@@ -576,18 +725,19 @@ async def list_videos(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
-    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    prefix = f"{attempt_id}_"
-    files = [p for p in VIDEO_DIR.glob(f"{prefix}*") if p.is_file()]
-    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    result = []
-    for f in files:
-        result.append({
-            "name": f.name,
-            "url": f"/api/media/videos/{f.name}",
-            "size": f.stat().st_size,
-            "created_at": datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).isoformat(),
-        })
+    result: list[dict[str, object]] = []
+    seen_keys: set[tuple[str, str]] = set()
+
+    for event in _saved_video_events(db, attempt_id):
+        item = _normalize_saved_video_meta(event.meta, event.occurred_at)
+        if not item:
+            continue
+        key = (str(item.get("session_id") or item.get("name") or item.get("url") or ""), str(item.get("source") or "camera"))
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        result.append(item)
+    result.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
     return result
 
 
@@ -635,7 +785,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
             await websocket.close(code=4403)
             db.close()
             return
-    proctoring_requirements = get_proctoring_requirements(attempt.exam.proctoring_config if attempt.exam else None)
+    proctoring_requirements = get_proctoring_requirements(exam_proctoring(attempt.exam) if attempt.exam else None)
     if (
         proctoring_requirements["identity_required"]
         and not attempt.precheck_passed_at
@@ -646,7 +796,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         db.close()
         return
 
-    exam_cfg = attempt.exam.proctoring_config if attempt and attempt.exam else {}
+    exam_cfg = exam_proctoring(attempt.exam) if attempt and attempt.exam else {}
     exam_cfg = exam_cfg.copy() if exam_cfg else {}
     if getattr(attempt, "face_signature", None):
         exam_cfg["face_signature"] = attempt.face_signature

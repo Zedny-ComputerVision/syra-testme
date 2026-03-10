@@ -30,6 +30,7 @@ from ...models import (
     AccessMode,
     ProctoringEvent,
 )
+from ...services.normalized_relations import exam_certificate, exam_proctoring, exam_runtime_settings
 from ...core.config import get_settings
 from ...schemas import (
     AttemptCreate,
@@ -436,7 +437,7 @@ def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
     earned_points = 0.0
     earned_auto_points = 0.0
     pending_manual_review = False
-    exam_settings = attempt.exam.settings if attempt.exam else {}
+    exam_settings = exam_runtime_settings(attempt.exam) if attempt.exam else {}
     negative_marking = bool((exam_settings or {}).get("negative_marking"))
     neg_mark_value = float((exam_settings or {}).get("neg_mark_value") or 0)
     neg_mark_type = str((exam_settings or {}).get("neg_mark_type") or "points").lower()
@@ -604,8 +605,7 @@ def _face_present(image_bytes: bytes) -> bool:
 
 
 def _runtime_settings(exam: Exam | None) -> dict:
-    settings_payload = getattr(exam, "settings", None)
-    return settings_payload if isinstance(settings_payload, dict) else {}
+    return exam_runtime_settings(exam) if exam else {}
 
 
 def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
@@ -866,8 +866,8 @@ async def submit_attempt(
         raise HTTPException(status_code=400, detail="Attempt cannot be submitted in its current state")
     if _attempt_is_paused(db, attempt_pk):
         raise HTTPException(status_code=409, detail="Attempt is paused")
-    exam_proctoring = attempt.exam.proctoring_config if attempt.exam else None
-    exam_requirements = get_proctoring_requirements(exam_proctoring)
+    proctoring_payload = exam_proctoring(attempt.exam) if attempt.exam else None
+    exam_requirements = get_proctoring_requirements(proctoring_payload)
     exam_requires_verification = exam_requirements["identity_required"]
     if (
         exam_requires_verification
@@ -1045,7 +1045,7 @@ def _generate_certificate(attempt: Attempt) -> bytes:
 
     exam = attempt.exam
     user = attempt.user
-    cfg = exam.certificate if isinstance(exam.certificate, dict) else {}
+    cfg = exam_certificate(exam) or {}
 
     title = cfg.get("title") or "Certificate of Completion"
     subtitle = cfg.get("subtitle") or ""
@@ -1142,7 +1142,7 @@ async def download_certificate(
     _ensure_attempt_access(db, attempt, current)
 
     exam = attempt.exam
-    if not exam or not exam.certificate:
+    if not exam or not exam_certificate(exam):
         raise HTTPException(status_code=400, detail="Certificate not configured for this test")
 
     if attempt.status not in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:

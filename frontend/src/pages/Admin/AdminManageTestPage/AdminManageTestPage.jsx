@@ -238,7 +238,7 @@ const PROCTOR_LABELS = {
   head_pose_detection: 'Head Pose Detection',
   audio_detection: 'Audio Detection',
   object_detection: 'Object Detection',
-  screen_capture: 'Screen Capture',
+  screen_capture: 'Screen Recording',
 }
 
 const TAB_ALIASES = {

@@ -2,7 +2,6 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createBrowserRouter, Navigate, RouterProvider, useLocation, useParams } from 'react-router-dom'
 import ErrorBoundary from '../components/ErrorBoundary/ErrorBoundary'
-import Footer from '../components/Footer/Footer'
 import Navbar from '../components/Navbar/Navbar'
 import ScrollProgress from '../components/ScrollProgress/ScrollProgress'
 import ScrollRestoration from '../components/ScrollRestoration/ScrollRestoration'
@@ -185,7 +184,6 @@ function Shell({ children }) {
               <ErrorBoundary>{children}</ErrorBoundary>
             </motion.main>
           </AnimatePresence>
-          {!isExamMode && <Footer />}
         </div>
       </div>
       {!isExamMode && <ScrollTopButton />}

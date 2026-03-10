@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import styles from './ProctorOverlay.module.scss'
 import { startAudioCapture, stopAudioCapture } from '../../utils/audioCapture'
 import { proctoringPing } from '../../services/proctoring.service'
+import { requestEntireScreenShare } from '../../utils/screenCapture'
 
 export default function ProctorOverlay({
   attemptId,
@@ -9,6 +10,8 @@ export default function ProctorOverlay({
   onViolation,
   onForcedSubmit,
   onStreamReady,
+  onScreenStreamReady,
+  onRegisterScreenShareRequest,
   onStatusChange,
   onCameraStateChange,
   config = {},
@@ -28,6 +31,7 @@ export default function ProctorOverlay({
   const wsRef = useRef(null)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const screenStreamRef = useRef(null)
   const canvasRef = useRef(null)
   const intervalRef = useRef(null)
   const localFrameIntervalRef = useRef(null)
@@ -168,6 +172,74 @@ export default function ProctorOverlay({
       if (screenIntervalRef.current) { clearInterval(screenIntervalRef.current); screenIntervalRef.current = null }
     }
 
+    function startScreenCaptureLoop(screenStream) {
+      if (screenIntervalRef.current) {
+        clearInterval(screenIntervalRef.current)
+        screenIntervalRef.current = null
+      }
+      const track = screenStream?.getVideoTracks?.()[0]
+      if (!track) return
+      const scCanvas = document.createElement('canvas')
+      screenIntervalRef.current = setInterval(() => {
+        const ws = wsRef.current
+        if (!ws || ws.readyState !== WebSocket.OPEN || track.readyState !== 'live') return
+        const imageCapture = new ImageCapture(track)
+        imageCapture.grabFrame().then((bitmap) => {
+          scCanvas.width = bitmap.width
+          scCanvas.height = bitmap.height
+          const ctx = scCanvas.getContext('2d')
+          ctx.drawImage(bitmap, 0, 0)
+          const dataUrl = scCanvas.toDataURL('image/jpeg', 0.6)
+          const b64 = dataUrl.split(',')[1]
+          ws.send(JSON.stringify({ type: 'screen', data: b64 }))
+        }).catch(() => {})
+      }, (config.screenshot_interval_sec || 60) * 1000)
+    }
+
+    function bindScreenStream(screenStream) {
+      if (!screenStream) return null
+      screenStreamRef.current = screenStream
+      onScreenStreamReady?.(screenStream)
+      const track = screenStream.getVideoTracks()[0] || null
+      if (track) {
+        track.onended = () => {
+          if (screenIntervalRef.current) {
+            clearInterval(screenIntervalRef.current)
+            screenIntervalRef.current = null
+          }
+          if (screenStreamRef.current === screenStream) {
+            screenStreamRef.current = null
+            onScreenStreamReady?.(null)
+          }
+        }
+      }
+      if (config.screen_capture && wsRef.current?.readyState === WebSocket.OPEN) {
+        startScreenCaptureLoop(screenStream)
+      }
+      return screenStream
+    }
+
+    function stopScreenStream() {
+      const current = screenStreamRef.current
+      if (!current) {
+        onScreenStreamReady?.(null)
+        return
+      }
+      screenStreamRef.current = null
+      current.getTracks().forEach((track) => track.stop())
+      onScreenStreamReady?.(null)
+    }
+
+    function ensureScreenStream() {
+      const existing = screenStreamRef.current
+      if (existing && existing.getVideoTracks().some((track) => track.readyState === 'live')) {
+        return Promise.resolve(existing)
+      }
+      return requestEntireScreenShare().then(bindScreenStream)
+    }
+
+    onRegisterScreenShareRequest?.(() => ensureScreenStream())
+
     function connect() {
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
@@ -186,23 +258,7 @@ export default function ProctorOverlay({
         }, frameInterval)
 
         if (config.screen_capture) {
-          navigator.mediaDevices.getDisplayMedia({ video: true }).then(screenStream => {
-            const track = screenStream.getVideoTracks()[0]
-            const scCanvas = document.createElement('canvas')
-            screenIntervalRef.current = setInterval(() => {
-              if (ws.readyState !== WebSocket.OPEN || !track) return
-              const imageCapture = new ImageCapture(track)
-              imageCapture.grabFrame().then(bitmap => {
-                scCanvas.width = bitmap.width
-                scCanvas.height = bitmap.height
-                const ctx = scCanvas.getContext('2d')
-                ctx.drawImage(bitmap, 0, 0)
-                const dataUrl = scCanvas.toDataURL('image/jpeg', 0.6)
-                const b64 = dataUrl.split(',')[1]
-                ws.send(JSON.stringify({ type: 'screen', data: b64 }))
-              }).catch(() => {})
-            }, (config.screenshot_interval_sec || 60) * 1000)
-          }).catch(() => {})
+          startScreenCaptureLoop(screenStreamRef.current)
         }
 
         const stream = streamRef.current
@@ -262,9 +318,11 @@ export default function ProctorOverlay({
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
       clearFrameIntervals()
       stopAudioCapture()
+      stopScreenStream()
+      onRegisterScreenShareRequest?.(null)
       wsRef.current?.close()
     }
-  }, [attemptId, token, wsUrl, config, analyzeLocalFrame, onViolation, onForcedSubmit])
+  }, [attemptId, token, wsUrl, config, analyzeLocalFrame, onForcedSubmit, onRegisterScreenShareRequest, onScreenStreamReady, onViolation])
 
   return (
     <div className={styles.overlay}>

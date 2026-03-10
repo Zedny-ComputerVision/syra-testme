@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...models import Attempt, Exam, ExamStatus, Schedule, RoleEnum, AttemptStatus
 from ...schemas import DashboardRead, ScheduleRead
+from ...services.normalized_relations import is_exam_pool_library
 from ..deps import ensure_permission, get_current_user, get_db_dep, learner_can_access_exam
 
 router = APIRouter()
@@ -43,16 +44,7 @@ def _build_schedule_read(s: Schedule) -> ScheduleRead:
 
 
 def _is_pool_library_exam(exam: Exam) -> bool:
-    settings = exam.settings if isinstance(exam.settings, dict) else {}
-    return bool(settings.get("_pool_library"))
-
-
-def _pool_library_filter(db: Session):
-    dialect_name = getattr(getattr(db, "bind", None), "dialect", None)
-    dialect_name = getattr(dialect_name, "name", None)
-    if dialect_name == "sqlite":
-        return func.json_extract(Exam.settings, "$._pool_library").is_(None)
-    return func.jsonb_extract_path_text(Exam.settings, "_pool_library").is_(None)
+    return is_exam_pool_library(exam)
 
 
 @router.get("/", response_model=DashboardRead)
@@ -72,7 +64,7 @@ async def dashboard(db: Session = Depends(get_db_dep), current=Depends(get_curre
         schedules_query = schedules_query.where(Schedule.user_id == current.id)
     schedules_query = schedules_query.where(Schedule.scheduled_at >= now)
     upcoming = db.scalars(schedules_query).all()
-    exams = db.scalars(select(Exam).where(_pool_library_filter(db))).all()
+    exams = [exam for exam in db.scalars(select(Exam)).all() if not _is_pool_library_exam(exam)]
     if current.role == RoleEnum.LEARNER:
         exams = [exam for exam in exams if learner_can_access_exam(db, exam, current, now=now)]
     return DashboardRead(

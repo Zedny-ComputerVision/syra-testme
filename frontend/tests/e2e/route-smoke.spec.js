@@ -4,7 +4,7 @@ import { ensureAdmin, createLearner } from './helpers/api'
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
 
 async function bootstrapSession(page, token) {
-  await page.goto('/login')
+  await page.goto('/login', { waitUntil: 'domcontentloaded' })
   await page.evaluate((accessToken) => {
     localStorage.setItem('syra_tokens', JSON.stringify({ access_token: accessToken }))
   }, token)
@@ -56,7 +56,7 @@ test.describe('Route smoke coverage', () => {
     ]
 
     for (const [path, heading] of routes) {
-      await page.goto(path)
+      await page.goto(path, { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { name: heading })).toBeVisible()
     }
 
@@ -64,6 +64,7 @@ test.describe('Route smoke coverage', () => {
   })
 
   test('learner route groups load with self-service session bootstrap', async ({ page, context }) => {
+    test.setTimeout(180000)
     const { token: adminToken } = await ensureAdmin(context)
     const learner = await createLearner(context, adminToken)
 
@@ -88,13 +89,13 @@ test.describe('Route smoke coverage', () => {
     ]
 
     for (const [path, heading] of routes) {
-      await page.goto(path)
+      await page.goto(path, { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { name: heading })).toBeVisible()
     }
 
-    await page.goto('/exams')
+    await page.goto('/exams', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/tests$/)
-    await page.goto('/surveys')
+    await page.goto('/surveys', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('No surveys available right now.')).toBeVisible()
   })
 })

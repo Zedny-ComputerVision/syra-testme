@@ -38,7 +38,9 @@ class Test(Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     settings = relationship("TestSettings", back_populates="test", uselist=False, cascade="all, delete-orphan")
-    category = relationship("Category")
+    category = relationship("Category", back_populates="tests")
+    schedules = relationship("Schedule", back_populates="test")
+    ui_columns = relationship("TestUiColumn", back_populates="test", cascade="all, delete-orphan", order_by="TestUiColumn.position")
 
 
 class TestSettings(Base):
@@ -53,3 +55,17 @@ class TestSettings(Base):
     violation_threshold_autosubmit: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("6"))
 
     test = relationship(Test, back_populates="settings")
+
+
+class TestUiColumn(Base):
+    __tablename__ = "test_ui_columns"
+    __table_args__ = (
+        UniqueConstraint("test_id", "position", name="uq_test_ui_column_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    test_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tests.id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    column_key: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    test = relationship(Test, back_populates="ui_columns")

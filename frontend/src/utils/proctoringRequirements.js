@@ -62,6 +62,7 @@ export function getJourneyRequirements(rawConfig) {
   const cfg = rawConfig && typeof rawConfig === 'object' ? rawConfig : {}
   const faceDetection = readOptionalFlag(cfg, ['face_detection', 'multi_face'])
   const audioDetection = readOptionalFlag(cfg, ['audio_detection'])
+  const screenRequired = readOptionalFlag(cfg, ['screen_capture', 'screen_required', 'require_screen_share'])
 
   let cameraRequired = readOptionalFlag(cfg, ['camera_required', 'require_camera', 'camera_enforce'])
   let micRequired = readOptionalFlag(cfg, ['mic_required', 'microphone_required', 'require_microphone'])
@@ -84,7 +85,7 @@ export function getJourneyRequirements(rawConfig) {
   if (lightingRequired === null) lightingRequired = Boolean(cameraRequired)
   if (identityRequired === null) identityRequired = Boolean(faceDetection)
 
-  const systemCheckRequired = Boolean(cameraRequired || micRequired || fullscreenRequired || lightingRequired)
+  const systemCheckRequired = Boolean(cameraRequired || micRequired || fullscreenRequired || lightingRequired || screenRequired)
   return {
     identityRequired: Boolean(identityRequired),
     systemCheckRequired,
@@ -92,6 +93,7 @@ export function getJourneyRequirements(rawConfig) {
     micRequired: Boolean(micRequired),
     fullscreenRequired: Boolean(fullscreenRequired),
     lightingRequired: Boolean(lightingRequired),
+    screenRequired: Boolean(screenRequired),
   }
 }
 
@@ -108,5 +110,6 @@ export function normalizeProctoringConfig(rawConfig) {
     mic_required: requirements.micRequired,
     fullscreen_required: requirements.fullscreenRequired,
     lighting_required: requirements.lightingRequired,
+    screen_required: requirements.screenRequired,
   }
 }

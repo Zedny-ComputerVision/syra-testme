@@ -14,6 +14,7 @@ from ...api.deps import get_current_user, get_db_dep, parse_uuid_param
 from ...core.config import get_settings
 from ...models import Attempt, RoleEnum
 from ...detection.face_verification import compute_face_signature, cosine_distance
+from ...services.normalized_relations import exam_proctoring
 from ...services.crypto_utils import encrypt_bytes
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 
@@ -311,9 +312,9 @@ async def precheck(
         db.commit()
         return {"status": "ok", "face_match_score": 0.0, "lighting_ok": True, "id_verified": True, "all_pass": True}
 
-    exam_proctoring = attempt.exam.proctoring_config if attempt and attempt.exam else {}
-    requirements = get_proctoring_requirements(exam_proctoring)
-    lighting_min = float((exam_proctoring or {}).get("lighting_min_score", 0.35))
+    proctoring_payload = exam_proctoring(attempt.exam) if attempt and attempt.exam else {}
+    requirements = get_proctoring_requirements(proctoring_payload)
+    lighting_min = float((proctoring_payload or {}).get("lighting_min_score", 0.35))
 
     manual_id_text = _payload_value("id_text") or _payload_value("id_number")
     manual_token = _normalized_id_text(manual_id_text)
@@ -369,7 +370,7 @@ async def precheck(
         id_vec, id_sig_mode = _compute_signature_with_fallback(id_crop if id_crop is not None else id_img)
         match_score = 1.0
         face_match = False
-        threshold = float((exam_proctoring or {}).get("face_verify_id_threshold", 0.30))
+        threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.30))
         if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
             match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
             face_match = match_score <= threshold
@@ -380,19 +381,19 @@ async def precheck(
         id_evidence_ok = manual_valid or len(ocr_candidates) > 0
 
         image_similarity = _image_similarity_score(selfie_img, id_img)
-        similarity_threshold = float((exam_proctoring or {}).get("id_selfie_similarity_threshold", 0.94))
+        similarity_threshold = float((proctoring_payload or {}).get("id_selfie_similarity_threshold", 0.94))
         id_too_similar = image_similarity >= similarity_threshold
 
         id_face_box = _largest_face_box(id_img)
         if id_face_box is not None:
             _, _, fw, fh = id_face_box
             id_face_ratio = float((fw * fh) / max(1, id_img.shape[0] * id_img.shape[1]))
-        max_face_ratio = float((exam_proctoring or {}).get("id_face_max_area_ratio", 0.22))
+        max_face_ratio = float((proctoring_payload or {}).get("id_face_max_area_ratio", 0.22))
         id_looks_like_selfie = id_face_ratio >= max_face_ratio
         id_has_document_outline = _has_document_outline(id_img)
 
-        strict_doc_checks = bool((exam_proctoring or {}).get("strict_id_document_checks", False))
-        require_id_text = bool((exam_proctoring or {}).get("id_text_required", True))
+        strict_doc_checks = bool((proctoring_payload or {}).get("strict_id_document_checks", False))
+        require_id_text = bool((proctoring_payload or {}).get("id_text_required", True))
 
         if requirements["lighting_required"] and not lighting_ok:
             failure_reasons.append("LOW_LIGHTING")

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Hls from 'hls.js'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
@@ -23,6 +24,21 @@ function severityClass(severity) {
   if (severity === 'HIGH') return styles.eventHigh
   if (severity === 'MEDIUM') return styles.eventMedium
   return styles.eventLow
+}
+
+function formatVideoSource(source) {
+  if (source === 'screen') return 'Screen'
+  if (source === 'camera') return 'Camera'
+  return 'Recording'
+}
+
+function isAbsoluteHttpUrl(url) {
+  return /^https?:\/\//i.test(String(url || '').trim())
+}
+
+function isHlsPlaybackUrl(url, playbackType) {
+  if (playbackType === 'hls') return true
+  return /\.m3u8($|\?)/i.test(String(url || ''))
 }
 
 function readMediaRangeEnd(ranges) {
@@ -53,6 +69,7 @@ export default function AdminAttemptVideos() {
   const inSupervisionMode = !attemptId && Boolean(examIdFilter)
   const navigate = useNavigate()
   const videoRef = useRef(null)
+  const hlsRef = useRef(null)
   const durationProbeKeyRef = useRef('')
 
   // Supervision mode: exam-level attempt picker
@@ -199,6 +216,10 @@ export default function AdminAttemptVideos() {
     () => videos.find((v) => v.name === selectedVideoName) || videos[0] || null,
     [videos, selectedVideoName],
   )
+  const selectedVideoUsesHls = useMemo(
+    () => isHlsPlaybackUrl(selectedVideoUrl || selectedVideo?.url, selectedVideo?.playback_type),
+    [selectedVideo?.playback_type, selectedVideo?.url, selectedVideoUrl],
+  )
 
   const warningEvents = useMemo(
     () => (events || []).filter((e) => e && WARN_SEVERITIES.has(e.severity)),
@@ -265,6 +286,10 @@ export default function AdminAttemptVideos() {
 
     async function loadVideoUrl() {
       if (!selectedVideo?.url) return
+      if ((selectedVideo.provider && selectedVideo.provider !== 'cloudflare') || !isAbsoluteHttpUrl(selectedVideo.url)) {
+        setWarning((current) => current || 'Only Cloudflare-hosted recordings are supported.')
+        return
+      }
       try {
         objectUrl = await fetchAuthenticatedMediaObjectUrl(selectedVideo.url)
         if (!active) {
@@ -458,6 +483,52 @@ export default function AdminAttemptVideos() {
     durationProbeKeyRef.current = ''
   }, [selectedVideoUrl])
 
+  useEffect(() => {
+    const videoEl = videoRef.current
+    if (hlsRef.current) {
+      hlsRef.current.destroy()
+      hlsRef.current = null
+    }
+    if (!videoEl || !selectedVideoUrl || !selectedVideoUsesHls) return undefined
+
+    if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+      videoEl.src = selectedVideoUrl
+      return () => {
+        if (videoEl.src === selectedVideoUrl) {
+          videoEl.removeAttribute('src')
+          videoEl.load()
+        }
+      }
+    }
+
+    if (!Hls.isSupported()) {
+      setWarning((current) => current || 'This browser cannot play the selected Cloudflare stream.')
+      return undefined
+    }
+
+    const hls = new Hls()
+    hlsRef.current = hls
+    hls.loadSource(selectedVideoUrl)
+    hls.attachMedia(videoEl)
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      syncDurationFromVideo(videoEl)
+      probeVideoDuration(videoEl)
+    })
+    hls.on(Hls.Events.LEVEL_LOADED, () => syncDurationFromVideo(videoEl))
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data?.fatal) {
+        setWarning((current) => current || 'The selected Cloudflare stream could not be played.')
+      }
+    })
+
+    return () => {
+      if (hlsRef.current === hls) {
+        hls.destroy()
+        hlsRef.current = null
+      }
+    }
+  }, [probeVideoDuration, selectedVideoUrl, selectedVideoUsesHls, syncDurationFromVideo])
+
   if (attemptsLoading || (loading && hasResolvedAttempt)) return <div className={`${styles.page} ${styles.loadingState}`}>Loading recordings...</div>
 
   return (
@@ -581,7 +652,7 @@ export default function AdminAttemptVideos() {
                   }}
                 >
                   {videos.map((v) => (
-                    <option key={v.name} value={v.name}>{v.name}</option>
+                    <option key={v.name} value={v.name}>{`${formatVideoSource(v.source)} - ${v.name}`}</option>
                   ))}
                 </select>
               </label>
@@ -595,11 +666,12 @@ export default function AdminAttemptVideos() {
             <div className={styles.playerViewport}>
               {selectedVideoUrl ? (
                 <video
-                  key={selectedVideo?.name}
+                  key={`${selectedVideo?.name || 'recording'}-${selectedVideoUsesHls ? 'hls' : 'file'}`}
                   ref={videoRef}
                   controls
                   preload="metadata"
                   className={styles.video}
+                  src={selectedVideoUsesHls ? undefined : selectedVideoUrl}
                   onLoadedMetadata={(e) => {
                     syncDurationFromVideo(e.currentTarget)
                     probeVideoDuration(e.currentTarget)
@@ -609,10 +681,7 @@ export default function AdminAttemptVideos() {
                     setCurrentTime(e.currentTarget.currentTime || 0)
                     syncDurationFromVideo(e.currentTarget)
                   }}
-                >
-                  <source src={selectedVideoUrl} type="video/mp4" />
-                  <source src={selectedVideoUrl} type="video/webm" />
-                </video>
+                />
               ) : (
                 <div className={styles.videoLoading}>Loading recording...</div>
               )}

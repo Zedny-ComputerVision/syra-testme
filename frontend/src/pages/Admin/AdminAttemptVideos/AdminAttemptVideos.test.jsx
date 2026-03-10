@@ -10,6 +10,10 @@ const getAttemptMock = vi.fn()
 const listAttemptVideosMock = vi.fn()
 const getAttemptEventsMock = vi.fn()
 const fetchAuthenticatedMediaObjectUrlMock = vi.fn()
+const hlsLoadSourceMock = vi.fn()
+const hlsAttachMediaMock = vi.fn()
+const hlsOnMock = vi.fn()
+const hlsDestroyMock = vi.fn()
 
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
@@ -25,6 +29,35 @@ vi.mock('../../../utils/authenticatedMedia', () => ({
   revokeObjectUrl: vi.fn(),
 }))
 
+vi.mock('hls.js', () => {
+  class MockHls {
+    static isSupported = vi.fn(() => true)
+    static Events = {
+      MANIFEST_PARSED: 'MANIFEST_PARSED',
+      LEVEL_LOADED: 'LEVEL_LOADED',
+      ERROR: 'ERROR',
+    }
+
+    loadSource(...args) {
+      hlsLoadSourceMock(...args)
+    }
+
+    attachMedia(...args) {
+      hlsAttachMediaMock(...args)
+    }
+
+    on(...args) {
+      hlsOnMock(...args)
+    }
+
+    destroy(...args) {
+      hlsDestroyMock(...args)
+    }
+  }
+
+  return { default: MockHls }
+})
+
 describe('AdminAttemptVideos supervision mode', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -32,7 +65,7 @@ describe('AdminAttemptVideos supervision mode', () => {
     getAttemptMock.mockResolvedValue({ data: null })
     listAttemptVideosMock.mockResolvedValue({ data: [] })
     getAttemptEventsMock.mockResolvedValue({ data: [] })
-    fetchAuthenticatedMediaObjectUrlMock.mockResolvedValue('blob:media')
+    fetchAuthenticatedMediaObjectUrlMock.mockImplementation(async (url) => url)
   })
 
   afterEach(() => {
@@ -95,7 +128,9 @@ describe('AdminAttemptVideos supervision mode', () => {
     listAttemptVideosMock.mockResolvedValue({
       data: [{
         name: 'attempt-7.webm',
-        url: '/videos/attempt-7.webm',
+        url: 'https://customer-abc.cloudflarestream.com/attempt-7/manifest/video.m3u8',
+        provider: 'cloudflare',
+        playback_type: 'hls',
         created_at: '2026-03-07T10:05:00Z',
       }],
     })
@@ -130,7 +165,8 @@ describe('AdminAttemptVideos supervision mode', () => {
     listAttemptVideosMock.mockResolvedValue({
       data: [{
         name: 'attempt-7.webm',
-        url: '/videos/attempt-7.webm',
+        url: 'https://stream.example.com/attempt-7.webm',
+        provider: 'cloudflare',
         created_at: '2026-03-07T10:05:00Z',
       }],
     })
@@ -190,7 +226,8 @@ describe('AdminAttemptVideos supervision mode', () => {
     listAttemptVideosMock.mockResolvedValue({
       data: [{
         name: 'attempt-7.webm',
-        url: '/videos/attempt-7.webm',
+        url: 'https://stream.example.com/attempt-7.webm',
+        provider: 'cloudflare',
         created_at: '2026-03-07T10:05:00Z',
       }],
     })

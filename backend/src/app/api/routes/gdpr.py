@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.encoders import jsonable_encoder
@@ -14,7 +15,6 @@ from ..deps import get_current_user, get_db_dep, parse_uuid_param
 router = APIRouter()
 
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
-VIDEO_DIR = BASE_STORAGE_DIR / "videos"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
 
 
@@ -52,10 +52,38 @@ def _collect_attempt_files(directory: Path, attempt_id) -> list[dict]:
     return items
 
 
+def _is_absolute_http_url(value: str | None) -> bool:
+    raw = str(value or "").strip()
+    if not raw:
+        return False
+    parsed = urlparse(raw)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
 def _collect_attempt_media(attempt: Attempt) -> dict:
     evidence: list[dict] = []
+    videos: list[dict] = []
+    seen_videos: set[tuple[str, str]] = set()
     for event in sorted(attempt.events, key=lambda item: item.occurred_at or datetime.min.replace(tzinfo=timezone.utc)):
         meta = event.meta if isinstance(event.meta, dict) else {}
+        if event.event_type == "VIDEO_SAVED":
+            video_name = str(meta.get("name") or "").strip()
+            video_url = str(meta.get("playback_url") or meta.get("url") or "").strip()
+            video_provider = str(meta.get("provider") or "").strip().lower()
+            if _is_absolute_http_url(video_url) and (not video_provider or video_provider == "cloudflare"):
+                video_source = str(meta.get("source") or "camera")
+                video_key = (str(meta.get("session_id") or video_name or video_url), video_source)
+                if video_key not in seen_videos:
+                    seen_videos.add(video_key)
+                    videos.append(
+                        {
+                            "filename": video_name or video_url.rstrip("/").rsplit("/", 1)[-1],
+                            "recorded_at": meta.get("created_at") or event.occurred_at,
+                            "provider": "cloudflare",
+                            "source": video_source,
+                            "url": video_url or None,
+                        }
+                    )
         evidence_path = meta.get("evidence")
         if evidence_path:
             evidence.append(
@@ -67,7 +95,7 @@ def _collect_attempt_media(attempt: Attempt) -> dict:
             )
 
     return {
-        "videos": _collect_attempt_files(VIDEO_DIR, attempt.id),
+        "videos": videos,
         "evidence": evidence or _collect_attempt_files(EVIDENCE_DIR, attempt.id),
         "identity_documents": [
             item

@@ -88,7 +88,7 @@ const PROCTORING_REQUIREMENTS = [
   { key: 'fullscreen_enforce', label: 'Fullscreen lock', desc: 'Require fullscreen during the active attempt.' },
   { key: 'tab_switch_detect', label: 'Tab / blur detection', desc: 'Track focus loss, tab switches, and hidden pages.' },
   { key: 'copy_paste_block', label: 'Clipboard blocking', desc: 'Disable copy and paste shortcuts during the attempt.' },
-  { key: 'screen_capture', label: 'Periodic screen capture', desc: 'Capture timed screen snapshots for later review.' },
+  { key: 'screen_capture', label: 'Screen recording', desc: 'Request screen share and save a screen recording with timed snapshots for later review.' },
 ]
 
 const PROCTORING_CONTROL_GROUPS = [
@@ -138,7 +138,7 @@ const PROCTORING_CONTROL_GROUPS = [
     controls: [
       { key: 'frame_interval_ms', label: 'Frame analysis interval', desc: 'Higher saves bandwidth. Lower gives denser monitoring.', min: 1200, max: 6000, step: 200, unit: 'ms' },
       { key: 'audio_chunk_ms', label: 'Audio chunk interval', desc: 'Higher sends fewer but larger audio chunks.', min: 1000, max: 6000, step: 250, unit: 'ms', enabledBy: 'audio_detection' },
-      { key: 'screenshot_interval_sec', label: 'Screen capture interval', desc: 'Only used when periodic screen capture is enabled.', min: 15, max: 180, step: 5, unit: 'sec', enabledBy: 'screen_capture' },
+      { key: 'screenshot_interval_sec', label: 'Screen capture interval', desc: 'Only used when screen recording is enabled.', min: 15, max: 180, step: 5, unit: 'sec', enabledBy: 'screen_capture' },
     ],
   },
 ]
