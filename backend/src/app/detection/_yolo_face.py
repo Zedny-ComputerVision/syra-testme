@@ -7,6 +7,7 @@ Set YOLO_FACE_MODEL env var to the full path of your .pt weights file, e.g.:
   YOLO_FACE_MODEL=/path/to/yolov8-face/weights/yolov8n-face.pt
 """
 
+import logging
 import os
 
 try:
@@ -17,14 +18,21 @@ except Exception:  # pragma: no cover
 # Override via env var; falls back to filename (works if file is in cwd or YOLO cache)
 FACE_MODEL_PATH = os.environ.get("YOLO_FACE_MODEL", "yolov8n-face.pt")
 _model = None
+_model_load_failed = False
+logger = logging.getLogger(__name__)
 
 
 def get_face_model():
     """Return (and lazily load) the shared YOLO face model, or None if unavailable."""
-    global _model
+    global _model, _model_load_failed
     if _model is not None:
         return _model
-    if YOLO is None:
+    if YOLO is None or _model_load_failed:
         return None
-    _model = YOLO(FACE_MODEL_PATH)
+    try:
+        _model = YOLO(FACE_MODEL_PATH)
+    except Exception as exc:
+        logger.warning("Failed to load YOLO face model from %s: %s", FACE_MODEL_PATH, exc)
+        _model_load_failed = True
+        return None
     return _model

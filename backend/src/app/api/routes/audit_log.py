@@ -1,12 +1,11 @@
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
 
-from ...models import AuditLog, RoleEnum
+from ...models import RoleEnum
 from ...schemas import AuditLogRead, PaginatedResponse
+from ...services.audit_log_service import list_audit_logs as list_audit_logs_service
+from ...utils.pagination import MAX_PAGE_SIZE
 from ..deps import get_db_dep, require_permission
 
 router = APIRouter()
@@ -14,36 +13,34 @@ router = APIRouter()
 
 @router.get("/", response_model=PaginatedResponse[AuditLogRead])
 async def list_audit_logs(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    q: Optional[str] = Query(None, description="Search in action or resource_id"),
-    action: Optional[str] = Query(None, description="Filter by action name"),
-    from_date: Optional[datetime] = Query(None, description="Filter logs after this date"),
-    to_date: Optional[datetime] = Query(None, description="Filter logs before this date"),
-    user_id: Optional[str] = Query(None, description="Filter by user_id"),
-    db: Session = Depends(get_db_dep),
+    page: int | None = Query(None, ge=1),
+    page_size: int | None = Query(None, ge=1, le=MAX_PAGE_SIZE),
+    search: str | None = Query(None, description="Search in action or resource_id"),
+    sort: str | None = Query(None),
+    order: str | None = Query(None),
+    skip: int | None = Query(None, ge=0),
+    limit: int | None = Query(None, ge=1, le=MAX_PAGE_SIZE),
+    q: str | None = Query(None, description="Legacy alias for search in action or resource_id"),
+    action: str | None = Query(None, description="Filter by action name"),
+    from_date: datetime | None = Query(None, description="Filter logs after this date"),
+    to_date: datetime | None = Query(None, description="Filter logs before this date"),
+    user_id: str | None = Query(None, description="Filter by user_id"),
+    db=Depends(get_db_dep),
     current=Depends(require_permission("View Audit Log", RoleEnum.ADMIN)),
 ):
-    query = select(AuditLog)
-    if q:
-        query = query.where(
-            or_(AuditLog.action.ilike(f"%{q}%"), AuditLog.resource_id.ilike(f"%{q}%"))
-        )
-    if action:
-        query = query.where(AuditLog.action.ilike(f"%{action}%"))
-    if from_date:
-        query = query.where(AuditLog.created_at >= from_date)
-    if to_date:
-        query = query.where(AuditLog.created_at <= to_date)
-    if user_id:
-        query = query.where(AuditLog.user_id == user_id)
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    logs = db.scalars(
-        query.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit)
-    ).all()
-    return {
-        "items": logs,
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    del current
+    return list_audit_logs_service(
+        db=db,
+        page=page,
+        page_size=page_size,
+        search=search,
+        sort=sort,
+        order=order,
+        skip=skip,
+        limit=limit,
+        q=q,
+        action=action,
+        from_date=from_date,
+        to_date=to_date,
+        user_id=user_id,
+    )

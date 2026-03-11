@@ -166,23 +166,25 @@ export default function ExamInstructions() {
         </div>
         )}
 
-        <div className={styles.instructions}>
-          <h3>{instructionsHeading}</h3>
-          <p>{instructionsBody}</p>
-          <ul>
-            {instructionItems.map((item, index) => (
-              <li key={`${item}-${index}`}>{item}</li>
-            ))}
-          </ul>
-        </div>
+        <div className={styles.lowerContent}>
+          <div className={styles.instructions}>
+            <h3>{instructionsHeading}</h3>
+            <p>{instructionsBody}</p>
+            <ul>
+              {instructionItems.map((item, index) => (
+                <li key={`${item}-${index}`}>{item}</li>
+              ))}
+            </ul>
+          </div>
 
-        <div className={styles.readinessCard}>
-          <div className={styles.readinessTitle}>Journey checklist</div>
-          <ul className={styles.readinessList}>
-            {requirementItems.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+          <div className={styles.readinessCard}>
+            <div className={styles.readinessTitle}>Journey checklist</div>
+            <ul className={styles.readinessList}>
+              {requirementItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <div className={styles.actions}>

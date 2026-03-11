@@ -79,3 +79,26 @@
 .connectorFilled {
   background: linear-gradient(90deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 60%, var(--color-border)));
 }
+
+@media (min-width: 860px) and (max-height: 920px) {
+  .stepper {
+    padding: 0.35rem 0.75rem;
+  }
+
+  .item,
+  .active,
+  .done {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.75rem;
+  }
+
+  .index {
+    width: 18px;
+    height: 18px;
+    font-size: 0.68rem;
+  }
+
+  .connector {
+    max-width: 40px;
+  }
+}

@@ -13,12 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=180 --retries 10 -r requirements.txt
 
 COPY backend/src/ ./src/
 COPY backend/alembic/ ./alembic/
 COPY backend/alembic.ini ./alembic.ini
 COPY config.yaml ./config.yaml
+COPY backend/yolov8n-face.pt ./yolov8n-face.pt
+COPY backend/yolov8n.pt ./yolov8n.pt
 
 EXPOSE 8000
 

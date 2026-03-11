@@ -1,7 +1,8 @@
 """Cooldown-aware alert aggregator.
 
 Collects detection events with per-event-type cooldown to prevent alert flooding.
-drain() returns pending events and resets the buffer.
+`drain()` returns pending events and clears only the pending buffer so cooldown
+state persists across frames.
 """
 import time
 
@@ -13,17 +14,9 @@ EVENT_COOLDOWNS: dict[str, float] = {
     "MULTIPLE_FACES": 8.0,
     "FACE_MISMATCH": 10.0,
     "FACE_MATCH_RECOVERED": 30.0,
-    "EYE_MOVEMENT_DETECTED": 8.0,
-    "GAZE_LEFT": 8.0,
-    "GAZE_RIGHT": 8.0,
-    "GAZE_UP": 8.0,
-    "GAZE_DOWN": 8.0,
+    "EYE_MOVEMENT": 8.0,
     "HEAD_POSE": 8.0,
-    "HEAD_TURNED_LEFT": 8.0,
-    "HEAD_TURNED_RIGHT": 8.0,
-    "HEAD_TILTED_UP": 8.0,
-    "HEAD_TILTED_DOWN": 8.0,
-    "MOUTH_OPEN": 10.0,
+    "MOUTH_MOVEMENT": 10.0,
     "FORBIDDEN_OBJECT": 10.0,
     "LOUD_AUDIO": 8.0,
     "AUDIO_ANOMALY": 15.0,
@@ -51,10 +44,9 @@ class AlertLogger:
             self._last_fired[event_type] = now
 
     def drain(self) -> list[dict]:
-        """Return all pending events and clear the buffer."""
+        """Return all pending events and clear only the pending buffer."""
         events = self._events[:]
         self._events.clear()
-        self._last_fired.clear()
         return events
 
     @property

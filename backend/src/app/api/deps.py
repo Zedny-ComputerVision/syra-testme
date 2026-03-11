@@ -40,8 +40,7 @@ DEFAULT_PERMISSION_ROWS = [
 
 
 def get_db_dep():
-    with get_db() as db:
-        yield db
+    yield from get_db()
 
 
 def parse_uuid_param(
@@ -68,7 +67,6 @@ def get_current_user(
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    # SQLAlchemy's UUID type expects a uuid.UUID instance even on SQLite; convert if needed
     try:
         user_pk = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
     except (ValueError, TypeError):

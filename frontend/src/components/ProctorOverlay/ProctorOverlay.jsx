@@ -4,6 +4,30 @@ import { startAudioCapture, stopAudioCapture } from '../../utils/audioCapture'
 import { proctoringPing } from '../../services/proctoring.service'
 import { requestEntireScreenShare } from '../../utils/screenCapture'
 
+const MAX_VISIBLE_ALERTS = 5
+const ALERT_DEDUP_WINDOW_MS = 4000
+const VISUAL_FRAME_INTERVAL_FLOOR_MS = 1000
+const VISUAL_FRAME_INTERVAL_CEILING_MS = 1500
+
+function getVisualFrameInterval(config) {
+  const rawValue = Number(config?.frame_interval_ms || VISUAL_FRAME_INTERVAL_CEILING_MS)
+  const normalized = Number.isFinite(rawValue) && rawValue > 0 ? rawValue : VISUAL_FRAME_INTERVAL_CEILING_MS
+  return Math.max(VISUAL_FRAME_INTERVAL_FLOOR_MS, Math.min(VISUAL_FRAME_INTERVAL_CEILING_MS, normalized))
+}
+
+function normalizeIncomingAlert(rawAlert) {
+  if (!rawAlert || typeof rawAlert !== 'object') return null
+  const eventType = String(rawAlert.event_type || rawAlert.type || 'PROCTORING_ALERT').trim().toUpperCase()
+  const severity = String(rawAlert.severity || 'LOW').trim().toUpperCase()
+  return {
+    ...rawAlert,
+    type: 'alert',
+    event_type: eventType || 'PROCTORING_ALERT',
+    severity: severity || 'LOW',
+    detail: String(rawAlert.detail || 'Automatic proctoring alert detected.').trim(),
+  }
+}
+
 export default function ProctorOverlay({
   attemptId,
   token,
@@ -19,7 +43,7 @@ export default function ProctorOverlay({
   const CAMERA_BLOCKED_LUMA_HARD = 28
   const CAMERA_BLOCKED_LUMA_SOFT = 44
   const CAMERA_BLOCKED_STDDEV_MAX = 18
-  const CAMERA_BLOCKED_CONSECUTIVE_FRAMES = 3
+  const CAMERA_BLOCKED_CONSECUTIVE_FRAMES = 2
 
   const WS_MAX_ATTEMPTS = 5
   const WS_BASE_DELAY_MS = 2000
@@ -42,6 +66,8 @@ export default function ProctorOverlay({
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimerRef = useRef(null)
   const intentionalCloseRef = useRef(false)
+  const blockingCloseRef = useRef(false)
+  const recentAlertRef = useRef(new Map())
 
   const wsUrl = useMemo(() => {
     const rawBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/'
@@ -60,6 +86,50 @@ export default function ProctorOverlay({
     onStatusChange?.(status)
   }, [status, onStatusChange])
 
+  const pushAlert = useCallback((rawAlert) => {
+    const event = normalizeIncomingAlert(rawAlert)
+    if (!event) return
+    const dedupeKey = `${event.event_type}:${event.severity}`
+    const now = Date.now()
+    const lastSeen = recentAlertRef.current.get(dedupeKey) || 0
+    if (now - lastSeen < ALERT_DEDUP_WINDOW_MS) return
+    recentAlertRef.current.set(dedupeKey, now)
+    setAlerts((prev) => [event, ...prev].slice(0, MAX_VISIBLE_ALERTS))
+    onViolation?.(event)
+  }, [onViolation])
+
+  const triggerForcedSubmit = useCallback((detail) => {
+    intentionalCloseRef.current = true
+    pushAlert({
+      severity: 'HIGH',
+      event_type: 'FORCED_SUBMIT',
+      detail: detail || 'Test auto-submitted due to violations.',
+    })
+    if (onForcedSubmit) {
+      void onForcedSubmit(detail)
+      return
+    }
+    window.location.href = `/attempts/${attemptId}`
+  }, [attemptId, onForcedSubmit, pushAlert])
+
+  const handleServerPingResult = useCallback((response) => {
+    const payload = response?.data ?? response
+    if (!payload || typeof payload !== 'object') return
+    const serverAlerts = Array.isArray(payload.alerts) ? payload.alerts : []
+    serverAlerts.forEach((alert) => pushAlert(alert))
+    if (payload.forced_submit) {
+      triggerForcedSubmit(payload.submit_reason || 'Test auto-submitted due to violations.')
+    }
+  }, [pushAlert, triggerForcedSubmit])
+
+  const emitSystemError = useCallback((detail) => {
+    pushAlert({
+      severity: 'LOW',
+      event_type: 'PROCTORING_ERROR',
+      detail: String(detail || 'Proctoring service error.').trim(),
+    })
+  }, [pushAlert])
+
   const emitLocalCameraCoveredAlert = useCallback(() => {
     const now = Date.now()
     if (now - lastLocalCameraAlertRef.current <= 15000) return
@@ -71,16 +141,15 @@ export default function ProctorOverlay({
       detail: 'Camera view is blocked or too dark',
       confidence: 0.95,
     }
-    setAlerts((prev) => [ev, ...prev].slice(0, 5))
-    onViolation?.(ev)
+    pushAlert(ev)
     proctoringPing(attemptId, {
       focus: document.hasFocus(),
       visibility: document.visibilityState,
       blurs: 0,
       fullscreen: !!document.fullscreenElement,
       camera_dark: true,
-    }).catch(() => {})
-  }, [attemptId, onViolation])
+    }).then(handleServerPingResult).catch(() => {})
+  }, [attemptId, handleServerPingResult, pushAlert])
 
   const analyzeLocalFrame = useCallback(() => {
     if (!videoRef.current) return null
@@ -88,7 +157,7 @@ export default function ProctorOverlay({
     canvasRef.current = canvas
     canvas.width = 320
     canvas.height = 240
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
     ctx.drawImage(videoRef.current, 0, 0, 320, 240)
 
     try {
@@ -134,6 +203,7 @@ export default function ProctorOverlay({
         onStreamReady?.(stream)
         if (videoRef.current) {
           videoRef.current.srcObject = stream
+          await videoRef.current.play().catch(() => {})
         }
       } catch (e) {
         if (!cancelled) setCameraError('Camera access denied. Proctoring may be incomplete.')
@@ -150,8 +220,7 @@ export default function ProctorOverlay({
 
   useEffect(() => {
     if (!attemptId) return
-    const configuredFrameMs = Number(config.frame_interval_ms || 3000)
-    const tickMs = Math.max(800, Math.min(1200, configuredFrameMs))
+    const tickMs = getVisualFrameInterval(config)
     localFrameIntervalRef.current = setInterval(() => {
       analyzeLocalFrame()
     }, tickMs)
@@ -165,6 +234,7 @@ export default function ProctorOverlay({
     if (!attemptId || !token) return
 
     intentionalCloseRef.current = false
+    blockingCloseRef.current = false
     reconnectAttemptsRef.current = 0
 
     function clearFrameIntervals() {
@@ -249,7 +319,7 @@ export default function ProctorOverlay({
         setStatus('connected')
         darkFrameCountRef.current = 0
         lastLocalCameraAlertRef.current = 0
-        const frameInterval = config.frame_interval_ms || 3000
+        const frameInterval = getVisualFrameInterval(config)
         intervalRef.current = setInterval(() => {
           if (ws.readyState !== WebSocket.OPEN || !videoRef.current) return
           const base64 = analyzeLocalFrame()
@@ -275,13 +345,19 @@ export default function ProctorOverlay({
         try {
           const msg = JSON.parse(ev.data)
           if (msg.type === 'alert') {
-            setAlerts(prev => [msg, ...prev].slice(0, 5))
-            onViolation?.(msg)
+            pushAlert(msg)
+            if (msg.event_type === 'PRECHECK_BYPASS_DENIED') {
+              blockingCloseRef.current = true
+              intentionalCloseRef.current = true
+            }
+          } else if (msg.type === 'error') {
+            emitSystemError(msg.detail)
+          } else if (msg.type === 'ping') {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'pong' }))
+            }
           } else if (msg.type === 'forced_submit') {
-            intentionalCloseRef.current = true
-            onViolation?.({ severity: 'HIGH', event_type: 'FORCED_SUBMIT', detail: 'Test auto-submitted due to violations' })
-            if (onForcedSubmit) onForcedSubmit()
-            else window.location.href = `/attempts/${attemptId}`
+            triggerForcedSubmit(msg.detail || 'Test auto-submitted due to violations.')
           }
         } catch (_) {}
       }
@@ -302,13 +378,18 @@ export default function ProctorOverlay({
 
       ws.onclose = (ev) => {
         // Code 1000 = normal closure (server-initiated graceful close)
-        if (intentionalCloseRef.current || ev.code === 1000) {
+        if (blockingCloseRef.current || ev.code === 4401 || ev.code === 4403 || ev.code === 4404) {
+          setStatus('closed')
+        } else if (intentionalCloseRef.current || ev.code === 1000) {
           setStatus('closed')
         } else {
           scheduleReconnect()
         }
       }
-      ws.onerror = () => scheduleReconnect()
+      ws.onerror = () => {
+        emitSystemError('Proctoring connection encountered an error.')
+        scheduleReconnect()
+      }
     }
 
     connect()
@@ -322,7 +403,7 @@ export default function ProctorOverlay({
       onRegisterScreenShareRequest?.(null)
       wsRef.current?.close()
     }
-  }, [attemptId, token, wsUrl, config, analyzeLocalFrame, onForcedSubmit, onRegisterScreenShareRequest, onScreenStreamReady, onViolation])
+  }, [attemptId, token, wsUrl, config, analyzeLocalFrame, emitSystemError, onForcedSubmit, onRegisterScreenShareRequest, onScreenStreamReady, pushAlert, triggerForcedSubmit])
 
   return (
     <div className={styles.overlay}>
@@ -336,7 +417,7 @@ export default function ProctorOverlay({
       </div>
 
       <div className={styles.statusText}>
-        {status === 'connected' ? 'Monitoring active' : status === 'closed' ? 'Connection closed' : reconnectAttemptsRef.current > 0 ? `Reconnecting… (${reconnectAttemptsRef.current}/${WS_MAX_ATTEMPTS})` : 'Connecting...'}
+        {status === 'connected' ? 'Monitoring active' : status === 'closed' ? 'Connection closed' : reconnectAttemptsRef.current > 0 ? `Reconnecting... (${reconnectAttemptsRef.current}/${WS_MAX_ATTEMPTS})` : 'Connecting...'}
       </div>
 
       {cameraError && (

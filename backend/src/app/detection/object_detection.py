@@ -1,6 +1,7 @@
 """Forbidden object detection using YOLOv8 nano."""
 
 import logging
+import os
 import cv2
 import numpy as np
 
@@ -11,6 +12,8 @@ except Exception:  # pragma: no cover - optional dependency in lightweight envs
 
 FORBIDDEN_LABELS = {"cell phone", "book", "laptop"}
 _model = None
+_model_load_failed = False
+OBJECT_MODEL_PATH = os.environ.get("YOLO_OBJECT_MODEL", "yolov8n.pt")
 logger = logging.getLogger(__name__)
 
 
@@ -22,12 +25,17 @@ class ObjectDetector:
         self._warned_unavailable = False
 
     def _get_model(self):
-        global _model
+        global _model, _model_load_failed
         if _model is not None:
             return _model
-        if YOLO is None:
+        if YOLO is None or _model_load_failed:
             return None
-        _model = YOLO("yolov8n.pt")  # downloads weights on first run
+        try:
+            _model = YOLO(OBJECT_MODEL_PATH)
+        except Exception as exc:
+            logger.warning("Failed to load YOLO object model from %s: %s", OBJECT_MODEL_PATH, exc)
+            _model_load_failed = True
+            return None
         return _model
 
     def process(self, frame_bytes: bytes) -> list[dict]:

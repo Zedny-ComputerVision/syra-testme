@@ -24,12 +24,25 @@ const DEFAULT_PROCTORING = {
   copy_paste_block: true,
   screen_capture: false,
   object_confidence_threshold: 0.5,
-  frame_interval_ms: 3000,
+  max_face_absence_sec: 3,
+  frame_interval_ms: 1500,
   audio_chunk_ms: 3000,
   audio_consecutive_chunks: 2,
   audio_window: 5,
   screenshot_interval_sec: 60,
   max_tab_blurs: 3,
+}
+
+function normalizeProctoringAlert(rawAlert) {
+  if (!rawAlert || typeof rawAlert !== 'object') return null
+  const eventType = String(rawAlert.event_type || rawAlert.type || 'PROCTORING_ALERT').trim().toUpperCase()
+  const severity = String(rawAlert.severity || 'LOW').trim().toUpperCase()
+  return {
+    ...rawAlert,
+    event_type: eventType || 'PROCTORING_ALERT',
+    severity: severity || 'LOW',
+    detail: String(rawAlert.detail || 'Automatic proctoring alert detected.').trim(),
+  }
 }
 
 function createRecordingController(source) {
@@ -38,6 +51,8 @@ function createRecordingController(source) {
     recorder: null,
     sessionId: null,
     mimeType: 'video/webm',
+    startedAt: null,
+    stoppedAt: null,
     finalizing: false,
     finalized: false,
     chunks: [],
@@ -252,17 +267,6 @@ export default function Proctoring() {
     }
   }, [proctorStatus])
 
-  // Fullscreen enforcement
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen?.().catch(() => {})
-      }
-    }
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [])
-
   const handleAnswer = (questionId, answer) => {
     setShowSubmitConfirm(false)
     setAnswers(prev => ({ ...prev, [questionId]: answer }))
@@ -322,6 +326,8 @@ export default function Proctoring() {
       recording.mimeType = mimeType
       recording.finalized = false
       recording.sessionId = createVideoSessionId()
+      recording.startedAt = new Date().toISOString()
+      recording.stoppedAt = null
       recording.chunks = []
       recording.bytesRecorded = 0
       const recorder = new MediaRecorder(stream, { mimeType })
@@ -351,6 +357,7 @@ export default function Proctoring() {
       await new Promise((resolve) => {
         const timeout = setTimeout(resolve, 3000)
         recorder.addEventListener('stop', () => {
+          recording.stoppedAt = recording.stoppedAt || new Date().toISOString()
           clearTimeout(timeout)
           resolve()
         }, { once: true })
@@ -358,6 +365,7 @@ export default function Proctoring() {
         recorder.stop()
       })
     }
+    recording.stoppedAt = recording.stoppedAt || new Date().toISOString()
     if (!recording.chunks.length || !sessionId) {
       setRecordingStatusForSource(source, 'failed')
       recording.finalizing = false
@@ -371,7 +379,10 @@ export default function Proctoring() {
       let lastError = null
       for (let i = 0; i < 3; i += 1) {
         try {
-          await uploadProctoringVideo(attemptId, sessionId, source, filename, blob)
+          await uploadProctoringVideo(attemptId, sessionId, source, filename, blob, {
+            recording_started_at: recording.startedAt,
+            recording_stopped_at: recording.stoppedAt,
+          })
           lastError = null
           break
         } catch (e) {
@@ -384,6 +395,8 @@ export default function Proctoring() {
       recording.finalized = true
       recording.sessionId = null
       recording.recorder = null
+      recording.startedAt = null
+      recording.stoppedAt = null
       recording.chunks = []
       recording.bytesRecorded = 0
     } catch {
@@ -446,6 +459,63 @@ export default function Proctoring() {
     }
   }, [attemptId, flush, navigate, stopAndFinalizeRecordings, submitting])
 
+  const handleViolation = useCallback((event) => {
+    if (event.severity === 'HIGH' || event.severity === 'MEDIUM') {
+      setViolations(prev => ({
+        ...prev,
+        [event.severity]: prev[event.severity] + 1
+      }))
+    }
+    setToast(event)
+  }, [])
+
+  const handleForcedSubmit = useCallback((detail = 'Test auto-submitted due to violations.') => {
+    const event = normalizeProctoringAlert({
+      severity: 'HIGH',
+      event_type: 'FORCED_SUBMIT',
+      detail,
+    })
+    if (event) {
+      handleViolation(event)
+    }
+    void handleSubmit()
+  }, [handleSubmit, handleViolation])
+
+  const applyPingResponse = useCallback((response) => {
+    const payload = response?.data ?? response
+    if (!payload || typeof payload !== 'object') return
+    const serverAlerts = Array.isArray(payload.alerts) ? payload.alerts : []
+    serverAlerts.forEach((alert) => {
+      const event = normalizeProctoringAlert(alert)
+      if (event) {
+        handleViolation(event)
+      }
+    })
+    if (payload.forced_submit) {
+      handleForcedSubmit(payload.submit_reason || 'Test auto-submitted due to violations.')
+    }
+  }, [handleForcedSubmit, handleViolation])
+
+  // Fullscreen enforcement
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (attemptId) {
+        proctoringPing(attemptId, {
+          focus: document.hasFocus(),
+          visibility: document.visibilityState,
+          blurs: tabBlurs,
+          fullscreen: !!document.fullscreenElement,
+          camera_dark: cameraDark,
+        }).then(applyPingResponse).catch(() => {})
+      }
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {})
+      }
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [applyPingResponse, attemptId, cameraDark, tabBlurs])
+
   useEffect(() => {
     if (!proctorCfg.screen_capture) {
       screenShareEstablishedRef.current = false
@@ -490,16 +560,6 @@ export default function Proctoring() {
     void handleSubmit()
   }, [timeLeft, handleSubmit])
 
-  const handleViolation = useCallback((event) => {
-    if (event.severity === 'HIGH' || event.severity === 'MEDIUM') {
-      setViolations(prev => ({
-        ...prev,
-        [event.severity]: prev[event.severity] + 1
-      }))
-    }
-    setToast(event)
-  }, [])
-
   const formatTime = (secs) => {
     if (secs === null) return '--:--'
     const m = Math.floor(secs / 60)
@@ -530,7 +590,7 @@ export default function Proctoring() {
             blurs: next,
             fullscreen: !!document.fullscreenElement,
             camera_dark: cameraDark,
-          }).catch(() => {})
+          }).then(applyPingResponse).catch(() => {})
         }
         return next
       })
@@ -546,7 +606,7 @@ export default function Proctoring() {
               blurs: next,
               fullscreen: !!document.fullscreenElement,
               camera_dark: cameraDark,
-            }).catch(() => {})
+            }).then(applyPingResponse).catch(() => {})
           }
           return next
         })
@@ -558,7 +618,7 @@ export default function Proctoring() {
       window.removeEventListener('blur', onBlur)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [attemptId, cameraDark, proctorCfg.tab_switch_detect])
+  }, [applyPingResponse, attemptId, cameraDark, proctorCfg.tab_switch_detect])
 
   useEffect(() => {
     const max = proctorCfg.max_tab_blurs
@@ -594,10 +654,10 @@ export default function Proctoring() {
         blurs: tabBlurs,
         fullscreen: !!document.fullscreenElement,
         camera_dark: cameraDark,
-      }).catch(() => {})
+      }).then(applyPingResponse).catch(() => {})
     }, 10000)
     return () => clearInterval(interval)
-  }, [attemptId, tabBlurs, cameraDark])
+  }, [applyPingResponse, attemptId, tabBlurs, cameraDark])
 
   useEffect(() => {
     const onBeforeUnload = () => {
@@ -658,7 +718,7 @@ export default function Proctoring() {
         token={tokens?.access_token}
         config={proctorCfg}
         onViolation={handleViolation}
-        onForcedSubmit={handleSubmit}
+        onForcedSubmit={handleForcedSubmit}
         onStreamReady={setCameraStream}
         onScreenStreamReady={setScreenStream}
         onRegisterScreenShareRequest={registerScreenShareRequest}

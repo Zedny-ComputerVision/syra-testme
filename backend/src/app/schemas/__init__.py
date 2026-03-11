@@ -42,8 +42,13 @@ T = TypeVar("T")
 class PaginatedResponse(BaseModel, Generic[T]):
     items: list[T]
     total: int
-    skip: int
-    limit: int
+    page: int = 1
+    page_size: int = 20
+    search: str | None = None
+    sort: str | None = None
+    order: str = "desc"
+    skip: int = 0
+    limit: int = 20
 
 
 class ReportScheduleRunResult(BaseModel):
@@ -455,6 +460,10 @@ class ScheduleBase(BaseModel):
     def validate_target(self):
         if not self.exam_id and not self.test_id:
             raise ValueError("Either exam_id or test_id is required")
+        if self.exam_id and self.test_id and self.exam_id != self.test_id:
+            raise ValueError("exam_id and test_id must reference the same test")
+        if self.exam_id is None and self.test_id is not None:
+            self.exam_id = self.test_id
         return self
 
 
@@ -509,10 +518,10 @@ class ProctoringRuleAlert(BaseModel):
     event_type: str
     severity: SeverityEnum
     detail: str
-    action: str
-    rule_id: str
-    threshold: int
-    actual_count: int
+    action: str | None = None
+    rule_id: str | None = None
+    threshold: int | None = None
+    actual_count: int | None = None
 
 
 class ProctoringPingResponse(BaseModel):

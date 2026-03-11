@@ -40,6 +40,7 @@ DEFAULT_ORCHESTRATOR_CONFIG = {
     "audio_detection": True,
     "head_pose_detection": True,
     "face_min_confidence": 0.6,
+    "multi_face_consecutive": 1,
     "object_detect_interval": 3,
     "max_face_absence_sec": 3,
     "eye_deviation_deg": 12,
@@ -172,7 +173,7 @@ def _validate_config(config: dict | None) -> dict:
     for key in ("eye_pitch_min_rad", "eye_pitch_max_rad", "eye_yaw_min_rad", "eye_yaw_max_rad", "head_yaw_min_rad", "head_yaw_max_rad", "head_pitch_min_rad", "head_pitch_max_rad"):
         validated[key] = _coerce_float(key, config.get(key), DEFAULT_ORCHESTRATOR_CONFIG[key], allow_none=True)
 
-    for key in ("object_detect_interval", "cheating_consecutive_frames", "eye_consecutive", "audio_consecutive_chunks", "audio_window", "head_pose_yaw_deg", "head_pose_pitch_deg", "head_pose_consecutive"):
+    for key in ("object_detect_interval", "multi_face_consecutive", "cheating_consecutive_frames", "eye_consecutive", "audio_consecutive_chunks", "audio_window", "head_pose_yaw_deg", "head_pose_pitch_deg", "head_pose_consecutive"):
         validated[key] = _coerce_int(key, config.get(key), DEFAULT_ORCHESTRATOR_CONFIG[key], min_value=1)
 
     validated["max_alerts_before_autosubmit"] = _coerce_int(
@@ -222,7 +223,11 @@ class ProctoringOrchestrator:
             disappeared_threshold=cfg.get("max_face_absence_sec", 3),
             min_confidence=self._face_conf,
         )
-        self.multi_detector = MultiFaceDetector(cooldown=5.0, min_confidence=self._face_conf)
+        self.multi_detector = MultiFaceDetector(
+            consecutive_threshold=cfg.get("multi_face_consecutive", 1),
+            cooldown=5.0,
+            min_confidence=self._face_conf,
+        )
 
         eye_dev_rad = float(math.radians(cfg.get("eye_deviation_deg", 12)))
         cheating_consecutive = int(cfg.get("cheating_consecutive_frames", 5))
@@ -286,16 +291,18 @@ class ProctoringOrchestrator:
         # ── 2. Single YOLO pass for face/multi-face ──────────────────────────
         face_count = 0
         face_confidences: list[float] = []
+        face_model_available = False
         if self.enable_face_detection or self.enable_multi_face:
             model = get_face_model()
             if model is not None:
+                face_model_available = True
                 results = model.predict(frame, verbose=False, conf=self._face_conf, imgsz=640)
                 face_confidences = [float(c) for r in results for c in r.boxes.conf]
                 face_count = len(face_confidences)
 
-        if self.enable_face_detection:
+        if self.enable_face_detection and face_model_available:
             self.alert_logger.add(self.face_detector.process_detections(face_count, face_confidences))
-        if self.enable_multi_face:
+        if self.enable_multi_face and face_model_available:
             self.alert_logger.add(self.multi_detector.process_detections(face_count, face_confidences))
 
         # ── 3. MediaPipe detectors — skip when no face visible ───────────────

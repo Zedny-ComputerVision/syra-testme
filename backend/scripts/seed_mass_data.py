@@ -1,10 +1,11 @@
 """Seed a large demo dataset for local UI testing.
 
 Run from backend folder:
-  set DATABASE_URL=sqlite:///./syra.db
-  .\.venv\Scripts\python.exe scripts\seed_mass_data.py
+  set DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/syra_lms
+  .\\.venv\\Scripts\\python.exe scripts\\seed_mass_data.py
 """
 
+import logging
 import os
 import random
 import sys
@@ -44,8 +45,7 @@ from src.app.models import (
     User,
     UserGroup,
 )
-from src.app.modules.tests.enums import ReportContent, ReportDisplayed, TestStatus, TestType
-from src.app.modules.tests.models import Test, TestSettings
+logger = logging.getLogger(__name__)
 
 
 def random_name(prefix: str, idx: int) -> str:
@@ -215,53 +215,7 @@ def seed():
         db.add_all(questions)
         db.flush()
 
-        # v2 tests + settings.
-        tests = []
-        settings_rows = []
-        for i in range(1, 101):
-            status = random.choice([TestStatus.DRAFT, TestStatus.PUBLISHED, TestStatus.ARCHIVED])
-            published_at = now - timedelta(days=random.randint(1, 120)) if status == TestStatus.PUBLISHED else None
-            archived_at = now - timedelta(days=random.randint(1, 90)) if status == TestStatus.ARCHIVED else None
-            test = Test(
-                code=f"T{run_tag[-8:]}{i:03d}",
-                name=f"Seed {run_tag} Test {i}",
-                description=f"Rich seeded test record {i} for UI validation.",
-                type=random.choice([TestType.MCQ, TestType.TEXT]),
-                status=status,
-                category_id=random.choice(categories).id,
-                time_limit_minutes=random.choice([20, 30, 45, 60, 90]),
-                attempts_allowed=random.choice([1, 2, 3]),
-                randomize_questions=bool(i % 2),
-                report_displayed=random.choice(list(ReportDisplayed)),
-                report_content=random.choice(list(ReportContent)),
-                ui_config={
-                    "section_count": random.randint(1, 4),
-                    "display_score": True,
-                    "display_score_description": bool(i % 2),
-                },
-                published_at=published_at,
-                archived_at=archived_at,
-            )
-            tests.append(test)
-        db.add_all(tests)
-        db.flush()
-
-        for t in tests:
-            settings_rows.append(
-                TestSettings(
-                    test_id=t.id,
-                    fullscreen_required=True,
-                    tab_switch_detect=True,
-                    camera_required=True,
-                    mic_required=bool(random.randint(0, 1)),
-                    violation_threshold_warn=random.randint(2, 5),
-                    violation_threshold_autosubmit=random.randint(6, 10),
-                )
-            )
-        db.add_all(settings_rows)
-        db.flush()
-
-        # Schedules for exams and tests.
+        # Schedules for exams.
         schedules = []
         for user in learners:
             for exam in random.sample(exams, k=3):
@@ -272,16 +226,6 @@ def seed():
                         scheduled_at=now + timedelta(days=random.randint(-20, 30), hours=random.randint(0, 20)),
                         access_mode=random.choice([AccessMode.OPEN, AccessMode.RESTRICTED]),
                         notes=f"Seeded exam schedule {run_tag}",
-                    )
-                )
-            for test in random.sample(tests, k=2):
-                schedules.append(
-                    Schedule(
-                        test_id=test.id,
-                        user_id=user.id,
-                        scheduled_at=now + timedelta(days=random.randint(-20, 30), hours=random.randint(0, 20)),
-                        access_mode=random.choice([AccessMode.OPEN, AccessMode.RESTRICTED]),
-                        notes=f"Seeded test schedule {run_tag}",
                     )
                 )
         db.add_all(schedules)
@@ -420,7 +364,7 @@ def seed():
                     user_id=actor.id,
                     action=random.choice(actions),
                     resource_type=random.choice(["test", "exam", "schedule", "report"]),
-                    resource_id=str(random.choice(tests).id),
+                    resource_id=str(random.choice(exams).id),
                     detail=f"Seeded audit entry {i}",
                     ip_address=f"10.10.0.{random.randint(2, 200)}",
                 )
@@ -433,23 +377,30 @@ def seed():
 
         db.commit()
 
-        print("Mass seed completed.")
-        print(f"Run tag: {run_tag}")
-        print("Login credentials:")
-        print("  admin@example.com / Admin1234!")
-        print("  instructor@example.com / Instructor1234!")
-        print("  learnerxxxx@example.com / Student1234!")
-        print("Created in this run:")
-        print(f"  learners={len(learners)}")
-        print(f"  exams={len(exams)} questions={len(questions)}")
-        print(f"  tests={len(tests)} test_settings={len(settings_rows)}")
-        print(f"  schedules={len(schedules)} attempts={len(attempts)} events={len(events)}")
-        print(f"  surveys={len(surveys)} survey_responses={len(survey_responses)}")
-        print(f"  groups={len(groups)} templates={len(templates)}")
-        print(f"  report_schedules={len(report_schedules)} notifications={len(notifications)} audit_logs={len(audit_logs)}")
+        logger.info("Mass seed completed for run %s", run_tag)
+        logger.info("Login credentials: admin@example.com / Admin1234!")
+        logger.info("Login credentials: instructor@example.com / Instructor1234!")
+        logger.info("Login credentials: learnerxxxx@example.com / Student1234!")
+        logger.info("Created learners=%s", len(learners))
+        logger.info("Created exams=%s questions=%s", len(exams), len(questions))
+        logger.info(
+            "Created schedules=%s attempts=%s events=%s",
+            len(schedules),
+            len(attempts),
+            len(events),
+        )
+        logger.info("Created surveys=%s survey_responses=%s", len(surveys), len(survey_responses))
+        logger.info("Created groups=%s templates=%s", len(groups), len(templates))
+        logger.info(
+            "Created report_schedules=%s notifications=%s audit_logs=%s",
+            len(report_schedules),
+            len(notifications),
+            len(audit_logs),
+        )
     finally:
         db.close()
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     seed()

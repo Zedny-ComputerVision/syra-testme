@@ -1,0 +1,1 @@
+import{a as e}from"./index-DcqQt2sU.js";const o=()=>e.get("surveys/"),u=s=>e.post("surveys/",s),a=(s,t)=>e.put(`surveys/${s}`,t),p=s=>e.delete(`surveys/${s}`),n=(s,t)=>e.post(`surveys/${s}/respond`,{survey_id:s,answers:t}),v=s=>e.get(`surveys/${s}/responses`);export{v as a,u as c,p as d,o as l,n as s,a as u};

@@ -1,0 +1,1407 @@
+Error: [31m  Failed to scan for dependencies from entries:
+  E:/codexxx/frontend/index.html
+
+  [39m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mCannot use "??" with "||" without parentheses[0m
+
+    src/pages/VerifyIdentityPage/VerifyIdentityPage.jsx:90:65:
+[37m      90 │ ... fs_ok: document.fullscreenElement != null || flags.fs_ok [32m??[37m true,
+         ╵                                                              [32m~~[0m
+
+  Expressions of the form "x || y ?? z" are not allowed in JavaScript. You must disambiguate between "(x || y) ?? z" and "x || (y ?? z)" by adding parentheses.
+
+
+    at failureErrorWithLog (E:\codexxx\frontend\node_modules\esbuild\lib\main.js:1472:15)
+    at E:\codexxx\frontend\node_modules\esbuild\lib\main.js:945:25
+    at runOnEndCallbacks (E:\codexxx\frontend\node_modules\esbuild\lib\main.js:1315:45)
+    at buildResponseToResult (E:\codexxx\frontend\node_modules\esbuild\lib\main.js:943:7)
+    at E:\codexxx\frontend\node_modules\esbuild\lib\main.js:955:9
+    at new Promise (<anonymous>)
+    at requestCallbacks.on-end (E:\codexxx\frontend\node_modules\esbuild\lib\main.js:954:54)
+    at handleRequest (E:\codexxx\frontend\node_modules\esbuild\lib\main.js:647:17)
+    at handleIncomingPacket (E:\codexxx\frontend\node_modules\esbuild\lib\main.js:672:7)
+    at Socket.readFromStdout (E:\codexxx\frontend\node_modules\esbuild\lib\main.js:600:7)
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m2:28:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: E:\codexxx\frontend\src\pages\VerifyIdentityPage\VerifyIdentityPage.jsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (90:65)
+
+[0m [90m 88 |[39m         mic_ok[33m:[39m flags[33m.[39mmic_ok [33m?[39m[33m?[39m [36mtrue[39m[33m,[39m
+ [90m 89 |[39m         cam_ok[33m:[39m flags[33m.[39mcam_ok [33m?[39m[33m?[39m [36mtrue[39m[33m,[39m
+[31m[1m>[22m[39m[90m 90 |[39m         fs_ok[33m:[39m document[33m.[39mfullscreenElement [33m!=[39m [36mnull[39m [33m||[39m flags[33m.[39mfs_ok [33m?[39m[33m?[39m [36mtrue[39m[33m,[39m
+ [90m    |[39m                                                                  [31m[1m^[22m[39m
+ [90m 91 |[39m       }
+ [90m 92 |[39m       [36mconst[39m { data } [33m=[39m [36mawait[39m precheckAttempt(attemptId[33m,[39m payload)
+ [90m 93 |[39m       setResult(data)[0m
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m3:08:32 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\pages\VerifyIdentityPage\VerifyIdentityPage.jsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (90:65)
+
+[0m [90m 88 |[31m         mic_ok[33m:[31m flags[33m.[31mmic_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+ [90m 89 |[31m         cam_ok[33m:[31m flags[33m.[31mcam_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+[31m[1m>[22m[31m[90m 90 |[31m         fs_ok[33m:[31m document[33m.[31mfullscreenElement [33m!=[31m [36mnull[31m [33m||[31m flags[33m.[31mfs_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+ [90m    |[31m                                                                  [31m[1m^[22m[31m
+ [90m 91 |[31m       }
+ [90m 92 |[31m       [36mconst[31m { data } [33m=[31m [36mawait[31m precheckAttempt(attemptId[33m,[31m payload)
+ [90m 93 |[31m       setResult(data)[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/pages/VerifyIdentityPage/VerifyIdentityPage.jsx[39m:90:65
+[33m  88 |          mic_ok: flags.mic_ok ?? true,
+  89 |          cam_ok: flags.cam_ok ?? true,
+  90 |          fs_ok: document.fullscreenElement != null || flags.fs_ok ?? true,
+     |                                                                   ^
+  91 |        }
+  92 |        const { data } = await precheckAttempt(attemptId, payload)[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10951:22)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10953:21)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10908:17)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseObjectProperty (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11950:83)
+      at JSXParserMixin.parseObjPropValue (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11978:100)
+      at JSXParserMixin.parsePropertyDefinition (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11915:17)
+      at JSXParserMixin.parseObjectLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11832:21)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11339:23)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseVar (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13384:91)
+      at JSXParserMixin.parseVarStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseTryStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13205:23)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12804:21)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseFunctionBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+      at JSXParserMixin.parseArrowExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12075:10)
+      at JSXParserMixin.parseAsyncArrowFromCallExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11264:10)
+      at JSXParserMixin.parseCoverCallAndAsyncArrowHead (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11194:27)
+      at JSXParserMixin.parseSubscript (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11120:19)
+      at JSXParserMixin.parseSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11094:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11085:17)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+[2m3:08:38 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\pages\VerifyIdentityPage\VerifyIdentityPage.jsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (90:65)
+
+[0m [90m 88 |[31m         mic_ok[33m:[31m flags[33m.[31mmic_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+ [90m 89 |[31m         cam_ok[33m:[31m flags[33m.[31mcam_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+[31m[1m>[22m[31m[90m 90 |[31m         fs_ok[33m:[31m document[33m.[31mfullscreenElement [33m!=[31m [36mnull[31m [33m||[31m flags[33m.[31mfs_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+ [90m    |[31m                                                                  [31m[1m^[22m[31m
+ [90m 91 |[31m       }
+ [90m 92 |[31m       [36mconst[31m { data } [33m=[31m [36mawait[31m precheckAttempt(attemptId[33m,[31m payload)
+ [90m 93 |[31m       setResult(data)[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/pages/VerifyIdentityPage/VerifyIdentityPage.jsx[39m:90:65
+[33m  88 |          mic_ok: flags.mic_ok ?? true,
+  89 |          cam_ok: flags.cam_ok ?? true,
+  90 |          fs_ok: document.fullscreenElement != null || flags.fs_ok ?? true,
+     |                                                                   ^
+  91 |        }
+  92 |        const { data } = await precheckAttempt(attemptId, payload)[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10951:22)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10953:21)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10908:17)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseObjectProperty (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11950:83)
+      at JSXParserMixin.parseObjPropValue (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11978:100)
+      at JSXParserMixin.parsePropertyDefinition (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11915:17)
+      at JSXParserMixin.parseObjectLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11832:21)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11339:23)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseVar (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13384:91)
+      at JSXParserMixin.parseVarStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseTryStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13205:23)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12804:21)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseFunctionBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+      at JSXParserMixin.parseArrowExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12075:10)
+      at JSXParserMixin.parseAsyncArrowFromCallExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11264:10)
+      at JSXParserMixin.parseCoverCallAndAsyncArrowHead (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11194:27)
+      at JSXParserMixin.parseSubscript (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11120:19)
+      at JSXParserMixin.parseSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11094:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11085:17)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+[2m3:08:40 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\pages\VerifyIdentityPage\VerifyIdentityPage.jsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (90:65)
+
+[0m [90m 88 |[31m         mic_ok[33m:[31m flags[33m.[31mmic_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+ [90m 89 |[31m         cam_ok[33m:[31m flags[33m.[31mcam_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+[31m[1m>[22m[31m[90m 90 |[31m         fs_ok[33m:[31m document[33m.[31mfullscreenElement [33m!=[31m [36mnull[31m [33m||[31m flags[33m.[31mfs_ok [33m?[31m[33m?[31m [36mtrue[31m[33m,[31m
+ [90m    |[31m                                                                  [31m[1m^[22m[31m
+ [90m 91 |[31m       }
+ [90m 92 |[31m       [36mconst[31m { data } [33m=[31m [36mawait[31m precheckAttempt(attemptId[33m,[31m payload)
+ [90m 93 |[31m       setResult(data)[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/pages/VerifyIdentityPage/VerifyIdentityPage.jsx[39m:90:65
+[33m  88 |          mic_ok: flags.mic_ok ?? true,
+  89 |          cam_ok: flags.cam_ok ?? true,
+  90 |          fs_ok: document.fullscreenElement != null || flags.fs_ok ?? true,
+     |                                                                   ^
+  91 |        }
+  92 |        const { data } = await precheckAttempt(attemptId, payload)[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10951:22)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10953:21)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10908:17)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseObjectProperty (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11950:83)
+      at JSXParserMixin.parseObjPropValue (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11978:100)
+      at JSXParserMixin.parsePropertyDefinition (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11915:17)
+      at JSXParserMixin.parseObjectLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11832:21)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11339:23)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseVar (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13384:91)
+      at JSXParserMixin.parseVarStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseTryStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13205:23)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12804:21)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseFunctionBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+      at JSXParserMixin.parseArrowExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12075:10)
+      at JSXParserMixin.parseAsyncArrowFromCallExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11264:10)
+      at JSXParserMixin.parseCoverCallAndAsyncArrowHead (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11194:27)
+      at JSXParserMixin.parseSubscript (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11120:19)
+      at JSXParserMixin.parseSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11094:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11085:17)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestsPage.jsx". Does the file exist?
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestPreviewPage.jsx". Does the file exist?
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestCreatePage.jsx". Does the file exist?
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestEditPage.jsx". Does the file exist?
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestsPage.jsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestsPage.jsx[39m:3:28
+[33m  18 |  import React, { useEffect, useMemo, useState } from "react";
+  19 |  import { useNavigate } from "react-router-dom";
+  20 |  import AdminPageHeader from "../../pages/Admin/AdminPageHeader/AdminPageHeader";
+     |                               ^
+  21 |  import { adminApi } from "../../services/admin.service";
+  22 |  import { useTestsList } from "../hooks/useTestsList";[39m
+      at TransformPluginContext._formatError (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 5)
+      at async TransformPluginContext.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestCreatePage.jsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestCreatePage.jsx[39m:3:28
+[33m  18 |  import React, { useState } from "react";
+  19 |  import { useNavigate } from "react-router-dom";
+  20 |  import AdminPageHeader from "../../pages/Admin/AdminPageHeader/AdminPageHeader";
+     |                               ^
+  21 |  import { testsApi } from "../api/tests.api";
+  22 |  import { TestType } from "../api/tests.types";[39m
+      at TransformPluginContext._formatError (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 5)
+      at async TransformPluginContext.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestEditPage.jsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestEditPage.jsx[39m:3:28
+[33m  18 |  import React, { useEffect, useMemo, useState } from "react";
+  19 |  import { useNavigate, useParams } from "react-router-dom";
+  20 |  import AdminPageHeader from "../../pages/Admin/AdminPageHeader/AdminPageHeader";
+     |                               ^
+  21 |  import { useTest } from "../hooks/useTest";
+  22 |  import { TestStatus, TestType, ReportContent, ReportDisplayed } from "../api/tests.types";[39m
+      at TransformPluginContext._formatError (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 5)
+      at async TransformPluginContext.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m7:35:50 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestPreviewPage.jsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestPreviewPage.jsx[39m:3:28
+[33m  18 |  import React from "react";
+  19 |  import { useParams, useNavigate } from "react-router-dom";
+  20 |  import AdminPageHeader from "../../pages/Admin/AdminPageHeader/AdminPageHeader";
+     |                               ^
+  21 |  import { useTest } from "../hooks/useTest";
+  22 |  import { TestStatusChip, TestTypeChip } from "../components/TestStatusChip";[39m
+      at TransformPluginContext._formatError (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 5)
+      at async TransformPluginContext.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m7:35:56 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestCreatePage.jsx". Does the file exist?
+[2m7:35:56 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:35:56 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestPreviewPage.jsx". Does the file exist?
+[2m7:35:56 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestsPage.jsx". Does the file exist?
+[2m7:35:56 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestEditPage.jsx". Does the file exist?
+[2m7:36:30 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestCreatePage.jsx". Does the file exist?
+[2m7:36:30 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestEditPage.jsx". Does the file exist?
+[2m7:36:30 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:36:30 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestPreviewPage.jsx". Does the file exist?
+[2m7:36:41 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestPreviewPage.jsx". Does the file exist?
+[2m7:36:41 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestEditPage.jsx". Does the file exist?
+[2m7:36:41 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:36:55 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../pages/Admin/AdminPageHeader/AdminPageHeader" from "src/features/tests/pages/AdminTestPreviewPage.jsx". Does the file exist?
+[2m7:36:55 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/api/tests.api.js[39m:1:18
+[33m  1  |  import api from '../../services/api'
+     |                   ^
+  2  |  
+  3  |  export const testsApi = {[39m
+      at TransformPluginContext._formatError (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 0)
+      at async TransformPluginContext.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///E:/codexxx/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m7:44:44 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:44:44 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:44:44 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+[2m7:44:44 PM[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "../../services/api" from "src/features/tests/api/tests.api.js". Does the file exist?
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m1:16:55 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\features\tests\pages\AdminTestsPage.jsx: Unterminated regular expression. (27:31)
+
+[0m [90m 25 |[31m
+ [90m 26 |[31m [36mfunction[31m parseCsv(content) {
+[31m[1m>[22m[31m[90m 27 |[31m   [36mconst[31m lines [33m=[31m content[33m.[31msplit([33m/[31m
+ [90m    |[31m                                [31m[1m^[22m[31m
+ [90m 28 |[31m [33m?[31m
+ [90m 29 |[31m [33m/[31m)[33m.[31mmap((l) [33m=>[31m l[33m.[31mtrim())[33m.[31mfilter([33mBoolean[31m)
+ [90m 30 |[31m   [36mif[31m ([33m![31mlines[33m.[31mlength) [36mreturn[31m [][0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestsPage.jsx[39m:27:31
+[33m  26 |  function parseCsv(content) {
+  27 |    const lines = content.split(/?
+  28 |  /).map((l) => l.trim()).filter(Boolean)
+     |                         ^
+  29 |    if (!lines.length) return []
+  30 |    const hasHeader = /^name\s*,\s*type/i.test(lines[0])[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.readRegexp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6328:20)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11313:16)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseExprListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12175:18)
+      at JSXParserMixin.parseCallExpressionArguments (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11252:22)
+      at JSXParserMixin.parseCoverCallAndAsyncArrowHead (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11186:29)
+      at JSXParserMixin.parseSubscript (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11120:19)
+      at JSXParserMixin.parseSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11094:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11085:17)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseVar (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13384:91)
+      at JSXParserMixin.parseVarStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseFunctionBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+      at JSXParserMixin.parseFunctionBodyAndFinish (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12086:10)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13445:12
+      at JSXParserMixin.withSmartMixTopicForbiddingContext (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12403:14)
+      at JSXParserMixin.parseFunction (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13444:10)
+      at JSXParserMixin.parseFunctionStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13125:17)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12791:21)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseModuleItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+[2m1:17:12 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\features\tests\pages\AdminTestsPage.jsx: Unterminated regular expression. (27:31)
+
+[0m [90m 25 |[31m
+ [90m 26 |[31m [36mfunction[31m parseCsv(content) {
+[31m[1m>[22m[31m[90m 27 |[31m   [36mconst[31m lines [33m=[31m content[33m.[31msplit([33m/[31m
+ [90m    |[31m                                [31m[1m^[22m[31m
+ [90m 28 |[31m [33m?[31m
+ [90m 29 |[31m [33m/[31m)[33m.[31mmap((l) [33m=>[31m l[33m.[31mtrim())[33m.[31mfilter([33mBoolean[31m)
+ [90m 30 |[31m   [36mif[31m ([33m![31mlines[33m.[31mlength) [36mreturn[31m [][0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestsPage.jsx[39m:27:31
+[33m  26 |  function parseCsv(content) {
+  27 |    const lines = content.split(/?
+  28 |  /).map((l) => l.trim()).filter(Boolean)
+     |                         ^
+  29 |    if (!lines.length) return []
+  30 |    const hasHeader = /^name\s*,\s*type/i.test(lines[0])[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.readRegexp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6328:20)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11313:16)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseExprListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12175:18)
+      at JSXParserMixin.parseCallExpressionArguments (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11252:22)
+      at JSXParserMixin.parseCoverCallAndAsyncArrowHead (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11186:29)
+      at JSXParserMixin.parseSubscript (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11120:19)
+      at JSXParserMixin.parseSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11094:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11085:17)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseVar (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13384:91)
+      at JSXParserMixin.parseVarStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseFunctionBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+      at JSXParserMixin.parseFunctionBodyAndFinish (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12086:10)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13445:12
+      at JSXParserMixin.withSmartMixTopicForbiddingContext (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12403:14)
+      at JSXParserMixin.parseFunction (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13444:10)
+      at JSXParserMixin.parseFunctionStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13125:17)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12791:21)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseModuleItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+[2m1:17:24 AM[22m [31m[1m[vite][22m[39m Pre-transform error: E:\codexxx\frontend\src\features\tests\pages\AdminTestsPage.jsx: Unterminated regular expression. (27:31)
+
+[0m [90m 25 |[39m
+ [90m 26 |[39m [36mfunction[39m parseCsv(content) {
+[31m[1m>[22m[39m[90m 27 |[39m   [36mconst[39m lines [33m=[39m content[33m.[39msplit([33m/[39m
+ [90m    |[39m                                [31m[1m^[22m[39m
+ [90m 28 |[39m [33m?[39m
+ [90m 29 |[39m [33m/[39m)[33m.[39mmap((l) [33m=>[39m l[33m.[39mtrim())[33m.[39mfilter([33mBoolean[39m)
+ [90m 30 |[39m   [36mif[39m ([33m![39mlines[33m.[39mlength) [36mreturn[39m [][0m
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+[2m1:40:08 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\features\tests\pages\AdminTestsPage.jsx: Unterminated regular expression. (42:31)
+
+[0m [90m 40 |[31m
+ [90m 41 |[31m [36mfunction[31m parseCsv(content) {
+[31m[1m>[22m[31m[90m 42 |[31m   [36mconst[31m lines [33m=[31m content[33m.[31msplit([33m/[31m
+ [90m    |[31m                                [31m[1m^[22m[31m
+ [90m 43 |[31m [33m?[31m
+ [90m 44 |[31m [33m/[31m)[33m.[31mmap((l) [33m=>[31m l[33m.[31mtrim())[33m.[31mfilter([33mBoolean[31m)
+ [90m 45 |[31m   [36mif[31m ([33m![31mlines[33m.[31mlength) [36mreturn[31m [][0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestsPage.jsx[39m:42:31
+[33m  41 |  function parseCsv(content) {
+  42 |    const lines = content.split(/?
+  43 |  /).map((l) => l.trim()).filter(Boolean)
+     |                                        ^
+  44 |    if (!lines.length) return []
+  45 |    const hasHeader = /^name\s*,\s*type/i.test(lines[0])[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.readRegexp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6328:20)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11313:16)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseExprListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12175:18)
+      at JSXParserMixin.parseCallExpressionArguments (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11252:22)
+      at JSXParserMixin.parseCoverCallAndAsyncArrowHead (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11186:29)
+      at JSXParserMixin.parseSubscript (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11120:19)
+      at JSXParserMixin.parseSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11094:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11085:17)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseVar (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13384:91)
+      at JSXParserMixin.parseVarStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseStatementListItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at JSXParserMixin.parseBlock (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at JSXParserMixin.parseFunctionBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+      at JSXParserMixin.parseFunctionBodyAndFinish (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12086:10)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13445:12
+      at JSXParserMixin.withSmartMixTopicForbiddingContext (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12403:14)
+      at JSXParserMixin.parseFunction (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13444:10)
+      at JSXParserMixin.parseFunctionStatement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13125:17)
+      at JSXParserMixin.parseStatementContent (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12791:21)
+      at JSXParserMixin.parseStatementLike (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at JSXParserMixin.parseModuleItem (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+      at JSXParserMixin.parseBlockBody (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+[2m1:40:40 AM[22m [31m[1m[vite][22m[39m Pre-transform error: E:\codexxx\frontend\src\features\tests\pages\AdminTestsPage.jsx: Unterminated regular expression. (42:31)
+
+[0m [90m 40 |[39m
+ [90m 41 |[39m [36mfunction[39m parseCsv(content) {
+[31m[1m>[22m[39m[90m 42 |[39m   [36mconst[39m lines [33m=[39m content[33m.[39msplit([33m/[39m
+ [90m    |[39m                                [31m[1m^[22m[39m
+ [90m 43 |[39m [33m?[39m
+ [90m 44 |[39m [33m/[39m)[33m.[39mmap((l) [33m=>[39m l[33m.[39mtrim())[33m.[39mfilter([33mBoolean[39m)
+ [90m 45 |[39m   [36mif[39m ([33m![39mlines[33m.[39mlength) [36mreturn[39m [][0m
+[2m1:40:40 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\features\tests\pages\AdminTestsPage.jsx: Unexpected token, expected "}" (302:47)
+
+[0m [90m 300 |[31m           [33m<[31m[33mstrong[31m[33m>[31m[33mImport[31m format[33m<[31m[33m/[31m[33mstrong[31m[33m>[31m
+ [90m 301 |[31m           [33m<[31m[33mp[31m[33m>[31m[33mUpload[31m [33mJSON[31m array or [33mCSV[31m [36mwith[31m columns[33m:[31m [33m<[31m[33mcode[31m[33m>[31mname[33m,[31mtype[33m<[31m[33m/[31m[33mcode[31m[33m>[31m[33m.[31m [33mType[31m must be [33m<[31m[33mcode[31m[33m>[31m[33mMCQ[31m[33m<[31m[33m/[31m[33mcode[31m[33m>[31m or [33m<[31m[33mcode[31m[33m>[31m[33mTEXT[31m[33m<[31m[33m/[31m[33mcode[31m[33m>[31m[33m.[31m[33m<[31m[33m/[31m[33mp[31m[33m>[31m
+[31m[1m>[22m[31m[90m 302 |[31m           [33m<[31m[33mpre[31m className[33m=[31m{styles[33m.[31mmono}[33m>[31m[{[32m"name"[31m[33m:[31m[32m"Math Final"[31m[33m,[31m[32m"type"[31m[33m:[31m[32m"MCQ"[31m}][33m<[31m[33m/[31m[33mpre[31m[33m>[31m
+ [90m     |[31m                                                [31m[1m^[22m[31m
+ [90m 303 |[31m           [33m<[31m[33mpre[31m className[33m=[31m{styles[33m.[31mmono}[33m>[31mname[33m,[31mtype
+ [90m 304 |[31m [33mMath[31m [33mFinal[31m[33m,[31m[33mMCQ[31m
+ [90m 305 |[31m [33mEssay[31m [33mPractice[31m[33m,[31m[33mTEXT[31m[33m<[31m[33m/[31m[33mpre[31m[33m>[31m[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestsPage.jsx[39m:302:47
+[33m  311|            className={styles.search}
+  312|            placeholder="Search by name or code..."
+  313|            value={filters.search}
+     |             ^
+  314|            onChange={(e) => {
+  315|              resetSelection()[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.unexpected (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6619:16)
+      at JSXParserMixin.expect (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6899:12)
+      at JSXParserMixin.jsxParseExpressionContainer (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4637:10)
+      at JSXParserMixin.jsxParseElementAt (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4711:36)
+      at JSXParserMixin.jsxParseElementAt (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4698:32)
+      at JSXParserMixin.jsxParseElement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11675:28)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11331:23)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOpBaseRightExpr (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10986:34)
+      at JSXParserMixin.parseExprOpRightExpr (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10981:21)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10947:27)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10908:17)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at JSXParserMixin.parseExpressionBase (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10784:23)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10780:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10780:17)
+      at JSXParserMixin.jsxParseExpressionContainer (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4632:31)
+      at JSXParserMixin.jsxParseElementAt (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4711:36)
+      at JSXParserMixin.jsxParseElement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+[2m1:41:21 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: E:\codexxx\frontend\src\features\tests\pages\AdminTestsPage.jsx: Unexpected token, expected "}" (302:47)
+
+[0m [90m 300 |[31m           [33m<[31m[33mstrong[31m[33m>[31m[33mImport[31m format[33m<[31m[33m/[31m[33mstrong[31m[33m>[31m
+ [90m 301 |[31m           [33m<[31m[33mp[31m[33m>[31m[33mUpload[31m [33mJSON[31m array or [33mCSV[31m [36mwith[31m columns[33m:[31m [33m<[31m[33mcode[31m[33m>[31mname[33m,[31mtype[33m<[31m[33m/[31m[33mcode[31m[33m>[31m[33m.[31m [33mType[31m must be [33m<[31m[33mcode[31m[33m>[31m[33mMCQ[31m[33m<[31m[33m/[31m[33mcode[31m[33m>[31m or [33m<[31m[33mcode[31m[33m>[31m[33mTEXT[31m[33m<[31m[33m/[31m[33mcode[31m[33m>[31m[33m.[31m[33m<[31m[33m/[31m[33mp[31m[33m>[31m
+[31m[1m>[22m[31m[90m 302 |[31m           [33m<[31m[33mpre[31m className[33m=[31m{styles[33m.[31mmono}[33m>[31m[{[32m"name"[31m[33m:[31m[32m"Math Final"[31m[33m,[31m[32m"type"[31m[33m:[31m[32m"MCQ"[31m}][33m<[31m[33m/[31m[33mpre[31m[33m>[31m
+ [90m     |[31m                                                [31m[1m^[22m[31m
+ [90m 303 |[31m           [33m<[31m[33mpre[31m className[33m=[31m{styles[33m.[31mmono}[33m>[31mname[33m,[31mtype
+ [90m 304 |[31m [33mMath[31m [33mFinal[31m[33m,[31m[33mMCQ[31m
+ [90m 305 |[31m [33mEssay[31m [33mPractice[31m[33m,[31m[33mTEXT[31m[33m<[31m[33m/[31m[33mpre[31m[33m>[31m[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mE:/codexxx/frontend/src/features/tests/pages/AdminTestsPage.jsx[39m:302:47
+[33m  311|            className={styles.search}
+  312|            placeholder="Search by name or code..."
+  313|            value={filters.search}
+     |             ^
+  314|            onChange={(e) => {
+  315|              resetSelection()[39m
+      at constructor (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at JSXParserMixin.raise (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at JSXParserMixin.unexpected (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6619:16)
+      at JSXParserMixin.expect (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:6899:12)
+      at JSXParserMixin.jsxParseExpressionContainer (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4637:10)
+      at JSXParserMixin.jsxParseElementAt (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4711:36)
+      at JSXParserMixin.jsxParseElementAt (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4698:32)
+      at JSXParserMixin.jsxParseElement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11675:28)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11331:23)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOpBaseRightExpr (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10986:34)
+      at JSXParserMixin.parseExprOpRightExpr (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10981:21)
+      at JSXParserMixin.parseExprOp (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10947:27)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10908:17)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at JSXParserMixin.parseExpressionBase (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10784:23)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10780:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at JSXParserMixin.parseExpression (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10780:17)
+      at JSXParserMixin.jsxParseExpressionContainer (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4632:31)
+      at JSXParserMixin.jsxParseElementAt (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4711:36)
+      at JSXParserMixin.jsxParseElement (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+      at JSXParserMixin.parseExprAtom (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+      at JSXParserMixin.parseExprSubscripts (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at JSXParserMixin.parseUpdate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at JSXParserMixin.parseExprOps (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at JSXParserMixin.allowInAnd (E:\codexxx\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+
+DEPRECATION WARNING [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.
+
+More info: https://sass-lang.com/d/legacy-js-api
+

@@ -226,14 +226,42 @@ export default function AdminAttemptVideos() {
     [events],
   )
 
-  const anchorStartMs = useMemo(() => {
-    if (selectedVideo?.created_at && duration > 0) {
-      return new Date(selectedVideo.created_at).getTime() - (duration * 1000)
-    }
-    return attempt?.started_at ? new Date(attempt.started_at).getTime() : null
-  }, [selectedVideo?.created_at, duration, attempt?.started_at])
+  const attemptStartMs = useMemo(() => {
+    if (!attempt?.started_at) return null
+    const startedAtMs = new Date(attempt.started_at).getTime()
+    return Number.isFinite(startedAtMs) ? startedAtMs : null
+  }, [attempt?.started_at])
+
+  const selectedVideoRecordedStartMs = useMemo(() => {
+    if (!selectedVideo?.recording_started_at) return null
+    const recordedStartMs = new Date(selectedVideo.recording_started_at).getTime()
+    return Number.isFinite(recordedStartMs) ? recordedStartMs : null
+  }, [selectedVideo?.recording_started_at])
+
+  const selectedVideoRecordedEndMs = useMemo(() => {
+    if (!selectedVideo?.recording_stopped_at) return null
+    const recordedEndMs = new Date(selectedVideo.recording_stopped_at).getTime()
+    return Number.isFinite(recordedEndMs) ? recordedEndMs : null
+  }, [selectedVideo?.recording_stopped_at])
+
+  const selectedVideoStartMs = useMemo(() => {
+    if (selectedVideoRecordedStartMs !== null) return selectedVideoRecordedStartMs
+    if (!selectedVideo?.created_at || !(duration > 0)) return null
+    const createdAtMs = new Date(selectedVideo.created_at).getTime()
+    if (!Number.isFinite(createdAtMs)) return null
+    return createdAtMs - (duration * 1000)
+  }, [selectedVideo?.created_at, duration, selectedVideoRecordedStartMs])
+
+  const selectedVideoEndMs = useMemo(() => {
+    if (selectedVideoRecordedEndMs !== null) return selectedVideoRecordedEndMs
+    if (!(selectedVideoStartMs !== null) || !(duration > 0)) return null
+    return selectedVideoStartMs + (duration * 1000)
+  }, [selectedVideoRecordedEndMs, selectedVideoStartMs, duration])
+
+  const anchorStartMs = selectedVideoStartMs ?? attemptStartMs
 
   const warningTimelineEvents = useMemo(() => {
+    const clipToleranceMs = 1000
     return warningEvents
       .map((e) => {
         if (!e) return null
@@ -242,27 +270,41 @@ export default function AdminAttemptVideos() {
         if (anchorStartMs && eventTime) {
           second = Math.max(0, (eventTime - anchorStartMs) / 1000)
         }
+        const inSelectedVideo = selectedVideoStartMs !== null
+          && selectedVideoEndMs !== null
+          && eventTime !== null
+          ? eventTime >= selectedVideoStartMs - clipToleranceMs && eventTime <= selectedVideoEndMs + clipToleranceMs
+          : true
         return {
           ...e,
-          second,
+          second: selectedVideoStartMs !== null && duration > 0
+            ? Math.max(0, Math.min(duration, second))
+            : second,
+          inSelectedVideo,
+          attemptSecond: attemptStartMs && eventTime ? Math.max(0, (eventTime - attemptStartMs) / 1000) : second,
         }
       })
       .filter(Boolean)
       .sort((a, b) => a.second - b.second)
-  }, [warningEvents, anchorStartMs])
+  }, [warningEvents, anchorStartMs, attemptStartMs, duration, selectedVideoEndMs, selectedVideoStartMs])
 
-  const warningTypeOptions = useMemo(
-    () => Array.from(new Set(warningTimelineEvents.map((event) => event.event_type).filter(Boolean))).sort(),
+  const recordingWarningEvents = useMemo(
+    () => warningTimelineEvents.filter((event) => event.inSelectedVideo),
     [warningTimelineEvents],
   )
 
+  const warningTypeOptions = useMemo(
+    () => Array.from(new Set(recordingWarningEvents.map((event) => event.event_type).filter(Boolean))).sort(),
+    [recordingWarningEvents],
+  )
+
   const filteredWarningEvents = useMemo(() => (
-    warningTimelineEvents.filter((event) => {
+    recordingWarningEvents.filter((event) => {
       if (severityFilter !== 'ALL' && event.severity !== severityFilter) return false
       if (eventTypeFilter !== 'ALL' && event.event_type !== eventTypeFilter) return false
       return true
     })
-  ), [eventTypeFilter, severityFilter, warningTimelineEvents])
+  ), [eventTypeFilter, recordingWarningEvents, severityFilter])
 
   useEffect(() => {
     if (filteredWarningEvents.length === 0) {
@@ -353,7 +395,11 @@ export default function AdminAttemptVideos() {
   const timelineSegments = useMemo(() => {
     const bucketCount = 120
     const finiteDuration = Number.isFinite(duration) ? duration : 0
-    const safeDuration = finiteDuration > 0 ? finiteDuration : Math.max(60, ...filteredWarningEvents.map((e) => (Number.isFinite(e.second) ? e.second + 1 : 1)), 60)
+    const maxEventSecond = Math.max(
+      0,
+      ...filteredWarningEvents.map((e) => (Number.isFinite(e.second) ? e.second : 0)),
+    )
+    const safeDuration = Math.max(finiteDuration, maxEventSecond + 1, 60)
     const buckets = Array.from({ length: bucketCount }, () => ({ level: 0, count: 0 }))
 
     for (const e of filteredWarningEvents) {
@@ -808,7 +854,11 @@ export default function AdminAttemptVideos() {
 
             {filteredWarningEvents.length === 0 ? (
               <div className={styles.emptySmall}>
-                {warningTimelineEvents.length === 0 ? 'No warning events detected for this attempt.' : 'No warning events match the active filters.'}
+                {warningTimelineEvents.length === 0
+                  ? 'No warning events detected for this attempt.'
+                  : recordingWarningEvents.length === 0
+                    ? 'No warning events fall within the selected recording.'
+                    : 'No warning events match the active filters.'}
               </div>
             ) : (
               <>

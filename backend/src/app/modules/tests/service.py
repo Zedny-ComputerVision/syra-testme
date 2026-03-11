@@ -1,162 +1,534 @@
+from __future__ import annotations
+
 import secrets
 import string
+import uuid
+from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from ...models import Exam, ExamStatus, ExamType, RoleEnum
+from ...services.audit import write_audit_log
+from ...services.notifications import notify_user
+from ...services.normalized_relations import (
+    exam_archived_at,
+    exam_certificate,
+    exam_code,
+    exam_proctoring,
+    exam_published_at,
+    exam_randomize_questions,
+    exam_report_content,
+    exam_report_displayed,
+    exam_runtime_settings,
+    exam_security_settings,
+    exam_ui_config,
+    mutate_exam_admin_meta,
+)
+from ...services.report_rendering import render_report_template
+from ...services.sanitization import sanitize_html_fragment, sanitize_instructions
+from ...utils.pagination import PaginationParams, build_page_response
+from .enums import ReportContent, ReportDisplayed, TestStatus
+from .proctoring_requirements import normalize_proctoring_config
+from .repository import TestListQuery, TestRepository
+from .schemas import TestCreateDTO, TestResponseDTO
 
-from .enums import TestStatus
-from .models import Test
-from .repository import TestRepository
 
-
-ERROR_CODES = {
-    "LOCKED_FIELDS": status.HTTP_409_CONFLICT,
-    "NOT_FOUND": status.HTTP_404_NOT_FOUND,
-    "VALIDATION_ERROR": status.HTTP_400_BAD_REQUEST,
-    "FORBIDDEN": status.HTTP_403_FORBIDDEN,
+DEFAULT_UI_CONFIG = {
+    "displayed_columns": ["name", "code", "type", "status", "time_limit_minutes", "testing_sessions"],
 }
 
 
-def http_error(code: str, message: str, details: dict | None = None, status_code: int | None = None):
-    status_code = status_code or ERROR_CODES.get(code, status.HTTP_400_BAD_REQUEST)
-    raise HTTPException(status_code=status_code, detail={"error": {"code": code, "message": message, "details": details or {}}})
+@dataclass(slots=True)
+class ServiceActor:
+    id: uuid.UUID | None
+    role: RoleEnum | None
 
 
-def generate_code(db: Session) -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    for _ in range(20):
-        code = "".join(secrets.choice(alphabet) for _ in range(secrets.choice(range(6, 13))))
-        exists = db.scalar(select(Test.id).where(Test.code == code))
-        if not exists:
-            return code
-    http_error("VALIDATION_ERROR", "Unable to generate unique code")
+class TestServiceError(Exception):
+    def __init__(self, *, code: str, message: str, status_code: int, details: dict | None = None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.details = details or {}
 
-
-def assert_can_mutate(test: Test, fields: set[str]):
-    if test.status == TestStatus.ARCHIVED:
-        http_error("LOCKED_FIELDS", "Archived tests are read-only")
-    if test.status == TestStatus.PUBLISHED:
-        allowed = {"name", "description", "report_displayed", "report_content"}
-        blocked = fields - allowed
-        if blocked:
-            http_error("LOCKED_FIELDS", "These fields are locked when published", {"fields": sorted(blocked)})
+    def to_response(self) -> dict:
+        return {
+            "error": {
+                "code": self.code,
+                "message": self.message,
+                "details": self.details,
+            }
+        }
 
 
 class TestService:
-    def __init__(self, db: Session):
-        self.db = db
-        self.repo = TestRepository(db)
+    def __init__(self, repository: TestRepository):
+        self.repository = repository
 
-    def list(self, **kwargs):
-        return self.repo.list_tests(**kwargs)
+    def list_tests(
+        self,
+        *,
+        pagination: PaginationParams,
+        status: tuple[TestStatus, ...] | None = None,
+        test_type=None,
+        category_id: uuid.UUID | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+    ) -> dict:
+        query = TestListQuery(
+            search=pagination.search,
+            status=status,
+            type=test_type,
+            category_id=category_id,
+            created_from=created_from,
+            created_to=created_to,
+            sort=pagination.sort,
+            order=pagination.order,
+            page=pagination.page,
+            page_size=pagination.page_size,
+        )
+        items, total, schedule_counts, question_counts = self.repository.list_tests(query)
+        payload = [
+            self._serialize_list_item(
+                exam,
+                testing_sessions=schedule_counts.get(exam.id, 0),
+                question_count=question_counts.get(exam.id, 0),
+            )
+            for exam in items
+        ]
+        return build_page_response(items=payload, total=total, pagination=pagination)
 
-    def create(self, body):
+    def create_test(
+        self,
+        *,
+        body: TestCreateDTO,
+        actor: ServiceActor,
+        request_ip: str | None,
+    ) -> TestResponseDTO:
+        if body.code and self.repository.code_exists(body.code.strip()):
+            self._raise("VALIDATION_ERROR", "Code already exists", status_code=400)
+
+        node = self._ensure_node(actor, body.node_id)
         now = datetime.now(timezone.utc)
-        from .enums import ReportDisplayed, ReportContent
+        exam = Exam(
+            node_id=node.id,
+            title=body.name.strip(),
+            description=sanitize_html_fragment(body.description),
+            type=ExamType(body.type.value),
+            status=ExamStatus.CLOSED,
+            time_limit=body.time_limit_minutes or 60,
+            max_attempts=body.attempts_allowed or 1,
+            passing_score=body.passing_score,
+            category_id=body.category_id,
+            grading_scale_id=body.grading_scale_id,
+            created_by_id=actor.id,
+            created_at=now,
+            updated_at=now,
+        )
+        self.repository.create_test(
+            exam=exam,
+            runtime_settings=sanitize_instructions(body.runtime_settings or {}),
+            proctoring_config=normalize_proctoring_config(body.proctoring_config or {}),
+            certificate=body.certificate,
+        )
+        mutate_exam_admin_meta(
+            exam,
+            code=body.code.strip() if body.code else None,
+            randomize_questions=True if body.randomize_questions is None else body.randomize_questions,
+            report_displayed=(body.report_displayed or ReportDisplayed.IMMEDIATELY_AFTER_GRADING).value,
+            report_content=(body.report_content or ReportContent.SCORE_AND_DETAILS).value,
+            ui_config=body.ui_config or deepcopy(DEFAULT_UI_CONFIG),
+            settings=body.settings.model_dump() if body.settings else None,
+            published_at=None,
+            archived_at=None,
+        )
+        self.repository.commit()
+        self.repository.refresh(exam)
+        self._write_audit_log(
+            actor=actor,
+            action="TEST_CREATED",
+            resource_id=str(exam.id),
+            detail=f"Created test: {exam.title}",
+            request_ip=request_ip,
+        )
+        return self._serialize_detail(exam)
 
-        test_data = {
-            "name": body.name.strip(),
-            "description": body.description,
-            "type": body.type,
-            "status": TestStatus.DRAFT,
-            "category_id": body.category_id,
-            "time_limit_minutes": body.time_limit_minutes or 60,
-            "attempts_allowed": body.attempts_allowed or 1,
-            "randomize_questions": True if body.randomize_questions is None else body.randomize_questions,
-            "report_displayed": body.report_displayed or ReportDisplayed.IMMEDIATELY_AFTER_GRADING,
-            "report_content": body.report_content or ReportContent.SCORE_AND_DETAILS,
-            "ui_config": body.ui_config or {},
-            "created_at": now,
-            "updated_at": now,
-        }
-        settings_data = {
-            "fullscreen_required": True,
-            "tab_switch_detect": True,
-            "camera_required": True,
-            "mic_required": False,
-            "violation_threshold_warn": 3,
-            "violation_threshold_autosubmit": 6,
-        }
-        test = self.repo.create(test_data, settings_data)
-        self.db.commit()
-        self.db.refresh(test)
-        return test
+    def get_test(self, test_id: str) -> TestResponseDTO:
+        exam = self._get_test_or_raise(test_id)
+        return self._serialize_detail(exam)
 
-    def get_or_404(self, test_id: str) -> Test:
-        test = self.repo.get(test_id)
-        if not test:
-            http_error("NOT_FOUND", "Test not found")
-        return test
+    def update_test(
+        self,
+        *,
+        test_id: str,
+        body,
+        actor: ServiceActor,
+        request_ip: str | None,
+    ) -> TestResponseDTO:
+        exam = self._get_test_for_write_or_raise(test_id)
+        payload = body.model_dump(exclude_unset=True, exclude_none=True)
+        self._assert_can_mutate(exam, set(payload.keys()))
 
-    def update(self, test: Test, body):
-        data = body.model_dump(exclude_unset=True, exclude_none=True)
-        assert_can_mutate(test, set(data.keys()))
-        data["updated_at"] = datetime.now(timezone.utc)
-        settings_payload = data.pop("settings", None)
-        if settings_payload:
-            for field, value in settings_payload.items():
-                setattr(test.settings, field, value)
-        test = self.repo.update(test, data)
-        self.db.commit()
-        self.db.refresh(test)
-        return test
+        if "code" in payload:
+            next_code = payload["code"].strip() if payload["code"] else None
+            if next_code and self.repository.code_exists(next_code, exclude_exam_id=exam.id):
+                self._raise("VALIDATION_ERROR", "Code already exists", status_code=400)
+            mutate_exam_admin_meta(exam, code=next_code)
+        if "name" in payload:
+            exam.title = payload["name"].strip()
+        if "description" in payload:
+            exam.description = sanitize_html_fragment(payload["description"])
+        if "type" in payload:
+            exam.type = ExamType(payload["type"])
+        if "node_id" in payload:
+            exam.node_id = self._ensure_node(actor, payload["node_id"]).id
+        if "category_id" in payload:
+            exam.category_id = payload["category_id"]
+        if "grading_scale_id" in payload:
+            exam.grading_scale_id = payload["grading_scale_id"]
+        if "time_limit_minutes" in payload:
+            exam.time_limit = payload["time_limit_minutes"]
+        if "attempts_allowed" in payload:
+            exam.max_attempts = payload["attempts_allowed"]
+        if "passing_score" in payload:
+            exam.passing_score = payload["passing_score"]
+        if "runtime_settings" in payload:
+            sanitized_runtime = sanitize_instructions(
+                deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+            )
+            from ...services.normalized_relations import set_exam_runtime_settings
 
-    def publish(self, test: Test):
-        if not test.name or not test.name.strip():
-            http_error("VALIDATION_ERROR", "Name is required before publishing")
-        if not test.time_limit_minutes or test.time_limit_minutes <= 0:
-            http_error("VALIDATION_ERROR", "time_limit_minutes must be greater than 0")
-        if test.code is None:
-            test.code = generate_code(self.db)
-        if test.status != TestStatus.PUBLISHED:
+            set_exam_runtime_settings(exam, sanitized_runtime)
+        if "proctoring_config" in payload:
+            from ...services.normalized_relations import set_exam_proctoring
+
+            set_exam_proctoring(exam, normalize_proctoring_config(payload["proctoring_config"] or {}))
+        if "certificate" in payload:
+            from ...services.normalized_relations import set_exam_certificate
+
+            set_exam_certificate(exam, payload["certificate"])
+
+        admin_updates = {}
+        for field in ("randomize_questions", "report_displayed", "report_content", "ui_config", "settings"):
+            if field in payload:
+                admin_updates[field] = payload[field]
+        if admin_updates:
+            mutate_exam_admin_meta(exam, **admin_updates)
+
+        exam.updated_at = datetime.now(timezone.utc)
+        self.repository.save(exam)
+        self.repository.commit()
+        self.repository.refresh(exam)
+        self._write_audit_log(
+            actor=actor,
+            action="TEST_UPDATED",
+            resource_id=str(exam.id),
+            detail=f"Updated test: {exam.title}",
+            request_ip=request_ip,
+        )
+        return self._serialize_detail(exam)
+
+    def publish_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
+        exam = self._get_test_for_write_or_raise(test_id)
+        if not exam.title or not exam.title.strip():
+            self._raise("VALIDATION_ERROR", "Name is required before publishing", status_code=400)
+        if self.repository.question_count(exam.id) <= 0:
+            self._raise("VALIDATION_ERROR", "Test must have at least one question before publishing", status_code=400)
+        if not exam_code(exam):
+            mutate_exam_admin_meta(exam, code=self._generate_code())
+
+        if self._status(exam) != TestStatus.PUBLISHED:
             now = datetime.now(timezone.utc)
-            test.status = TestStatus.PUBLISHED
-            test.published_at = now
-            test.updated_at = now
-            self.db.add(test)
-        self.db.commit()
-        self.db.refresh(test)
-        return test
+            exam.status = ExamStatus.OPEN
+            exam.updated_at = now
+            mutate_exam_admin_meta(exam, published_at=now, archived_at=None)
+            self.repository.save(exam)
+            self.repository.commit()
+            self.repository.refresh(exam)
+            self._write_audit_log(
+                actor=actor,
+                action="TEST_PUBLISHED",
+                resource_id=str(exam.id),
+                detail=exam.title,
+                request_ip=None,
+            )
+            self._notify_published(exam)
+        return self._serialize_detail(exam)
 
-    def duplicate(self, test: Test):
-        settings = test.settings
-        new_test = self.repo.duplicate(test, settings)
-        new_test.code = None
-        new_test.created_at = datetime.now(timezone.utc)
-        new_test.updated_at = new_test.created_at
-        self.db.commit()
-        self.db.refresh(new_test)
-        return new_test
+    def duplicate_test(
+        self,
+        *,
+        test_id: str,
+        actor: ServiceActor,
+        request_ip: str | None,
+    ) -> TestResponseDTO:
+        exam = self._get_test_for_write_or_raise(test_id)
+        duplicate = self.repository.duplicate_test(exam, actor.id)
+        mutate_exam_admin_meta(duplicate, code=None, published_at=None, archived_at=None)
+        duplicate.updated_at = duplicate.created_at
+        self.repository.commit()
+        self.repository.refresh(duplicate)
+        self._write_audit_log(
+            actor=actor,
+            action="TEST_DUPLICATED",
+            resource_id=str(duplicate.id),
+            detail=f"Duplicated test: {exam.title} -> {duplicate.title}",
+            request_ip=request_ip,
+        )
+        return self._serialize_detail(duplicate)
 
-    def archive(self, test: Test):
-        if test.status == TestStatus.ARCHIVED:
-            return test
+    def archive_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
+        exam = self._get_test_for_write_or_raise(test_id)
+        previous_status = self._status(exam)
+        if previous_status == TestStatus.ARCHIVED:
+            return self._serialize_detail(exam)
+
         now = datetime.now(timezone.utc)
-        test.status = TestStatus.ARCHIVED
-        test.archived_at = now
-        test.updated_at = now
-        self.db.add(test)
-        self.db.commit()
-        self.db.refresh(test)
-        return test
+        exam.status = ExamStatus.CLOSED
+        exam.updated_at = now
+        mutate_exam_admin_meta(exam, archived_at=now)
+        self.repository.save(exam)
+        self.repository.commit()
+        self.repository.refresh(exam)
+        if previous_status == TestStatus.PUBLISHED:
+            self._write_audit_log(
+                actor=actor,
+                action="TEST_UNPUBLISHED",
+                resource_id=str(exam.id),
+                detail=exam.title,
+                request_ip=None,
+            )
+        self._write_audit_log(
+            actor=actor,
+            action="TEST_ARCHIVED",
+            resource_id=str(exam.id),
+            detail=exam.title,
+            request_ip=None,
+        )
+        return self._serialize_detail(exam)
 
-    def unarchive(self, test: Test):
-        if test.status == TestStatus.PUBLISHED and not test.archived_at:
-            return test
-        test.status = TestStatus.PUBLISHED
-        test.archived_at = None
-        test.updated_at = datetime.now(timezone.utc)
-        self.db.add(test)
-        self.db.commit()
-        self.db.refresh(test)
-        return test
+    def unarchive_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
+        exam = self._get_test_for_write_or_raise(test_id)
+        now = datetime.now(timezone.utc)
+        exam.status = ExamStatus.OPEN
+        exam.updated_at = now
+        mutate_exam_admin_meta(
+            exam,
+            archived_at=None,
+            published_at=exam_published_at(exam) or now,
+        )
+        self.repository.save(exam)
+        self.repository.commit()
+        self.repository.refresh(exam)
+        self._write_audit_log(
+            actor=actor,
+            action="TEST_UNARCHIVED",
+            resource_id=str(exam.id),
+            detail=exam.title,
+            request_ip=None,
+        )
+        return self._serialize_detail(exam)
 
-    def delete(self, test: Test):
-        if test.status != TestStatus.DRAFT:
-            http_error("FORBIDDEN", "Only draft tests can be deleted", status_code=status.HTTP_409_CONFLICT)
-        if self.repo.count_attempts(test.id) > 0:
-            http_error("FORBIDDEN", "Cannot delete a test with attempts", status_code=status.HTTP_409_CONFLICT)
-        self.repo.delete(test)
-        self.db.commit()
+    def delete_test(
+        self,
+        *,
+        test_id: str,
+        actor: ServiceActor,
+        request_ip: str | None,
+    ) -> None:
+        exam = self._get_test_for_write_or_raise(test_id)
+        if self._status(exam) != TestStatus.DRAFT:
+            self._raise("FORBIDDEN", "Only draft tests can be deleted", status_code=409)
+        if self.repository.attempt_count(exam.id) > 0:
+            self._raise("FORBIDDEN", "Cannot delete a test with attempts", status_code=409)
+
+        for user_id in self.repository.scheduled_user_ids(exam.id):
+            notify_user(
+                self.repository.db,
+                user_id,
+                "Test Cancelled",
+                f"The test '{exam.title}' has been removed.",
+                "/schedule",
+            )
+        exam_id = str(exam.id)
+        exam_title = exam.title
+        self.repository.delete(exam)
+        self.repository.commit()
+        self._write_audit_log(
+            actor=actor,
+            action="TEST_DELETED",
+            resource_id=exam_id,
+            detail=f"Deleted test: {exam_title}",
+            request_ip=request_ip,
+        )
+
+    def render_report(self, test_id: str) -> str:
+        exam = self._get_test_or_raise(test_id)
+        attempts = self.repository.list_report_attempts(exam.id)
+        return render_report_template(
+            "test_report.html",
+            report_title=f"{exam.title} Report",
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            exam_title=exam.title,
+            rows=[
+                {
+                    "user_name": attempt.user.name if attempt.user else "",
+                    "status": getattr(attempt.status, "value", attempt.status),
+                    "score": "" if attempt.score is None else attempt.score,
+                }
+                for attempt in attempts
+            ],
+        )
+
+    def _get_test_or_raise(self, test_id: str) -> Exam:
+        exam = self.repository.get_test(self._parse_test_id(test_id))
+        if exam is None:
+            self._raise("NOT_FOUND", "Test not found", status_code=404)
+        return exam
+
+    def _get_test_for_write_or_raise(self, test_id: str) -> Exam:
+        exam = self.repository.get_test_for_write(self._parse_test_id(test_id))
+        if exam is None:
+            self._raise("NOT_FOUND", "Test not found", status_code=404)
+        return exam
+
+    def _ensure_node(self, actor: ServiceActor, node_id: uuid.UUID | None):
+        actor_proxy = type(
+            "Actor",
+            (),
+            {"id": actor.id, "role": actor.role or RoleEnum.ADMIN},
+        )()
+        try:
+            return self.repository.ensure_node(actor_proxy, node_id)
+        except LookupError:
+            self._raise("NOT_FOUND", "Node not found", status_code=404)
+
+    def _generate_code(self) -> str:
+        alphabet = string.ascii_uppercase + string.digits
+        for _ in range(20):
+            code = "".join(secrets.choice(alphabet) for _ in range(secrets.choice(range(6, 13))))
+            if not self.repository.code_exists(code):
+                return code
+        self._raise("VALIDATION_ERROR", "Unable to generate unique code", status_code=400)
+
+    def _assert_can_mutate(self, exam: Exam, fields: set[str]) -> None:
+        status = self._status(exam)
+        if status == TestStatus.ARCHIVED:
+            self._raise("LOCKED_FIELDS", "Archived tests are read-only", status_code=409)
+        if status == TestStatus.PUBLISHED:
+            allowed = {"name", "description", "report_displayed", "report_content", "ui_config"}
+            blocked = fields - allowed
+            if blocked:
+                self._raise(
+                    "LOCKED_FIELDS",
+                    "These fields are locked when published",
+                    status_code=409,
+                    details={"fields": sorted(blocked)},
+                )
+
+    def _status(self, exam: Exam) -> TestStatus:
+        if exam_archived_at(exam):
+            return TestStatus.ARCHIVED
+        if exam.status == ExamStatus.OPEN:
+            return TestStatus.PUBLISHED
+        return TestStatus.DRAFT
+
+    def _serialize_detail(self, exam: Exam) -> TestResponseDTO:
+        node = exam.node
+        course = node.course if node else None
+        return TestResponseDTO.model_validate(
+            {
+                "id": exam.id,
+                "code": exam_code(exam),
+                "name": exam.title,
+                "description": exam.description,
+                "type": exam.type.value,
+                "status": self._status(exam).value,
+                "runtime_status": exam.status.value,
+                "node_id": exam.node_id,
+                "node_title": node.title if node else None,
+                "course_id": course.id if course else None,
+                "course_title": course.title if course else None,
+                "category_id": exam.category_id,
+                "grading_scale_id": exam.grading_scale_id,
+                "time_limit_minutes": exam.time_limit or 60,
+                "attempts_allowed": exam.max_attempts or 1,
+                "passing_score": exam.passing_score,
+                "randomize_questions": exam_randomize_questions(exam),
+                "report_displayed": exam_report_displayed(exam).value,
+                "report_content": exam_report_content(exam).value,
+                "ui_config": exam_ui_config(exam),
+                "settings": exam_security_settings(exam),
+                "runtime_settings": exam_runtime_settings(exam),
+                "proctoring_config": exam_proctoring(exam),
+                "certificate": exam_certificate(exam),
+                "question_count": len(exam.questions or []),
+                "created_at": exam.created_at,
+                "updated_at": exam.updated_at,
+                "published_at": exam_published_at(exam),
+                "archived_at": exam_archived_at(exam),
+            }
+        )
+
+    def _serialize_list_item(self, exam: Exam, *, testing_sessions: int, question_count: int) -> dict:
+        category = None
+        if exam.category:
+            category = {"id": exam.category.id, "name": exam.category.name}
+        return {
+            "id": exam.id,
+            "code": exam_code(exam),
+            "name": exam.title,
+            "type": exam.type.value,
+            "status": self._status(exam).value,
+            "category": category,
+            "time_limit_minutes": exam.time_limit or 60,
+            "testing_sessions": testing_sessions,
+            "question_count": question_count,
+            "certificate": exam_certificate(exam),
+            "created_at": exam.created_at,
+            "updated_at": exam.updated_at,
+        }
+
+    def _notify_published(self, exam: Exam) -> None:
+        seen: set[str] = set()
+        for user_id in self.repository.scheduled_user_ids(exam.id):
+            user_key = str(user_id)
+            if user_key in seen:
+                continue
+            seen.add(user_key)
+            notify_user(
+                self.repository.db,
+                user_id,
+                title="Test published",
+                message=f"{exam.title} is now published and available.",
+                link=f"/tests/{exam.id}",
+            )
+
+    def _write_audit_log(
+        self,
+        *,
+        actor: ServiceActor,
+        action: str,
+        resource_id: str,
+        detail: str,
+        request_ip: str | None,
+    ) -> None:
+        write_audit_log(
+            self.repository.db,
+            actor.id,
+            action=action,
+            resource_type="test",
+            resource_id=resource_id,
+            detail=detail,
+            ip_address=request_ip,
+        )
+
+    def _parse_test_id(self, raw_value: str) -> uuid.UUID:
+        try:
+            return uuid.UUID(str(raw_value))
+        except (ValueError, TypeError):
+            self._raise("NOT_FOUND", "Test not found", status_code=404)
+
+    def _raise(self, code: str, message: str, *, status_code: int, details: dict | None = None) -> None:
+        raise TestServiceError(code=code, message=message, status_code=status_code, details=details)

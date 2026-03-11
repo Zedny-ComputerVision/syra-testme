@@ -1,7 +1,8 @@
 from functools import lru_cache
 import os
 import sys
-from pydantic import Field, field_validator
+
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PLACEHOLDER_API_KEYS = {
@@ -22,12 +23,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str = Field(default="postgresql://postgres:password@localhost:5432/syra_lms")
-    SECRET_KEY: str = Field(..., min_length=32)
-    ALGORITHM: str = Field(default="HS256")
+    DATABASE_URL: str = Field(default="postgresql+psycopg://postgres:password@localhost:5432/syra_lms")
+    JWT_SECRET: str = Field(..., min_length=32, validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"))
+    JWT_ALGORITHM: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALGORITHM", "ALGORITHM"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
     PASSWORD_RESET_EXPIRE_MINUTES: int = Field(default=60)
+    LOG_LEVEL: str = Field(default="INFO")
 
     BREVO_API_KEY: str | None = None
     BREVO_BASE_URL: str = "https://api.brevo.com/v3"
@@ -53,7 +55,7 @@ class Settings(BaseSettings):
     E2E_SEED_ENABLED: bool = False
     DEV_LOG_REQUESTS: bool = False
     PRECHECK_ALLOW_TEST_BYPASS: bool = False
-    AUTO_APPLY_MIGRATIONS: bool = True
+    AUTO_APPLY_MIGRATIONS: bool = False
     IDENTITY_RETENTION_DAYS: int = Field(default=7, ge=1)
     PROCTORING_VIDEO_RETENTION_DAYS: int = Field(default=90, ge=1)
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
@@ -62,12 +64,38 @@ class Settings(BaseSettings):
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_MEDIA_WATERMARK_UID: str | None = None
 
-    @field_validator("SECRET_KEY")
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError("DATABASE_URL is required")
+        if not normalized.startswith("postgresql+psycopg://"):
+            raise ValueError("DATABASE_URL must use the postgresql+psycopg:// driver")
+        return normalized
+
+    @field_validator("JWT_SECRET")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
         if len(v) < 32:
-            raise ValueError("SECRET_KEY must be at least 32 characters")
+            raise ValueError("JWT_SECRET must be at least 32 characters")
         return v
+
+    @field_validator("JWT_ALGORITHM")
+    @classmethod
+    def validate_jwt_algorithm(cls, value: str) -> str:
+        normalized = str(value or "").strip().upper()
+        if normalized != "HS256":
+            raise ValueError("JWT_ALGORITHM must be HS256")
+        return normalized
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        normalized = str(value or "INFO").strip().upper()
+        if normalized not in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
+            raise ValueError("LOG_LEVEL must be one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
+        return normalized
 
     @field_validator("PROCTORING_VIDEO_STORAGE_PROVIDER")
     @classmethod
@@ -99,6 +127,14 @@ class Settings(BaseSettings):
                 or "PYTEST_CURRENT_TEST" in os.environ
             )
         )
+
+    @property
+    def SECRET_KEY(self) -> str:
+        return self.JWT_SECRET
+
+    @property
+    def ALGORITHM(self) -> str:
+        return self.JWT_ALGORITHM
 
 
 @lru_cache

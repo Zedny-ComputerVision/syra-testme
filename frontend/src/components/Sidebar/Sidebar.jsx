@@ -156,13 +156,13 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
         <nav className={styles.nav}>
           {/* ── HOME ── */}
           {canViewDashboard && (
-            <Section label="Home" defaultOpen>
+            <Section label="Home">
               <NavLink to={dashboardPath} icon="home" label="Dashboard" active={isActive(dashboardPath)} />
             </Section>
           )}
 
           {/* ── MY LEARNING ── */}
-          <Section label="My Learning" defaultOpen>
+          <Section label="My Learning">
             {canTakeTests && <NavLink to="/tests" icon="exams" label="My Tests" active={isActive('/tests') || isActive('/exams')} />}
             {canViewOwnSchedule && <NavLink to="/schedule" icon="schedule" label="My Schedule" active={isActive('/schedule')} />}
             {canViewOwnAttempts && <NavLink to="/attempts" icon="attempts" label="My Attempts" active={isActive('/attempts')} />}
@@ -173,7 +173,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
           {/* ── TESTS (admin/instructor) ── */}
           {(canCreateTests || canManageTests || canEditSupportingTests || canManageCategories || canManageGradingScales || canManageQuestionPools) && (
-            <Section label="Tests" defaultOpen>
+            <Section label="Tests">
               {canCreateTests && <NavLink to="/admin/tests/new" icon="newTest" label="New Test" active={isActive('/admin/tests/new')} />}
               {canManageTests && <NavLink
                 to="/admin/tests"
@@ -193,7 +193,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
           {/* ── TESTING CENTER ── */}
           {(canAssignSchedules || canViewAttemptAnalysis) && (
-            <Section label="Testing Center" defaultOpen>
+            <Section label="Testing Center">
               {canAssignSchedules && <NavLink to="/admin/sessions" icon="sessions" label="Testing Sessions" active={isActive('/admin/sessions')} />}
               {canViewAttemptAnalysis && <NavLink to="/admin/candidates" icon="candidates" label="Candidates" active={isActive('/admin/candidates')} />}
               {canViewAttemptAnalysis && <NavLink to="/admin/attempt-analysis" icon="analysis" label="Attempt Analysis" active={isActive('/admin/attempt-analysis')} />}
@@ -202,7 +202,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
           {/* ── USERS ── */}
           {(canManageUsers || canManageRoles) && (
-            <Section label="Users" defaultOpen>
+            <Section label="Users">
               {canManageUsers && <NavLink to="/admin/users" icon="users" label="User Profiles" active={isActive('/admin/users')} />}
               {canManageRoles && <NavLink to="/admin/roles" icon="roles" label="Roles & Permissions" active={isActive('/admin/roles')} />}
               {isAdmin && canManageUsers && <NavLink to="/admin/user-groups" icon="groups" label="User Groups" active={isActive('/admin/user-groups')} />}
@@ -211,7 +211,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
           {/* ── REPORTING ── */}
           {(canViewAttemptAnalysis || canGenerateReports || canSystemSettings) && (
-            <Section label="Reporting" defaultOpen>
+            <Section label="Reporting">
               {canViewAttemptAnalysis && <NavLink to="/admin/attempt-analysis" icon="analysis" label="Attempt Analysis" active={isActive('/admin/attempt-analysis')} />}
               {canGenerateReports && <NavLink to="/admin/report-builder" icon="reports" label="Report Builder" active={isActive('/admin/report-builder')} />}
               {canGenerateReports && <NavLink to="/admin/reports" icon="reports" label="Scheduled Reports" active={isActive('/admin/reports')} />}
@@ -222,7 +222,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
             </Section>
           )}
           {canSystemSettings && (
-            <Section label="System" defaultOpen>
+            <Section label="System">
               <NavLink to="/admin/integrations" icon="settings" label="Integrations" active={isActive('/admin/integrations')} />
               <NavLink to="/admin/maintenance" icon="settings" label="Maintenance" active={isActive('/admin/maintenance')} />
               <NavLink to="/admin/audit-log" icon="auditLog" label="Audit Log" active={isActive('/admin/audit-log')} />

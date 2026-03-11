@@ -1,0 +1,715 @@
+INFO:     Will watch for changes in these directories: ['E:\\codexxx\\backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [13008] using StatReload
+INFO:     Started server process [29036]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\modules\tests\service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29036]
+INFO:     Started server process [38116]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\modules\tests\service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [38116]
+INFO:     Started server process [21436]
+INFO:     Waiting for application startup.
+DB startup error — check DATABASE_URL in .env: (psycopg2.errors.DatatypeMismatch) column "randomize_questions" is of type boolean but default expression is of type integer
+HINT:  You will need to rewrite or cast the expression.
+
+[SQL: 
+CREATE TABLE tests (
+	id UUID NOT NULL, 
+	code VARCHAR(12), 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(4000), 
+	type test_type NOT NULL, 
+	status test_status NOT NULL, 
+	category_id UUID, 
+	time_limit_minutes INTEGER DEFAULT 60 NOT NULL, 
+	attempts_allowed INTEGER DEFAULT 1 NOT NULL, 
+	randomize_questions BOOLEAN DEFAULT 1 NOT NULL, 
+	report_displayed report_displayed DEFAULT 'IMMEDIATELY_AFTER_GRADING' NOT NULL, 
+	report_content report_content DEFAULT 'SCORE_AND_DETAILS' NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	published_at TIMESTAMP WITH TIME ZONE, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_tests_code UNIQUE (code), 
+	UNIQUE (code), 
+	FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\modules\tests\tests_service_test.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [21436]
+INFO:     Started server process [34956]
+INFO:     Waiting for application startup.
+DB startup error — check DATABASE_URL in .env: (psycopg2.errors.DatatypeMismatch) column "randomize_questions" is of type boolean but default expression is of type integer
+HINT:  You will need to rewrite or cast the expression.
+
+[SQL: 
+CREATE TABLE tests (
+	id UUID NOT NULL, 
+	code VARCHAR(12), 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(4000), 
+	type test_type NOT NULL, 
+	status test_status NOT NULL, 
+	category_id UUID, 
+	time_limit_minutes INTEGER DEFAULT 60 NOT NULL, 
+	attempts_allowed INTEGER DEFAULT 1 NOT NULL, 
+	randomize_questions BOOLEAN DEFAULT 1 NOT NULL, 
+	report_displayed report_displayed DEFAULT 'IMMEDIATELY_AFTER_GRADING' NOT NULL, 
+	report_content report_content DEFAULT 'SCORE_AND_DETAILS' NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	published_at TIMESTAMP WITH TIME ZONE, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_tests_code UNIQUE (code), 
+	UNIQUE (code), 
+	FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\modules\tests\tests_service_test.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [34956]
+INFO:     Started server process [36212]
+INFO:     Waiting for application startup.
+DB startup error — check DATABASE_URL in .env: (psycopg2.errors.DatatypeMismatch) column "randomize_questions" is of type boolean but default expression is of type integer
+HINT:  You will need to rewrite or cast the expression.
+
+[SQL: 
+CREATE TABLE tests (
+	id UUID NOT NULL, 
+	code VARCHAR(12), 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(4000), 
+	type test_type NOT NULL, 
+	status test_status NOT NULL, 
+	category_id UUID, 
+	time_limit_minutes INTEGER DEFAULT 60 NOT NULL, 
+	attempts_allowed INTEGER DEFAULT 1 NOT NULL, 
+	randomize_questions BOOLEAN DEFAULT 1 NOT NULL, 
+	report_displayed report_displayed DEFAULT 'IMMEDIATELY_AFTER_GRADING' NOT NULL, 
+	report_content report_content DEFAULT 'SCORE_AND_DETAILS' NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	published_at TIMESTAMP WITH TIME ZONE, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_tests_code UNIQUE (code), 
+	UNIQUE (code), 
+	FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\modules\tests\enums.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [36212]
+INFO:     Started server process [25788]
+INFO:     Waiting for application startup.
+DB startup error — check DATABASE_URL in .env: (psycopg2.errors.DatatypeMismatch) column "randomize_questions" is of type boolean but default expression is of type integer
+HINT:  You will need to rewrite or cast the expression.
+
+[SQL: 
+CREATE TABLE tests (
+	id UUID NOT NULL, 
+	code VARCHAR(12), 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(4000), 
+	type test_type NOT NULL, 
+	status test_status NOT NULL, 
+	category_id UUID, 
+	time_limit_minutes INTEGER DEFAULT 60 NOT NULL, 
+	attempts_allowed INTEGER DEFAULT 1 NOT NULL, 
+	randomize_questions BOOLEAN DEFAULT 1 NOT NULL, 
+	report_displayed report_displayed DEFAULT 'IMMEDIATELY_AFTER_GRADING' NOT NULL, 
+	report_content report_content DEFAULT 'SCORE_AND_DETAILS' NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	published_at TIMESTAMP WITH TIME ZONE, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_tests_code UNIQUE (code), 
+	UNIQUE (code), 
+	FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\models\__init__.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [25788]
+INFO:     Started server process [36548]
+INFO:     Waiting for application startup.
+DB startup error — check DATABASE_URL in .env: (psycopg2.errors.DatatypeMismatch) column "randomize_questions" is of type boolean but default expression is of type integer
+HINT:  You will need to rewrite or cast the expression.
+
+[SQL: 
+CREATE TABLE tests (
+	id UUID NOT NULL, 
+	code VARCHAR(12), 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(4000), 
+	type test_type NOT NULL, 
+	status test_status NOT NULL, 
+	category_id UUID, 
+	time_limit_minutes INTEGER DEFAULT 60 NOT NULL, 
+	attempts_allowed INTEGER DEFAULT 1 NOT NULL, 
+	randomize_questions BOOLEAN DEFAULT 1 NOT NULL, 
+	report_displayed report_displayed DEFAULT 'IMMEDIATELY_AFTER_GRADING' NOT NULL, 
+	report_content report_content DEFAULT 'SCORE_AND_DETAILS' NOT NULL, 
+	ui_config JSON, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	published_at TIMESTAMP WITH TIME ZONE, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_tests_code UNIQUE (code), 
+	UNIQUE (code), 
+	FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\api\routes\proctoring.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [36548]
+INFO:     Started server process [10180]
+INFO:     Waiting for application startup.
+DB startup error — check DATABASE_URL in .env: (psycopg2.errors.DatatypeMismatch) column "randomize_questions" is of type boolean but default expression is of type integer
+HINT:  You will need to rewrite or cast the expression.
+
+[SQL: 
+CREATE TABLE tests (
+	id UUID NOT NULL, 
+	code VARCHAR(12), 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(4000), 
+	type test_type NOT NULL, 
+	status test_status NOT NULL, 
+	category_id UUID, 
+	time_limit_minutes INTEGER DEFAULT 60 NOT NULL, 
+	attempts_allowed INTEGER DEFAULT 1 NOT NULL, 
+	randomize_questions BOOLEAN DEFAULT 1 NOT NULL, 
+	report_displayed report_displayed DEFAULT 'IMMEDIATELY_AFTER_GRADING' NOT NULL, 
+	report_content report_content DEFAULT 'SCORE_AND_DETAILS' NOT NULL, 
+	ui_config JSON, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	published_at TIMESTAMP WITH TIME ZONE, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_tests_code UNIQUE (code), 
+	UNIQUE (code), 
+	FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src\app\api\routes\proctoring.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10180]
+INFO:     Started server process [1564]
+INFO:     Waiting for application startup.
+DB startup error — check DATABASE_URL in .env: (psycopg2.errors.DatatypeMismatch) column "randomize_questions" is of type boolean but default expression is of type integer
+HINT:  You will need to rewrite or cast the expression.
+
+[SQL: 
+CREATE TABLE tests (
+	id UUID NOT NULL, 
+	code VARCHAR(12), 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(4000), 
+	type test_type NOT NULL, 
+	status test_status NOT NULL, 
+	category_id UUID, 
+	time_limit_minutes INTEGER DEFAULT 60 NOT NULL, 
+	attempts_allowed INTEGER DEFAULT 1 NOT NULL, 
+	randomize_questions BOOLEAN DEFAULT 1 NOT NULL, 
+	report_displayed report_displayed DEFAULT 'IMMEDIATELY_AFTER_GRADING' NOT NULL, 
+	report_content report_content DEFAULT 'SCORE_AND_DETAILS' NOT NULL, 
+	ui_config JSON, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+	published_at TIMESTAMP WITH TIME ZONE, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_tests_code UNIQUE (code), 
+	UNIQUE (code), 
+	FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+ call last):
+  File "E:\codexxx\backend\src\app\core\security.py", line 50, in verify_token
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 174, in decode
+    _validate_claims(
+    ~~~~~~~~~~~~~~~~^
+        claims,
+        ^^^^^^^
+    ...<5 lines>...
+        options=defaults,
+        ^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 497, in _validate_claims
+    _validate_exp(claims, leeway=leeway)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 331, in _validate_exp
+    raise ExpiredSignatureError("Signature has expired.")
+jose.exceptions.ExpiredSignatureError: Signature has expired.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\codexxx\backend\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\src\app\main.py", line 99, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 95, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 153, in simple_response
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\src\app\main.py", line 71, in dispatch
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\slowapi\middleware.py", line 136, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 453, in app
+    solved_result = await solve_dependencies(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\dependencies\utils.py", line 677, in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "E:\codexxx\backend\src\app\api\deps.py", line 24, in get_current_user
+    payload = verify_token(token, expected_type="access")
+  File "E:\codexxx\backend\src\app\core\security.py", line 52, in verify_token
+    raise ValueError("Invalid token") from exc
+ValueError: Invalid token
+Unhandled error on GET /api/attempts/
+Traceback (most recent call last):
+  File "E:\codexxx\backend\src\app\core\security.py", line 50, in verify_token
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 174, in decode
+    _validate_claims(
+    ~~~~~~~~~~~~~~~~^
+        claims,
+        ^^^^^^^
+    ...<5 lines>...
+        options=defaults,
+        ^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 497, in _validate_claims
+    _validate_exp(claims, leeway=leeway)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 331, in _validate_exp
+    raise ExpiredSignatureError("Signature has expired.")
+jose.exceptions.ExpiredSignatureError: Signature has expired.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\src\app\main.py", line 99, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 95, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 153, in simple_response
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\src\app\main.py", line 71, in dispatch
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\slowapi\middleware.py", line 136, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 453, in app
+    solved_result = await solve_dependencies(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\dependencies\utils.py", line 677, in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "E:\codexxx\backend\src\app\api\deps.py", line 24, in get_current_user
+    payload = verify_token(token, expected_type="access")
+  File "E:\codexxx\backend\src\app\core\security.py", line 52, in verify_token
+    raise ValueError("Invalid token") from exc
+ValueError: Invalid token
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "E:\codexxx\backend\src\app\core\security.py", line 50, in verify_token
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 174, in decode
+    _validate_claims(
+    ~~~~~~~~~~~~~~~~^
+        claims,
+        ^^^^^^^
+    ...<5 lines>...
+        options=defaults,
+        ^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 497, in _validate_claims
+    _validate_exp(claims, leeway=leeway)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\jose\jwt.py", line 331, in _validate_exp
+    raise ExpiredSignatureError("Signature has expired.")
+jose.exceptions.ExpiredSignatureError: Signature has expired.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\codexxx\backend\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\src\app\main.py", line 99, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 95, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 153, in simple_response
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\src\app\main.py", line 71, in dispatch
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\slowapi\middleware.py", line 136, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\routing.py", line 453, in app
+    solved_result = await solve_dependencies(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\fastapi\dependencies\utils.py", line 677, in solve_dependencies
+    solved = await run_in_threadpool(call, **solved_result.values)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\starlette\concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "E:\codexxx\backend\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "E:\codexxx\backend\src\app\api\deps.py", line 24, in get_current_user
+    payload = verify_token(token, expected_type="access")
+  File "E:\codexxx\backend\src\app\core\security.py", line 52, in verify_token
+    raise ValueError("Invalid token") from exc
+ValueError: Invalid token

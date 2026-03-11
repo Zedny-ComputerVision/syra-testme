@@ -20,9 +20,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    dialect = bind.dialect.name
-
     op.execute(
         """
         DELETE FROM attempt_answers AS older
@@ -36,25 +33,12 @@ def upgrade() -> None:
         """
     )
 
-    if dialect == "sqlite":
-        op.create_index(
-            "uq_attempt_answer_attempt_question",
-            "attempt_answers",
-            ["attempt_id", "question_id"],
-            unique=True,
-        )
-    else:
-        op.create_unique_constraint(
-            "uq_attempt_answer_attempt_question",
-            "attempt_answers",
-            ["attempt_id", "question_id"],
-        )
+    op.create_unique_constraint(
+        "uq_attempt_answer_attempt_question",
+        "attempt_answers",
+        ["attempt_id", "question_id"],
+    )
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    dialect = bind.dialect.name
-    if dialect == "sqlite":
-        op.drop_index("uq_attempt_answer_attempt_question", table_name="attempt_answers")
-    else:
-        op.drop_constraint("uq_attempt_answer_attempt_question", "attempt_answers", type_="unique")
+    op.drop_constraint("uq_attempt_answer_attempt_question", "attempt_answers", type_="unique")

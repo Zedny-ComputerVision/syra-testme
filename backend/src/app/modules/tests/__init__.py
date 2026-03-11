@@ -1,13 +1,21 @@
 from .enums import TestStatus, TestType, ReportDisplayed, ReportContent
-from .models import Test, TestSettings
+from .models import Test, TestSettings, TestUiColumn
 from .schemas import (
+    ActionResponse,
+    ActionResponseDTO,
+    ErrorResponse,
+    ErrorResponseDTO,
     TestCreate,
-    TestUpdate,
+    TestCreateDTO,
     TestDetail,
     TestListItem,
+    TestListItemDTO,
     TestListResponse,
-    ActionResponse,
-    ErrorResponse,
+    TestListResponseDTO,
+    TestResponseDTO,
+    TestSettingsSchema,
+    TestUpdate,
+    TestUpdateDTO,
 )
 from .routes_admin import router
 
@@ -18,12 +26,21 @@ __all__ = [
     "ReportContent",
     "Test",
     "TestSettings",
+    "TestUiColumn",
+    "TestSettingsSchema",
     "TestCreate",
+    "TestCreateDTO",
     "TestUpdate",
+    "TestUpdateDTO",
     "TestDetail",
+    "TestResponseDTO",
     "TestListItem",
+    "TestListItemDTO",
     "TestListResponse",
+    "TestListResponseDTO",
     "ActionResponse",
+    "ActionResponseDTO",
     "ErrorResponse",
+    "ErrorResponseDTO",
     "router",
 ]

@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from .api.router import router as api_router
 from .api.routes import media
 from .core.config import get_settings
+from .core.logging import setup_logging
 from .core.limiter import limiter
 from .core.security import verify_token
 from .db.session import SessionLocal, engine
@@ -26,8 +27,8 @@ from .models import ReportSchedule, SystemSettings
 from .api.routes.report_schedules import report_schedule_due, run_report_schedule
 from starlette.middleware.base import BaseHTTPMiddleware
 
+setup_logging()
 logger = logging.getLogger("syra")
-
 settings = get_settings()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/src/app -> backend
 STORAGE_DIR = BASE_DIR / "storage"

@@ -141,7 +141,6 @@ class Category(Base):
     description: Mapped[str | None] = mapped_column(String(1024))
 
     exams = relationship("Exam", back_populates="category")
-    tests = relationship("Test", back_populates="category")
 
 
 class GradingScale(Base):
@@ -293,12 +292,10 @@ class Schedule(Base):
     __tablename__ = "schedules"
     __table_args__ = (
         UniqueConstraint("user_id", "exam_id", name="uq_schedule_user_exam"),
-        UniqueConstraint("user_id", "test_id", name="uq_schedule_user_test"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     exam_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("exams.id", ondelete="CASCADE"), nullable=True)
-    test_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("tests.id", ondelete="CASCADE"), nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     access_mode: Mapped[AccessMode] = mapped_column(SAEnum(AccessMode), default=AccessMode.OPEN, nullable=False)
@@ -307,7 +304,6 @@ class Schedule(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     exam = relationship("Exam", back_populates="schedules")
-    test = relationship("Test", back_populates="schedules")
     user = relationship("User", back_populates="schedules")
 
 
@@ -702,5 +698,3 @@ class SystemSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
-# Import test domain models so SQLAlchemy can resolve Schedule.test relationship.
-from ..modules.tests.models import Test, TestSettings  # noqa: E402,F401

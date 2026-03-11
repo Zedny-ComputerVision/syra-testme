@@ -22,7 +22,6 @@ from ..models import (
     UserGroupMember,
 )
 from ..modules.tests.enums import ReportContent, ReportDisplayed
-from ..modules.tests.models import Test, TestUiColumn
 
 ADMIN_META_KEY = "_admin_test"
 
@@ -54,7 +53,7 @@ DEFAULT_PROCTORING = {
     "eye_deviation_deg": 12,
     "mouth_open_threshold": 0.35,
     "audio_rms_threshold": 0.08,
-    "max_face_absence_sec": 5,
+    "max_face_absence_sec": 3,
     "max_tab_blurs": 3,
     "max_alerts_before_autosubmit": 5,
     "max_fullscreen_exits": 2,
@@ -62,7 +61,7 @@ DEFAULT_PROCTORING = {
     "lighting_min_score": 0.35,
     "face_verify_id_threshold": 0.18,
     "max_score_before_autosubmit": 15,
-    "frame_interval_ms": 3000,
+    "frame_interval_ms": 1500,
     "audio_chunk_ms": 3000,
     "screenshot_interval_sec": 60,
     "face_verify_threshold": 0.15,
@@ -847,36 +846,6 @@ def set_exam_proctoring(exam: Exam, payload: dict[str, Any] | None) -> None:
         }
         for rule in rules
     ]
-
-
-def test_ui_config(test: Test) -> dict[str, Any]:
-    if test.ui_columns:
-        columns = [column.column_key for column in sorted(test.ui_columns, key=lambda item: item.position)]
-        return {"displayed_columns": columns or deepcopy(DEFAULT_UI_COLUMNS)}
-    raw = test.ui_config
-    if isinstance(raw, dict):
-        columns = raw.get("displayed_columns")
-        if isinstance(columns, list) and columns:
-            return {"displayed_columns": list(columns)}
-    return {"displayed_columns": deepcopy(DEFAULT_UI_COLUMNS)}
-
-
-def set_test_ui_config(test: Test, payload: dict[str, Any] | None) -> None:
-    raw_columns = payload.get("displayed_columns") if isinstance(payload, dict) else None
-    columns = [str(column).strip() for column in (raw_columns or []) if str(column).strip()]
-    if not columns:
-        columns = deepcopy(DEFAULT_UI_COLUMNS)
-    desired_columns = [
-        TestUiColumn(position=index, column_key=column)
-        for index, column in enumerate(columns, start=1)
-    ]
-    test.ui_columns = _sync_collection(
-        getattr(test, "ui_columns", None),
-        desired_columns,
-        key_fn=lambda item: getattr(item, "position", None),
-        update_fields=("position", "column_key"),
-    )
-    test.ui_config = {"displayed_columns": columns}
 
 
 def _coerce_datetime(value: Any) -> datetime | None:

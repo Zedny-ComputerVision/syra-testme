@@ -1123,7 +1123,8 @@ export default function AdminManageTestPage() {
 
   const handleOpenVideo = (row) => {
     if (rowBusy[row.id] || !row.attemptIdFull) return
-    navigate(`/admin/attempts/${row.attemptIdFull}/videos`)
+    const url = `/admin/attempts/${row.attemptIdFull}/videos`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const handleOpenResult = (row) => {

@@ -4,13 +4,8 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from src.app.db.base import Base
-from src.app.models import (  # noqa: F401 - import all models to register metadata
-    User, Course, Node, Category, GradingScale, QuestionPool, Exam, Question,
-    Attempt, AttemptAnswer, Schedule, ProctoringEvent, Notification, AuditLog,
-    Survey, SurveyResponse, UserGroup, ExamTemplate, ReportSchedule, SystemSettings,
-)
-from src.app.modules.tests.models import Test, TestSettings  # noqa: F401
 from src.app.core.config import get_settings
+import src.app.models  # noqa: F401
 
 config = context.config
 
@@ -25,7 +20,14 @@ config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True, dialect_opts={"paramstyle": "named"})
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        compare_type=True,
+        compare_server_default=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
@@ -37,7 +39,12 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
+        )
         with context.begin_transaction():
             context.run_migrations()
 

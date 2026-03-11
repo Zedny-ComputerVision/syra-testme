@@ -1,4 +1,5 @@
 """Seed demo data for SYRA LMS."""
+import logging
 import sys
 import os
 
@@ -18,6 +19,8 @@ from src.app.models import (
     AccessMode,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def seed():
     # Create tables if they don't exist
@@ -26,7 +29,7 @@ def seed():
     db: Session = SessionLocal()
     try:
         if db.query(User).count() > 0:
-            print("Data already present, skipping seeds")
+            logger.info("Data already present, skipping seeds")
             return
 
         # --- Users ---
@@ -133,7 +136,7 @@ def seed():
         # --- Questions for Exam 2 ---
         q2_list = [
             Question(exam_id=exam2.id, text="What is the time complexity of binary search?", type=ExamType.MCQ,
-                     options=["O(n)", "O(log n)", "O(n²)", "O(1)"], correct_answer="B", points=1.0, order=1),
+                     options=["O(n)", "O(log n)", "O(n^2)", "O(1)"], correct_answer="B", points=1.0, order=1),
             Question(exam_id=exam2.id, text="Which data structure uses FIFO?", type=ExamType.MCQ,
                      options=["Stack", "Queue", "Tree", "Graph"], correct_answer="B", points=1.0, order=2),
             Question(exam_id=exam2.id, text="A stack uses which principle?", type=ExamType.MCQ,
@@ -169,14 +172,15 @@ def seed():
         db.add_all([sched1, sched2, sched3])
 
         db.commit()
-        print("Demo data seeded successfully!")
-        print("  Users: admin@example.com / Admin1234!")
-        print("         instructor@example.com / Instructor1234!")
-        print("         student1@example.com / Student1234!")
-        print("         student2@example.com / Student1234!")
+        logger.info("Demo data seeded successfully")
+        logger.info("Users: admin@example.com / Admin1234!")
+        logger.info("Users: instructor@example.com / Instructor1234!")
+        logger.info("Users: student1@example.com / Student1234!")
+        logger.info("Users: student2@example.com / Student1234!")
     finally:
         db.close()
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     seed()

@@ -2,6 +2,16 @@ let audioCtx = null
 let processor = null
 let sourceNode = null
 
+function encodePcm16ToBase64(int16Array) {
+  const bytes = new Uint8Array(int16Array.buffer)
+  const chunkSize = 0x8000
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
+
 export async function startAudioCapture(stream, onChunk, intervalMs = 1000) {
   if (!stream) throw new Error('Stream required')
   stopAudioCapture()
@@ -26,7 +36,7 @@ export async function startAudioCapture(stream, onChunk, intervalMs = 1000) {
         const merged = new Int16Array(totalLength)
         let offset = 0
         buffer.forEach(arr => { merged.set(arr, offset); offset += arr.length })
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(merged.buffer)))
+        const b64 = encodePcm16ToBase64(merged)
         onChunk(b64)
         buffer.length = 0
         lastEmit = now

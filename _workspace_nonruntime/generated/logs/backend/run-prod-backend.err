@@ -1,0 +1,45 @@
+INFO:     Started server process [4132]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+INFO:     127.0.0.1:53322 - "WebSocket /api/proctoring/49073d86-87f8-4068-ba4a-2931429e7cad/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4N2VkOTY1ZS1lMGJiLTQ5NWMtYWQzZi1jNTdkYzI2NmQwNTkiLCJ1c2VyX2lkIjoiTFJOZDN2dGoiLCJyb2xlIjoiTEVBUk5FUiIsIm5hbWUiOiJMZWFybmVyIFRlc3QiLCJlbWFpbCI6ImxlYXJuZXIrZDN2dGpAZXhhbXBsZS5jb20iLCJ0eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyOTgxNTcyfQ.MBualKeI3utA0lJqScb-rNfCcT5HKrr8zHqDkyQKvnc" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:62275 - "WebSocket /api/proctoring/2aa1a5ae-c21b-41a3-bc9d-5e64afb87d0a/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YTM5OWMwMi1iMTMyLTQ1ZTgtODlkMS1iMjNiZWQ2MmZjZDAiLCJ1c2VyX2lkIjoiTElWMTc3Mjk4MTcxNzQ5NyIsInJvbGUiOiJMRUFSTkVSIiwibmFtZSI6IkxlYXJuZXIgVGVzdCIsImVtYWlsIjoibGVhcm5lcitqOHdzOEBleGFtcGxlLmNvbSIsInR5cGUiOiJhY2Nlc3MiLCJleHAiOjE3NzI5ODM1MzF9.uRB4cx1k6-IFv-Lu6b7Sqm_2pc2o5ynAtOQaNKUFa-4" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:63338 - "WebSocket /api/proctoring/2aa1a5ae-c21b-41a3-bc9d-5e64afb87d0a/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YTM5OWMwMi1iMTMyLTQ1ZTgtODlkMS1iMjNiZWQ2MmZjZDAiLCJ1c2VyX2lkIjoiTElWMTc3Mjk4MTcxNzQ5NyIsInJvbGUiOiJMRUFSTkVSIiwibmFtZSI6IkxlYXJuZXIgVGVzdCIsImVtYWlsIjoibGVhcm5lcitqOHdzOEBleGFtcGxlLmNvbSIsInR5cGUiOiJhY2Nlc3MiLCJleHAiOjE3NzI5ODM1MzF9.uRB4cx1k6-IFv-Lu6b7Sqm_2pc2o5ynAtOQaNKUFa-4" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:54174 - "WebSocket /api/proctoring/2eac5851-a97f-4342-936f-bbfbb618c7a9/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MjI1NWQzMy02ZTliLTQzMDQtOTI0Yy02ZTQ2ZGQxMmQ3ZTQiLCJ1c2VyX2lkIjoiTFJOMWhud2UiLCJyb2xlIjoiTEVBUk5FUiIsIm5hbWUiOiJMZWFybmVyIFRlc3QiLCJlbWFpbCI6ImxlYXJuZXIrMWhud2VAZXhhbXBsZS5jb20iLCJ0eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyOTgzNjU1fQ.eV3U3t8lFTsezHXASnjqja7AL5qoCCj1iODIxQvUozA" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:58902 - "WebSocket /api/proctoring/10b53adb-9370-4e7e-aa60-8efd46de94c6/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwYmQyY2ExZC1mZTAzLTQ2MzctYjUyMi03MTM5YmEyNjRkODciLCJ1c2VyX2lkIjoiTElWMTc3Mjk4MTkxNTk1OSIsInJvbGUiOiJMRUFSTkVSIiwibmFtZSI6IkxlYXJuZXIgVGVzdCIsImVtYWlsIjoibGVhcm5lcitlbXZqbEBleGFtcGxlLmNvbSIsInR5cGUiOiJhY2Nlc3MiLCJleHAiOjE3NzI5ODM3MzJ9.JwJ8JmsGZDzTXJEsY_XgyyoMbSGMjoLT98UQLVKV2yI" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:58238 - "WebSocket /api/proctoring/10b53adb-9370-4e7e-aa60-8efd46de94c6/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwYmQyY2ExZC1mZTAzLTQ2MzctYjUyMi03MTM5YmEyNjRkODciLCJ1c2VyX2lkIjoiTElWMTc3Mjk4MTkxNTk1OSIsInJvbGUiOiJMRUFSTkVSIiwibmFtZSI6IkxlYXJuZXIgVGVzdCIsImVtYWlsIjoibGVhcm5lcitlbXZqbEBleGFtcGxlLmNvbSIsInR5cGUiOiJhY2Nlc3MiLCJleHAiOjE3NzI5ODM3MzJ9.JwJ8JmsGZDzTXJEsY_XgyyoMbSGMjoLT98UQLVKV2yI" [accepted]
+INFO:     connection open
+INFO:     connection closed
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+INFO:     127.0.0.1:60536 - "WebSocket /api/proctoring/5103422b-95d2-434e-b451-65170f452af0/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhOTdlYmVmMC1lMTQ4LTQ1OGMtYWQ0MC00OTJiODZmNGQ4MjYiLCJ1c2VyX2lkIjoiTFJOcDVnbDQiLCJyb2xlIjoiTEVBUk5FUiIsIm5hbWUiOiJMZWFybmVyIFRlc3QiLCJlbWFpbCI6ImxlYXJuZXIrcDVnbDRAZXhhbXBsZS5jb20iLCJ0eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMDMwNDc1fQ.FZkJFK9FCNees62YIu_LgFRHEj4oV8UuP9kOFX45QA8" [accepted]
+INFO:     connection open
+INFO:     connection closed

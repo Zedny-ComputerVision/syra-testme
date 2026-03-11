@@ -15,8 +15,8 @@ const REASON_MESSAGES = {
   FULLSCREEN_REQUIRED: 'Fullscreen is required.',
   LOW_LIGHTING: 'Lighting is too low. Move to a brighter area.',
   FACE_MATCH_FAILED: 'Face match between selfie and ID photo failed.',
-  ID_TEXT_MISSING_OR_INVALID: 'No valid ID number was found from OCR or manual input.',
-  OCR_UNAVAILABLE_AND_MANUAL_ID_REQUIRED: 'OCR is not available on the server. Enter your ID number manually.',
+  ID_TEXT_MISSING_OR_INVALID: 'No valid ID number was found. Enter it manually and try again.',
+  OCR_UNAVAILABLE_AND_MANUAL_ID_REQUIRED: 'We could not read the ID number automatically. Enter it manually.',
   ID_IMAGE_TOO_SIMILAR_TO_SELFIE: 'ID capture is too similar to your selfie. Show the actual ID card.',
   ID_CAPTURE_LOOKS_LIKE_SELFIE: 'ID capture looks like a selfie. Hold your ID card in front of the camera.',
   ID_DOCUMENT_NOT_DETECTED: 'No ID card/document outline detected. Make sure the full ID card is visible in frame.',
@@ -74,9 +74,9 @@ export default function VerifyIdentityPage() {
       helper: requirements.lightingRequired ? 'Move into brighter light if the score stays too low.' : 'Low-light rejection is disabled for this test.',
     },
     {
-      label: 'OCR fallback',
-      value: idNumber.trim() ? 'Manual ID entered' : 'OCR first',
-      helper: idNumber.trim() ? 'Manual ID will be sent together with OCR evidence.' : 'If OCR misses the ID text, the learner can type it manually.',
+      label: 'ID number',
+      value: idNumber.trim() ? 'Entered manually' : 'Automatic detection',
+      helper: idNumber.trim() ? 'Your typed ID number will be sent with your photos.' : 'If the ID number is not detected automatically, the learner can type it manually.',
     },
   ]
 
@@ -404,23 +404,65 @@ export default function VerifyIdentityPage() {
         )}
 
         <div className={styles.cameraArea}>
-          <div className={styles.videoWrapper}>
-            <video ref={videoRef} className={styles.video} autoPlay muted playsInline />
-            <div className={styles.faceGuide} />
-          </div>
-          <div className={styles.captureRow}>
-            <button type="button" className={styles.captureBtn} onClick={capture} disabled={loadingConfig || submitting || !configResolved}>
-              Capture Selfie
-            </button>
-            <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(selfieInputRef)} disabled={loadingConfig || submitting || !configResolved}>
-              Upload Selfie
-            </button>
-            <button type="button" className={styles.captureBtn} onClick={captureId} disabled={loadingConfig || submitting || !configResolved}>
-              Capture ID
-            </button>
-            <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(idInputRef)} disabled={loadingConfig || submitting || !configResolved}>
-              Upload ID
-            </button>
+          <div className={styles.captureLayout}>
+            <div className={styles.visualColumn}>
+              <div className={styles.videoWrapper}>
+                <video ref={videoRef} className={styles.video} autoPlay muted playsInline />
+                <div className={styles.faceGuide} />
+              </div>
+              <div className={styles.previewRow}>
+                {selfie && (
+                  <div className={styles.photoPreview}>
+                    <span className={styles.tag}>Selfie</span>
+                    <img src={selfie} alt="Selfie" className={styles.capturedImg} />
+                  </div>
+                )}
+                {idPhoto && (
+                  <div className={styles.photoPreview}>
+                    <span className={styles.tag}>ID</span>
+                    <img src={idPhoto} alt="ID" className={styles.capturedImg} />
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className={styles.controlColumn}>
+              <div className={styles.captureRow}>
+                <button type="button" className={styles.captureBtn} onClick={capture} disabled={loadingConfig || submitting || !configResolved}>
+                  Capture Selfie
+                </button>
+                <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(selfieInputRef)} disabled={loadingConfig || submitting || !configResolved}>
+                  Upload Selfie
+                </button>
+                <button type="button" className={styles.captureBtn} onClick={captureId} disabled={loadingConfig || submitting || !configResolved}>
+                  Capture ID
+                </button>
+                <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(idInputRef)} disabled={loadingConfig || submitting || !configResolved}>
+                  Upload ID
+                </button>
+              </div>
+              <div className={styles.captureChecklist}>
+                <div className={`${styles.captureState} ${selfie ? styles.captureStateReady : ''}`}>Selfie {selfie ? 'ready' : 'missing'}</div>
+                <div className={`${styles.captureState} ${idPhoto ? styles.captureStateReady : ''}`}>ID image {idPhoto ? 'ready' : 'missing'}</div>
+                <div className={`${styles.captureState} ${idNumber.trim() ? styles.captureStateReady : ''}`}>Manual ID {idNumber.trim() ? 'provided' : 'optional'}</div>
+              </div>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="identity-id-number">ID number</label>
+                <input
+                  id="identity-id-number"
+                  className={styles.input}
+                  placeholder="e.g. passport / national ID"
+                  value={idNumber}
+                  onChange={(e) => setIdNumber(e.target.value)}
+                />
+                <p className={styles.helper}>If the ID number is not detected from the image, you can type it here.</p>
+              </div>
+              <div className={styles.photoActions}>
+                <button type="button" className={styles.btnSecondary} onClick={retake} disabled={submitting || !configResolved}>Retake</button>
+                <button type="button" className={styles.btnPrimary} onClick={confirm} disabled={submitting || loadingConfig || !configResolved || !selfie || !idPhoto || (requirements.fullscreenRequired && !fullscreenActive)}>
+                  {submitting ? 'Verifying...' : 'Confirm & Continue'}
+                </button>
+              </div>
+            </div>
           </div>
           <input
             ref={selfieInputRef}
@@ -442,55 +484,18 @@ export default function VerifyIdentityPage() {
               e.target.value = ''
             }}
           />
-          <div className={styles.previewRow}>
-            {selfie && (
-              <div className={styles.photoPreview}>
-                <span className={styles.tag}>Selfie</span>
-                <img src={selfie} alt="Selfie" className={styles.capturedImg} />
-              </div>
-            )}
-            {idPhoto && (
-              <div className={styles.photoPreview}>
-                <span className={styles.tag}>ID</span>
-                <img src={idPhoto} alt="ID" className={styles.capturedImg} />
-              </div>
-            )}
-          </div>
-          <div className={styles.captureChecklist}>
-            <div className={`${styles.captureState} ${selfie ? styles.captureStateReady : ''}`}>Selfie {selfie ? 'ready' : 'missing'}</div>
-            <div className={`${styles.captureState} ${idPhoto ? styles.captureStateReady : ''}`}>ID image {idPhoto ? 'ready' : 'missing'}</div>
-            <div className={`${styles.captureState} ${idNumber.trim() ? styles.captureStateReady : ''}`}>Manual ID {idNumber.trim() ? 'provided' : 'optional'}</div>
-          </div>
-          <div className={styles.photoActions}>
-            <button type="button" className={styles.btnSecondary} onClick={retake} disabled={submitting || !configResolved}>Retake</button>
-            <button type="button" className={styles.btnPrimary} onClick={confirm} disabled={submitting || loadingConfig || !configResolved || !selfie || !idPhoto || (requirements.fullscreenRequired && !fullscreenActive)}>
-              {submitting ? 'Verifying...' : 'Confirm & Continue'}
-            </button>
-          </div>
-          <div className={styles.formRow}>
-            <label className={styles.label} htmlFor="identity-id-number">ID number (required if OCR is unavailable)</label>
-            <input
-              id="identity-id-number"
-              className={styles.input}
-              placeholder="e.g. passport / national ID"
-              value={idNumber}
-              onChange={(e) => setIdNumber(e.target.value)}
-            />
-            <p className={styles.helper}>If OCR misses your ID text, you can type it here.</p>
-          </div>
           {result && (
             <div className={styles.resultPanel}>
               <div className={styles.resultBox}>
                 <div>Face match score: {result.face_match_score?.toFixed(3)}</div>
                 <div>Lighting ok: {result.lighting_ok ? 'Yes' : 'No'}</div>
                 <div>ID verified: {result.id_verified ? 'Yes' : 'No'}</div>
-                <div>OCR available: {result.ocr_available ? 'Yes' : 'No'}</div>
                 <div>Manual ID accepted: {result.manual_id_valid ? 'Yes' : 'No'}</div>
                 <div>Document outline detected: {result.id_document_outline ? 'Yes' : 'No'}</div>
                 <div>Face signature mode: {result.signature_mode?.selfie || 'n/a'} / {result.signature_mode?.id || 'n/a'}</div>
               </div>
               <div className={styles.resultBox}>
-                <div>ID candidates: {(result.ocr_candidates || []).length > 0 ? result.ocr_candidates.join(', ') : 'None detected'}</div>
+                <div>Detected ID numbers: {(result.ocr_candidates || []).length > 0 ? result.ocr_candidates.join(', ') : 'None detected'}</div>
                 <div>Selfie vs ID similarity: {typeof result.id_selfie_similarity === 'number' ? result.id_selfie_similarity.toFixed(3) : '-'}</div>
                 <div>ID face ratio: {typeof result.id_face_ratio === 'number' ? result.id_face_ratio.toFixed(3) : '-'}</div>
                 <div>Failure reasons: {failureReasons.length > 0 ? failureReasons.map(toReasonText).join(' | ') : 'None'}</div>

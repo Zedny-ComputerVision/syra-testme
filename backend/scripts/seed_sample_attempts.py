@@ -1,8 +1,11 @@
 """Seed sample attempts with proctoring events for richer reports."""
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from src.app.db.session import SessionLocal
 from src.app.models import Attempt, AttemptStatus, ProctoringEvent, SeverityEnum, User, Exam
+
+logger = logging.getLogger(__name__)
 
 def find_exam(session, title="Programming Fundamentals Exam"):
     ex = session.query(Exam).filter(Exam.title == title).first()
@@ -13,12 +16,12 @@ def main():
     try:
         exam = find_exam(session)
         if not exam:
-            print("No exams found")
+            logger.info("No exams found")
             return
         users = session.query(User).all()
         learners = [u for u in users if u.role.value == "LEARNER"]
         if len(learners) < 2:
-            print("Not enough learners")
+            logger.info("Not enough learners")
             return
         base_time = datetime.now(timezone.utc) - timedelta(days=1)
         attempts_to_create = [
@@ -64,9 +67,10 @@ def main():
                 )
                 session.add(pe)
         session.commit()
-        print("Seeded sample attempts and events for exam:", exam.title)
+        logger.info("Seeded sample attempts and events for exam: %s", exam.title)
     finally:
         session.close()
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     main()
