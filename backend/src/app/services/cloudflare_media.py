@@ -10,10 +10,7 @@ settings = get_settings()
 
 
 def cloudflare_video_storage_enabled() -> bool:
-    return (
-        settings.PROCTORING_VIDEO_STORAGE_PROVIDER == "cloudflare"
-        and bool(str(settings.CLOUDFLARE_MEDIA_API_BASE_URL or "").strip())
-    )
+    return bool(str(settings.CLOUDFLARE_MEDIA_API_BASE_URL or "").strip())
 
 
 def _base_url() -> str:

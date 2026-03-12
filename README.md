@@ -29,5 +29,6 @@ Env files already populated with local defaults.
 
 ## Notes
 - AI proctoring uses optional computer-vision/OCR backends with heuristic fallbacks. For strongest production accuracy, install and configure the heavier detector dependencies the deployment will rely on.
+- Proctoring video uploads stream through Cloudflare. Set `CLOUDFLARE_MEDIA_API_BASE_URL` in the backend env before running recorded exams.
 - Reports are written to `backend/storage/reports`.
 - Evidence screenshots are written to `backend/storage/evidence`.

@@ -16,6 +16,7 @@ from ...models import Attempt, RoleEnum
 from ...detection.face_verification import compute_face_signature, cosine_distance
 from ...services.normalized_relations import exam_proctoring
 from ...services.crypto_utils import encrypt_bytes
+from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 
 try:
@@ -411,12 +412,22 @@ async def precheck(
             failure_reasons.append("ID_DOCUMENT_NOT_DETECTED")
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        selfie_path = EVIDENCE_DIR / f"{attempt_id}_selfie_{ts}.bin"
-        id_path = EVIDENCE_DIR / f"{attempt_id}_id_{ts}.bin"
-        selfie_path.write_bytes(encrypt_bytes(cv2.imencode(".jpg", selfie_img)[1].tobytes()))
-        id_path.write_bytes(encrypt_bytes(cv2.imencode(".jpg", id_img)[1].tobytes()))
-        attempt.selfie_path = str(selfie_path)
-        attempt.id_doc_path = str(id_path)
+        selfie_filename = f"{attempt_id}_selfie_{ts}.bin"
+        id_filename = f"{attempt_id}_id_{ts}.bin"
+        selfie_bytes = encrypt_bytes(cv2.imencode(".jpg", selfie_img)[1].tobytes())
+        id_bytes = encrypt_bytes(cv2.imencode(".jpg", id_img)[1].tobytes())
+        if settings.MEDIA_STORAGE_PROVIDER == "supabase":
+            stored_selfie = await upload_bytes_to_supabase("identity", selfie_filename, selfie_bytes, content_type="application/octet-stream")
+            stored_id = await upload_bytes_to_supabase("identity", id_filename, id_bytes, content_type="application/octet-stream")
+            attempt.selfie_path = str(stored_selfie.get("path") or selfie_filename)
+            attempt.id_doc_path = str(stored_id.get("path") or id_filename)
+        else:
+            selfie_path = EVIDENCE_DIR / selfie_filename
+            id_path = EVIDENCE_DIR / id_filename
+            selfie_path.write_bytes(selfie_bytes)
+            id_path.write_bytes(id_bytes)
+            attempt.selfie_path = str(selfie_path)
+            attempt.id_doc_path = str(id_path)
         attempt.id_text = _build_id_text_payload(
             ocr_text=ocr_text,
             ocr_candidates=ocr_candidates,

@@ -59,11 +59,11 @@ describe('Home page', () => {
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(screen.getByText('Dashboard data is temporarily unavailable. You can still open your tests and retry.')).toBeTruthy())
-    expect(screen.getByRole('link', { name: 'View all tests ->' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByText(/Dashboard data is temporarily unavailable/i)).toBeTruthy())
+    expect(screen.getByRole('link', { name: 'Browse Tests' })).toBeTruthy()
     expect(screen.getByText('No upcoming scheduled tests.')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry dashboard' }))
 
     await waitFor(() => expect(screen.getAllByText('Biology Quiz').length).toBeGreaterThan(0))
   })
@@ -77,7 +77,7 @@ describe('Home page', () => {
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(screen.getByText('Dashboard data is temporarily unavailable. You can still open your tests and retry.')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/Dashboard data is temporarily unavailable/i)).toBeTruthy())
     expect(screen.getByText('No upcoming scheduled tests.')).toBeTruthy()
   })
 })

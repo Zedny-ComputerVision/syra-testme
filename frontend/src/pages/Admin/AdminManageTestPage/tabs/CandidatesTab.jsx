@@ -68,11 +68,11 @@ function CandidatesTab({
                 <td>{row.highAlerts}</td>
                 <td>{row.mediumAlerts}</td>
                 <td className={styles.actionsCell}>
-                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => handleOpenResult(row)}>Result</button>
-                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => navigate(`/admin/attempt-analysis?id=${row.attemptIdFull}`)}>Analyze</button>
-                  <button type="button" onClick={() => handlePauseResume(row)} disabled={rowBusy[row.id] || !row.attemptIdFull}>{row.paused ? 'Resume' : 'Pause'}</button>
-                  <button type="button" onClick={() => handleOpenVideo(row)} disabled={rowBusy[row.id] || !row.attemptIdFull}>Video</button>
-                  <button type="button" onClick={() => handleOpenReport(row)} disabled={rowBusy[row.id] || !row.attemptIdFull}>{rowBusy[row.id] ? 'Opening...' : 'Report'}</button>
+                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => handleOpenResult(row)} aria-label={`Open result for ${row.username} attempt ${row.attemptId}`} title={`Open result for ${row.username} attempt ${row.attemptId}`}>Result</button>
+                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => navigate(`/admin/attempt-analysis?id=${row.attemptIdFull}`)} aria-label={`Review attempt analysis for ${row.username} attempt ${row.attemptId}`} title={`Review attempt analysis for ${row.username} attempt ${row.attemptId}`}>Analyze</button>
+                  <button type="button" onClick={() => handlePauseResume(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`${row.paused ? 'Resume' : 'Pause'} monitoring for ${row.username} attempt ${row.attemptId}`}>{row.paused ? 'Resume' : 'Pause'}</button>
+                  <button type="button" onClick={() => handleOpenVideo(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`Open video for ${row.username} attempt ${row.attemptId}`} title={`Open video for ${row.username} attempt ${row.attemptId}`}>Video</button>
+                  <button type="button" onClick={() => handleOpenReport(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`Open report for ${row.username} attempt ${row.attemptId}`} title={`Open report for ${row.username} attempt ${row.attemptId}`}>{rowBusy[row.id] ? 'Opening...' : 'Report'}</button>
                 </td>
               </tr>
             ))}

@@ -119,6 +119,11 @@ export default function AdminTestingSessions() {
 
   const isUpcoming = (iso) => iso && new Date(iso) > new Date()
   const testLookup = new Map(tests.map((test) => [test.id, test]))
+  const describeSession = (session) => {
+    const candidate = session.user_name || session.user_id || 'candidate'
+    const testName = session.test_title || session.exam_title || testLookup.get(session.exam_id)?.name || 'test'
+    return `${candidate} for ${testName}`
+  }
   const normalizedSearch = search.trim().toLowerCase()
 
   const filtered = sessions.filter((session) => {
@@ -147,6 +152,7 @@ export default function AdminTestingSessions() {
   const upcomingCount = sessions.filter((session) => isUpcoming(session.scheduled_at)).length
   const restrictedCount = sessions.filter((session) => session.access_mode === 'RESTRICTED').length
   const hasActiveFilters = Boolean(normalizedSearch) || statusTab !== 'All' || sortOrder !== 'asc'
+  const editTarget = editId ? sessions.find((session) => session.id === editId) : null
   const summaryCards = [
     {
       label: 'Loaded sessions',
@@ -414,6 +420,7 @@ export default function AdminTestingSessions() {
             const isRestricted = session.access_mode === 'RESTRICTED'
             const linkedTest = testLookup.get(session.exam_id)
             const testCode = linkedTest?.code || session.test_code
+            const sessionLabel = describeSession(session)
 
             return (
               <div key={session.id} className={styles.card}>
@@ -456,8 +463,14 @@ export default function AdminTestingSessions() {
                 <div className={styles.cardFooter}>
                   {canAssignSchedules && (
                     <>
-                      <button type="button" className={styles.actionBtnEdit} onClick={() => openEdit(session)}>
-                        Edit
+                      <button
+                        type="button"
+                        className={styles.actionBtnEdit}
+                        onClick={() => openEdit(session)}
+                        aria-label={`Edit session for ${sessionLabel}`}
+                        title={`Edit session for ${sessionLabel}`}
+                      >
+                        Edit session
                       </button>
                       {deleteConfirmId === session.id ? (
                         <>
@@ -466,16 +479,18 @@ export default function AdminTestingSessions() {
                             className={styles.actionBtnConfirm}
                             onClick={() => void handleDelete(session.id)}
                             disabled={deleteBusyId === session.id}
+                            aria-label={`Confirm delete for session ${sessionLabel}`}
                           >
-                            {deleteBusyId === session.id ? 'Deleting...' : 'Confirm'}
+                            {deleteBusyId === session.id ? 'Deleting...' : 'Confirm delete'}
                           </button>
                           <button
                             type="button"
                             className={styles.actionBtnCancel}
                             onClick={() => setDeleteConfirmId(null)}
                             disabled={deleteBusyId === session.id}
+                            aria-label={`Keep session for ${sessionLabel}`}
                           >
-                            Cancel
+                            Keep session
                           </button>
                         </>
                       ) : (
@@ -484,8 +499,10 @@ export default function AdminTestingSessions() {
                           className={styles.actionBtnDanger}
                           onClick={() => void handleDelete(session.id)}
                           disabled={deleteBusyId === session.id}
+                          aria-label={`Delete session for ${sessionLabel}`}
+                          title={`Delete session for ${sessionLabel}`}
                         >
-                          Delete
+                          Delete session
                         </button>
                       )}
                     </>
@@ -507,8 +524,9 @@ export default function AdminTestingSessions() {
 
       {editModal && (
         <div className={styles.modalOverlay} onClick={() => { if (!editSaving) { setEditModal(false); setEditError('') } }}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Edit Session</h3>
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="edit-session-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="edit-session-dialog-title" className={styles.modalTitle}>Edit Session</h3>
+            {editTarget && <div className={styles.modalMeta}>{describeSession(editTarget)}</div>}
             {editError && <div className={styles.modalError}>{editError}</div>}
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="edit-session-date">Scheduled Date and Time</label>
@@ -537,8 +555,8 @@ export default function AdminTestingSessions() {
 
       {modal && (
         <div className={styles.modalOverlay} onClick={() => { if (!saving) { setModal(false); setModalError('') } }}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 className={styles.modalTitle}>New Testing Session</h3>
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="create-session-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="create-session-dialog-title" className={styles.modalTitle}>New Testing Session</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="create-session-test">Test</label>

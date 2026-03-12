@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,8 @@ def _is_pool_library_exam(exam: Exam) -> bool:
 @router.get("/")
 async def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = q.strip().lower()
+    if not query:
+        raise HTTPException(status_code=400, detail="Search query is required")
     rows = load_permission_rows(db)
     can_edit_tests = permission_allowed(rows, current.role, "Edit Tests")
     can_view_attempt_analysis = permission_allowed(rows, current.role, "View Attempt Analysis")

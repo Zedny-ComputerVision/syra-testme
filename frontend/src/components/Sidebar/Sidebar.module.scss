@@ -29,17 +29,21 @@
 
 /* ---------- Brand ---------- */
 .brand {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   padding: 1rem 1rem 1.1rem;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   background:
     radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 18%, transparent), transparent 48%),
     linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 88%, transparent), transparent);
+  backdrop-filter: blur(16px);
 }
 
 .brandLink {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.85rem;
   text-decoration: none;
   color: var(--color-text);
@@ -64,52 +68,16 @@
 .brandTextWrap {
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
+  align-items: center;
   flex: 1;
 }
 
-.brandKicker {
-  font-size: 0.62rem;
-  font-weight: 800;
-  color: var(--color-primary);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  line-height: 1.25;
-}
-
 .brandText {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 800;
   letter-spacing: 0.5px;
   color: var(--color-text);
-  line-height: 1.15;
-}
-
-.brandSub {
-  color: var(--color-muted);
-  font-size: 0.72rem;
-  line-height: 1.45;
-  max-width: 100%;
-  overflow-wrap: break-word;
-}
-
-.rolePill {
-  align-self: flex-start;
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  margin-top: 0.35rem;
-  padding: 0.38rem 0.62rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, var(--color-border));
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-  color: var(--color-primary);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: normal;
-  line-height: 1.2;
+  line-height: 1;
 }
 
 /* ---------- Navigation ---------- */

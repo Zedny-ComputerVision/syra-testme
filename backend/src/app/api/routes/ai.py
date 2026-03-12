@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ...core.config import get_settings
+from ...models import RoleEnum
+from ..deps import require_permission
 
 router = APIRouter()
 
@@ -21,7 +23,10 @@ class GeneratedQuestion(BaseModel):
 
 
 @router.post("/generate-questions", response_model=list[GeneratedQuestion])
-async def generate_questions(body: GenerateRequest):
+async def generate_questions(
+    body: GenerateRequest,
+    _=Depends(require_permission("Create Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
     settings = get_settings()
     # Offline-friendly fallback: if no OpenAI key, synthesize simple questions locally.
     if not settings.OPENAI_API_KEY:
@@ -29,17 +34,21 @@ async def generate_questions(body: GenerateRequest):
         for i in range(body.count):
             if body.question_type.upper() == "MCQ":
                 opts = [f"Option {c}" for c in ["A", "B", "C", "D"]]
-                fallback.append(GeneratedQuestion(
-                    text=f"[Offline] {body.topic} sample question {i+1} ({body.difficulty or 'mixed'})",
-                    options=opts,
-                    correct_answer="A",
-                    explanation="Offline fallback – set OPENAI_API_KEY to enable AI generation.",
-                ))
+                fallback.append(
+                    GeneratedQuestion(
+                        text=f"[Offline] {body.topic} sample question {i + 1} ({body.difficulty or 'mixed'})",
+                        options=opts,
+                        correct_answer="A",
+                        explanation="Offline fallback - set OPENAI_API_KEY to enable AI generation.",
+                    )
+                )
             else:
-                fallback.append(GeneratedQuestion(
-                    text=f"[Offline] {body.topic} prompt {i+1} ({body.difficulty or 'mixed'})",
-                    explanation="Offline fallback – set OPENAI_API_KEY to enable AI generation.",
-                ))
+                fallback.append(
+                    GeneratedQuestion(
+                        text=f"[Offline] {body.topic} prompt {i + 1} ({body.difficulty or 'mixed'})",
+                        explanation="Offline fallback - set OPENAI_API_KEY to enable AI generation.",
+                    )
+                )
         return fallback
 
     try:
@@ -66,14 +75,14 @@ async def generate_questions(body: GenerateRequest):
 
     try:
         completion = client.chat.completions.create(
-          model="gpt-4o-mini",
-          messages=[
-              {"role": "system", "content": system_prompt},
-              {"role": "user", "content": user_prompt},
-          ],
-          temperature=0.7,
-          max_tokens=1200,
-          response_format={"type": "json_object"},
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.7,
+            max_tokens=1200,
+            response_format={"type": "json_object"},
         )
         content = completion.choices[0].message.content
     except Exception as exc:
@@ -87,12 +96,16 @@ async def generate_questions(body: GenerateRequest):
         questions = data.get("questions") if isinstance(data, dict) else data
         parsed = []
         for q in questions:
-            parsed.append(GeneratedQuestion.model_validate({
-                "text": q.get("text") or q.get("question"),
-                "options": q.get("options"),
-                "correct_answer": q.get("correct_answer"),
-                "explanation": q.get("explanation"),
-            }))
+            parsed.append(
+                GeneratedQuestion.model_validate(
+                    {
+                        "text": q.get("text") or q.get("question"),
+                        "options": q.get("options"),
+                        "correct_answer": q.get("correct_answer"),
+                        "explanation": q.get("explanation"),
+                    }
+                )
+            )
         return parsed
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not parse model output: {exc}") from exc

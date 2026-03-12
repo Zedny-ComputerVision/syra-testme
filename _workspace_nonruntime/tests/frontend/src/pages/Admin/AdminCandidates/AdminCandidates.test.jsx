@@ -33,7 +33,7 @@ vi.mock('../../../hooks/useAuth', () => ({
 
 describe('AdminCandidates', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     attemptsMock.mockResolvedValue({ data: [] })
     getAttemptEventsMock.mockResolvedValue({ data: [] })
     schedulesMock.mockResolvedValue({ data: [] })
@@ -88,9 +88,9 @@ describe('AdminCandidates', () => {
 
     const reschedulingTab = (await screen.findAllByRole('button', { name: 'Rescheduling' })).at(-1)
     fireEvent.click(reschedulingTab)
-    fireEvent.click(screen.getByRole('button', { name: 'Reschedule' }))
+    fireEvent.click(screen.getByRole('button', { name: /open reschedule form/i }))
 
-    const confirmButton = screen.getByRole('button', { name: 'Confirm' })
+    const confirmButton = screen.getByRole('button', { name: /save reschedule/i })
     expect(confirmButton.disabled).toBe(true)
 
     const dateInput = document.querySelector('input[type="datetime-local"]')
@@ -168,6 +168,6 @@ describe('AdminCandidates', () => {
 
     await screen.findByText('Missing required columns: test_title or exam_title')
 
-    expect(screen.getByRole('button', { name: 'Import 1 row(s)' }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Import 1 result row(s)' }).disabled).toBe(true)
   })
 })

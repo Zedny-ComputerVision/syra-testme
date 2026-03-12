@@ -34,6 +34,7 @@ backend/*.err
 frontend/*.err
 frontend/playwright-report/
 frontend/test-results/
+frontend/.generated-tests/
 frontend/tmp-*.cjs
 tmp-*.js
 merge-*.cjs

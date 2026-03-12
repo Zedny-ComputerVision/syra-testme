@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { listTests } from '../../services/test.service'
 import Loader from '../../components/common/Loader/Loader'
 import ScrollReveal from '../../components/ScrollReveal/ScrollReveal'
+import PrefetchLink from '../../components/common/PrefetchLink/PrefetchLink'
 import { normalizeTest } from '../../utils/assessmentAdapters'
 import { readPaginatedItems } from '../../utils/pagination'
-import { preloadRoute } from '../../utils/routePrefetch'
 import styles from './Exams.module.scss'
 
 function sortNewestFirst(items) {
@@ -43,7 +42,6 @@ export default function Exams() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const navigate = useNavigate()
 
   const loadTests = () => {
     setLoading(true)
@@ -80,7 +78,17 @@ export default function Exams() {
   const scoredTests = tests.filter((test) => test.passing_score != null).length
   const hasActiveFilters = Boolean(search.trim())
 
-  if (loading) return <Loader />
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <ScrollReveal className={styles.header}>
+          <h1 className={styles.heading}>Available Tests</h1>
+          <p className={styles.sub}>Review readiness details, then open the instructions for any available test.</p>
+        </ScrollReveal>
+        <Loader label="Loading tests..." />
+      </div>
+    )
+  }
 
   return (
     <div className={styles.page}>
@@ -175,15 +183,7 @@ export default function Exams() {
             className={styles.revealCard}
             delay={Math.min(index, 7) * 45}
           >
-            <div
-              className={`${styles.card} ${index === 0 ? styles.latestCard : ''}`}
-              tabIndex={0}
-              role="button"
-              onMouseEnter={() => preloadRoute(`/tests/${test.id}`)}
-              onFocus={() => preloadRoute(`/tests/${test.id}`)}
-              onClick={() => navigate(`/tests/${test.id}`)}
-              onKeyDown={(event) => event.key === 'Enter' && navigate(`/tests/${test.id}`)}
-            >
+            <article className={`${styles.card} ${index === 0 ? styles.latestCard : ''}`}>
               <div className={styles.cardTop}>
                 <div className={styles.cardFlags}>
                   {index === 0 && <span className={styles.latestBadge}>Latest release</span>}
@@ -221,9 +221,15 @@ export default function Exams() {
               </div>
               <div className={styles.cardFooter}>
                 <span className={styles.cardHint}>{index === 0 ? 'Newest available test is pinned first.' : 'Ready whenever you are.'}</span>
-                <span className={styles.cardAction}>Open test flow</span>
+                <PrefetchLink
+                  className={styles.cardCta}
+                  to={`/tests/${test.id}`}
+                  aria-label={`Open instructions for ${test.title}`}
+                >
+                  Open instructions
+                </PrefetchLink>
               </div>
-            </div>
+            </article>
           </ScrollReveal>
         ))}
       </div>

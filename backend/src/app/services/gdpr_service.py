@@ -181,19 +181,24 @@ def collect_attempt_media(attempt: Attempt) -> dict:
         if event.event_type == "VIDEO_SAVED":
             video_name = str(meta.get("name") or "").strip()
             video_url = str(meta.get("playback_url") or meta.get("url") or "").strip()
+            video_path = str(meta.get("path") or meta.get("object_path") or "").strip()
             video_provider = str(meta.get("provider") or "").strip().lower()
-            if is_absolute_http_url(video_url) and (not video_provider or video_provider == "cloudflare"):
+            if (
+                (is_absolute_http_url(video_url) and video_provider in {"", "cloudflare", "supabase"})
+                or (video_provider == "supabase" and video_path)
+            ):
                 video_source = str(meta.get("source") or "camera")
-                video_key = (str(meta.get("session_id") or video_name or video_url), video_source)
+                video_key = (str(meta.get("session_id") or video_path or video_name or video_url), video_source)
                 if video_key not in seen_videos:
                     seen_videos.add(video_key)
                     videos.append(
                         {
-                            "filename": video_name or video_url.rstrip("/").rsplit("/", 1)[-1],
+                            "filename": video_name or Path(video_path).name or video_url.rstrip("/").rsplit("/", 1)[-1],
                             "recorded_at": meta.get("created_at") or event.occurred_at,
-                            "provider": "cloudflare",
+                            "provider": video_provider or "cloudflare",
                             "source": video_source,
                             "url": video_url or None,
+                            "path": video_path or None,
                         }
                     )
         evidence_path = meta.get("evidence")

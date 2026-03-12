@@ -235,7 +235,10 @@ export default function AdminQuestionPools() {
         </div>
       ) : (
         <div className={styles.grid}>
-          {filtered.map((pool) => (
+          {filtered.map((pool) => {
+            const poolLabel = pool.name || 'this question pool'
+
+            return (
             <div key={pool.id} className={styles.card}>
               {!canManagePool(pool) && (
                 <div className={styles.readOnlyNote}>Read-only - only the owner or an admin can manage this pool.</div>
@@ -248,21 +251,21 @@ export default function AdminQuestionPools() {
                   )}
                 </div>
                 <div className={styles.actionBtns}>
-                  <button type="button" className={styles.actionBtn} onClick={() => navigate(`/admin/question-pools/${pool.id}`)} disabled={deleteBusyId === pool.id}>
+                  <button type="button" className={styles.actionBtn} onClick={() => navigate(`/admin/question-pools/${pool.id}`)} disabled={deleteBusyId === pool.id} aria-label={`Open question pool ${poolLabel}`} title={`Open question pool ${poolLabel}`}>
                     Open
                   </button>
                   {canManagePool(pool) && (
                     deleteConfirmId === pool.id ? (
                       <>
-                        <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id}>
+                        <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id} aria-label={`Confirm delete for question pool ${poolLabel}`}>
                           {deleteBusyId === pool.id ? 'Deleting...' : 'Confirm'}
                         </button>
-                        <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === pool.id}>
+                        <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === pool.id} aria-label={`Keep question pool ${poolLabel}`}>
                           Cancel
                         </button>
                       </>
                     ) : (
-                      <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id}>
+                      <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id} aria-label={`Delete question pool ${poolLabel}`} title={`Delete question pool ${poolLabel}`}>
                         Delete
                       </button>
                     )
@@ -292,14 +295,15 @@ export default function AdminQuestionPools() {
                 {expandLoadingId === pool.id ? 'Loading questions...' : expanded[pool.id] ? 'Hide questions' : 'Show questions'}
               </button>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
       {modal && (
         <div className={styles.modalOverlay} onClick={resetModal}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 className={styles.modalTitle}>New Question Pool</h3>
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="question-pool-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="question-pool-dialog-title" className={styles.modalTitle}>New Question Pool</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="pool-name">Name</label>

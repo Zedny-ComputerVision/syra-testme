@@ -331,21 +331,21 @@ export default function AdminCourses() {
                   <div className={styles.courseActions}>
                     {canManageCourse(course) && (
                       <>
-                        <button className={styles.btnSecondary} onClick={() => void toggleCourseStatus(course)} disabled={savingCourseId === course.id}>
+                        <button className={styles.btnSecondary} onClick={() => void toggleCourseStatus(course)} disabled={savingCourseId === course.id} aria-label={`${course.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'} course ${course.title || 'this course'}`} title={`${course.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'} course ${course.title || 'this course'}`}>
                           {savingCourseId === course.id ? 'Saving...' : course.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
                         </button>
-                        <button className={styles.btnSecondary} onClick={() => setEditingCourse({ ...course })} disabled={savingCourseId === course.id}>Edit</button>
+                        <button className={styles.btnSecondary} onClick={() => setEditingCourse({ ...course })} disabled={savingCourseId === course.id} aria-label={`Edit course ${course.title || 'this course'}`} title={`Edit course ${course.title || 'this course'}`}>Edit</button>
                       </>
                     )}
                     {isAdmin && (deleteCourseConfirmId === course.id ? (
                       <>
-                        <button className={styles.dangerBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id}>
+                        <button className={styles.dangerBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`Confirm delete for course ${course.title || 'this course'}`}>
                           {savingCourseId === course.id ? 'Deleting...' : 'Confirm'}
                         </button>
-                        <button className={styles.btnSecondary} onClick={() => setDeleteCourseConfirmId(null)} disabled={savingCourseId === course.id}>Cancel</button>
+                        <button className={styles.btnSecondary} onClick={() => setDeleteCourseConfirmId(null)} disabled={savingCourseId === course.id} aria-label={`Keep course ${course.title || 'this course'}`}>Cancel</button>
                       </>
                     ) : (
-                      <button className={styles.deleteBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id}>Delete</button>
+                      <button className={styles.deleteBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`Delete course ${course.title || 'this course'}`} title={`Delete course ${course.title || 'this course'}`}>Delete</button>
                     ))}
                   </div>
                 </div>
@@ -357,22 +357,22 @@ export default function AdminCourses() {
                     {editingNode === node.id ? (
                       <>
                         <input className={styles.input} value={editNodeTitle} onChange={(event) => setEditNodeTitle(event.target.value)} autoFocus />
-                        <button type="button" className={styles.btnPrimary} onClick={() => void saveNodeEdit(node)} disabled={busyNodeId === node.id}>{busyNodeId === node.id ? 'Saving...' : 'Save'}</button>
-                        <button type="button" className={styles.btnSecondary} onClick={() => setEditingNode(null)} disabled={busyNodeId === node.id}>Cancel</button>
+                        <button type="button" className={styles.btnPrimary} onClick={() => void saveNodeEdit(node)} disabled={busyNodeId === node.id} aria-label={`Save module ${node.title || 'this module'} in ${course.title || 'this course'}`}>{busyNodeId === node.id ? 'Saving...' : 'Save'}</button>
+                        <button type="button" className={styles.btnSecondary} onClick={() => setEditingNode(null)} disabled={busyNodeId === node.id} aria-label={`Cancel editing module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Cancel</button>
                       </>
                     ) : (
                       <>
                         <span className={styles.moduleChip}>{node.title}</span>
                         {canManageCourse(course) && (
                           <>
-                            <button type="button" className={styles.iconBtn} onClick={() => { setEditingNode(node.id); setEditNodeTitle(node.title) }} disabled={busyNodeId === node.id}>Edit</button>
+                            <button type="button" className={styles.iconBtn} onClick={() => { setEditingNode(node.id); setEditNodeTitle(node.title) }} disabled={busyNodeId === node.id} aria-label={`Edit module ${node.title || 'this module'} in ${course.title || 'this course'}`} title={`Edit module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Edit</button>
                             {deleteNodeConfirmId === node.id ? (
                               <>
-                                <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id}>{busyNodeId === node.id ? 'Deleting...' : 'Confirm'}</button>
-                                <button type="button" className={styles.iconBtn} onClick={() => setDeleteNodeConfirmId(null)} disabled={busyNodeId === node.id}>Cancel</button>
+                                <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`Confirm delete for module ${node.title || 'this module'} in ${course.title || 'this course'}`}>{busyNodeId === node.id ? 'Deleting...' : 'Confirm'}</button>
+                                <button type="button" className={styles.iconBtn} onClick={() => setDeleteNodeConfirmId(null)} disabled={busyNodeId === node.id} aria-label={`Keep module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Cancel</button>
                               </>
                             ) : (
-                              <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id}>Delete</button>
+                              <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`Delete module ${node.title || 'this module'} in ${course.title || 'this course'}`} title={`Delete module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Delete</button>
                             )}
                           </>
                         )}
@@ -416,7 +416,7 @@ export default function AdminCourses() {
                               <td>{test.type || '-'}</td>
                               {isAdmin && (
                                 <td>
-                                  <button type="button" className={styles.compactBtn} onClick={() => navigate(`/admin/tests/${test.id}/manage`)}>Manage</button>
+                                  <button type="button" className={styles.compactBtn} onClick={() => navigate(`/admin/tests/${test.id}/manage`)} aria-label={`Manage linked test ${test.title || 'test'} from course ${course.title || 'this course'}`} title={`Manage linked test ${test.title || 'test'} from course ${course.title || 'this course'}`}>Manage test</button>
                                 </td>
                               )}
                             </tr>

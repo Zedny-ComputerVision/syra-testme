@@ -2,6 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import useUnsavedChanges from '../../../hooks/useUnsavedChanges'
 import { adminApi } from '../../../services/admin.service'
+import {
+  CERTIFICATE_ISSUE_RULE_OPTIONS,
+  certificateIssueRuleLabel,
+  DEFAULT_CERTIFICATE_ISSUE_RULE,
+  normalizeCertificateIssueRule,
+} from '../../../utils/certificates'
 import { readBlobErrorMessage } from '../../../utils/httpErrors'
 import { normalizeProctoringConfig } from '../../../utils/proctoringRequirements'
 import { readPaginatedItems } from '../../../utils/pagination'
@@ -350,8 +356,10 @@ function normalizeCertificatePayload(value) {
     subtitle: String(value?.subtitle || '').trim(),
     issuer: String(value?.issuer || '').trim(),
     signer: String(value?.signer || '').trim(),
+    issue_rule: normalizeCertificateIssueRule(value?.issue_rule),
   }
-  return Object.values(payload).some(Boolean) ? payload : null
+  const hasContent = Object.entries(payload).some(([key, item]) => key !== 'issue_rule' && Boolean(item))
+  return hasContent ? payload : null
 }
 
 function normalizeTranslationEntry(entry) {
@@ -577,6 +585,7 @@ export default function AdminManageTestPage() {
     certificate_subtitle: '',
     certificate_issuer: '',
     certificate_signer: '',
+    certificate_issue_rule: DEFAULT_CERTIFICATE_ISSUE_RULE,
     allow_pause: false,
     pause_duration_minutes: '',
     allow_retake: false,
@@ -769,6 +778,7 @@ export default function AdminManageTestPage() {
       certificate_subtitle: certificate?.subtitle || '',
       certificate_issuer: certificate?.issuer || '',
       certificate_signer: certificate?.signer || '',
+      certificate_issue_rule: normalizeCertificateIssueRule(certificate?.issue_rule),
       allow_pause: Boolean(s?.allow_pause),
       pause_duration_minutes: s?.pause_duration_minutes != null ? String(s.pause_duration_minutes) : '',
       allow_retake: Boolean(s?.allow_retake),
@@ -889,18 +899,10 @@ export default function AdminManageTestPage() {
 
       const stateByAttempt = new Map()
       await Promise.all(examAttempts.map(async (a) => {
-        let paused = false
+        let paused = Boolean(a.paused)
         let hasVideo = false
-        let highAlerts = 0
-        let mediumAlerts = 0
-        try {
-          const { data: events } = await adminApi.getAttemptEvents(a.id)
-          const list = events || []
-          const stateEvents = list.filter((e) => e.event_type === 'ATTEMPT_PAUSED' || e.event_type === 'ATTEMPT_RESUMED')
-          if (stateEvents.length > 0) paused = stateEvents[stateEvents.length - 1].event_type === 'ATTEMPT_PAUSED'
-          highAlerts = list.filter((e) => e.severity === 'HIGH').length
-          mediumAlerts = list.filter((e) => e.severity === 'MEDIUM').length
-        } catch {}
+        const highAlerts = Number(a.high_violations || 0)
+        const mediumAlerts = Number(a.med_violations || 0)
         try {
           const { data: videos } = await adminApi.listAttemptVideos(a.id)
           hasVideo = Array.isArray(videos) && videos.length > 0
@@ -1207,6 +1209,7 @@ export default function AdminManageTestPage() {
       subtitle: form.certificate_subtitle,
       issuer: form.certificate_issuer,
       signer: form.certificate_signer,
+      issue_rule: form.certificate_issue_rule,
     })
     const attachmentItems = normalizeAttachmentEntries(form.attachment_items, form.attachment_urls)
     const attachmentUrls = attachmentItems.map((item) => item.url)
@@ -1725,6 +1728,7 @@ export default function AdminManageTestPage() {
     subtitle: settingsForm.certificate_subtitle,
     issuer: settingsForm.certificate_issuer,
     signer: settingsForm.certificate_signer,
+    issue_rule: settingsForm.certificate_issue_rule,
   })
 
   const setCheckboxField = (field) => (e) => setSettingsForm((prev) => ({ ...prev, [field]: e.target.checked }))
@@ -1742,6 +1746,7 @@ export default function AdminManageTestPage() {
         subtitle: field === 'certificate_subtitle' ? value : next.certificate_subtitle,
         issuer: field === 'certificate_issuer' ? value : next.certificate_issuer,
         signer: field === 'certificate_signer' ? value : next.certificate_signer,
+        issue_rule: field === 'certificate_issue_rule' ? value : next.certificate_issue_rule,
       }) || {}, null, 2)
       return next
     })
@@ -2007,6 +2012,7 @@ export default function AdminManageTestPage() {
       certificate_subtitle: '',
       certificate_issuer: '',
       certificate_signer: '',
+      certificate_issue_rule: DEFAULT_CERTIFICATE_ISSUE_RULE,
       certificate_json: '',
     }))
     setShowCertificateEditor(false)
@@ -2051,6 +2057,7 @@ export default function AdminManageTestPage() {
       certificate_subtitle: normalized.subtitle || '',
       certificate_issuer: normalized.issuer || '',
       certificate_signer: normalized.signer || '',
+      certificate_issue_rule: normalizeCertificateIssueRule(normalized.issue_rule),
       certificate_json: JSON.stringify(normalized, null, 2),
     }))
     setShowCertificateEditor(true)
@@ -2859,6 +2866,14 @@ export default function AdminManageTestPage() {
                     </div>
                     <div className={styles.inlineFormGrid}>
                       <label className={styles.settingsFieldGroup}>
+                        <span>Issue rule</span>
+                        <select value={settingsForm.certificate_issue_rule} disabled={lockedExamFields} onChange={setCertificateField('certificate_issue_rule')}>
+                          {CERTIFICATE_ISSUE_RULE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className={styles.settingsFieldGroup}>
                         <span>Certificate title</span>
                         <input value={settingsForm.certificate_title} disabled={lockedExamFields} onChange={setCertificateField('certificate_title')} placeholder="Certificate of Completion" />
                       </label>
@@ -2883,7 +2898,7 @@ export default function AdminManageTestPage() {
                   </div>
                   <div className={`${styles.certificatePreviewCard} ${certificateView === 'compact' ? styles.certificatePreviewCompact : ''}`}>
                     <div className={styles.certificatePreviewInner}>
-                      <div className={styles.certificateBadge}>Certificate</div>
+                      <div className={styles.certificateBadge}>{certificateIssueRuleLabel(certificatePreview?.issue_rule)}</div>
                       <div className={styles.certificateHeading}>{certificatePreview?.title || 'Certificate of Completion'}</div>
                       <div className={styles.certificateSubtitle}>
                         {certificatePreview?.subtitle || `Awarded for successfully completing ${settingsForm.title || exam.title}.`}

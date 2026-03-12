@@ -296,7 +296,10 @@ export default function AdminGradingScales() {
         </div>
       ) : (
         <div className={styles.grid}>
-          {filteredScales.map((scale) => (
+          {filteredScales.map((scale) => {
+            const scaleLabel = scale.name || 'this grading scale'
+
+            return (
             <div key={scale.id} className={styles.card}>
               <div className={styles.cardHeader}>
                 <div>
@@ -304,20 +307,20 @@ export default function AdminGradingScales() {
                   <span className={styles.bandCount}>{(scale.bands || []).length} band{(scale.bands || []).length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className={styles.actionBtns}>
-                  <button type="button" className={styles.actionBtn} onClick={() => openEdit(scale)} disabled={deleteBusyId === scale.id}>
+                  <button type="button" className={styles.actionBtn} onClick={() => openEdit(scale)} disabled={deleteBusyId === scale.id} aria-label={`Edit grading scale ${scaleLabel}`} title={`Edit grading scale ${scaleLabel}`}>
                     Edit
                   </button>
                   {isAdmin && (deleteConfirmId === scale.id ? (
                     <>
-                      <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(scale.id)} disabled={deleteBusyId === scale.id}>
+                      <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(scale.id)} disabled={deleteBusyId === scale.id} aria-label={`Confirm delete for grading scale ${scaleLabel}`}>
                         {deleteBusyId === scale.id ? 'Deleting...' : 'Confirm'}
                       </button>
-                      <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === scale.id}>
+                      <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === scale.id} aria-label={`Keep grading scale ${scaleLabel}`}>
                         Cancel
                       </button>
                     </>
                   ) : (
-                    <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(scale.id)} disabled={deleteBusyId === scale.id}>
+                    <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(scale.id)} disabled={deleteBusyId === scale.id} aria-label={`Delete grading scale ${scaleLabel}`} title={`Delete grading scale ${scaleLabel}`}>
                       Delete
                     </button>
                   ))}
@@ -338,14 +341,15 @@ export default function AdminGradingScales() {
                 ))}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
       {modal && (
         <div className={styles.modalOverlay} onClick={close}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 className={styles.modalTitle}>{modal === 'create' ? 'New Grading Scale' : 'Edit Grading Scale'}</h3>
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="grading-scale-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="grading-scale-dialog-title" className={styles.modalTitle}>{modal === 'create' ? 'New Grading Scale' : 'Edit Grading Scale'}</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="grading-scale-name">Scale Name</label>
@@ -361,7 +365,7 @@ export default function AdminGradingScales() {
                   <input aria-label={`Band ${index + 1} maximum score`} className={styles.inputSmall} type="number" value={band.max_score} onChange={(event) => updateBand(index, 'max_score', event.target.value)} placeholder="Max" />
                   <span className={styles.percentSuffix}>%</span>
                   {bands.length > 1 && (
-                    <button className={styles.removeBand} type="button" onClick={() => removeBand(index)} disabled={saving}>
+                    <button className={styles.removeBand} type="button" onClick={() => removeBand(index)} disabled={saving} aria-label={`Remove band ${index + 1}`} title={`Remove band ${index + 1}`}>
                       x
                     </button>
                   )}
@@ -372,7 +376,7 @@ export default function AdminGradingScales() {
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnCancel} onClick={close} disabled={saving}>Cancel</button>
               <button type="button" className={styles.btnPrimary} onClick={() => void handleSave()} disabled={saving || !name.trim() || bands.length === 0}>
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? 'Saving...' : 'Save scale'}
               </button>
             </div>
           </div>

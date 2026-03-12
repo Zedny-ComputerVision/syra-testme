@@ -378,6 +378,8 @@ export default function SystemCheckPage() {
     navigate(nextRoute)
   }
 
+  const continueLabel = requirements.identityRequired ? 'Continue to identity verification' : 'Continue to rules'
+
   return (
     <div className={styles.page}>
       <ExamJourneyStepper currentStep={1} />
@@ -394,7 +396,7 @@ export default function SystemCheckPage() {
           <div className={styles.helperRow}>
             <p className={styles.errorBanner}>{configError}</p>
             <button type="button" className={styles.secondaryBtn} onClick={() => void loadConfig()} disabled={configLoading}>
-              {configLoading ? 'Retrying...' : 'Retry requirements'}
+              {configLoading ? 'Retrying requirements...' : 'Retry loading requirements'}
             </button>
           </div>
         )}
@@ -447,14 +449,20 @@ export default function SystemCheckPage() {
               {renderIcon(fullscreen)}
               <span>Fullscreen Entry</span>
             </div>
-            <button
-              type="button"
-              className={styles.inlineBtn}
-              onClick={requestFullscreen}
-              disabled={!requirements.fullscreenRequired}
-            >
-              {!requirements.fullscreenRequired ? 'Not Required' : fullscreen === 'passed' ? 'Fullscreen Active' : 'Enter Fullscreen'}
-            </button>
+            {!requirements.fullscreenRequired ? (
+              <div className={styles.statusPill}>Not required</div>
+            ) : fullscreen === 'passed' ? (
+              <div className={styles.statusPill}>Fullscreen active</div>
+            ) : (
+              <button
+                type="button"
+                className={styles.inlineBtn}
+                onClick={requestFullscreen}
+                disabled={fullscreen === 'checking'}
+              >
+                {fullscreen === 'checking' ? 'Checking fullscreen...' : 'Enter fullscreen'}
+              </button>
+            )}
             {requirements.fullscreenRequired && fullscreen === 'pending' && <p className={styles.hint}>Enter fullscreen to continue.</p>}
             {requirements.fullscreenRequired && fullscreen === 'failed' && <p className={styles.hint}>Fullscreen is required for this test.</p>}
           </motion.div>
@@ -482,18 +490,18 @@ export default function SystemCheckPage() {
                 {renderIcon(screenShare)}
                 <span>Screen Share Permission</span>
               </div>
-              <button
-                type="button"
-                className={styles.inlineBtn}
-                onClick={() => void checkScreenShare(true)}
-                disabled={screenShare === 'checking'}
-              >
-                {screenShare === 'passed'
-                  ? 'Screen Share Ready'
-                  : screenShare === 'checking'
-                    ? 'Requesting Screen...'
-                    : 'Share Entire Screen'}
-              </button>
+              {screenShare === 'passed' ? (
+                <div className={styles.statusPill}>Screen share ready</div>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.inlineBtn}
+                  onClick={() => void checkScreenShare(true)}
+                  disabled={screenShare === 'checking'}
+                >
+                  {screenShare === 'checking' ? 'Requesting screen...' : 'Share entire screen'}
+                </button>
+              )}
               {screenShare !== 'passed' && (
                 <p className={styles.hint}>
                   Entire-screen sharing is required. Choose your full desktop in the browser picker before continuing.
@@ -518,7 +526,7 @@ export default function SystemCheckPage() {
           whileTap={{ scale: allPassed && !continueBusy ? 0.98 : 1 }}
           onClick={handleContinue}
         >
-          {configLoading ? 'Loading requirements...' : configError ? 'Cannot continue' : allPassed ? 'Continue' : 'Waiting for checks...'}
+          {configLoading ? 'Loading requirements...' : configError ? 'Cannot continue' : allPassed ? continueLabel : 'Waiting for checks...'}
         </motion.button>
       </motion.div>
     </div>

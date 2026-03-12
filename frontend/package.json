@@ -7,8 +7,8 @@
     "dev": "cross-env SASS_SILENCE_DEPRECATIONS=legacy-js-api vite",
     "build": "cross-env SASS_SILENCE_DEPRECATIONS=legacy-js-api vite build",
     "preview": "cross-env SASS_SILENCE_DEPRECATIONS=legacy-js-api vite preview",
-    "test": "vitest --passWithNoTests",
-    "test:e2e": "playwright test",
+    "test": "node scripts/run-vitest.mjs",
+    "test:e2e": "node scripts/run-playwright.mjs",
     "lint": "eslint src/",
     "format": "prettier --write src/"
   },

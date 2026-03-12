@@ -151,7 +151,7 @@ export default function AttemptResult() {
     return (
       <div className={styles.errorRow}>
         <div className={styles.errorBanner}>{loadError}</div>
-        <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>Retry</button>
+        <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>Retry loading result</button>
       </div>
     )
   }
@@ -171,6 +171,9 @@ export default function AttemptResult() {
   const showAnswerReview = Boolean(examSettings.show_answer_review)
   const showCorrectAnswers = Boolean(examSettings.show_correct_answers)
   const pendingManualReview = attempt.pending_manual_review ?? (attempt.status === 'SUBMITTED' && attempt.score == null)
+  const certificateConfigured = Boolean(exam?.certificate)
+  const canDownloadCert = Boolean(attempt.certificate_eligible)
+  const certificateBlockReason = attempt.certificate_block_reason || ''
   const searchParams = new URLSearchParams(location.search)
   const openedFromManageTest = searchParams.get('from') === 'manage-test'
   const returnTestId = searchParams.get('testId')
@@ -224,8 +227,6 @@ export default function AttemptResult() {
     navigate('/attempts')
   }
 
-  const canDownloadCert = exam?.certificate && attempt.status !== 'IN_PROGRESS' && !pendingManualReview &&
-    (exam.passing_score == null || attempt.score == null || attempt.score >= exam.passing_score)
   const manualReviewItems = questions
     .map((question) => ({ question, answer: answerMap[question.id] }))
     .filter(({ question, answer }) => isManualReviewAnswer(question, answer))
@@ -326,7 +327,7 @@ export default function AttemptResult() {
           </p>
         </div>
         <button type="button" className={styles.printBtn} onClick={() => window.print()}>
-          Print / Export
+          Print or export result
         </button>
       </div>
 
@@ -337,7 +338,14 @@ export default function AttemptResult() {
         </div>
       )}
 
-      {detailWarning && <div className={styles.warningBanner}>{detailWarning}</div>}
+      {detailWarning && (
+        <div className={styles.warningRow}>
+          <div className={styles.warningBanner}>{detailWarning}</div>
+          <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>
+            Retry loading details
+          </button>
+        </div>
+      )}
       {reviewError && <div className={styles.errorBanner}>{reviewError}</div>}
       {reviewNotice && <div className={styles.contextBanner}><div className={styles.contextText}>{reviewNotice}</div></div>}
 
@@ -368,6 +376,13 @@ export default function AttemptResult() {
           <div className={styles.pendingReviewText}>
             Detailed answer review and final result reporting will appear after grading is complete.
           </div>
+        </div>
+      )}
+
+      {certificateConfigured && !canDownloadCert && certificateBlockReason && (
+        <div className={styles.contextBanner}>
+          <div className={styles.contextTitle}>Certificate status</div>
+          <div className={styles.contextText}>{certificateBlockReason}</div>
         </div>
       )}
 
@@ -589,7 +604,7 @@ export default function AttemptResult() {
       )}
 
       <button type="button" className={styles.backBtn} onClick={handleBack}>
-        {openedFromManageTest && returnTestId ? '\u2190 Back to Manage Test' : '\u2190 Back to Attempts'}
+        {openedFromManageTest && returnTestId ? '\u2190 Back to Manage Test' : '\u2190 Back to Attempts List'}
       </button>
     </div>
   )

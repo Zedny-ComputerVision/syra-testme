@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,4 +18,7 @@ def health_db(db: Session = Depends(get_db_dep)):
         db.execute(text("SELECT 1"))
         return {"status": "ok"}
     except Exception as exc:
-        return {"status": "error", "detail": str(exc)}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database unavailable: {exc}",
+        ) from exc

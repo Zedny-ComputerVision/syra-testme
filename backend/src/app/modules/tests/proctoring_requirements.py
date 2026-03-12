@@ -135,6 +135,7 @@ def normalize_proctoring_config(proctoring_config: Mapping[str, Any] | None) -> 
         "fullscreen_required": requirements["fullscreen_required"],
         "lighting_required": requirements["lighting_required"],
         "screen_required": requirements["screen_required"],
+        "screen_capture": requirements["screen_required"],
         "fullscreen_enforce": requirements["fullscreen_required"],
         "face_verify": requirements["identity_required"],
     })

@@ -66,13 +66,14 @@ function SessionsTab({
                         className={styles.dangerInlineBtn}
                         disabled={isArchived || deletingSessionBusyId === session.id}
                         onClick={() => handleDeleteSession(session.id)}
+                        aria-label={`Confirm delete for session ${(users.find((user) => String(user.id) === String(session.user_id))?.user_id || String(session.user_id).slice(0, 8))} on ${new Date(session.scheduled_at).toLocaleString()}`}
                       >
                         {deletingSessionBusyId === session.id ? 'Deleting...' : 'Confirm delete'}
                       </button>
-                      <button type="button" disabled={deletingSessionBusyId === session.id} onClick={() => setDeleteSessionId(null)}>Cancel</button>
+                      <button type="button" disabled={deletingSessionBusyId === session.id} onClick={() => setDeleteSessionId(null)} aria-label={`Keep session ${(users.find((user) => String(user.id) === String(session.user_id))?.user_id || String(session.user_id).slice(0, 8))} on ${new Date(session.scheduled_at).toLocaleString()}`}>Cancel</button>
                     </>
                   ) : (
-                    <button type="button" disabled={isArchived || deletingSessionBusyId === session.id} onClick={() => handleDeleteSession(session.id)}>Delete</button>
+                    <button type="button" disabled={isArchived || deletingSessionBusyId === session.id} onClick={() => handleDeleteSession(session.id)} aria-label={`Delete session ${(users.find((user) => String(user.id) === String(session.user_id))?.user_id || String(session.user_id).slice(0, 8))} on ${new Date(session.scheduled_at).toLocaleString()}`} title={`Delete session ${(users.find((user) => String(user.id) === String(session.user_id))?.user_id || String(session.user_id).slice(0, 8))} on ${new Date(session.scheduled_at).toLocaleString()}`}>Delete</button>
                   )}
                 </td>
               </tr>

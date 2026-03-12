@@ -62,7 +62,16 @@ export default function Schedule() {
     })
   }
 
-  if (loading) return <div className={styles.loading}>Loading schedules...</div>
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.pageHeader}>
+          <h2 className={styles.title}>Test Schedule</h2>
+        </div>
+        <div className={styles.loading}>Loading schedules...</div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.page}>

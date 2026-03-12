@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, Literal, Optional, TypeVar
 from uuid import UUID
 
 from pydantic import AliasChoices, BaseModel, Field, EmailStr, field_validator, model_validator
@@ -402,6 +402,8 @@ class AttemptRead(AttemptBase):
     user_id: UUID
     status: AttemptStatus
     paused: bool = False
+    high_violations: int = 0
+    med_violations: int = 0
     score: Optional[float]
     grade: Optional[str] = None
     pending_manual_review: Optional[bool] = None
@@ -421,6 +423,11 @@ class AttemptRead(AttemptBase):
     attempts_remaining: Optional[int] = None
     user_name: Optional[str] = None
     user_student_id: Optional[str] = None
+    certificate_eligible: Optional[bool] = None
+    certificate_issue_rule: Optional[str] = None
+    certificate_review_status: Optional[str] = None
+    certificate_reviewed_at: Optional[datetime] = None
+    certificate_block_reason: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -428,6 +435,10 @@ class AttemptRead(AttemptBase):
 class AttemptAnswerBase(BaseModel):
     question_id: UUID
     answer: Optional[str | list | dict] = None
+
+
+class AttemptCertificateReviewUpdate(BaseModel):
+    decision: Literal["APPROVED", "REJECTED"]
 
 
 class AttemptAnswerRead(AttemptAnswerBase):
@@ -533,6 +544,11 @@ class ProctoringPingResponse(BaseModel):
 
 class DashboardRead(BaseModel):
     total_exams: int
+    total_tests: int = 0
+    total_users: int = 0
+    total_learners: int = 0
+    total_admins: int = 0
+    published_tests: int = 0
     total_attempts: int
     in_progress_attempts: int
     completed_attempts: int

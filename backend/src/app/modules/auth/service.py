@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 
@@ -9,6 +10,7 @@ from ...core.security import (
     create_password_reset_token,
     create_refresh_token,
     hash_password,
+    token_issued_at,
     verify_password,
     verify_token,
 )
@@ -102,6 +104,7 @@ class AuthService:
         user = self._load_token_user(payload)
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+        self._ensure_token_is_current(user, payload)
         return TokenRefresh(
             access_token=create_access_token(
                 str(user.id),
@@ -113,6 +116,9 @@ class AuthService:
         )
 
     def logout(self, *, current_user: User, request_ip: str | None) -> Message:
+        self._invalidate_user_tokens(current_user)
+        self.repository.add(current_user)
+        self.repository.commit()
         write_audit_log(
             self.repository.db,
             current_user.id,
@@ -128,6 +134,7 @@ class AuthService:
         if not verify_password(body.current_password, current_user.hashed_password):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password")
         current_user.hashed_password = hash_password(body.new_password)
+        self._invalidate_user_tokens(current_user)
         self.repository.add(current_user)
         self.repository.commit()
         write_audit_log(
@@ -153,7 +160,9 @@ class AuthService:
         except Exception as exc:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
         user = self._load_token_user(payload, not_found_status=status.HTTP_404_NOT_FOUND)
+        self._ensure_token_is_current(user, payload)
         user.hashed_password = hash_password(body.new_password)
+        self._invalidate_user_tokens(user)
         self.repository.add(user)
         self.repository.commit()
         write_audit_log(
@@ -178,3 +187,18 @@ class AuthService:
             detail = "User not found" if not_found_status == status.HTTP_404_NOT_FOUND else "Invalid token"
             raise HTTPException(status_code=not_found_status, detail=detail)
         return user
+
+    def _ensure_token_is_current(self, user: User, payload: dict) -> None:
+        issued_at = token_issued_at(payload)
+        cutoff = getattr(user, "token_invalid_before", None)
+        if issued_at is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        if cutoff:
+            normalized_cutoff = cutoff if cutoff.tzinfo else cutoff.replace(tzinfo=timezone.utc)
+            if int(issued_at.timestamp()) < int(normalized_cutoff.timestamp()):
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    def _invalidate_user_tokens(self, user: User) -> None:
+        now = datetime.now(timezone.utc)
+        user.token_invalid_before = now
+        user.updated_at = now

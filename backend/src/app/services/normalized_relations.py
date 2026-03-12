@@ -24,6 +24,12 @@ from ..models import (
 from ..modules.tests.enums import ReportContent, ReportDisplayed
 
 ADMIN_META_KEY = "_admin_test"
+DEFAULT_CERTIFICATE_ISSUE_RULE = "ON_PASS"
+CERTIFICATE_ISSUE_RULES = {
+    "ON_PASS",
+    "POSITIVE_PROCTORING",
+    "AFTER_PROCTORING_REVIEW",
+}
 
 DEFAULT_SECURITY_SETTINGS = {
     "fullscreen_required": True,
@@ -744,35 +750,65 @@ def mutate_exam_admin_meta(exam: Exam, **updates: Any) -> None:
 
 
 def exam_certificate(exam: Exam) -> dict[str, Any] | None:
+    certificate = getattr(exam, "certificate", None)
+    raw = deepcopy(certificate) if isinstance(certificate, dict) else {}
     config = getattr(exam, "certificate_config_rel", None)
     if config:
-        payload = {
+        raw.update({
             "title": config.title,
             "subtitle": config.subtitle,
             "issuer": config.issuer,
             "signer": config.signer,
-        }
-        return {key: value for key, value in payload.items() if value not in {None, ""}} or None
-    raw = exam.certificate
-    return deepcopy(raw) if isinstance(raw, dict) else None
+        })
+    if not raw:
+        return None
+    raw["issue_rule"] = normalize_certificate_issue_rule(raw.get("issue_rule"))
+    return {key: value for key, value in raw.items() if value not in {None, ""}} or None
 
 
 def set_exam_certificate(exam: Exam, payload: dict[str, Any] | None) -> None:
-    if not isinstance(payload, dict) or not any(payload.values()):
+    if not isinstance(payload, dict):
         setattr(exam, "certificate_config_rel", None)
         exam.certificate = None
         return
+
+    normalized = deepcopy(payload)
+    for key in ("template", "orientation", "description", "title", "subtitle"):
+        if key in normalized:
+            normalized[key] = str(normalized.get(key) or "").strip() or None
+    normalized["issuer"] = str(payload.get("issuer_name") or payload.get("issuer") or "").strip() or None
+    normalized["signer"] = str(payload.get("signer_name") or payload.get("signer") or "").strip() or None
+    normalized["issue_rule"] = normalize_certificate_issue_rule(payload.get("issue_rule"))
+    normalized.pop("issuer_name", None)
+    normalized.pop("signer_name", None)
+
+    has_content = any(
+        value not in {None, ""}
+        for key, value in normalized.items()
+        if key != "issue_rule"
+    )
+    if not has_content:
+        setattr(exam, "certificate_config_rel", None)
+        exam.certificate = None
+        return
+
     config = _ensure_certificate_config(exam)
-    config.title = str(payload.get("title") or "").strip() or None
-    config.subtitle = str(payload.get("subtitle") or "").strip() or None
-    config.issuer = str(payload.get("issuer_name") or payload.get("issuer") or "").strip() or None
-    config.signer = str(payload.get("signer_name") or payload.get("signer") or "").strip() or None
+    config.title = normalized.get("title")
+    config.subtitle = normalized.get("subtitle")
+    config.issuer = normalized.get("issuer")
+    config.signer = normalized.get("signer")
     exam.certificate = {
-        "title": config.title,
-        "subtitle": config.subtitle,
-        "issuer": config.issuer,
-        "signer": config.signer,
+        key: value
+        for key, value in normalized.items()
+        if value not in {None, ""}
     }
+
+
+def normalize_certificate_issue_rule(value: Any) -> str:
+    normalized = str(value or DEFAULT_CERTIFICATE_ISSUE_RULE).strip().upper()
+    if normalized not in CERTIFICATE_ISSUE_RULES:
+        return DEFAULT_CERTIFICATE_ISSUE_RULE
+    return normalized
 
 
 def exam_proctoring(exam: Exam) -> dict[str, Any]:

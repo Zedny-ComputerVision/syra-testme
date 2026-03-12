@@ -76,7 +76,7 @@ function renderPage() {
 
 describe('Proctoring page', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     getAttemptMock.mockResolvedValue({
       data: {
         id: 'attempt-1',
@@ -131,7 +131,7 @@ describe('Proctoring page', () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText('Failed to load test. Please refresh and try again.')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading test' }))
 
     await waitFor(() => expect(screen.getByText('What is 2 + 2?')).toBeTruthy())
     expect(getAttemptMock).toHaveBeenCalledTimes(2)
@@ -143,7 +143,7 @@ describe('Proctoring page', () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText('No questions are available for this attempt.')).toBeTruthy())
-    expect(screen.getByRole('button', { name: 'Back to Attempts' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Back to attempts list' })).toBeTruthy()
   })
 
   it('shows progress details and a submit confirmation before final submission', async () => {
@@ -153,7 +153,7 @@ describe('Proctoring page', () => {
     expect(screen.getByText('0 answered of 1 total')).toBeTruthy()
     expect(screen.getByText('1 unanswered')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit Test' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review and submit test' }))
 
     await waitFor(() => expect(screen.getByText('Ready to submit?')).toBeTruthy())
     expect(screen.getByText(/You still have 1 unanswered question./)).toBeTruthy()

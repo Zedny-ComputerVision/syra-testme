@@ -5,6 +5,7 @@ sqlalchemy>=2.0
 psycopg[binary]
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt<5
 httpx
 slowapi
 pydantic-settings

@@ -302,16 +302,16 @@ export default function AdminTemplates() {
                   {!canManageTemplate(template) && <div className={styles.rowSub}>Read-only template. Only the owner or an admin can edit this template.</div>}
                 </div>
                 <div className={styles.rowBtns}>
-                  {canManageTemplate(template) && <button className={styles.editBtn} type="button" onClick={() => startEdit(template)}>Edit</button>}
+                  {canManageTemplate(template) && <button className={styles.editBtn} type="button" onClick={() => startEdit(template)} aria-label={`Edit template ${template.name || 'this template'}`} title={`Edit template ${template.name || 'this template'}`}>Edit</button>}
                   {isAdmin && (deleteConfirmId === template.id ? (
                     <>
-                      <button className={`${styles.deleteBtn} ${styles.dangerBtn}`} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id}>
+                      <button className={`${styles.deleteBtn} ${styles.dangerBtn}`} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`Confirm delete for template ${template.name || 'this template'}`}>
                         {deletingId === template.id ? 'Deleting...' : 'Confirm'}
                       </button>
-                      <button className={styles.editBtn} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deletingId === template.id}>Cancel</button>
+                      <button className={styles.editBtn} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deletingId === template.id} aria-label={`Keep template ${template.name || 'this template'}`}>Cancel</button>
                     </>
                   ) : (
-                    <button className={styles.deleteBtn} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id}>Delete</button>
+                    <button className={styles.deleteBtn} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`Delete template ${template.name || 'this template'}`} title={`Delete template ${template.name || 'this template'}`}>Delete</button>
                   ))}
                 </div>
               </div>

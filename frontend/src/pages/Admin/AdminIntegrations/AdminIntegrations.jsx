@@ -369,7 +369,7 @@ export default function AdminIntegrations() {
                 <div className={styles.resultRow}><strong>Last test:</strong> {testResults[integration.key]}</div>
               ) : null}
               <div className={styles.actions}>
-                <button type="button" className={styles.toggle} onClick={() => toggle(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading}>
+                <button type="button" className={styles.toggle} onClick={() => toggle(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={`${state.enabled ? 'Disable' : 'Enable'} integration ${integration.name}`}>
                   {state.enabled ? 'Disable' : 'Enable'}
                 </button>
                 {savingKey === integration.key ? (
@@ -377,12 +377,12 @@ export default function AdminIntegrations() {
                 ) : savedKey === integration.key ? (
                   <span className={styles.savedText}>Saved</span>
                 ) : (
-                  <button type="button" className={styles.saveBtn} onClick={() => saveIntegration(integration.key)} disabled={!ready || !dirty || Boolean(testingKey) || loading}>Save</button>
+                  <button type="button" className={styles.saveBtn} onClick={() => saveIntegration(integration.key)} disabled={!ready || !dirty || Boolean(testingKey) || loading} aria-label={`Save changes for integration ${integration.name}`} title={`Save changes for integration ${integration.name}`}>Save</button>
                 )}
                 {dirty ? (
-                  <button type="button" className={styles.testBtn} onClick={() => resetDraft(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading}>Reset</button>
+                  <button type="button" className={styles.testBtn} onClick={() => resetDraft(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={`Reset draft changes for integration ${integration.name}`} title={`Reset draft changes for integration ${integration.name}`}>Reset</button>
                 ) : null}
-                <button type="button" className={styles.testBtn} onClick={() => sendTest(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading}>
+                <button type="button" className={styles.testBtn} onClick={() => sendTest(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={`Send test event for integration ${integration.name}`} title={`Send test event for integration ${integration.name}`}>
                   {testingKey === integration.key ? 'Testing...' : 'Send Test'}
                 </button>
               </div>

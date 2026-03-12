@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from ...models import RoleEnum
 from ...schemas import ExamCreate, ExamRead, ExamUpdate, Message, PaginatedResponse
 from ...services.exam_compat_service import (
+    assert_has_questions as _assert_has_questions,
     create_test as create_test_service,
     delete_test as delete_test_service,
     get_test as get_test_service,
@@ -76,3 +77,14 @@ async def delete_exam(
 ):
     del current
     return delete_test_service(db=db, test_id=exam_id)
+
+
+__all__ = [
+    "router",
+    "list_exams",
+    "create_exam",
+    "get_exam",
+    "update_exam",
+    "delete_exam",
+    "_assert_has_questions",
+]

@@ -5,12 +5,12 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..api.deps import ensure_permission, learner_can_access_exam
-from ..models import Course, CourseStatus, Exam, ExamStatus, Node, Question, RoleEnum
+from ..models import AccessMode, Course, CourseStatus, Exam, ExamStatus, Node, Question, RoleEnum, Schedule
 from ..modules.tests.proctoring_requirements import normalize_proctoring_config
 from ..schemas import ExamCreate, ExamRead, ExamUpdate, Message
 from ..utils.pagination import build_page_response, clamp_sort_field, normalize_pagination
@@ -106,7 +106,12 @@ def list_tests(
 
     query = (
         select(Exam)
-        .options(joinedload(Exam.node).joinedload(Node.course), joinedload(Exam.category))
+        .options(
+            joinedload(Exam.node).joinedload(Node.course),
+            joinedload(Exam.category),
+            selectinload(Exam.questions),
+        )
+        .where(Exam.library_pool_id.is_(None))
         .order_by(order_column, Exam.created_at.desc())
     )
     if pagination.search:
@@ -119,13 +124,29 @@ def list_tests(
         )
 
     if current.role == RoleEnum.LEARNER:
-        query = query.where(Exam.status == ExamStatus.OPEN)
-        tests = db.scalars(query).all()
-        tests = [test for test in tests if learner_can_access_exam(db, test, current)]
-        page_items = tests[pagination.offset : pagination.offset + pagination.limit]
+        current_time = datetime.now(timezone.utc)
+        restricted_schedule_exists = exists(
+            select(Schedule.id).where(
+                Schedule.exam_id == Exam.id,
+                Schedule.access_mode == AccessMode.RESTRICTED,
+            )
+        )
+        learner_schedule_available = exists(
+            select(Schedule.id).where(
+                Schedule.exam_id == Exam.id,
+                Schedule.user_id == current.id,
+                Schedule.scheduled_at <= current_time,
+            )
+        )
+        query = query.where(
+            Exam.status == ExamStatus.OPEN,
+            or_(~restricted_schedule_exists, learner_schedule_available),
+        )
+        total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+        page_items = db.scalars(query.offset(pagination.offset).limit(pagination.limit)).all()
         return build_page_response(
             items=[serialize_legacy_test(test) for test in page_items],
-            total=len(tests),
+            total=total,
             pagination=pagination,
             extended=False,
         )

@@ -1245,6 +1245,55 @@
   color: var(--color-text);
 }
 
+.certRuleList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.certRuleCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+
+  input {
+    margin-top: 0.15rem;
+  }
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+}
+
+.certRuleCardActive {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+}
+
+.certRuleBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.certRuleTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.certRuleDescription {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+
 /* Certificate Preview */
 .certPreview {
   margin-top: 1.25rem;
@@ -1272,6 +1321,21 @@
   padding: 1.5rem;
   text-align: center;
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.12);
+}
+
+.certPreviewBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .certPreviewLandscape {

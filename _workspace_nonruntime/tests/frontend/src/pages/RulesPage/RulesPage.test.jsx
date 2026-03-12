@@ -40,7 +40,7 @@ function renderPage() {
 
 describe('RulesPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     window.sessionStorage.clear()
   })
 
@@ -61,15 +61,15 @@ describe('RulesPage', () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText('Failed to load the test rules and requirements. Retry before starting.')).toBeTruthy())
-    expect(screen.getByRole('button', { name: 'Start Test' }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Start test' }).disabled).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading rules' }))
 
     await waitFor(() => expect(screen.getByText('Keep your camera on.')).toBeTruthy())
     const checkbox = screen.getByRole('checkbox')
     fireEvent.click(checkbox)
 
-    expect(screen.getByRole('button', { name: 'Start Test' }).disabled).toBe(false)
+    expect(screen.getByRole('button', { name: 'Start test' }).disabled).toBe(false)
   })
 
   it('shows the system-check prerequisite state before the learner starts', async () => {
@@ -83,7 +83,6 @@ describe('RulesPage', () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText('System check')).toBeTruthy())
-    expect(screen.getByText('Pending')).toBeTruthy()
     expect(screen.getByText(/System check has not been completed in this browser session yet./)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Complete system check first' }).disabled).toBe(true)
     expect(screen.getByRole('button', { name: 'Back to system check' })).toBeTruthy()

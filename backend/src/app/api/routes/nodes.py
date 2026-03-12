@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import Node, Course, CourseStatus, RoleEnum
+from ...models import Attempt, Course, CourseStatus, Exam, Node, RoleEnum
 from ...schemas import NodeCreate, NodeRead, NodeBase, Message
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
@@ -78,6 +78,20 @@ async def delete_node(node_id: str, db: Session = Depends(get_db_dep), current=D
         raise HTTPException(status_code=404, detail="Node not found")
     if current.role == RoleEnum.INSTRUCTOR and node.course.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
+    attempt_count = int(
+        db.scalar(
+            select(func.count(Attempt.id))
+            .select_from(Attempt)
+            .join(Exam, Attempt.exam_id == Exam.id)
+            .where(Exam.node_id == node.id)
+        )
+        or 0
+    )
+    if attempt_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete a node that has learner attempts",
+        )
     db.delete(node)
     db.commit()
     return Message(detail="Deleted")

@@ -6,6 +6,7 @@ import styles from './AdminRolesPermissions.module.scss'
 
 const DEFAULTS = DEFAULT_PERMISSION_ROWS
 const KEY = 'permissions_config'
+const ADMIN_LOCKED_FEATURES = new Set(['Manage Roles', 'System Settings'])
 
 function serializeRows(rows) {
   return JSON.stringify(canonicalizePermissionRows(rows))
@@ -78,8 +79,9 @@ export default function AdminRolesPermissions() {
       setSavedPermissions(canonical)
       setNotice('Permissions saved.')
       setTimeout(() => setNotice(''), 3000)
-    } catch {
-      setNotice('Failed to save.')
+    } catch (error) {
+      const detail = error.response?.data?.detail || 'Failed to save.'
+      setNotice(`Failed to save: ${detail}`)
     } finally {
       setSaving(false)
     }
@@ -169,6 +171,7 @@ export default function AdminRolesPermissions() {
                       <input
                         type="checkbox"
                         checked={!!permission[role]}
+                        disabled={role === 'admin' && ADMIN_LOCKED_FEATURES.has(permission.feature)}
                         onChange={() => toggle(idx, role)}
                         className={styles.checkbox}
                       />

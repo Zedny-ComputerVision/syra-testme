@@ -171,7 +171,7 @@ function ProctoringTab({
                         >
                           {savingAccomId === session.id ? 'Saving...' : 'Save'}
                         </button>
-                        <button type="button" disabled={savingAccomId === session.id} onClick={() => setEditingAccomId(null)}>Cancel</button>
+                        <button type="button" disabled={savingAccomId === session.id} onClick={() => setEditingAccomId(null)} aria-label={`Cancel editing accommodation for ${(users.find((u) => String(u.id) === String(session.user_id))?.user_id || String(session.user_id).slice(0, 8))}`}>Cancel</button>
                       </td>
                     </>
                   ) : (
@@ -180,7 +180,7 @@ function ProctoringTab({
                       <td>{session.notes || '-'}</td>
                       <td>{new Date(session.scheduled_at).toLocaleString()}</td>
                       <td className={styles.actionsCell}>
-                        <button type="button" disabled={isArchived} onClick={() => startEditAccom(session)}>Edit</button>
+                        <button type="button" disabled={isArchived} onClick={() => startEditAccom(session)} aria-label={`Edit accommodation for ${(users.find((u) => String(u.id) === String(session.user_id))?.user_id || String(session.user_id).slice(0, 8))}`} title={`Edit accommodation for ${(users.find((u) => String(u.id) === String(session.user_id))?.user_id || String(session.user_id).slice(0, 8))}`}>Edit</button>
                       </td>
                     </>
                   )}
@@ -200,9 +200,9 @@ function ProctoringTab({
                 <tr key={row.id}>
                   <td>{row.attemptId}</td><td>{row.username}</td><td>{row.highAlerts}</td><td>{row.mediumAlerts}</td>
                   <td className={styles.actionsCell}>
-                    <button type="button" disabled={rowBusy[row.id]} onClick={() => navigate(`/admin/attempt-analysis?id=${row.id}`)}>Analyze</button>
-                    <button type="button" disabled={rowBusy[row.id]} onClick={() => handleOpenVideo(row)}>Inspect video</button>
-                    <button type="button" disabled={rowBusy[row.id]} onClick={() => handleOpenReport(row)}>
+                    <button type="button" disabled={rowBusy[row.id]} onClick={() => navigate(`/admin/attempt-analysis?id=${row.id}`)} aria-label={`Review attempt analysis for ${row.username} attempt ${row.attemptId}`} title={`Review attempt analysis for ${row.username} attempt ${row.attemptId}`}>Analyze</button>
+                    <button type="button" disabled={rowBusy[row.id]} onClick={() => handleOpenVideo(row)} aria-label={`Inspect video for ${row.username} attempt ${row.attemptId}`} title={`Inspect video for ${row.username} attempt ${row.attemptId}`}>Inspect video</button>
+                    <button type="button" disabled={rowBusy[row.id]} onClick={() => handleOpenReport(row)} aria-label={`Open report for ${row.username} attempt ${row.attemptId}`} title={`Open report for ${row.username} attempt ${row.attemptId}`}>
                       {rowBusy[row.id] ? 'Opening...' : 'Open report'}
                     </button>
                   </td>

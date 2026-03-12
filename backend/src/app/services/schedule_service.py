@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..api.deps import ensure_permission, normalize_utc_datetime, parse_uuid_param
 from ..models import Attempt, AttemptStatus, Exam, RoleEnum, Schedule
@@ -17,9 +17,20 @@ from .notifications import notify_user
 logger = logging.getLogger(__name__)
 
 
-def validate_schedule_time(scheduled_at: datetime | None) -> None:
+def validate_schedule_time(
+    scheduled_at: datetime | None,
+    *,
+    allow_existing_past: bool = False,
+    previous_scheduled_at: datetime | None = None,
+) -> None:
     normalized = normalize_utc_datetime(scheduled_at)
-    if normalized and normalized < datetime.now(timezone.utc) - timedelta(minutes=1):
+    previous_normalized = normalize_utc_datetime(previous_scheduled_at)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=1)
+    if (
+        normalized
+        and normalized < cutoff
+        and not (allow_existing_past and previous_normalized and previous_normalized < cutoff)
+    ):
         raise HTTPException(status_code=422, detail="Cannot schedule in the past")
 
 
@@ -113,12 +124,17 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
 
 
 def list_schedulable_tests(*, db: Session) -> list[ExamRead]:
-    exams = db.scalars(select(Exam).order_by(Exam.created_at.desc())).all()
+    exams = db.scalars(
+        select(Exam)
+        .options(joinedload(Exam.node), joinedload(Exam.category), joinedload(Exam.questions))
+        .where(Exam.library_pool_id.is_(None))
+        .order_by(Exam.created_at.desc())
+    ).all()
     return [serialize_schedulable_test(exam) for exam in exams]
 
 
 def list_schedules(*, db: Session, current) -> list[ScheduleRead]:
-    query = select(Schedule)
+    query = select(Schedule).options(joinedload(Schedule.exam), joinedload(Schedule.user)).order_by(Schedule.scheduled_at.asc())
     if current.role == RoleEnum.LEARNER:
         query = query.where(Schedule.user_id == current.id)
     else:
@@ -133,11 +149,16 @@ def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, acto
     if not schedule:
         raise HTTPException(status_code=404, detail="Not found")
     payload = body.model_dump(exclude_unset=True)
+    previous_scheduled_at = schedule.scheduled_at
     for field, value in payload.items():
         if value is None and field == "scheduled_at":
             continue
         setattr(schedule, field, value)
-    validate_schedule_time(schedule.scheduled_at)
+    validate_schedule_time(
+        schedule.scheduled_at,
+        allow_existing_past=True,
+        previous_scheduled_at=previous_scheduled_at,
+    )
     schedule.updated_at = datetime.now(timezone.utc)
     try:
         db.add(schedule)

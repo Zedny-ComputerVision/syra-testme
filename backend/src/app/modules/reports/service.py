@@ -20,6 +20,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from ...api.deps import parse_uuid_param
 from ...core.config import get_settings
+from ...core.security import create_report_access_token
 from ...models import Attempt, AttemptStatus, Exam, ExamStatus, ProctoringEvent, ReportSchedule, RoleEnum, SeverityEnum, SystemSettings, User
 from ...schemas import CustomReportExportRequest, CustomReportPreview
 from ...services.audit import write_audit_log
@@ -27,6 +28,7 @@ from ...services.email import send_email
 from ...services.integrations import send_report_integration_event
 from ...services.normalized_relations import exam_archived_at, exam_code, is_exam_pool_library
 from ...services.report_rendering import render_report_template
+from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from .repository import ReportRepository
 from .schemas import Message, ReportScheduleCreate, ReportScheduleRunResult
 
@@ -393,7 +395,7 @@ class ReportService:
 
     async def run_schedule_now(self, *, schedule_id: str, actor_id) -> ReportScheduleRunResult:
         schedule = self.get_report_schedule(schedule_id)
-        artifact = self._run_report_schedule(schedule)
+        artifact = await self._run_report_schedule(schedule)
         report_url = artifact["report_url"]
         subscribers = self._load_subscribers()
         recipients = list({*(schedule.recipients or []), *subscribers})
@@ -775,7 +777,8 @@ class ReportService:
 
     def _report_public_url(self, filename: Path) -> str:
         base = settings.BACKEND_BASE_URL.rstrip("/")
-        return f"{base}/api/media/reports/{filename.name}"
+        token = create_report_access_token(filename.name)
+        return f"{base}/api/media/reports/public/{token}"
 
     def report_schedule_due(self, schedule: ReportSchedule, now: datetime | None = None) -> bool:
         if not getattr(schedule, "is_active", True):
@@ -793,7 +796,7 @@ class ReportService:
             return False
         return next_time <= current_time
 
-    def _run_report_schedule(self, schedule: ReportSchedule) -> dict[str, str]:
+    async def _run_report_schedule(self, schedule: ReportSchedule) -> dict[str, str]:
         attempts = self.repository.scalars(
             select(Attempt)
             .options(
@@ -810,15 +813,26 @@ class ReportService:
             "usage": self._render_usage_report,
         }
         html = renderers.get(schedule.report_type, self._render_attempts_report)(attempts)
-        reports_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = reports_dir / f"{schedule.id}_{ts}.html"
-        filename.write_text(html, encoding="utf-8")
+        filename = f"{schedule.id}_{ts}.html"
+        if settings.MEDIA_STORAGE_PROVIDER == "supabase":
+            stored = await upload_bytes_to_supabase(
+                "reports",
+                filename,
+                html.encode("utf-8"),
+                content_type="text/html; charset=utf-8",
+            )
+            file_path = str(stored.get("path") or filename)
+        else:
+            reports_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            output_path = reports_dir / filename
+            output_path.write_text(html, encoding="utf-8")
+            file_path = str(output_path)
         schedule.last_run_at = datetime.now(timezone.utc)
         self.repository.add(schedule)
         self.repository.commit()
         return {
-            "file_path": str(filename),
-            "report_url": self._report_public_url(filename),
+            "file_path": file_path,
+            "report_url": self._report_public_url(Path(filename)),
         }

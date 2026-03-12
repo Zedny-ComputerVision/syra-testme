@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import Skeleton from '../../../components/Skeleton/Skeleton'
-import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import { readPaginatedItems, readPaginatedTotal } from '../../../utils/pagination'
 import styles from './AdminDashboard.module.scss'
 
@@ -22,13 +21,35 @@ const ICONS = {
   attempts:   'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z',
 }
 
+const PANEL_TIMEOUT_MS = 8000
+const DASHBOARD_ATTEMPT_LIMIT = 24
+
+function createTimeoutError(label, timeoutMs) {
+  const error = new Error(`${label} timed out after ${Math.ceil(timeoutMs / 1000)}s`)
+  error.name = 'TimeoutError'
+  return error
+}
+
+function withTimeout(request, label, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(createTimeoutError(label, timeoutMs)), timeoutMs)
+
+    Promise.resolve(request)
+      .then((value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      })
+      .catch((error) => {
+        window.clearTimeout(timer)
+        reject(error)
+      })
+  })
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState({
-    users: [],
-    exams: [],
     attempts: [],
-    userTotal: 0,
     attemptTotal: 0,
     dashboard: {},
   })
@@ -38,14 +59,16 @@ export default function AdminDashboard() {
   const [error, setError] = useState('')
   const [warning, setWarning] = useState('')
   const mountedRef = useRef(false)
+  const loadSequenceRef = useRef(0)
 
-  const hasAnyData = stats.users.length > 0
-    || stats.exams.length > 0
-    || stats.attempts.length > 0
+  const hasAnyData = stats.attempts.length > 0
     || auditLog.length > 0
     || Object.keys(stats.dashboard || {}).length > 0
 
   const loadDashboard = async ({ preserveData = false } = {}) => {
+    const loadSequence = loadSequenceRef.current + 1
+    loadSequenceRef.current = loadSequence
+
     if (preserveData) {
       setRefreshing(true)
     } else {
@@ -55,56 +78,42 @@ export default function AdminDashboard() {
     setError('')
     setWarning('')
 
-    const results = await Promise.allSettled([
-      adminApi.users({ skip: 0, limit: 200 }),
-      adminApi.attempts({ skip: 0, limit: 200 }),
-      adminApi.dashboard(),
-      adminApi.auditLog({ skip: 0, limit: 10 }),
-      adminApi.allTests(),
-    ])
+    try {
+      const results = await Promise.allSettled([
+        withTimeout(adminApi.dashboard(), 'dashboard', PANEL_TIMEOUT_MS),
+        withTimeout(adminApi.auditLog({ skip: 0, limit: 10 }), 'audit log', PANEL_TIMEOUT_MS),
+        withTimeout(adminApi.attempts({ skip: 0, limit: DASHBOARD_ATTEMPT_LIMIT }), 'attempts', PANEL_TIMEOUT_MS),
+      ])
 
-    if (!mountedRef.current) return
+      if (!mountedRef.current || loadSequence !== loadSequenceRef.current) return
 
-    const [usersRes, attemptsRes, dashboardRes, auditRes, testsRes] = results
-    const failedPanels = results.filter((result) => result.status === 'rejected').length
-    const baseAttempts = attemptsRes.status === 'fulfilled' ? readPaginatedItems(attemptsRes.value.data) : []
-    const enrichedAttempts = await Promise.all(
-      baseAttempts.map(async (attempt) => {
-        try {
-          const { data: events } = await adminApi.getAttemptEvents(attempt.id)
-          const high = (events || []).filter((event) => event.severity === 'HIGH').length
-          const med = (events || []).filter((event) => event.severity === 'MEDIUM').length
-          return { ...attempt, high_violations: high, med_violations: med }
-        } catch {
-          return { ...attempt, high_violations: 0, med_violations: 0 }
-        }
-      }),
-    )
+      const [dashboardRes, auditRes, attemptsRes] = results
+      const failedPanels = results.filter((result) => result.status === 'rejected').length
+      const dashboardData = dashboardRes.status === 'fulfilled' ? dashboardRes.value.data || {} : {}
+      const auditItems = auditRes.status === 'fulfilled' ? readPaginatedItems(auditRes.value.data) : []
+      const baseAttempts = attemptsRes.status === 'fulfilled' ? readPaginatedItems(attemptsRes.value.data) : []
+      const attemptTotal = attemptsRes.status === 'fulfilled' ? readPaginatedTotal(attemptsRes.value.data) : 0
 
-    if (!mountedRef.current) return
+      setStats({
+        attempts: baseAttempts,
+        attemptTotal,
+        dashboard: dashboardData,
+      })
+      setAuditLog(auditItems)
 
-    const userRows = usersRes.status === 'fulfilled' ? readPaginatedItems(usersRes.value.data) : []
-    const userTotal = usersRes.status === 'fulfilled' ? readPaginatedTotal(usersRes.value.data) : 0
-    const attemptTotal = attemptsRes.status === 'fulfilled' ? readPaginatedTotal(attemptsRes.value.data) : 0
-
-    setStats({
-      users: userRows,
-      exams: testsRes.status === 'fulfilled' ? (testsRes.value.data?.items || []).map(normalizeAdminTest) : [],
-      attempts: enrichedAttempts,
-      userTotal,
-      attemptTotal,
-      dashboard: dashboardRes.status === 'fulfilled' ? dashboardRes.value.data || {} : {},
-    })
-    setAuditLog(auditRes.status === 'fulfilled' ? readPaginatedItems(auditRes.value.data) : [])
-
-    if (failedPanels === results.length) {
+      if (failedPanels === results.length) {
+        setError('Failed to load dashboard data.')
+      } else if (failedPanels > 0) {
+        setWarning('Some dashboard panels could not be loaded in time. Refresh to retry.')
+      }
+    } catch {
+      if (!mountedRef.current || loadSequence !== loadSequenceRef.current) return
       setError('Failed to load dashboard data.')
-    } else if (failedPanels > 0) {
-      setWarning('Some dashboard panels could not be loaded. Refresh to retry.')
+    } finally {
+      if (!mountedRef.current || loadSequence !== loadSequenceRef.current) return
+      setLoading(false)
+      setRefreshing(false)
     }
-
-    setLoading(false)
-    setRefreshing(false)
   }
 
   useEffect(() => {
@@ -115,12 +124,12 @@ export default function AdminDashboard() {
     }
   }, [])
 
-  const totalUsers = stats.userTotal || stats.dashboard.total_users || stats.users.length
-  const totalLearners = stats.users.filter((user) => user.role === 'LEARNER').length
-  const totalAdmins = stats.users.filter((user) => user.role === 'ADMIN').length
-  const totalExams = stats.exams.length > 0 ? stats.exams.length : stats.dashboard.total_exams || 0
-  const activeExams = stats.exams.filter((test) => test.status === 'PUBLISHED').length
-  const totalAttempts = stats.attemptTotal || stats.dashboard.total_attempts || stats.attempts.length
+  const totalUsers = stats.dashboard.total_users ?? 0
+  const totalLearners = stats.dashboard.total_learners ?? 0
+  const totalAdmins = stats.dashboard.total_admins ?? 0
+  const totalTests = stats.dashboard.total_tests ?? stats.dashboard.total_exams ?? 0
+  const publishedTests = stats.dashboard.published_tests ?? 0
+  const totalAttempts = stats.dashboard.total_attempts ?? stats.attemptTotal ?? stats.attempts.length
 
   const riskyAttempts = stats.attempts.filter((attempt) => (attempt.high_violations || 0) > 0 || (attempt.med_violations || 0) >= 2)
 
@@ -137,8 +146,8 @@ export default function AdminDashboard() {
     { label: 'Total Users',     value: totalUsers,    iconKey: 'users',     tone: 'Blue',   to: '/admin/users' },
     { label: 'Candidates',      value: totalLearners, iconKey: 'learner',   tone: 'Green',  to: '/admin/candidates' },
     { label: 'Admins',          value: totalAdmins,   iconKey: 'admin',     tone: 'Red',    to: '/admin/users' },
-    { label: 'Total Tests',     value: totalExams,    iconKey: 'tests',     tone: 'Violet', to: '/admin/tests' },
-    { label: 'Published Tests', value: activeExams,   iconKey: 'published', tone: 'Amber',  to: '/admin/tests' },
+    { label: 'Total Tests',     value: totalTests,    iconKey: 'tests',     tone: 'Violet', to: '/admin/tests' },
+    { label: 'Published Tests', value: publishedTests, iconKey: 'published', tone: 'Amber',  to: '/admin/tests' },
     { label: 'Total Attempts',  value: totalAttempts, iconKey: 'attempts',  tone: 'Cyan',   to: '/admin/attempt-analysis' },
   ]
 
@@ -186,7 +195,7 @@ export default function AdminDashboard() {
           onClick={handleRefresh}
           disabled={loading || refreshing}
         >
-          {refreshing ? 'Refreshing…' : 'Refresh'}
+          {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </AdminPageHeader>
 
@@ -232,8 +241,13 @@ export default function AdminDashboard() {
             <div className={styles.tableCardTitle}>
               Risky Attempts <span className={styles.countBadge}>{riskyAttempts.length}</span>
             </div>
-            <button type="button" className={styles.viewAllBtn} onClick={() => navigate('/admin/candidates')}>
-              View All →
+            <button
+              type="button"
+              className={styles.viewAllBtn}
+              onClick={() => navigate('/admin/candidates')}
+              aria-label="Open candidates queue"
+            >
+              Candidates queue
             </button>
           </div>
           {riskyAttempts.length === 0 ? (
@@ -269,8 +283,9 @@ export default function AdminDashboard() {
                         type="button"
                         className={styles.linkButton}
                         onClick={() => navigate(`/admin/attempt-analysis?id=${attempt.id}`)}
+                        aria-label={`Review attempt for ${attempt.user_name || attempt.user_id || 'learner'} on ${attempt.test_title || attempt.exam_title || 'test'}`}
                       >
-                        Analyze →
+                        Review attempt
                       </button>
                     </td>
                   </tr>
@@ -285,8 +300,13 @@ export default function AdminDashboard() {
             <div className={styles.tableCardTitle}>
               Recent Activity <span className={styles.countBadge}>{auditLog.length}</span>
             </div>
-            <button type="button" className={styles.viewAllBtn} onClick={() => navigate('/admin/audit-log')}>
-              View All →
+            <button
+              type="button"
+              className={styles.viewAllBtn}
+              onClick={() => navigate('/admin/audit-log')}
+              aria-label="Open audit log"
+            >
+              Audit log
             </button>
           </div>
           {auditLog.length === 0 ? (

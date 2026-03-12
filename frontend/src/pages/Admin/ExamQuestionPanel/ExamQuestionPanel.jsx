@@ -256,7 +256,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
             ) : null}
           </div>
           <div className={styles.qActions}>
-            <button type="button" className={styles.qBtn} onClick={() => openEdit(question)} disabled={saving || deletingId != null}>Edit</button>
+            <button type="button" className={styles.qBtn} onClick={() => openEdit(question)} disabled={saving || deletingId != null} aria-label={`Edit ${question.text || `question ${index + 1}`}`} title={`Edit ${question.text || `question ${index + 1}`}`}>Edit</button>
             {deleteConfirmId === question.id ? (
               <>
                 <button
@@ -264,13 +264,14 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
                   className={`${styles.qBtn} ${styles.qBtnDanger}`}
                   onClick={() => handleDelete(question.id)}
                   disabled={deletingId === question.id}
+                  aria-label={`Confirm delete for ${question.text || `question ${index + 1}`}`}
                 >
                   {deletingId === question.id ? 'Deleting...' : 'Confirm delete'}
                 </button>
-                <button type="button" className={styles.qBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingId === question.id}>Cancel</button>
+                <button type="button" className={styles.qBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingId === question.id} aria-label={`Keep ${question.text || `question ${index + 1}`}`}>Cancel</button>
               </>
             ) : (
-              <button type="button" className={`${styles.qBtn} ${styles.qBtnDanger}`} onClick={() => handleDelete(question.id)} disabled={saving || deletingId != null}>Delete</button>
+              <button type="button" className={`${styles.qBtn} ${styles.qBtnDanger}`} onClick={() => handleDelete(question.id)} disabled={saving || deletingId != null} aria-label={`Delete ${question.text || `question ${index + 1}`}`} title={`Delete ${question.text || `question ${index + 1}`}`}>Delete</button>
             )}
           </div>
         </div>

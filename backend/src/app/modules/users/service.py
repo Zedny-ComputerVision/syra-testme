@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 
 from ...api.deps import load_permission_rows, parse_uuid_param, permission_allowed
 from ...core.security import hash_password
-from ...models import RoleEnum, User, UserPreference
+from ...models import Attempt, RoleEnum, User, UserPreference
 from ...schemas import (
     AdminPasswordResetRequest,
     AdminUserPatch,
@@ -173,8 +173,10 @@ class UserService:
         user = self.get_user(user_id)
         if not body.new_password or len(body.new_password) < 8:
             raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+        now = datetime.now(timezone.utc)
         user.hashed_password = hash_password(body.new_password)
-        user.updated_at = datetime.now(timezone.utc)
+        user.token_invalid_before = now
+        user.updated_at = now
         self.repository.add(user)
         self.repository.commit()
         write_audit_log(
@@ -191,6 +193,15 @@ class UserService:
         user = self.get_user(user_id)
         if user.id == current.id:
             raise HTTPException(status_code=400, detail="Cannot delete your own account")
+        attempt_count = int(
+            self.repository.db.scalar(select(func.count(Attempt.id)).where(Attempt.user_id == user.id))
+            or 0
+        )
+        if attempt_count:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete a user with existing attempts",
+            )
         self.repository.delete(user)
         self.repository.commit()
         return Message(detail="Deleted")
@@ -242,6 +253,11 @@ class UserService:
         return query.order_by(column.desc(), User.created_at.desc())
 
     def _update_user_record(self, *, user: User, payload: dict, current: User) -> User:
+        if user.id == current.id and "role" in payload and payload["role"] != user.role:
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+        if user.id == current.id and payload.get("is_active") is False:
+            raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+
         previous_role = user.role
         changed_fields: list[str] = []
         for field, value in payload.items():

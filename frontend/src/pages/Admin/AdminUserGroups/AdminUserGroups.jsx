@@ -282,19 +282,19 @@ export default function AdminUserGroups() {
             {!loading && groups.length === 0 && <div className={styles.empty}>No groups yet.</div>}
             {groups.map((group) => (
               <div key={group.id} className={`${styles.row} ${selectedGroup?.id === group.id ? styles.rowActive : ''}`}>
-                <button type="button" className={styles.rowBtn} onClick={() => loadMembers(group)}>
+                <button type="button" className={styles.rowBtn} onClick={() => loadMembers(group)} aria-label={`Open group ${group.name}`} title={`Open group ${group.name}`}>
                   <div className={styles.rowTitle}>{group.name}</div>
                   <div className={styles.rowSub}>{group.description || 'No description'}</div>
                 </button>
                 {deleteConfirmId === group.id ? (
                   <>
-                    <button type="button" className={`${styles.deleteBtn} ${styles.deleteConfirmBtn}`} onClick={() => remove(group.id)} disabled={deletingGroupId === group.id}>
+                    <button type="button" className={`${styles.deleteBtn} ${styles.deleteConfirmBtn}`} onClick={() => remove(group.id)} disabled={deletingGroupId === group.id} aria-label={`Confirm delete for group ${group.name}`}>
                       {deletingGroupId === group.id ? 'Deleting...' : 'Confirm'}
                     </button>
-                    <button type="button" className={styles.deleteBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingGroupId === group.id}>Cancel</button>
+                    <button type="button" className={styles.deleteBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingGroupId === group.id} aria-label={`Keep group ${group.name}`}>Cancel</button>
                   </>
                 ) : (
-                  <button type="button" className={styles.deleteBtn} onClick={() => remove(group.id)} disabled={deletingGroupId === group.id}>Delete</button>
+                  <button type="button" className={styles.deleteBtn} onClick={() => remove(group.id)} disabled={deletingGroupId === group.id} aria-label={`Delete group ${group.name}`} title={`Delete group ${group.name}`}>Delete</button>
                 )}
               </div>
             ))}

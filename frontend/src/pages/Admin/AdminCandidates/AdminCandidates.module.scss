@@ -362,6 +362,13 @@
   flex-wrap: wrap;
 }
 
+.importFileField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: min(100%, 280px);
+}
+
 .previewTitle {
   margin-top: 1.5rem;
 }

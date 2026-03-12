@@ -10,7 +10,7 @@ import {
 export const AuthContext = createContext(null);
 
 const STORAGE_KEY = 'syra_tokens';
-const rawBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/';
+const rawBase = import.meta.env.VITE_API_BASE_URL || '/api/';
 const apiBaseURL = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
 
 function safeSetItem(key, value) {

@@ -30,7 +30,7 @@ vi.mock('../../../services/admin.service', () => ({
 
 describe('AdminTestingSessions page', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     createSchedule.mockResolvedValue({ data: {} })
     updateSchedule.mockResolvedValue({ data: {} })
     deleteSchedule.mockResolvedValue({ data: { detail: 'Deleted' } })
@@ -75,12 +75,12 @@ describe('AdminTestingSessions page', () => {
 
     await waitFor(() => expect(screen.getByText('Physics Final')).toBeTruthy())
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0])
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    fireEvent.click(screen.getByRole('button', { name: /delete session for learner one for physics final/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /confirm delete for session learner one for physics final/i })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /confirm delete for session learner one for physics final/i }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Deleting...' }).disabled).toBe(true))
-    expect(screen.getByRole('button', { name: 'Cancel' }).disabled).toBe(true)
+    await waitFor(() => expect(screen.getByRole('button', { name: /confirm delete for session learner one for physics final/i }).disabled).toBe(true))
+    expect(screen.getByRole('button', { name: /keep session for learner one for physics final/i }).disabled).toBe(true)
 
     resolveDelete({ data: { detail: 'Deleted' } })
     await waitFor(() => expect(deleteSchedule).toHaveBeenCalledWith('session-1'))

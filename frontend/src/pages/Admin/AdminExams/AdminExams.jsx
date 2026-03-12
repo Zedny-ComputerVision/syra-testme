@@ -263,10 +263,10 @@ export default function AdminExams() {
           </label>
         </div>
         <button type="button" className={styles.actionBtn} onClick={() => setShowColumns((prev) => !prev)}>
-          Displayed columns
+          {showColumns ? 'Hide columns' : 'Edit columns'}
         </button>
         <button type="button" className={styles.actionBtn} onClick={() => setShowFilters((prev) => !prev)}>
-          Filter
+          {showFilters ? 'Hide filters' : 'Show filters'}
         </button>
         <button type="button" className={styles.actionBtn} onClick={() => load()} disabled={loading}>
           {loading ? 'Loading...' : 'Refresh'}
@@ -444,21 +444,23 @@ export default function AdminExams() {
                         className={`${styles.actionBtn} ${styles.manageBtn}`}
                         disabled={busyId === test.id}
                         onClick={() => navigate(`/admin/tests/${test.id}/manage`)}
+                        aria-label={`Manage test ${test.name}`}
                       >
-                        Manage
+                        Manage test
                       </button>
                       <div className={styles.menuWrap} data-admin-test-menu>
                         <button
                           type="button"
                           className={styles.menuToggle}
                           aria-label={`More actions for ${test.name}`}
+                          aria-haspopup="true"
                           aria-expanded={openMenuId === test.id}
                           onClick={() => {
                             setDeleteConfirmId((current) => (current === test.id ? current : ''))
                             setOpenMenuId((current) => (current === test.id ? '' : test.id))
                           }}
                         >
-                          More
+                          Actions
                         </button>
                         {openMenuId === test.id && (
                           <div className={styles.menu}>

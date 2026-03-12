@@ -83,7 +83,7 @@ function QuestionsTab({
                 <td>{q.text}</td>
                 <td>{q.points ?? 1}</td>
                 <td className={styles.actionsCell}>
-                  <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => startEditQuestion(q)}>Edit</button>
+                  <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => startEditQuestion(q)} aria-label={`Edit ${q.text || `question ${q.order ?? 0}`}`} title={`Edit ${q.text || `question ${q.order ?? 0}`}`}>Edit</button>
                   {deleteQuestionId === q.id ? (
                     <>
                       <button
@@ -91,13 +91,14 @@ function QuestionsTab({
                         className={styles.dangerInlineBtn}
                         disabled={lockedExamFields || deletingQuestionBusyId === q.id}
                         onClick={() => handleDeleteQuestion(q.id)}
+                        aria-label={`Confirm delete for ${q.text || `question ${q.order ?? 0}`}`}
                       >
                         {deletingQuestionBusyId === q.id ? 'Deleting...' : 'Confirm delete'}
                       </button>
-                      <button type="button" disabled={deletingQuestionBusyId === q.id} onClick={() => setDeleteQuestionId(null)}>Cancel</button>
+                      <button type="button" disabled={deletingQuestionBusyId === q.id} onClick={() => setDeleteQuestionId(null)} aria-label={`Keep ${q.text || `question ${q.order ?? 0}`}`}>Cancel</button>
                     </>
                   ) : (
-                    <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => handleDeleteQuestion(q.id)}>Delete</button>
+                    <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => handleDeleteQuestion(q.id)} aria-label={`Delete ${q.text || `question ${q.order ?? 0}`}`} title={`Delete ${q.text || `question ${q.order ?? 0}`}`}>Delete</button>
                   )}
                 </td>
               </tr>

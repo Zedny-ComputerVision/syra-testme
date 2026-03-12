@@ -1,6 +1,7 @@
 from ...schemas import (
     AttemptAnswerBase,
     AttemptAnswerRead,
+    AttemptCertificateReviewUpdate,
     AttemptAnswerReviewUpdate,
     AttemptCreate,
     AttemptRead,
@@ -10,6 +11,7 @@ from ...schemas import (
 __all__ = [
     "AttemptAnswerBase",
     "AttemptAnswerRead",
+    "AttemptCertificateReviewUpdate",
     "AttemptAnswerReviewUpdate",
     "AttemptCreate",
     "AttemptRead",

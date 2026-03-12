@@ -7,6 +7,7 @@ from passlib.context import CryptContext
 from .config import get_settings
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+REPORT_ACCESS_EXPIRE_DAYS = 7
 
 
 def hash_password(password: str) -> str:
@@ -25,7 +26,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def _create_token(data: dict[str, Any], expires_delta: timedelta, token_type: str) -> str:
     settings = get_settings()
     to_encode = data.copy()
-    to_encode.update({"type": token_type, "exp": datetime.now(timezone.utc) + expires_delta})
+    issued_at = datetime.now(timezone.utc)
+    to_encode.update(
+        {
+            "type": token_type,
+            "iat": int(issued_at.timestamp()),
+            "exp": issued_at + expires_delta,
+        }
+    )
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
@@ -56,6 +64,11 @@ def create_password_reset_token(sub: str) -> str:
     return _create_token({"sub": sub}, expire, token_type="password_reset")
 
 
+def create_report_access_token(filename: str) -> str:
+    expire = timedelta(days=REPORT_ACCESS_EXPIRE_DAYS)
+    return _create_token({"sub": filename}, expire, token_type="report_access")
+
+
 def verify_token(token: str, expected_type: Optional[str] = None) -> dict[str, Any]:
     settings = get_settings()
     try:
@@ -66,3 +79,11 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> dict[str, A
     if expected_type and payload.get("type") != expected_type:
         raise ValueError("Invalid token type")
     return payload
+
+
+def token_issued_at(payload: dict[str, Any]) -> datetime | None:
+    try:
+        issued_at = int(payload.get("iat"))
+    except (TypeError, ValueError):
+        return None
+    return datetime.fromtimestamp(issued_at, timezone.utc)

@@ -52,7 +52,7 @@ describe('AdminIntegrations page', () => {
     const slackCard = screen.getByTestId('integration-card-slack')
     fireEvent.change(within(slackCard).getByLabelText('Webhook URL'), { target: { value: 'https://hooks.slack.test/path' } })
 
-    fireEvent.click(within(slackCard).getByRole('button', { name: 'Send Test' }))
+    fireEvent.click(within(slackCard).getByRole('button', { name: /send test event/i }))
 
     await waitFor(() => expect(testIntegrations).toHaveBeenCalledWith({
       slack: {

@@ -1390,6 +1390,7 @@ def test_permissions_config_is_accessible_without_system_settings():
             "permissions_config",
             admin_settings_routes.SystemSettingUpdate(value=json.dumps([
                 {"feature": "Manage Roles", "admin": True, "instructor": True, "learner": False},
+                {"feature": "System Settings", "admin": True, "instructor": False, "learner": False},
             ])),
             db=db,
             current=current_user,
@@ -1404,12 +1405,14 @@ def test_permissions_config_normalizes_legacy_test_aliases():
     normalized = admin_settings_routes._normalize_permissions_config(json.dumps([
         {"feature": "Edit Exams", "admin": True, "instructor": False, "learner": False},
         {"feature": "Edit Tests", "admin": False, "instructor": True, "learner": False},
+        {"feature": "Manage Roles", "admin": True, "instructor": False, "learner": False},
+        {"feature": "System Settings", "admin": True, "instructor": False, "learner": False},
     ]))
 
     parsed = json.loads(normalized)
-    assert parsed == [
-        {"feature": "Edit Tests", "admin": True, "instructor": True, "learner": False},
-    ]
+    assert {"feature": "Edit Tests", "admin": True, "instructor": True, "learner": False} in parsed
+    assert {"feature": "Manage Roles", "admin": True, "instructor": False, "learner": False} in parsed
+    assert {"feature": "System Settings", "admin": True, "instructor": False, "learner": False} in parsed
 
 
 def test_integrations_config_requires_http_urls():

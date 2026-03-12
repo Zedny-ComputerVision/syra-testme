@@ -179,7 +179,9 @@ export default function Attempts() {
         ) : loadError ? (
           <div className={styles.errorRow}>
             <div className={styles.empty}>{loadError}</div>
-            <button type="button" className={styles.secondaryBtn} onClick={() => void loadAttempts()}>Retry</button>
+            <button type="button" className={styles.secondaryBtn} onClick={() => void loadAttempts()}>
+              Retry loading attempts
+            </button>
           </div>
         ) : paginated.length === 0 ? (
           <div className={styles.empty}>{attempts.length === 0 ? 'No attempts yet. Take a test to get started.' : 'No attempts match your filters.'}</div>
@@ -213,8 +215,14 @@ export default function Attempts() {
                   <td className={styles.mutedCell}>{formatDate(attempt.started_at)}</td>
                   <td className={styles.mutedCell}>{formatDuration(attempt.started_at, attempt.submitted_at)}</td>
                   <td>
-                    <button type="button" className={styles.actionBtn} onClick={() => openAttempt(attempt)}>
-                      {attempt.status === 'IN_PROGRESS' ? 'Resume' : 'View Result'}
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={() => openAttempt(attempt)}
+                      aria-label={`${attempt.status === 'IN_PROGRESS' ? 'Resume attempt for' : 'Open result for'} ${attempt.test_title || attempt.exam_title || 'this test'}`}
+                      title={`${attempt.status === 'IN_PROGRESS' ? 'Resume attempt for' : 'Open result for'} ${attempt.test_title || attempt.exam_title || 'this test'}`}
+                    >
+                      {attempt.status === 'IN_PROGRESS' ? 'Resume attempt' : 'Open result'}
                     </button>
                   </td>
                 </tr>
@@ -227,8 +235,8 @@ export default function Attempts() {
       {totalPages > 1 && (
         <div className={styles.pagination}>
           <span className={styles.pageInfo}>{sortedFiltered.length} attempt{sortedFiltered.length !== 1 ? 's' : ''} - Page {page} of {totalPages}</span>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1}>Prev</button>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages}>Next</button>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1}>Previous page</button>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages}>Next page</button>
         </div>
       )}
     </div>

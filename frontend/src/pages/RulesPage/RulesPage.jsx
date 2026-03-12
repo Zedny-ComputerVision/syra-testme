@@ -75,6 +75,9 @@ export default function RulesPage() {
         : 'The attempt can continue without fullscreen enforcement.',
     },
   ]
+  const startActionLabel = requirements.fullscreenRequired || requirements.cameraRequired || requirements.micRequired || requirements.screenRequired
+    ? 'Start monitored test'
+    : 'Start test'
 
   const loadRules = async () => {
     setConfigLoading(true)
@@ -186,7 +189,7 @@ export default function RulesPage() {
           <div className={styles.helperRow}>
             <div className={styles.errorBanner}>{configError}</div>
             <button type="button" className={styles.retryBtn} onClick={() => void loadRules()} disabled={configLoading || loading}>
-              {configLoading ? 'Retrying...' : 'Retry'}
+              {configLoading ? 'Retrying rules...' : 'Retry loading rules'}
             </button>
           </div>
         )}
@@ -239,7 +242,7 @@ export default function RulesPage() {
             </button>
           )}
           <button className={styles.btn} type="button" disabled={!agreed || loading || configLoading || Boolean(configError) || !systemCheckSatisfied} onClick={handleStart}>
-            {loading ? 'Starting...' : configLoading ? 'Loading requirements...' : !systemCheckSatisfied ? 'Complete system check first' : 'Start Test'}
+            {loading ? 'Starting...' : configLoading ? 'Loading requirements...' : !systemCheckSatisfied ? 'Complete system check first' : startActionLabel}
           </button>
         </div>
       </div>

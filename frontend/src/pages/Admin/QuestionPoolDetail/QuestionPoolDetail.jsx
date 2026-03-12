@@ -328,16 +328,16 @@ export default function QuestionPoolDetail() {
                   <span>Q{index + 1} <span className={styles.typeBadge}>{TYPE_LABELS[normalizeQuestionType(question.question_type)] || normalizeQuestionType(question.question_type)}</span></span>
                   {canManagePool && (
                     <div className={styles.qActions}>
-                      <button className={styles.btnSecondary} onClick={() => startEdit(question)} disabled={deleteBusyId === question.id}>Edit</button>
+                      <button className={styles.btnSecondary} onClick={() => startEdit(question)} disabled={deleteBusyId === question.id} aria-label={`Edit ${question.text || `question ${index + 1}`}`} title={`Edit ${question.text || `question ${index + 1}`}`}>Edit</button>
                       {deleteConfirmId === question.id ? (
                         <>
-                          <button className={styles.dangerBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id}>
+                          <button className={styles.dangerBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id} aria-label={`Confirm delete for ${question.text || `question ${index + 1}`}`}>
                             {deleteBusyId === question.id ? 'Deleting...' : 'Confirm'}
                           </button>
-                          <button className={styles.btnSecondary} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === question.id}>Cancel</button>
+                          <button className={styles.btnSecondary} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === question.id} aria-label={`Keep ${question.text || `question ${index + 1}`}`}>Cancel</button>
                         </>
                       ) : (
-                        <button className={styles.deleteBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id}>Delete</button>
+                        <button className={styles.deleteBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id} aria-label={`Delete ${question.text || `question ${index + 1}`}`} title={`Delete ${question.text || `question ${index + 1}`}`}>Delete</button>
                       )}
                     </div>
                   )}

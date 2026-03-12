@@ -17,12 +17,13 @@ def test_settings_normalize_placeholder_openai_key():
     assert settings.OPENAI_API_KEY is None
 
 
-def test_generate_questions_uses_offline_fallback_when_openai_key_missing(client, monkeypatch):
+def test_generate_questions_uses_offline_fallback_when_openai_key_missing(client, monkeypatch, admin_headers):
     monkeypatch.setattr(ai_routes, "get_settings", lambda: SimpleNamespace(OPENAI_API_KEY=None))
 
     response = client.post(
         "/api/ai/generate-questions",
         json={"topic": "Algebra", "count": 2, "difficulty": "easy", "question_type": "MCQ"},
+        headers=admin_headers,
     )
 
     assert response.status_code == 200
@@ -33,7 +34,7 @@ def test_generate_questions_uses_offline_fallback_when_openai_key_missing(client
     assert data[0]["correct_answer"] == "A"
 
 
-def test_generate_questions_parses_openai_json_payload(client, monkeypatch):
+def test_generate_questions_parses_openai_json_payload(client, monkeypatch, admin_headers):
     class DummyOpenAI:
         def __init__(self, api_key: str):
             assert api_key == "sk-test"
@@ -62,6 +63,7 @@ def test_generate_questions_parses_openai_json_payload(client, monkeypatch):
     response = client.post(
         "/api/ai/generate-questions",
         json={"topic": "Arithmetic", "count": 1, "difficulty": "easy", "question_type": "MCQ"},
+        headers=admin_headers,
     )
 
     assert response.status_code == 200

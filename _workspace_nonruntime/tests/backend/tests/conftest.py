@@ -8,9 +8,25 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:password@lo
 os.environ.setdefault("AUTO_APPLY_MIGRATIONS", "false")
 os.environ.setdefault("PRECHECK_ALLOW_TEST_BYPASS", "true")
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+CURRENT_FILE = Path(__file__).resolve()
+REPO_ROOT = next(
+    (
+        parent
+        for parent in CURRENT_FILE.parents
+        if (parent / "backend" / "src" / "app" / "main.py").is_file()
+        and (parent / "frontend" / "src").is_dir()
+    ),
+    None,
+)
+if REPO_ROOT is None:
+    raise RuntimeError("Could not resolve repository root for backend tests")
+
+BACKEND_DIR = REPO_ROOT / "backend"
+TEST_SUPPORT_DIR = CURRENT_FILE.parents[1]
+
+for import_path in (BACKEND_DIR, TEST_SUPPORT_DIR):
+    if str(import_path) not in sys.path:
+        sys.path.insert(0, str(import_path))
 
 import pytest
 from fastapi.testclient import TestClient

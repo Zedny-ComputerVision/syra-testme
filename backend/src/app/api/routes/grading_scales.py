@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import GradingScale, RoleEnum
+from ...models import Exam, GradingScale, RoleEnum
 from ...schemas import GradingScaleBase, GradingScaleRead, Message
 from ...services.audit import write_audit_log
 from ..deps import get_db_dep, parse_uuid_param, require_permission
@@ -144,6 +144,15 @@ async def delete_scale(
     scale = db.get(GradingScale, scale_pk)
     if not scale:
         raise HTTPException(status_code=404, detail="Not found")
+    usage_count = int(
+        db.scalar(select(func.count(Exam.id)).where(Exam.grading_scale_id == scale.id))
+        or 0
+    )
+    if usage_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete a grading scale that is assigned to existing tests",
+        )
     scale_name = scale.name
     scale_pk_str = str(scale.id)
     db.delete(scale)

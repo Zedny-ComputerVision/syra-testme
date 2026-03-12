@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
+import { certificateIssueRuleLabel } from '../../../utils/certificates'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
 import { readPaginatedItems } from '../../../utils/pagination'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
@@ -28,6 +29,13 @@ function resolveError(err, fallback) {
   )
 }
 
+function certificateDecisionLabel(value) {
+  if (value === 'APPROVED') return 'Approved'
+  if (value === 'REJECTED') return 'Rejected'
+  if (value === 'PENDING') return 'Pending review'
+  return 'Not required'
+}
+
 function evidenceKeyForEvent(event, index) {
   return String(event?.id || event?.meta?.evidence || index)
 }
@@ -45,6 +53,9 @@ export default function AdminAttemptAnalysis() {
   const [listError, setListError] = useState('')
   const [detailError, setDetailError] = useState('')
   const [detailWarning, setDetailWarning] = useState('')
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [reviewError, setReviewError] = useState('')
+  const [reviewNotice, setReviewNotice] = useState('')
   const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [evidenceUrls, setEvidenceUrls] = useState({})
   const evidenceUrlsRef = useRef({})
@@ -99,6 +110,8 @@ export default function AdminAttemptAnalysis() {
         setAnswers([])
         setDetailError('')
         setDetailWarning('')
+        setReviewError('')
+        setReviewNotice('')
         setSelectedEvidence(null)
         return
       }
@@ -106,6 +119,8 @@ export default function AdminAttemptAnalysis() {
       setLoading(true)
       setDetailError('')
       setDetailWarning('')
+      setReviewError('')
+      setReviewNotice('')
       setSelectedEvidence(null)
       setAttempt(null)
       setEvents([])
@@ -243,6 +258,13 @@ export default function AdminAttemptAnalysis() {
   })
   const evidenceEvents = events.filter((event) => event.meta?.evidence)
   const initials = (attempt?.user_name || attempt?.user_id || '??').slice(0, 2).toUpperCase()
+  const requiresCertificateReview = attempt?.certificate_issue_rule === 'AFTER_PROCTORING_REVIEW'
+  const certificateStatus = attempt?.certificate_review_status || (requiresCertificateReview ? 'PENDING' : null)
+  const certificateDecisionToneClass = certificateStatus === 'APPROVED'
+    ? styles.certificateDecisionApproved
+    : certificateStatus === 'REJECTED'
+      ? styles.certificateDecisionRejected
+      : styles.certificateDecisionPending
 
   const formatTime = (iso) => {
     if (!iso || !attempt?.started_at) return '-'
@@ -250,6 +272,26 @@ export default function AdminAttemptAnalysis() {
     const minutes = Math.floor(diff / 60)
     const seconds = Math.floor(diff % 60)
     return `${minutes}:${String(seconds).padStart(2, '0')}`
+  }
+
+  const handleCertificateDecision = async (decision) => {
+    if (!selectedId) return
+    setReviewBusy(true)
+    setReviewError('')
+    setReviewNotice('')
+    try {
+      const { data } = await adminApi.reviewAttemptCertificate(selectedId, decision)
+      setAttempt(data || null)
+      setReviewNotice(
+        decision === 'APPROVED'
+          ? 'Certificate release approved after proctoring review.'
+          : 'Certificate release rejected after proctoring review.',
+      )
+    } catch (err) {
+      setReviewError(resolveError(err, 'Failed to save certificate review decision.'))
+    } finally {
+      setReviewBusy(false)
+    }
   }
 
   const showNoAttempts = !listLoading && !listError && attempts.length === 0
@@ -304,6 +346,8 @@ export default function AdminAttemptAnalysis() {
         </div>
       )}
       {detailWarning && <div className={styles.warningBanner}>{detailWarning}</div>}
+      {reviewError && <div className={styles.errorBanner}>{reviewError}</div>}
+      {reviewNotice && <div className={styles.warningBanner}>{reviewNotice}</div>}
       {listLoading && <div className={styles.loading}>Loading attempts...</div>}
       {showNoAttempts && <div className={styles.empty}>No attempts are available yet.</div>}
       {showSelectionHint && <div className={styles.empty}>Select an attempt to review its integrity timeline, answers, and evidence.</div>}
@@ -325,6 +369,47 @@ export default function AdminAttemptAnalysis() {
               <div className={`${styles.gaugeValue} ${integrityToneClass}`}>{integrity}%</div>
             </div>
           </div>
+
+          {attempt.certificate_issue_rule && (
+            <div className={styles.certificateReviewCard}>
+              <div className={styles.certificateReviewHeader}>
+                <div>
+                  <div className={styles.certificateReviewTitle}>Certificate release</div>
+                  <div className={styles.certificateReviewMeta}>
+                    {certificateIssueRuleLabel(attempt.certificate_issue_rule)}
+                  </div>
+                </div>
+                <div className={`${styles.certificateDecisionBadge} ${certificateDecisionToneClass}`}>
+                  {certificateDecisionLabel(certificateStatus)}
+                </div>
+              </div>
+              <div className={styles.certificateReviewCopy}>
+                {attempt.certificate_eligible
+                  ? 'The learner can download the certificate right now.'
+                  : (attempt.certificate_block_reason || 'Certificate is currently unavailable.')}
+              </div>
+              {requiresCertificateReview && (
+                <div className={styles.certificateReviewActions}>
+                  <button
+                    type="button"
+                    className={styles.reviewApproveBtn}
+                    disabled={reviewBusy}
+                    onClick={() => void handleCertificateDecision('APPROVED')}
+                  >
+                    {reviewBusy ? 'Saving...' : 'Approve certificate'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.reviewRejectBtn}
+                    disabled={reviewBusy}
+                    onClick={() => void handleCertificateDecision('REJECTED')}
+                  >
+                    {reviewBusy ? 'Saving...' : 'Reject certificate'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className={styles.metricsGrid}>
             <div className={styles.metric}>

@@ -7,7 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..core.security import verify_token
+from ..core.security import token_issued_at, verify_token
 from ..db.session import get_db
 from ..models import AccessMode, Exam, ExamStatus, RoleEnum, Schedule, SystemSettings, User
 
@@ -77,6 +77,12 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+    issued_at = token_issued_at(payload)
+    cutoff = normalize_utc_datetime(getattr(user, "token_invalid_before", None))
+    cutoff_seconds = int(cutoff.timestamp()) if cutoff else None
+    issued_seconds = int(issued_at.timestamp()) if issued_at else None
+    if issued_seconds is None or (cutoff_seconds is not None and issued_seconds < cutoff_seconds):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     return user
 
 

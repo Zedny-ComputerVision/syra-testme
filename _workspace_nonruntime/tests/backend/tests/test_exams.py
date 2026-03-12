@@ -1,3 +1,8 @@
+from datetime import datetime, timedelta, timezone
+
+from src.app.models import AccessMode, Course, CourseStatus, Exam, ExamStatus, ExamType, Node, RoleEnum, Schedule, User
+
+
 def _create_admin_test(client, admin_headers, *, name="Admin Test"):
     response = client.post(
         "/api/admin/tests/",
@@ -96,3 +101,103 @@ def test_archive_test_returns_archived_status(client, admin_headers):
     body = archive_response.json()
     assert body["status"] == "ARCHIVED"
     assert body["runtime_status"] == "CLOSED"
+
+
+def test_learner_exam_list_honors_restricted_schedule_rules(client, db, learner_user, learner_headers):
+    admin = User(
+        email="owner@example.com",
+        name="Owner",
+        user_id="ADM100",
+        role=RoleEnum.ADMIN,
+        hashed_password="hashed",
+    )
+    db.add(admin)
+    db.flush()
+
+    course = Course(
+        title="Learner Access Course",
+        description="",
+        status=CourseStatus.PUBLISHED,
+        created_by_id=admin.id,
+    )
+    db.add(course)
+    db.flush()
+
+    node = Node(course_id=course.id, title="Module 1", order=0)
+    db.add(node)
+    db.flush()
+
+    unrestricted = Exam(
+        node_id=node.id,
+        title="Open Access Exam",
+        type=ExamType.MCQ,
+        status=ExamStatus.OPEN,
+        max_attempts=1,
+    )
+    restricted_other = Exam(
+        node_id=node.id,
+        title="Restricted Other Learner",
+        type=ExamType.MCQ,
+        status=ExamStatus.OPEN,
+        max_attempts=1,
+    )
+    restricted_future = Exam(
+        node_id=node.id,
+        title="Restricted Future Slot",
+        type=ExamType.MCQ,
+        status=ExamStatus.OPEN,
+        max_attempts=1,
+    )
+    restricted_past = Exam(
+        node_id=node.id,
+        title="Restricted Ready Now",
+        type=ExamType.MCQ,
+        status=ExamStatus.OPEN,
+        max_attempts=1,
+    )
+    db.add_all([unrestricted, restricted_other, restricted_future, restricted_past])
+    db.flush()
+
+    other_learner = User(
+        email="other@example.com",
+        name="Other Learner",
+        user_id="LRN999",
+        role=RoleEnum.LEARNER,
+        hashed_password="hashed",
+    )
+    db.add(other_learner)
+    db.flush()
+
+    now = datetime.now(timezone.utc)
+    db.add_all(
+        [
+            Schedule(
+                exam_id=restricted_other.id,
+                user_id=other_learner.id,
+                access_mode=AccessMode.RESTRICTED,
+                scheduled_at=now - timedelta(minutes=5),
+            ),
+            Schedule(
+                exam_id=restricted_future.id,
+                user_id=learner_user.id,
+                access_mode=AccessMode.RESTRICTED,
+                scheduled_at=now + timedelta(minutes=30),
+            ),
+            Schedule(
+                exam_id=restricted_past.id,
+                user_id=learner_user.id,
+                access_mode=AccessMode.RESTRICTED,
+                scheduled_at=now - timedelta(minutes=5),
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get("/api/exams/?skip=0&limit=50", headers=learner_headers)
+
+    assert response.status_code == 200
+    titles = {item["title"] for item in response.json()["items"]}
+    assert "Open Access Exam" in titles
+    assert "Restricted Ready Now" in titles
+    assert "Restricted Other Learner" not in titles
+    assert "Restricted Future Slot" not in titles

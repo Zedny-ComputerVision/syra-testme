@@ -132,6 +132,10 @@ export default function AdminUsers() {
     role,
     count: users.filter((listedUser) => listedUser.role === role).length,
   }))
+  const deleteTarget = deleteId ? users.find((listedUser) => listedUser.id === deleteId) : null
+  const deleteTargetLabel = deleteTarget?.name || deleteTarget?.email || deleteTarget?.user_id || 'this user'
+  const userModalTitleId = modal === 'create' ? 'user-create-dialog-title' : 'user-edit-dialog-title'
+  const editingSelf = modal !== 'create' && modal?.id === user?.id
 
   const exportCSV = () => {
     const rows = [
@@ -249,8 +253,7 @@ export default function AdminUsers() {
           user_id: payload.user_id,
           name: payload.name,
           email: payload.email,
-          role: payload.role,
-          is_active: payload.is_active,
+          ...(editingSelf ? {} : { role: payload.role, is_active: payload.is_active }),
         })
         setNotice('User updated.')
       }
@@ -441,7 +444,10 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {pageUsers.map((listedUser) => (
+              {pageUsers.map((listedUser) => {
+                const userActionLabel = listedUser.name || listedUser.email || listedUser.user_id || 'this user'
+
+                return (
                 <tr key={listedUser.id}>
                   {isAdmin && <td><input type="checkbox" checked={selected.includes(listedUser.id)} onChange={() => toggleSelect(listedUser.id)} /></td>}
                   <td><div className={styles.avatar}>{initials(listedUser)}</div></td>
@@ -458,6 +464,8 @@ export default function AdminUsers() {
                           className={styles.actionBtn}
                           onClick={() => openEdit(listedUser)}
                           disabled={deleteBusyId === listedUser.id}
+                          aria-label={`Edit user ${userActionLabel}`}
+                          title={`Edit user ${userActionLabel}`}
                         >
                           Edit
                         </button>
@@ -465,7 +473,9 @@ export default function AdminUsers() {
                           type="button"
                           className={styles.actionBtnDanger}
                           onClick={() => setDeleteId(listedUser.id)}
-                          disabled={deleteBusyId === listedUser.id}
+                          disabled={deleteBusyId === listedUser.id || listedUser.id === user?.id}
+                          aria-label={`Delete user ${userActionLabel}`}
+                          title={`Delete user ${userActionLabel}`}
                         >
                           {deleteBusyId === listedUser.id ? 'Deleting...' : 'Delete'}
                         </button>
@@ -473,7 +483,8 @@ export default function AdminUsers() {
                     </td>
                   )}
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}
@@ -489,12 +500,17 @@ export default function AdminUsers() {
 
       {isAdmin && modal && (
         <div className={styles.modalOverlay} onClick={() => { if (!modalBusy) setModal(null) }}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 className={styles.modalTitle}>{modal === 'create' ? 'Create User' : 'Edit User'}</h3>
-            {['user_id', 'name', 'email'].map((field) => (
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={userModalTitleId} onClick={(event) => event.stopPropagation()}>
+            <h3 id={userModalTitleId} className={styles.modalTitle}>{modal === 'create' ? 'Create User' : 'Edit User'}</h3>
+            {['user_id', 'name', 'email'].map((field) => {
+              const inputId = `user-modal-${field.replace('_', '-')}`
+              const label = field === 'user_id' ? 'User ID' : field.charAt(0).toUpperCase() + field.slice(1)
+
+              return (
               <div key={field} className={styles.formGroup}>
-                <label className={styles.label}>{field === 'user_id' ? 'User ID' : field.charAt(0).toUpperCase() + field.slice(1)}</label>
+                <label className={styles.label} htmlFor={inputId}>{label}</label>
                 <input
+                  id={inputId}
                   className={`${styles.input} ${fieldErrors[field] ? styles.inputInvalid : ''}`}
                   aria-invalid={fieldErrors[field] ? 'true' : 'false'}
                   value={form[field]}
@@ -510,11 +526,13 @@ export default function AdminUsers() {
                 />
                 {fieldErrors[field] && <div className={styles.fieldError}>{fieldErrors[field]}</div>}
               </div>
-            ))}
+              )
+            })}
             {modal === 'create' && (
               <div className={styles.formGroup}>
-                <label className={styles.label}>Password</label>
+                <label className={styles.label} htmlFor="user-modal-password">Password</label>
                 <input
+                  id="user-modal-password"
                   type="password"
                   className={`${styles.input} ${fieldErrors.password ? styles.inputInvalid : ''}`}
                   aria-invalid={fieldErrors.password ? 'true' : 'false'}
@@ -539,12 +557,15 @@ export default function AdminUsers() {
                   className={styles.btnReset}
                   onClick={() => { setShowResetPw((value) => !value); setResetPwValue('') }}
                   disabled={modalBusy}
+                  aria-expanded={showResetPw ? 'true' : 'false'}
+                  aria-controls="user-reset-password-panel"
                 >
                   {showResetPw ? 'Cancel Reset' : 'Reset Password'}
                 </button>
                 {showResetPw && (
-                  <div className={styles.resetPwRow}>
+                  <div id="user-reset-password-panel" className={styles.resetPwRow}>
                     <input
+                      id="user-modal-reset-password"
                       type="password"
                       className={styles.input}
                       placeholder="New password (min 8 chars)"
@@ -564,11 +585,13 @@ export default function AdminUsers() {
               </div>
             )}
             <div className={styles.formGroup}>
-              <label className={styles.label}>Role</label>
+              <label className={styles.label} htmlFor="user-modal-role">Role</label>
               <select
+                id="user-modal-role"
                 className={`${styles.select} ${fieldErrors.role ? styles.inputInvalid : ''}`}
                 aria-invalid={fieldErrors.role ? 'true' : 'false'}
                 value={form.role}
+                disabled={editingSelf}
                 onChange={(event) => {
                   setForm((current) => ({ ...current, role: event.target.value }))
                   setFieldErrors((current) => {
@@ -585,10 +608,19 @@ export default function AdminUsers() {
             </div>
             <div className={styles.formGroup}>
               <label className={styles.checkboxLabel}>
-                <input type="checkbox" checked={form.is_active} onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.checked }))} />
+                <input
+                  id="user-modal-active"
+                  type="checkbox"
+                  checked={form.is_active}
+                  disabled={editingSelf}
+                  onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.checked }))}
+                />
                 <span className={styles.checkboxText}>Active</span>
               </label>
             </div>
+            {editingSelf && (
+              <div className={styles.notice}>Use another admin account to change your own role or activation status.</div>
+            )}
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnCancel} onClick={() => setModal(null)} disabled={modalBusy}>Cancel</button>
               <button type="button" className={styles.btnPrimary} onClick={handleSave} disabled={saving}>
@@ -601,12 +633,12 @@ export default function AdminUsers() {
 
       {isAdmin && deleteId && (
         <div className={styles.modalOverlay} onClick={() => { if (deleteBusyId !== deleteId) setDeleteId(null) }}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Delete User?</h3>
-            <p className={styles.modalWarning}>This cannot be undone.</p>
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="user-delete-dialog-title" aria-describedby="user-delete-dialog-description" onClick={(event) => event.stopPropagation()}>
+            <h3 id="user-delete-dialog-title" className={styles.modalTitle}>Delete User?</h3>
+            <p id="user-delete-dialog-description" className={styles.modalWarning}>Delete the account for {deleteTargetLabel}. This cannot be undone.</p>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnCancel} onClick={() => setDeleteId(null)} disabled={deleteBusyId === deleteId}>Cancel</button>
-              <button type="button" className={styles.btnDanger} onClick={() => handleDelete(deleteId)} disabled={deleteBusyId === deleteId}>
+              <button type="button" className={styles.btnCancel} onClick={() => setDeleteId(null)} disabled={deleteBusyId === deleteId} aria-label={`Cancel deleting ${deleteTargetLabel}`}>Cancel</button>
+              <button type="button" className={styles.btnDanger} onClick={() => handleDelete(deleteId)} disabled={deleteBusyId === deleteId} aria-label={`Delete ${deleteTargetLabel}`}>
                 {deleteBusyId === deleteId ? 'Deleting...' : 'Delete'}
               </button>
             </div>

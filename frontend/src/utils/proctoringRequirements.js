@@ -103,6 +103,7 @@ export function normalizeProctoringConfig(rawConfig) {
   return {
     ...cfg,
     alert_rules: normalizeAlertRules(cfg.alert_rules),
+    screen_capture: requirements.screenRequired,
     fullscreen_enforce: requirements.fullscreenRequired,
     identity_required: requirements.identityRequired,
     face_verify: requirements.identityRequired,

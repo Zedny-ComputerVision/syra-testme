@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import time
+from threading import Lock
 
 from alembic import command
 from alembic.config import Config
@@ -95,12 +96,21 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 MAINTENANCE_PUBLIC_PATHS = {
     "/api/admin-settings/maintenance/public",
 }
+MAINTENANCE_BYPASS_PREFIXES = (
+    "/api/health",
+)
 MAINTENANCE_ALLOWED_WRITE_PATHS = {
     "/api/auth/login",
     "/api/auth/refresh",
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
 }
+MAINTENANCE_CACHE_TTL_SECONDS = 5.0
+_maintenance_mode_cache = {
+    "mode": "off",
+    "expires_at": 0.0,
+}
+_maintenance_mode_lock = Lock()
 REQUIRED_API_ROUTES = (
     "/api/auth/signup-status",
     "/api/exams/",
@@ -149,6 +159,34 @@ def _maintenance_blocks_request(mode: str, method: str, path: str, role: str | N
     return False
 
 
+def _read_maintenance_mode_from_db() -> str:
+    with SessionLocal() as db:
+        setting = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
+        if setting and setting.value:
+            return setting.value
+    return "off"
+
+
+def _get_cached_maintenance_mode() -> str:
+    now = time.monotonic()
+    if _maintenance_mode_cache["expires_at"] > now:
+        return _maintenance_mode_cache["mode"]
+
+    with _maintenance_mode_lock:
+        now = time.monotonic()
+        if _maintenance_mode_cache["expires_at"] > now:
+            return _maintenance_mode_cache["mode"]
+
+        try:
+            mode = _read_maintenance_mode_from_db()
+        except Exception:
+            mode = _maintenance_mode_cache["mode"] or "off"
+
+        _maintenance_mode_cache["mode"] = mode or "off"
+        _maintenance_mode_cache["expires_at"] = now + MAINTENANCE_CACHE_TTL_SECONDS
+        return _maintenance_mode_cache["mode"]
+
+
 def _assert_required_api_routes() -> None:
     registered = {getattr(route, "path", "") for route in app.router.routes}
     missing = [path for path in REQUIRED_API_ROUTES if path not in registered]
@@ -175,15 +213,10 @@ class MaintenanceModeMiddleware(BaseHTTPMiddleware):
         path = request.scope.get("path", "")
         if not path.startswith("/api"):
             return await call_next(request)
+        if any(path.startswith(prefix) for prefix in MAINTENANCE_BYPASS_PREFIXES):
+            return await call_next(request)
 
-        mode = "off"
-        try:
-            with SessionLocal() as db:
-                setting = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
-                if setting and setting.value:
-                    mode = setting.value
-        except Exception:
-            mode = "off"
+        mode = await asyncio.to_thread(_get_cached_maintenance_mode)
 
         role = _request_role_from_headers(request)
         if _maintenance_blocks_request(mode, request.method, path, role):
@@ -265,7 +298,8 @@ def _run_alembic_upgrade() -> None:
             alembic_config = Config(str(alembic_ini))
             alembic_config.set_main_option("script_location", str(alembic_dir))
             alembic_config.set_main_option("prepend_sys_path", str(BASE_DIR))
-            alembic_config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+            # Alembic uses configparser interpolation, so '%' in passwords must be escaped.
+            alembic_config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
             inspector = inspect(engine)
             table_names = set(inspector.get_table_names())
             if "alembic_version" not in table_names and {"users", "exams", "attempts", "schedules"}.issubset(table_names):
@@ -347,7 +381,7 @@ async def _schedule_loop():
                 now = datetime.now(timezone.utc)
                 for sched in schedules:
                     if report_schedule_due(sched, now):
-                        run_report_schedule(db, sched)
+                        await run_report_schedule(db, sched)
         except Exception as exc:
             logger.error("Report scheduler error: %s", exc)
         await asyncio.sleep(60)

@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import Course, CourseStatus, RoleEnum
+from ...models import Attempt, Course, CourseStatus, Exam, Node, RoleEnum
 from ...schemas import CourseCreate, CourseRead, CourseBase, Message
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
@@ -112,6 +112,21 @@ async def delete_course(course_id: str, db: Session = Depends(get_db_dep), curre
     course = db.get(Course, course_pk)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    attempt_count = int(
+        db.scalar(
+            select(func.count(Attempt.id))
+            .select_from(Attempt)
+            .join(Exam, Attempt.exam_id == Exam.id)
+            .join(Node, Exam.node_id == Node.id)
+            .where(Node.course_id == course.id)
+        )
+        or 0
+    )
+    if attempt_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete a course that has learner attempts",
+        )
     db.delete(course)
     db.commit()
     return Message(detail="Deleted")

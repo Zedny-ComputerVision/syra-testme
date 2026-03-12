@@ -56,6 +56,7 @@ export default function VerifyIdentityPage() {
   const [configResolved, setConfigResolved] = useState(false)
   const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [fullscreenResumeNeeded, setFullscreenResumeNeeded] = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
 
   const requirementCards = [
     {
@@ -85,6 +86,7 @@ export default function VerifyIdentityPage() {
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
     }
+    setCameraReady(false)
   }, [])
 
   const requestFullscreen = useCallback(async () => {
@@ -112,10 +114,17 @@ export default function VerifyIdentityPage() {
   const startCamera = useCallback(async () => {
     try {
       stopCamera()
+      setCameraReady(false)
       const stream = await navigator.mediaDevices.getUserMedia({ video: true })
       streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        if (videoRef.current.readyState >= 2) {
+          setCameraReady(videoRef.current.videoWidth > 0 && videoRef.current.videoHeight > 0)
+        }
+      }
     } catch {
+      setCameraReady(false)
       setError('Camera is unavailable. You can still upload selfie and ID images below.')
     }
   }, [stopCamera])
@@ -184,7 +193,10 @@ export default function VerifyIdentityPage() {
 
   const capture = () => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || !streamRef.current || !cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
+      setError('Live camera capture is not ready. Allow camera access or upload your images instead.')
+      return
+    }
     const canvas = canvasRef.current
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
@@ -197,16 +209,21 @@ export default function VerifyIdentityPage() {
     }
     setLightingScore(sum / (data.length / 4) / 255)
     setSelfie(dataUrl)
+    setError('')
   }
 
   const captureId = () => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || !streamRef.current || !cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
+      setError('Live camera capture is not ready. Allow camera access or upload your images instead.')
+      return
+    }
     const canvas = canvasRef.current
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
     canvas.getContext('2d').drawImage(video, 0, 0)
     setIdPhoto(canvas.toDataURL('image/jpeg', 0.9))
+    setError('')
   }
 
   const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
@@ -391,7 +408,7 @@ export default function VerifyIdentityPage() {
         {!loadingConfig && !configResolved && (
           <div className={styles.helperRow}>
             <button type="button" className={styles.btnSecondary} onClick={() => void loadRequirements()}>
-              Retry requirements
+              Reload verification requirements
             </button>
           </div>
         )}
@@ -407,7 +424,15 @@ export default function VerifyIdentityPage() {
           <div className={styles.captureLayout}>
             <div className={styles.visualColumn}>
               <div className={styles.videoWrapper}>
-                <video ref={videoRef} className={styles.video} autoPlay muted playsInline />
+                <video
+                  ref={videoRef}
+                  className={styles.video}
+                  autoPlay
+                  muted
+                  playsInline
+                  onLoadedMetadata={() => setCameraReady(true)}
+                  onEmptied={() => setCameraReady(false)}
+                />
                 <div className={styles.faceGuide} />
               </div>
               <div className={styles.previewRow}>
@@ -427,19 +452,52 @@ export default function VerifyIdentityPage() {
             </div>
             <div className={styles.controlColumn}>
               <div className={styles.captureRow}>
-                <button type="button" className={styles.captureBtn} onClick={capture} disabled={loadingConfig || submitting || !configResolved}>
+                <button
+                  type="button"
+                  className={styles.captureBtn}
+                  onClick={capture}
+                  disabled={loadingConfig || submitting || !configResolved || !cameraReady}
+                  aria-label="Capture selfie from live camera"
+                  title="Capture selfie from live camera"
+                >
                   Capture Selfie
                 </button>
-                <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(selfieInputRef)} disabled={loadingConfig || submitting || !configResolved}>
+                <button
+                  type="button"
+                  className={styles.captureBtn}
+                  onClick={() => openUploadPicker(selfieInputRef)}
+                  disabled={loadingConfig || submitting || !configResolved}
+                  aria-label="Upload selfie image"
+                  title="Upload selfie image"
+                >
                   Upload Selfie
                 </button>
-                <button type="button" className={styles.captureBtn} onClick={captureId} disabled={loadingConfig || submitting || !configResolved}>
+                <button
+                  type="button"
+                  className={styles.captureBtn}
+                  onClick={captureId}
+                  disabled={loadingConfig || submitting || !configResolved || !cameraReady}
+                  aria-label="Capture ID photo from live camera"
+                  title="Capture ID photo from live camera"
+                >
                   Capture ID
                 </button>
-                <button type="button" className={styles.captureBtn} onClick={() => openUploadPicker(idInputRef)} disabled={loadingConfig || submitting || !configResolved}>
+                <button
+                  type="button"
+                  className={styles.captureBtn}
+                  onClick={() => openUploadPicker(idInputRef)}
+                  disabled={loadingConfig || submitting || !configResolved}
+                  aria-label="Upload ID image"
+                  title="Upload ID image"
+                >
                   Upload ID
                 </button>
               </div>
+              {configResolved && !cameraReady && (
+                <p className={styles.helper}>
+                  Live camera capture is unavailable right now. Allow camera access or continue with the upload buttons.
+                </p>
+              )}
               <div className={styles.captureChecklist}>
                 <div className={`${styles.captureState} ${selfie ? styles.captureStateReady : ''}`}>Selfie {selfie ? 'ready' : 'missing'}</div>
                 <div className={`${styles.captureState} ${idPhoto ? styles.captureStateReady : ''}`}>ID image {idPhoto ? 'ready' : 'missing'}</div>
@@ -457,7 +515,7 @@ export default function VerifyIdentityPage() {
                 <p className={styles.helper}>If the ID number is not detected from the image, you can type it here.</p>
               </div>
               <div className={styles.photoActions}>
-                <button type="button" className={styles.btnSecondary} onClick={retake} disabled={submitting || !configResolved}>Retake</button>
+                <button type="button" className={styles.btnSecondary} onClick={retake} disabled={submitting || !configResolved}>Retake identity photos</button>
                 <button type="button" className={styles.btnPrimary} onClick={confirm} disabled={submitting || loadingConfig || !configResolved || !selfie || !idPhoto || (requirements.fullscreenRequired && !fullscreenActive)}>
                   {submitting ? 'Verifying...' : 'Confirm & Continue'}
                 </button>
@@ -469,6 +527,7 @@ export default function VerifyIdentityPage() {
             className={styles.fileInput}
             type="file"
             accept="image/*"
+            aria-label="Upload selfie image"
             onChange={(e) => {
               handleUploadSelfie(e.target.files?.[0])
               e.target.value = ''
@@ -479,6 +538,7 @@ export default function VerifyIdentityPage() {
             className={styles.fileInput}
             type="file"
             accept="image/*"
+            aria-label="Upload ID image"
             onChange={(e) => {
               handleUploadId(e.target.files?.[0])
               e.target.value = ''

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str = Field(default="postgresql+psycopg://postgres:password@localhost:5432/syra_lms")
+    DB_POOL_SIZE: int = Field(default=3, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=0, ge=0)
+    DB_POOL_TIMEOUT_SECONDS: int = Field(default=15, ge=1)
+    DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=60)
+    DB_DISABLE_POOLING: bool | None = None
     JWT_SECRET: str = Field(..., min_length=32, validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"))
     JWT_ALGORITHM: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALGORITHM", "ALGORITHM"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
@@ -59,10 +64,17 @@ class Settings(BaseSettings):
     IDENTITY_RETENTION_DAYS: int = Field(default=7, ge=1)
     PROCTORING_VIDEO_RETENTION_DAYS: int = Field(default=90, ge=1)
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
+    MEDIA_STORAGE_PROVIDER: str = Field(default="local")
+    # Proctoring videos always use Cloudflare streaming; legacy env values are coerced.
     PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
-    CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="http://209.38.218.224:8010")
+    CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_MEDIA_WATERMARK_UID: str | None = None
+    SUPABASE_URL: str | None = None
+    SUPABASE_PUBLISHABLE_KEY: str | None = None
+    SUPABASE_SECRET_KEY: str | None = None
+    SUPABASE_STORAGE_BUCKET: str = Field(default="syra-media")
+    SUPABASE_SIGNED_URL_EXPIRES_SECONDS: int = Field(default=3600, ge=60)
 
     @field_validator("DATABASE_URL")
     @classmethod
@@ -70,8 +82,12 @@ class Settings(BaseSettings):
         normalized = str(value or "").strip()
         if not normalized:
             raise ValueError("DATABASE_URL is required")
+        if normalized.startswith("postgres://"):
+            normalized = f"postgresql+psycopg://{normalized[len('postgres://'):]}"
+        elif normalized.startswith("postgresql://"):
+            normalized = f"postgresql+psycopg://{normalized[len('postgresql://'):]}"
         if not normalized.startswith("postgresql+psycopg://"):
-            raise ValueError("DATABASE_URL must use the postgresql+psycopg:// driver")
+            raise ValueError("DATABASE_URL must use a PostgreSQL connection string")
         return normalized
 
     @field_validator("JWT_SECRET")
@@ -97,12 +113,58 @@ class Settings(BaseSettings):
             raise ValueError("LOG_LEVEL must be one of CRITICAL, ERROR, WARNING, INFO, DEBUG")
         return normalized
 
+    @field_validator("MEDIA_STORAGE_PROVIDER")
+    @classmethod
+    def normalize_media_storage_provider(cls, value: str) -> str:
+        normalized = str(value or "local").strip().lower()
+        if normalized not in {"local", "supabase"}:
+            raise ValueError("MEDIA_STORAGE_PROVIDER must be either 'local' or 'supabase'")
+        return normalized
+
     @field_validator("PROCTORING_VIDEO_STORAGE_PROVIDER")
     @classmethod
     def normalize_video_storage_provider(cls, value: str) -> str:
-        normalized = str(value or "local").strip().lower()
-        if normalized not in {"local", "cloudflare"}:
-            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be either 'local' or 'cloudflare'")
+        normalized = str(value or "cloudflare").strip().lower()
+        if normalized not in {"local", "cloudflare", "supabase"}:
+            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'cloudflare'")
+        return "cloudflare"
+
+    @field_validator("CLOUDFLARE_MEDIA_API_BASE_URL", mode="before")
+    @classmethod
+    def normalize_cloudflare_media_api_base_url(cls, value: str | None) -> str:
+        normalized = str(value or "").strip().rstrip("/")
+        if not normalized:
+            return ""
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("CLOUDFLARE_MEDIA_API_BASE_URL must start with http:// or https://")
+        return normalized
+
+    @field_validator("SUPABASE_URL", mode="before")
+    @classmethod
+    def normalize_supabase_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip().rstrip("/")
+        if not normalized:
+            return None
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("SUPABASE_URL must start with http:// or https://")
+        return normalized
+
+    @field_validator("SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", mode="before")
+    @classmethod
+    def normalize_supabase_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @field_validator("SUPABASE_STORAGE_BUCKET")
+    @classmethod
+    def normalize_supabase_bucket(cls, value: str) -> str:
+        normalized = str(value or "syra-media").strip()
+        if not normalized:
+            raise ValueError("SUPABASE_STORAGE_BUCKET is required")
         return normalized
 
     @field_validator("OPENAI_API_KEY", mode="before")
@@ -129,13 +191,10 @@ class Settings(BaseSettings):
         )
 
     @property
-    def SECRET_KEY(self) -> str:
-        return self.JWT_SECRET
-
-    @property
-    def ALGORITHM(self) -> str:
-        return self.JWT_ALGORITHM
-
+    def db_disable_pooling(self) -> bool:
+        if self.DB_DISABLE_POOLING is not None:
+            return bool(self.DB_DISABLE_POOLING)
+        return ".pooler.supabase.com" in self.DATABASE_URL
 
 @lru_cache
 def get_settings() -> Settings:

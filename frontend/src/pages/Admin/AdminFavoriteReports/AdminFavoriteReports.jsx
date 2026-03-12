@@ -8,17 +8,24 @@ import styles from './AdminFavoriteReports.module.scss'
 const SUPPORTED_APP_ROUTE_PREFIXES = [
   '/admin/dashboard',
   '/admin/tests',
+  '/admin/exams',
+  '/admin/new',
+  '/admin/attempts',
+  '/admin/videos',
   '/admin/attempt-analysis',
   '/admin/candidates',
   '/admin/reports',
   '/admin/report-builder',
   '/admin/predefined-reports',
   '/admin/favorite-reports',
+  '/admin/audit-log',
   '/admin/settings',
   '/admin/subscribers',
   '/admin/integrations',
   '/admin/maintenance',
   '/admin/users',
+  '/admin/user-groups',
+  '/admin/roles',
   '/admin/sessions',
   '/admin/templates',
   '/admin/question-pools',
@@ -27,7 +34,10 @@ const SUPPORTED_APP_ROUTE_PREFIXES = [
   '/admin/grading-scales',
   '/admin/categories',
   '/admin/certificates',
+  '/admin/schedules',
 ]
+
+const SUPPORTED_APP_ROUTE_EXACT = new Set(['/admin'])
 
 const parseJsonArray = (raw) => {
   if (!raw) return []
@@ -39,7 +49,10 @@ const parseJsonArray = (raw) => {
   }
 }
 
-const isSupportedAppRoute = (value) => SUPPORTED_APP_ROUTE_PREFIXES.some((prefix) => value === prefix || value.startsWith(`${prefix}/`))
+const isSupportedAppRoute = (value) => (
+  SUPPORTED_APP_ROUTE_EXACT.has(value)
+  || SUPPORTED_APP_ROUTE_PREFIXES.some((prefix) => value === prefix || value.startsWith(`${prefix}/`))
+)
 
 const normalizeFavoriteEntries = (entries) => (
   Array.isArray(entries)

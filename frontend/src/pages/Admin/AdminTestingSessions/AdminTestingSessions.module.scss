@@ -289,8 +289,15 @@
   display: flex;
   justify-content: flex-end;
   gap: 0.4rem;
+  flex-wrap: wrap;
   padding: 0.6rem 1.1rem;
   border-top: 1px solid var(--color-border);
+}
+
+.modalMeta {
+  margin-bottom: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--color-muted);
 }
 
 .actionBtnEdit {

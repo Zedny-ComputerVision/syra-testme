@@ -30,6 +30,18 @@ def _allowed_features(rows, role: RoleEnum):
     return [row["feature"] for row in rows if isinstance(row, dict) and row.get(role_key) is True and row.get("feature")]
 
 
+def _ensure_admin_permission_floor(rows: list[dict]) -> None:
+    required_features = {"Manage Roles", "System Settings"}
+    for feature in required_features:
+        if not any(
+            isinstance(row, dict)
+            and normalize_feature(row.get("feature")) == feature
+            and row.get("admin") is True
+            for row in rows
+        ):
+            raise HTTPException(status_code=400, detail=f"Admin must keep the '{feature}' permission")
+
+
 def _normalize_permissions_config(raw_value: str | None) -> str:
     try:
         parsed = DEFAULT_PERMISSION_ROWS if not raw_value else json.loads(raw_value)
@@ -47,7 +59,9 @@ def _normalize_permissions_config(raw_value: str | None) -> str:
             "instructor": bool(row.get("instructor")),
             "learner": bool(row.get("learner")),
         })
-    return json.dumps(canonicalize_permission_rows(normalized))
+    canonical = canonicalize_permission_rows(normalized)
+    _ensure_admin_permission_floor(canonical)
+    return json.dumps(canonical)
 
 
 def _role_permission_sets(raw_value: str | None) -> dict[str, set[str]]:

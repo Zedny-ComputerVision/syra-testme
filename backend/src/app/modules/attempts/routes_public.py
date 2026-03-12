@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import inspect
 import json
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -11,7 +12,7 @@ import numpy as np
 import io
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -29,8 +30,15 @@ from ...models import (
     Schedule,
     AccessMode,
     ProctoringEvent,
+    SeverityEnum,
 )
-from ...services.normalized_relations import exam_certificate, exam_proctoring, exam_runtime_settings
+from ...services.normalized_relations import (
+    DEFAULT_CERTIFICATE_ISSUE_RULE,
+    exam_certificate,
+    exam_proctoring,
+    exam_runtime_settings,
+    normalize_certificate_issue_rule,
+)
 from ...core.config import get_settings
 from ...schemas import (
     AttemptCreate,
@@ -39,6 +47,7 @@ from ...schemas import (
     AttemptRead,
     AttemptAnswerBase,
     AttemptAnswerRead,
+    AttemptCertificateReviewUpdate,
     AttemptAnswerReviewUpdate,
     Message,
 )
@@ -46,6 +55,7 @@ from ...api.deps import ensure_permission, get_current_user, get_db_dep, require
 from ...detection.face_verification import compute_face_signature
 from ...services.crypto_utils import encrypt_bytes
 from ...services.notifications import notify_user
+from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 from ...utils.pagination import MAX_PAGE_SIZE, build_page_response, clamp_sort_field, normalize_pagination
 
@@ -56,6 +66,9 @@ except Exception:  # pragma: no cover - optional dependency
 
 router = APIRouter()
 settings = get_settings()
+
+CERTIFICATE_REVIEW_APPROVED = "CERTIFICATE_REVIEW_APPROVED"
+CERTIFICATE_REVIEW_REJECTED = "CERTIFICATE_REVIEW_REJECTED"
 
 
 def _notify_attempt_result(db: Session, attempt: Attempt, *, result_kind: str) -> None:
@@ -98,23 +111,174 @@ def _attempt_is_paused(db: Session, attempt_id) -> bool:
     return bool(last_state_event and last_state_event.event_type == "ATTEMPT_PAUSED")
 
 
+def _violation_counts_by_attempt(db: Session, attempt_ids: list) -> dict[str, dict[str, int]]:
+    if not attempt_ids:
+        return {}
+
+    rows = db.execute(
+        select(
+            ProctoringEvent.attempt_id,
+            func.sum(case((ProctoringEvent.severity == SeverityEnum.HIGH, 1), else_=0)).label("high_violations"),
+            func.sum(case((ProctoringEvent.severity == SeverityEnum.MEDIUM, 1), else_=0)).label("med_violations"),
+        )
+        .where(ProctoringEvent.attempt_id.in_(attempt_ids))
+        .group_by(ProctoringEvent.attempt_id)
+    ).all()
+
+    return {
+        str(attempt_id): {
+            "high_violations": int(high_violations or 0),
+            "med_violations": int(med_violations or 0),
+        }
+        for attempt_id, high_violations, med_violations in rows
+    }
+
+
+def _certificate_review_event(attempt: Attempt, db: Session) -> ProctoringEvent | None:
+    return db.scalar(
+        select(ProctoringEvent)
+        .where(
+            ProctoringEvent.attempt_id == attempt.id,
+            ProctoringEvent.event_type.in_([CERTIFICATE_REVIEW_APPROVED, CERTIFICATE_REVIEW_REJECTED]),
+        )
+        .order_by(ProctoringEvent.occurred_at.desc())
+        .limit(1)
+    )
+
+
+def _has_negative_proctoring_signal(attempt: Attempt, db: Session) -> bool:
+    count = db.scalar(
+        select(func.count())
+        .select_from(ProctoringEvent)
+        .where(
+            ProctoringEvent.attempt_id == attempt.id,
+            ProctoringEvent.event_type.notin_([CERTIFICATE_REVIEW_APPROVED, CERTIFICATE_REVIEW_REJECTED]),
+            ProctoringEvent.severity.in_([SeverityEnum.HIGH, SeverityEnum.MEDIUM]),
+        )
+    )
+    return bool(count)
+
+
+def _certificate_decision(
+    attempt: Attempt,
+    *,
+    db: Session | None,
+    pending_manual_review: bool | None = None,
+) -> dict[str, object]:
+    exam = attempt.exam
+    certificate = exam_certificate(exam) if exam else None
+    if not exam or not certificate:
+        return {
+            "eligible": False,
+            "issue_rule": None,
+            "review_status": None,
+            "reviewed_at": None,
+            "block_reason": None,
+        }
+
+    issue_rule = normalize_certificate_issue_rule(certificate.get("issue_rule"))
+    if attempt.status not in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
+        return {
+            "eligible": False,
+            "issue_rule": issue_rule,
+            "review_status": None,
+            "reviewed_at": None,
+            "block_reason": "Attempt not completed yet",
+        }
+
+    if pending_manual_review is None and db is not None:
+        pending_manual_review = _pending_manual_review_for_attempt(attempt, db)
+    if pending_manual_review:
+        return {
+            "eligible": False,
+            "issue_rule": issue_rule,
+            "review_status": None,
+            "reviewed_at": None,
+            "block_reason": "Awaiting answer review",
+        }
+
+    if exam.passing_score is not None and attempt.score is not None and attempt.score < exam.passing_score:
+        return {
+            "eligible": False,
+            "issue_rule": issue_rule,
+            "review_status": None,
+            "reviewed_at": None,
+            "block_reason": "Passing score not met",
+        }
+
+    review_event = _certificate_review_event(attempt, db) if db is not None else None
+    review_status = None
+    reviewed_at = None
+    if review_event:
+        review_status = "APPROVED" if review_event.event_type == CERTIFICATE_REVIEW_APPROVED else "REJECTED"
+        reviewed_at = review_event.occurred_at
+
+    if issue_rule == "POSITIVE_PROCTORING":
+        if db is not None and _has_negative_proctoring_signal(attempt, db):
+            return {
+                "eligible": False,
+                "issue_rule": issue_rule,
+                "review_status": review_status,
+                "reviewed_at": reviewed_at,
+                "block_reason": "Positive proctoring result not achieved",
+            }
+    elif issue_rule == "AFTER_PROCTORING_REVIEW":
+        effective_status = review_status or "PENDING"
+        if effective_status != "APPROVED":
+            return {
+                "eligible": False,
+                "issue_rule": issue_rule,
+                "review_status": effective_status,
+                "reviewed_at": reviewed_at,
+                "block_reason": (
+                    "Certificate release rejected after proctoring review"
+                    if effective_status == "REJECTED"
+                    else "Awaiting proctoring review"
+                ),
+            }
+        review_status = effective_status
+
+    return {
+        "eligible": True,
+        "issue_rule": issue_rule,
+        "review_status": review_status,
+        "reviewed_at": reviewed_at,
+        "block_reason": None,
+    }
+
+
 def _build_attempt_read(
     attempt: Attempt,
     *,
     db: Session | None = None,
     pending_manual_review: bool | None = None,
+    high_violations: int = 0,
+    med_violations: int = 0,
 ) -> AttemptRead:
     exam = attempt.exam
     user = getattr(attempt, "user", None)
     title = getattr(exam, "title", None) if exam else None
     exam_type = getattr(exam, "type", None) if exam else None
     time_limit = getattr(exam, "time_limit", None) if exam else None
+    certificate = _certificate_decision(
+        attempt,
+        db=db,
+        pending_manual_review=pending_manual_review,
+    ) if db is not None else {
+        "eligible": False,
+        "issue_rule": None,
+        "review_status": None,
+        "reviewed_at": None,
+        "block_reason": None,
+    }
     return AttemptRead(
         id=attempt.id,
         exam_id=attempt.exam_id,
         user_id=attempt.user_id,
         status=attempt.status,
         paused=_attempt_is_paused(db, attempt.id) if db is not None else False,
+        high_violations=high_violations,
+        med_violations=med_violations,
         score=attempt.score,
         grade=attempt.grade,
         pending_manual_review=pending_manual_review,
@@ -134,20 +298,31 @@ def _build_attempt_read(
         attempts_remaining=None,
         user_name=getattr(user, "name", None) if user else None,
         user_student_id=getattr(user, "user_id", None) if user else None,
+        certificate_eligible=bool(certificate["eligible"]) if certificate["issue_rule"] else None,
+        certificate_issue_rule=certificate["issue_rule"],
+        certificate_review_status=certificate["review_status"],
+        certificate_reviewed_at=certificate["reviewed_at"],
+        certificate_block_reason=certificate["block_reason"],
     )
 
 
-def _save_identity_photo(attempt_id: str, b64_data: str) -> str:
+async def _save_identity_photo(attempt_id: str, b64_data: str) -> str:
     """Persist an encrypted base64-encoded identity photo.
 
     Accepts both raw base64 strings and data URLs (data:image/jpeg;base64,...).
-    Returns the absolute file path.
+    Returns the stored object path or local file path.
     """
     # Strip possible data URL prefix
     if "," in b64_data:
         b64_data = b64_data.split(",", 1)[1]
 
-    photo_bytes = base64.b64decode(b64_data)
+    photo_bytes = encrypt_bytes(base64.b64decode(b64_data))
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"{attempt_id}_{ts}.bin"
+
+    if settings.MEDIA_STORAGE_PROVIDER == "supabase":
+        stored = await upload_bytes_to_supabase("identity", filename, photo_bytes, content_type="application/octet-stream")
+        return str(stored.get("path") or filename)
 
     storage_dir = (
         Path(__file__)
@@ -157,10 +332,8 @@ def _save_identity_photo(attempt_id: str, b64_data: str) -> str:
         / "identity"
     )
     storage_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    filename = f"{attempt_id}_{ts}.bin"
     filepath = storage_dir / filename
-    filepath.write_bytes(encrypt_bytes(photo_bytes))
+    filepath.write_bytes(photo_bytes)
     return str(filepath)
 
 
@@ -777,12 +950,15 @@ async def list_attempts(
     )
     attempts = db.scalars(query).all()
     pending_ids = _pending_manual_review_attempt_ids(db, [attempt.id for attempt in attempts])
+    violation_counts = _violation_counts_by_attempt(db, [attempt.id for attempt in attempts])
     return build_page_response(
         items=[
             _build_attempt_read(
                 a,
                 db=db,
                 pending_manual_review=a.id in pending_ids,
+                high_violations=violation_counts.get(str(a.id), {}).get("high_violations", 0),
+                med_violations=violation_counts.get(str(a.id), {}).get("med_violations", 0),
             )
             for a in attempts
         ],
@@ -803,10 +979,13 @@ async def get_attempt(
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     _ensure_attempt_access(db, attempt, current)
+    violation_counts = _violation_counts_by_attempt(db, [attempt.id]).get(str(attempt.id), {})
     return _build_attempt_read(
         attempt,
         db=db,
         pending_manual_review=_pending_manual_review_for_attempt(attempt, db),
+        high_violations=violation_counts.get("high_violations", 0),
+        med_violations=violation_counts.get("med_violations", 0),
     )
 
 
@@ -1032,6 +1211,55 @@ async def finalize_attempt_review(
     return _build_attempt_read(attempt, db=db, pending_manual_review=False)
 
 
+@router.post("/{attempt_id}/certificate-review", response_model=AttemptRead)
+async def review_attempt_certificate(
+    attempt_id: str,
+    body: AttemptCertificateReviewUpdate,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
+    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt = db.get(Attempt, attempt_pk)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if attempt.status == AttemptStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="Attempt must be submitted before certificate review")
+
+    certificate = exam_certificate(attempt.exam) if attempt.exam else None
+    if not certificate:
+        raise HTTPException(status_code=400, detail="Certificate not configured for this test")
+    if normalize_certificate_issue_rule(certificate.get("issue_rule")) != "AFTER_PROCTORING_REVIEW":
+        raise HTTPException(status_code=400, detail="This certificate does not require a proctoring review decision")
+
+    pending_manual_review = _pending_manual_review_for_attempt(attempt, db)
+    if pending_manual_review:
+        raise HTTPException(status_code=409, detail="Finalize answer review before certificate review")
+
+    event_type = CERTIFICATE_REVIEW_APPROVED if body.decision == "APPROVED" else CERTIFICATE_REVIEW_REJECTED
+    detail = (
+        "Certificate approved after proctoring review"
+        if body.decision == "APPROVED"
+        else "Certificate rejected after proctoring review"
+    )
+    db.add(
+        ProctoringEvent(
+            attempt_id=attempt.id,
+            event_type=event_type,
+            severity=SeverityEnum.LOW if body.decision == "APPROVED" else SeverityEnum.MEDIUM,
+            detail=detail,
+            meta={
+                "reviewer_user_id": str(current.id),
+                "reviewer_name": current.name,
+                "decision": body.decision,
+            },
+            occurred_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
+    db.refresh(attempt)
+    return _build_attempt_read(attempt, db=db, pending_manual_review=False)
+
+
 @router.post("/{attempt_id}/verify-identity", response_model=AttemptRead)
 async def verify_identity(
     attempt_id: str,
@@ -1058,7 +1286,9 @@ async def verify_identity(
 
     signature = compute_face_signature(raw_bytes)
 
-    _save_identity_photo(str(attempt_pk), photo_base64)
+    saved_photo = _save_identity_photo(str(attempt_pk), photo_base64)
+    if inspect.isawaitable(saved_photo):
+        await saved_photo
 
     attempt.identity_verified = True
     attempt.id_verified = True
@@ -1178,12 +1408,13 @@ async def download_certificate(
     exam = attempt.exam
     if not exam or not exam_certificate(exam):
         raise HTTPException(status_code=400, detail="Certificate not configured for this test")
-
-    if attempt.status not in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
-        raise HTTPException(status_code=400, detail="Attempt not completed yet")
-
-    if exam.passing_score is not None and attempt.score is not None and attempt.score < exam.passing_score:
-        raise HTTPException(status_code=400, detail="Passing score not met")
+    decision = _certificate_decision(
+        attempt,
+        db=db,
+        pending_manual_review=_pending_manual_review_for_attempt(attempt, db),
+    )
+    if not decision["eligible"]:
+        raise HTTPException(status_code=400, detail=str(decision["block_reason"] or "Certificate not available"))
 
     pdf_bytes = _generate_certificate(attempt)
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={

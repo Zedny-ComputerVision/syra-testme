@@ -80,6 +80,23 @@ def _build_survey_read(survey: Survey) -> SurveyRead:
     )
 
 
+def _validate_response_payload(survey: Survey, survey_id: str, body: SurveyResponseCreate) -> dict:
+    if str(body.survey_id) != str(survey_id):
+        raise HTTPException(status_code=422, detail="survey_id does not match the target survey")
+    answers = {} if body.answers is None else body.answers
+    if not isinstance(answers, dict):
+        raise HTTPException(status_code=422, detail="answers must be an object")
+    expected_keys = {
+        str(question.get("text") or "").strip()
+        for question in serialize_survey_questions(survey)
+        if str(question.get("text") or "").strip()
+    }
+    unknown_keys = sorted(key for key in answers.keys() if str(key) not in expected_keys)
+    if unknown_keys:
+        raise HTTPException(status_code=422, detail="answers include unknown survey questions")
+    return answers
+
+
 @router.post("/", response_model=SurveyRead)
 async def create_survey(body: SurveyCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     payload = _normalize_survey_payload(body.model_dump(), partial=False)
@@ -134,6 +151,10 @@ async def update_survey(
     for field, value in payload.items():
         setattr(survey, field, value)
     if questions is not None:
+        for item in list(survey.question_items or []):
+            db.delete(item)
+        survey.question_items = []
+        db.flush()
         replace_survey_questions(survey, questions)
     db.add(survey)
     db.commit()
@@ -165,7 +186,8 @@ async def submit_response(survey_id: str, body: SurveyResponseCreate, db: Sessio
     )
     if existing:
         raise HTTPException(status_code=409, detail="Already responded")
-    resp = SurveyResponse(survey_id=survey_pk, user_id=current.id, answers=body.answers)
+    answers = _validate_response_payload(survey, survey_pk, body)
+    resp = SurveyResponse(survey_id=survey_pk, user_id=current.id, answers=answers)
     db.add(resp)
     db.commit()
     db.refresh(resp)

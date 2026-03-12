@@ -62,6 +62,11 @@ function readBestVideoDuration(videoEl) {
   )
 }
 
+function readVideoDurationValue(video) {
+  const value = Number(video?.duration)
+  return Number.isFinite(value) && value > 0 ? value : 0
+}
+
 export default function AdminAttemptVideos() {
   const { attemptId } = useParams()
   const [searchParams] = useSearchParams()
@@ -216,10 +221,23 @@ export default function AdminAttemptVideos() {
     () => videos.find((v) => v.name === selectedVideoName) || videos[0] || null,
     [videos, selectedVideoName],
   )
+  const effectiveDuration = useMemo(
+    () => (duration > 0 ? duration : readVideoDurationValue(selectedVideo)),
+    [duration, selectedVideo],
+  )
   const selectedVideoUsesHls = useMemo(
     () => isHlsPlaybackUrl(selectedVideoUrl || selectedVideo?.url, selectedVideo?.playback_type),
     [selectedVideo?.playback_type, selectedVideo?.url, selectedVideoUrl],
   )
+  const latestPlayableVideosBySource = useMemo(() => {
+    const bySource = new Map()
+    for (const video of videos) {
+      if (!video?.source || bySource.has(video.source)) continue
+      const isPlayable = video.ready_to_stream !== false && video.status !== 'error' && Boolean(video.url)
+      if (isPlayable) bySource.set(video.source, video)
+    }
+    return bySource
+  }, [videos])
 
   const warningEvents = useMemo(
     () => (events || []).filter((e) => e && WARN_SEVERITIES.has(e.severity)),
@@ -246,17 +264,17 @@ export default function AdminAttemptVideos() {
 
   const selectedVideoStartMs = useMemo(() => {
     if (selectedVideoRecordedStartMs !== null) return selectedVideoRecordedStartMs
-    if (!selectedVideo?.created_at || !(duration > 0)) return null
+    if (!selectedVideo?.created_at || !(effectiveDuration > 0)) return null
     const createdAtMs = new Date(selectedVideo.created_at).getTime()
     if (!Number.isFinite(createdAtMs)) return null
-    return createdAtMs - (duration * 1000)
-  }, [selectedVideo?.created_at, duration, selectedVideoRecordedStartMs])
+    return createdAtMs - (effectiveDuration * 1000)
+  }, [effectiveDuration, selectedVideo?.created_at, selectedVideoRecordedStartMs])
 
   const selectedVideoEndMs = useMemo(() => {
     if (selectedVideoRecordedEndMs !== null) return selectedVideoRecordedEndMs
-    if (!(selectedVideoStartMs !== null) || !(duration > 0)) return null
-    return selectedVideoStartMs + (duration * 1000)
-  }, [selectedVideoRecordedEndMs, selectedVideoStartMs, duration])
+    if (!(selectedVideoStartMs !== null) || !(effectiveDuration > 0)) return null
+    return selectedVideoStartMs + (effectiveDuration * 1000)
+  }, [effectiveDuration, selectedVideoRecordedEndMs, selectedVideoStartMs])
 
   const anchorStartMs = selectedVideoStartMs ?? attemptStartMs
 
@@ -277,8 +295,8 @@ export default function AdminAttemptVideos() {
           : true
         return {
           ...e,
-          second: selectedVideoStartMs !== null && duration > 0
-            ? Math.max(0, Math.min(duration, second))
+          second: selectedVideoStartMs !== null && effectiveDuration > 0
+            ? Math.max(0, Math.min(effectiveDuration, second))
             : second,
           inSelectedVideo,
           attemptSecond: attemptStartMs && eventTime ? Math.max(0, (eventTime - attemptStartMs) / 1000) : second,
@@ -286,7 +304,7 @@ export default function AdminAttemptVideos() {
       })
       .filter(Boolean)
       .sort((a, b) => a.second - b.second)
-  }, [warningEvents, anchorStartMs, attemptStartMs, duration, selectedVideoEndMs, selectedVideoStartMs])
+  }, [warningEvents, anchorStartMs, attemptStartMs, effectiveDuration, selectedVideoEndMs, selectedVideoStartMs])
 
   const recordingWarningEvents = useMemo(
     () => warningTimelineEvents.filter((event) => event.inSelectedVideo),
@@ -328,8 +346,8 @@ export default function AdminAttemptVideos() {
 
     async function loadVideoUrl() {
       if (!selectedVideo?.url) return
-      if ((selectedVideo.provider && selectedVideo.provider !== 'cloudflare') || !isAbsoluteHttpUrl(selectedVideo.url)) {
-        setWarning((current) => current || 'Only Cloudflare-hosted recordings are supported.')
+      if (!isAbsoluteHttpUrl(selectedVideo.url)) {
+        setWarning((current) => current || 'The selected recording does not have a usable playback URL.')
         return
       }
       try {
@@ -394,12 +412,12 @@ export default function AdminAttemptVideos() {
 
   const timelineSegments = useMemo(() => {
     const bucketCount = 120
-    const finiteDuration = Number.isFinite(duration) ? duration : 0
+    const finiteDuration = Number.isFinite(effectiveDuration) ? effectiveDuration : 0
     const maxEventSecond = Math.max(
       0,
       ...filteredWarningEvents.map((e) => (Number.isFinite(e.second) ? e.second : 0)),
     )
-    const safeDuration = Math.max(finiteDuration, maxEventSecond + 1, 60)
+    const safeDuration = Math.max(finiteDuration, maxEventSecond + 1, finiteDuration > 0 ? finiteDuration : 1)
     const buckets = Array.from({ length: bucketCount }, () => ({ level: 0, count: 0 }))
 
     for (const e of filteredWarningEvents) {
@@ -413,7 +431,7 @@ export default function AdminAttemptVideos() {
     }
 
     return { buckets, safeDuration }
-  }, [duration, filteredWarningEvents])
+  }, [effectiveDuration, filteredWarningEvents])
 
   const videoSummaryCards = [
     {
@@ -433,14 +451,14 @@ export default function AdminAttemptVideos() {
     },
     {
       label: 'Timeline span',
-      value: formatSeconds(duration || timelineSegments.safeDuration),
+      value: formatSeconds(effectiveDuration || timelineSegments.safeDuration),
       helper: 'Video or reconstructed event duration currently in view',
     },
   ]
 
   const seekTo = (second) => {
     if (!videoRef.current) return
-    const target = Math.max(0, Math.min(second, duration || second))
+    const target = Math.max(0, Math.min(second, effectiveDuration || second))
     videoRef.current.currentTime = target
     setCurrentTime(target)
   }
@@ -548,7 +566,7 @@ export default function AdminAttemptVideos() {
     }
 
     if (!Hls.isSupported()) {
-      setWarning((current) => current || 'This browser cannot play the selected Cloudflare stream.')
+      setWarning((current) => current || 'This browser cannot play the selected stream.')
       return undefined
     }
 
@@ -563,7 +581,7 @@ export default function AdminAttemptVideos() {
     hls.on(Hls.Events.LEVEL_LOADED, () => syncDurationFromVideo(videoEl))
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (data?.fatal) {
-        setWarning((current) => current || 'The selected Cloudflare stream could not be played.')
+        setWarning((current) => current || 'The selected stream could not be played.')
       }
     })
 
@@ -681,27 +699,60 @@ export default function AdminAttemptVideos() {
                 <span className={styles.statLabel}>Medium</span>
               </div>
               <div className={styles.statItem}>
-                <span className={styles.statValue}>{formatSeconds(duration || timelineSegments.safeDuration)}</span>
+                <span className={styles.statValue}>{formatSeconds(effectiveDuration || timelineSegments.safeDuration)}</span>
                 <span className={styles.statLabel}>Timeline span</span>
               </div>
             </div>
 
             <div className={styles.playerTop}>
-              <label>
-                Recording
-                <select
-                  value={selectedVideo?.name || ''}
-                  onChange={(e) => {
-                    setSelectedVideoName(e.target.value)
-                    setCurrentTime(0)
-                    setDuration(0)
-                  }}
-                >
-                  {videos.map((v) => (
-                    <option key={v.name} value={v.name}>{`${formatVideoSource(v.source)} - ${v.name}`}</option>
-                  ))}
-                </select>
-              </label>
+              <div className={styles.recordingControls}>
+                <div className={styles.sourceSwitchRow}>
+                  {['camera', 'screen'].map((source) => {
+                    const sourceVideo = latestPlayableVideosBySource.get(source)
+                    const isActive = sourceVideo?.name && sourceVideo.name === selectedVideo?.name
+                    return (
+                      <button
+                        key={source}
+                        type="button"
+                        className={`${styles.sourceSwitchBtn} ${isActive ? styles.sourceSwitchBtnActive : ''}`}
+                        disabled={!sourceVideo}
+                        onClick={() => {
+                          if (!sourceVideo) return
+                          setSelectedVideoName(sourceVideo.name)
+                          setCurrentTime(0)
+                          setDuration(readVideoDurationValue(sourceVideo))
+                        }}
+                      >
+                        <span className={styles.sourceSwitchLabel}>{formatVideoSource(source)}</span>
+                        <span className={styles.sourceSwitchMeta}>
+                          {sourceVideo ? formatSeconds(readVideoDurationValue(sourceVideo)) : 'Not saved'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <label>
+                  Recording
+                  <select
+                    value={selectedVideo?.name || ''}
+                    onChange={(e) => {
+                      const nextVideo = videos.find((video) => video.name === e.target.value)
+                      setSelectedVideoName(e.target.value)
+                      setCurrentTime(0)
+                      setDuration(readVideoDurationValue(nextVideo))
+                    }}
+                  >
+                    {videos.map((v) => {
+                      const suffix = v.ready_to_stream === false || v.status === 'error'
+                        ? ` (${v.status || 'unavailable'})`
+                        : ''
+                      return (
+                        <option key={v.name} value={v.name}>{`${formatVideoSource(v.source)} - ${v.name}${suffix}`}</option>
+                      )
+                    })}
+                  </select>
+                </label>
+              </div>
               {selectedVideoUrl ? (
                 <a href={selectedVideoUrl} target="_blank" rel="noreferrer">Open file</a>
               ) : (
@@ -757,7 +808,7 @@ export default function AdminAttemptVideos() {
                   </button>
                   <div className={styles.timeDisplay}>
                     <span className={styles.timeNow}>
-                      {formatSeconds(currentTime)} / {formatSeconds(duration || timelineSegments.safeDuration)}
+                      {formatSeconds(currentTime)} / {formatSeconds(effectiveDuration || timelineSegments.safeDuration)}
                     </span>
                   </div>
                 </div>

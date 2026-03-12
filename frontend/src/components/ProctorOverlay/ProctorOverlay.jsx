@@ -15,6 +15,34 @@ function getVisualFrameInterval(config) {
   return Math.max(VISUAL_FRAME_INTERVAL_FLOOR_MS, Math.min(VISUAL_FRAME_INTERVAL_CEILING_MS, normalized))
 }
 
+function needsVideoCapture(config) {
+  return Boolean(
+    config?.camera_required
+    || config?.lighting_required
+    || config?.identity_required
+    || config?.face_detection
+    || config?.multi_face
+    || config?.eye_tracking
+    || config?.head_pose_detection
+    || config?.object_detection
+    || config?.mouth_detection
+  )
+}
+
+function needsAudioCapture(config) {
+  return Boolean(config?.mic_required || config?.audio_detection)
+}
+
+function needsRealtimeMonitoring(config) {
+  return Boolean(
+    needsVideoCapture(config)
+    || needsAudioCapture(config)
+    || config?.screen_capture
+    || config?.screen_required
+    || (Array.isArray(config?.alert_rules) && config.alert_rules.length > 0)
+  )
+}
+
 function normalizeIncomingAlert(rawAlert) {
   if (!rawAlert || typeof rawAlert !== 'object') return null
   const eventType = String(rawAlert.event_type || rawAlert.type || 'PROCTORING_ALERT').trim().toUpperCase()
@@ -70,17 +98,20 @@ export default function ProctorOverlay({
   const recentAlertRef = useRef(new Map())
 
   const wsUrl = useMemo(() => {
-    const rawBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/'
+    const rawBase = import.meta.env.VITE_API_BASE_URL || '/api/'
     let parsed
     try {
       parsed = new URL(rawBase, window.location.origin)
     } catch {
-      parsed = new URL('http://127.0.0.1:8000/api/')
+      parsed = new URL('/api/', window.location.origin)
     }
     const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
     const basePath = parsed.pathname.endsWith('/') ? parsed.pathname.slice(0, -1) : parsed.pathname
     return `${wsProtocol}//${parsed.host}${basePath}/proctoring/${attemptId}/ws?token=${encodeURIComponent(token || '')}`
   }, [attemptId, token])
+  const videoRequired = useMemo(() => needsVideoCapture(config), [config])
+  const audioRequired = useMemo(() => needsAudioCapture(config), [config])
+  const realtimeMonitoring = useMemo(() => needsRealtimeMonitoring(config), [config])
 
   useEffect(() => {
     onStatusChange?.(status)
@@ -194,14 +225,23 @@ export default function ProctorOverlay({
 
   // Start camera
   useEffect(() => {
+    if (!videoRequired && !audioRequired) {
+      setCameraError('')
+      onStreamReady?.(null)
+      onCameraStateChange?.(false)
+      return undefined
+    }
     let cancelled = false
     async function startCam() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: videoRequired,
+          audio: audioRequired,
+        })
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
         streamRef.current = stream
         onStreamReady?.(stream)
-        if (videoRef.current) {
+        if (videoRequired && videoRef.current) {
           videoRef.current.srcObject = stream
           await videoRef.current.play().catch(() => {})
         }
@@ -216,10 +256,10 @@ export default function ProctorOverlay({
       onCameraStateChange?.(false)
       streamRef.current?.getTracks().forEach(t => t.stop())
     }
-  }, [onCameraStateChange, onStreamReady])
+  }, [audioRequired, onCameraStateChange, onStreamReady, videoRequired])
 
   useEffect(() => {
-    if (!attemptId) return
+    if (!attemptId || !videoRequired) return
     const tickMs = getVisualFrameInterval(config)
     localFrameIntervalRef.current = setInterval(() => {
       analyzeLocalFrame()
@@ -227,11 +267,14 @@ export default function ProctorOverlay({
     return () => {
       if (localFrameIntervalRef.current) clearInterval(localFrameIntervalRef.current)
     }
-  }, [attemptId, config.frame_interval_ms, analyzeLocalFrame])
+  }, [attemptId, config.frame_interval_ms, analyzeLocalFrame, videoRequired])
 
   // WebSocket connection + frame streaming with exponential-backoff reconnect
   useEffect(() => {
-    if (!attemptId || !token) return
+    if (!attemptId || !token || !realtimeMonitoring) {
+      setStatus('closed')
+      return undefined
+    }
 
     intentionalCloseRef.current = false
     blockingCloseRef.current = false
@@ -403,7 +446,7 @@ export default function ProctorOverlay({
       onRegisterScreenShareRequest?.(null)
       wsRef.current?.close()
     }
-  }, [attemptId, token, wsUrl, config, analyzeLocalFrame, emitSystemError, onForcedSubmit, onRegisterScreenShareRequest, onScreenStreamReady, pushAlert, triggerForcedSubmit])
+  }, [attemptId, token, wsUrl, config, analyzeLocalFrame, emitSystemError, onForcedSubmit, onRegisterScreenShareRequest, onScreenStreamReady, pushAlert, realtimeMonitoring, triggerForcedSubmit])
 
   return (
     <div className={styles.overlay}>

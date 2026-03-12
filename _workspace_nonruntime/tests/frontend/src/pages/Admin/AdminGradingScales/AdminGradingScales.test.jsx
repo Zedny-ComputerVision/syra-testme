@@ -41,7 +41,7 @@ describe('AdminGradingScales', () => {
     fireEvent.change(screen.getByLabelText('Scale Name'), { target: { value: 'Standard Letter' } })
     fireEvent.change(screen.getByLabelText('Band 1 minimum score'), { target: { value: '95' } })
     fireEvent.change(screen.getByLabelText('Band 1 maximum score'), { target: { value: '90' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() => expect(screen.getByText('Band minimum scores cannot exceed the maximum.')).toBeTruthy())
     expect(createGradingScaleMock).not.toHaveBeenCalled()
@@ -55,7 +55,7 @@ describe('AdminGradingScales', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ New Scale' }))
     fireEvent.change(screen.getByLabelText('Scale Name'), { target: { value: 'Standard Letter' } })
     fireEvent.change(screen.getByLabelText('Band 2 maximum score'), { target: { value: '95' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() => expect(screen.getByText('Grade bands cannot overlap.')).toBeTruthy())
     expect(createGradingScaleMock).not.toHaveBeenCalled()

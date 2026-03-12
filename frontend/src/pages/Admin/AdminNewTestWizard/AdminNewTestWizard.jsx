@@ -4,6 +4,12 @@ import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import useUnsavedChanges from '../../../hooks/useUnsavedChanges'
 import { adminApi } from '../../../services/admin.service'
 import { generateQuestionsAI } from '../../../services/ai.service'
+import {
+  CERTIFICATE_ISSUE_RULE_OPTIONS,
+  certificateIssueRuleLabel,
+  DEFAULT_CERTIFICATE_ISSUE_RULE,
+  normalizeCertificateIssueRule,
+} from '../../../utils/certificates'
 import { normalizeProctoringConfig } from '../../../utils/proctoringRequirements'
 import { readPaginatedItems } from '../../../utils/pagination'
 import ExamQuestionPanel from '../ExamQuestionPanel/ExamQuestionPanel'
@@ -208,6 +214,7 @@ export default function AdminNewTestWizard() {
   const editId = searchParams.get('edit') || paramId
   const autosaveTimerRef = useRef(null)
   const autosavingRef = useRef(false)
+  const saveExamRef = useRef(null)
   const prefersReducedMotion = useReducedMotion()
   const stepTransitionDuration = prefersReducedMotion || import.meta.env.MODE === 'test' ? 0 : 0.25
 
@@ -305,6 +312,7 @@ export default function AdminNewTestWizard() {
   const [certCompany, setCertCompany] = useState('')
   const [certSigner, setCertSigner] = useState('Examiner')
   const [certDescription, setCertDescription] = useState('This is to certify that the above named candidate has successfully completed the assessment.')
+  const [certIssueRule, setCertIssueRule] = useState(DEFAULT_CERTIFICATE_ISSUE_RULE)
 
   /* ─── Step 7: Sessions ─── */
   const [users, setUsers] = useState([])
@@ -593,8 +601,10 @@ export default function AdminNewTestWizard() {
         setCertCompany(test.certificate.issuer || '')
         setCertSigner(test.certificate.signer || 'Examiner')
         setCertDescription(test.certificate.description || 'This is to certify that the above named candidate has successfully completed the assessment.')
+        setCertIssueRule(normalizeCertificateIssueRule(test.certificate.issue_rule))
       } else {
         setCertEnabled(false)
+        setCertIssueRule(DEFAULT_CERTIFICATE_ISSUE_RULE)
       }
     }).catch(() => {})
     const questionRequest = adminApi.getQuestions(editId).then(({ data }) => setQuestions(data || [])).catch(() => {})
@@ -652,10 +662,14 @@ export default function AdminNewTestWizard() {
     }
     if (cfg.certificate) {
       setCertEnabled(true)
+      setCertTemplate(cfg.certificate.template || certTemplate)
+      setCertOrientation(cfg.certificate.orientation || certOrientation)
       setCertTitle(cfg.certificate.title || certTitle)
       setCertSubtitle(cfg.certificate.subtitle || certSubtitle)
       setCertCompany(cfg.certificate.issuer || certCompany)
       setCertSigner(cfg.certificate.signer || certSigner)
+      setCertDescription(cfg.certificate.description || certDescription)
+      setCertIssueRule(normalizeCertificateIssueRule(cfg.certificate.issue_rule))
     }
   }
 
@@ -727,6 +741,7 @@ export default function AdminNewTestWizard() {
       issuer: certCompany,
       signer: certSigner,
       description: certDescription,
+      issue_rule: certIssueRule,
     } : null), [
       certEnabled,
       certTemplate,
@@ -736,6 +751,7 @@ export default function AdminNewTestWizard() {
       certCompany,
       certSigner,
       certDescription,
+      certIssueRule,
     ])
 
   const testPayload = useMemo(() => ({
@@ -806,6 +822,10 @@ export default function AdminNewTestWizard() {
     return id
   }
 
+  useEffect(() => {
+    saveExamRef.current = saveExam
+  }, [saveExam])
+
   const ensureExamCreated = async () => {
     if (examId || saving) return examId
     setSaving(true)
@@ -832,7 +852,7 @@ export default function AdminNewTestWizard() {
       if (autosavingRef.current) return
       autosavingRef.current = true
       try {
-        await saveExam()
+        await saveExamRef.current?.()
       } catch {
         setPanelError('Autosave failed. Check your connection and try again.')
       } finally {
@@ -1333,6 +1353,7 @@ export default function AdminNewTestWizard() {
       editStep: 5,
       items: [
         ['Certificate', certEnabled ? `${certTemplate} (${certOrientation})` : 'Disabled'],
+        ['Issue Rule', certEnabled ? certificateIssueRuleLabel(certIssueRule) : 'Disabled'],
         ['Certificate Title', certEnabled ? certTitle || 'None' : 'Disabled'],
         ['Subtitle', certEnabled ? certSubtitle || 'None' : 'Disabled'],
         ['Issuer', certEnabled ? certCompany || 'None' : 'Disabled'],
@@ -2372,10 +2393,36 @@ export default function AdminNewTestWizard() {
             >
               <div className={styles.toggleThumb} />
             </div>
-            <span className={styles.toggleLabelStrong}>Issue certificate upon passing</span>
+            <span className={styles.toggleLabelStrong}>Enable certificate builder</span>
           </label>
           {certEnabled && (
             <>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Certificate Release Rule</label>
+                <div className={styles.certRuleList}>
+                  {CERTIFICATE_ISSUE_RULE_OPTIONS.map((option) => (
+                    <label key={option.value} className={`${styles.certRuleCard} ${certIssueRule === option.value ? styles.certRuleCardActive : ''}`}>
+                      <input
+                        type="radio"
+                        name="wizard-certificate-issue-rule"
+                        checked={certIssueRule === option.value}
+                        onChange={() => { setCertIssueRule(option.value); if (examId) autoPersist() }}
+                      />
+                      <span className={styles.certRuleBody}>
+                        <span className={styles.certRuleTitle}>{option.label}</span>
+                        <span className={styles.certRuleDescription}>{option.description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className={styles.helper}>
+                  {certIssueRule === 'AFTER_PROCTORING_REVIEW'
+                    ? 'Learners can download the certificate only after an admin or instructor approves it from Attempt Analysis.'
+                    : certIssueRule === 'POSITIVE_PROCTORING'
+                      ? 'Medium and high proctoring alerts will block certificate download.'
+                      : 'The certificate becomes available as soon as the learner passes.'}
+                </div>
+              </div>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
                   <label className={styles.label} htmlFor="wizard-certificate-template">Template</label>
@@ -2420,6 +2467,7 @@ export default function AdminNewTestWizard() {
               <div className={styles.certPreview}>
                 <div className={styles.certPreviewLabel}>{certTemplate} - {certOrientation}</div>
                 <div className={`${styles.certPreviewBox} ${certOrientation === 'landscape' ? styles.certPreviewLandscape : styles.certPreviewPortrait}`}>
+                  <div className={styles.certPreviewBadge}>{certificateIssueRuleLabel(certIssueRule)}</div>
                   <div className={styles.certPreviewTitle}>{certTitle || 'Certificate Title'}</div>
                   {certSubtitle && <div className={styles.certPreviewSub}>{certSubtitle}</div>}
                   {certCompany && <div className={styles.certPreviewCompany}>{certCompany}</div>}

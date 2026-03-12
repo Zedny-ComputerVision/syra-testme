@@ -88,7 +88,6 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
   const isAdmin = role === 'ADMIN'
   const isInstructor = role === 'INSTRUCTOR'
   const isSuperAdmin = role === 'ADMIN'
-  const roleLabel = isAdmin ? 'Admin workspace' : isInstructor ? 'Instructor workspace' : 'Learner workspace'
   const dashboardPath = isAdmin ? '/admin/dashboard' : '/'
   const canViewDashboard = hasPermission?.('View Dashboard')
   const canTakeTests = hasPermission?.('Take Tests')
@@ -142,13 +141,10 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
       >
         {/* Brand */}
         <div className={styles.brand}>
-          <PrefetchLink to="/" className={styles.brandLink}>
+          <PrefetchLink to={dashboardPath} className={styles.brandLink}>
             <span className={styles.brandLogo}>S</span>
             <span className={styles.brandTextWrap}>
-              <span className={styles.brandKicker}>Assessment platform</span>
               <span className={styles.brandText}>SYRA LMS</span>
-              <span className={styles.brandSub}>Secure testing, learner progress, and operational control in one place.</span>
-              <span className={styles.rolePill}>{roleLabel}</span>
             </span>
           </PrefetchLink>
         </div>

@@ -266,6 +266,63 @@
   padding: 0.95rem 1rem 0.85rem;
 }
 
+.recordingControls {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.sourceSwitchRow {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.sourceSwitchBtn {
+  min-width: 138px;
+  border: 1px solid var(--review-border);
+  border-radius: 14px;
+  padding: 0.58rem 0.78rem;
+  background: color-mix(in srgb, var(--color-bg) 52%, transparent);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.sourceSwitchBtn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-primary) 46%, var(--review-border));
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--review-panel));
+}
+
+.sourceSwitchBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sourceSwitchBtnActive {
+  border-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--review-panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 36%, transparent);
+}
+
+.sourceSwitchLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.sourceSwitchMeta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .playerTop label {
   min-width: 0;
   flex: 1;

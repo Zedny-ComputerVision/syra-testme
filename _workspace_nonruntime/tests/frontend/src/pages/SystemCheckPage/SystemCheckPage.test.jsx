@@ -55,7 +55,7 @@ function renderPage() {
 
 describe('SystemCheckPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
       configurable: true,
       get() {
@@ -100,9 +100,9 @@ describe('SystemCheckPage', () => {
     await waitFor(() => expect(screen.getByText('Failed to load test configuration. Please refresh and try again.')).toBeTruthy())
     expect(screen.getByRole('button', { name: 'Cannot continue' }).disabled).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry requirements' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading requirements' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(false))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue to rules' }).disabled).toBe(false))
   })
 
   it('attaches the camera stream after the preview video mounts', async () => {
@@ -131,7 +131,7 @@ describe('SystemCheckPage', () => {
       return element
     })
     await waitFor(() => expect(video.srcObject).toBe(stream))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(false))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue to rules' }).disabled).toBe(false))
   })
 
   it('requires entire-screen sharing before continue is enabled', async () => {
@@ -155,10 +155,10 @@ describe('SystemCheckPage', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Waiting for checks...' }).disabled).toBe(true))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Share Entire Screen' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share entire screen' }))
 
     await waitFor(() => expect(getDisplayMediaMock).toHaveBeenCalled())
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(false))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue to rules' }).disabled).toBe(false))
   })
 
   it('rejects window-only sharing when entire-screen capture is required', async () => {
@@ -180,7 +180,7 @@ describe('SystemCheckPage', () => {
 
     renderPage()
 
-    const shareButton = await waitFor(() => screen.getByRole('button', { name: 'Share Entire Screen' }))
+    const shareButton = await waitFor(() => screen.getByRole('button', { name: 'Share entire screen' }))
     fireEvent.click(shareButton)
 
     await waitFor(() => expect(getDisplayMediaMock).toHaveBeenCalled())

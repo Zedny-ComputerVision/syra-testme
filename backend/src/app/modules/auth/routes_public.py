@@ -65,8 +65,8 @@ async def signup_status(service: AuthService = Depends(_service_from_db)):
     return service.signup_status()
 
 
-@router.post("/signup", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
+@router.post("/signup", response_model=Message)
 async def signup(
     request: Request,
     body: SignupRequest,
@@ -79,8 +79,8 @@ async def signup(
     return Message(detail="Signup successful. Please check your email and log in.")
 
 
-@router.post("/login", response_model=Token)
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
+@router.post("/login", response_model=Token)
 async def login(
     request: Request,
     body: LoginRequest,
@@ -123,8 +123,8 @@ async def change_password(
     return response
 
 
-@router.post("/forgot-password", status_code=202, response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
+@router.post("/forgot-password", status_code=202, response_model=Message)
 async def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,

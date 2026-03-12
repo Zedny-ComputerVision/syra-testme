@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const STORAGE_KEY = 'syra_tokens'
-const rawBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/'
+const rawBase = import.meta.env.VITE_API_BASE_URL || '/api/'
 const baseURL = rawBase.endsWith('/') ? rawBase : `${rawBase}/`
 const AUTH_ENDPOINTS = ['auth/login', 'auth/signup', 'auth/setup', 'auth/refresh', 'auth/forgot-password', 'auth/reset-password']
 

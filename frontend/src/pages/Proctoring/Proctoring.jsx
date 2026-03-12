@@ -8,20 +8,20 @@ import { getAttempt, getAttemptAnswers, submitAnswer, submitAttempt } from '../.
 import { getTestQuestions, getTest } from '../../services/test.service'
 import { proctoringPing, uploadProctoringVideo } from '../../services/proctoring.service'
 import { normalizeQuestion, normalizeTest } from '../../utils/assessmentAdapters'
-import { normalizeProctoringConfig } from '../../utils/proctoringRequirements'
+import { getJourneyRequirements, normalizeProctoringConfig } from '../../utils/proctoringRequirements'
 import styles from './Proctoring.module.scss'
 
 const DEFAULT_PROCTORING = {
-  tab_switch_detect: true,
-  fullscreen_enforce: true,
-  face_detection: true,
-  multi_face: true,
-  eye_tracking: true,
-  head_pose_detection: true,
-  audio_detection: true,
-  object_detection: true,
+  tab_switch_detect: false,
+  fullscreen_enforce: false,
+  face_detection: false,
+  multi_face: false,
+  eye_tracking: false,
+  head_pose_detection: false,
+  audio_detection: false,
+  object_detection: false,
   mouth_detection: false,
-  copy_paste_block: true,
+  copy_paste_block: false,
   screen_capture: false,
   object_confidence_threshold: 0.5,
   max_face_absence_sec: 3,
@@ -267,6 +267,22 @@ export default function Proctoring() {
     }
   }, [proctorStatus])
 
+  const journeyRequirements = getJourneyRequirements(proctorCfg)
+  const proctoringEnabled = Boolean(
+    proctorCfg.tab_switch_detect
+    || proctorCfg.fullscreen_enforce
+    || proctorCfg.face_detection
+    || proctorCfg.multi_face
+    || proctorCfg.eye_tracking
+    || proctorCfg.head_pose_detection
+    || proctorCfg.audio_detection
+    || proctorCfg.object_detection
+    || proctorCfg.mouth_detection
+    || journeyRequirements.systemCheckRequired
+    || journeyRequirements.identityRequired
+    || (Array.isArray(proctorCfg.alert_rules) && proctorCfg.alert_rules.length > 0)
+  )
+
   const handleAnswer = (questionId, answer) => {
     setShowSubmitConfirm(false)
     setAnswers(prev => ({ ...prev, [questionId]: answer }))
@@ -498,6 +514,14 @@ export default function Proctoring() {
 
   // Fullscreen enforcement
   useEffect(() => {
+    if (!proctoringEnabled) {
+      setProctorStatus('closed')
+      setCameraDark(false)
+    }
+  }, [proctoringEnabled])
+
+  useEffect(() => {
+    if (!proctorCfg.fullscreen_enforce) return undefined
     const handleFullscreenChange = () => {
       if (attemptId) {
         proctoringPing(attemptId, {
@@ -514,7 +538,7 @@ export default function Proctoring() {
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [applyPingResponse, attemptId, cameraDark, tabBlurs])
+  }, [applyPingResponse, attemptId, cameraDark, proctorCfg.fullscreen_enforce, tabBlurs])
 
   useEffect(() => {
     if (!proctorCfg.screen_capture) {
@@ -646,7 +670,7 @@ export default function Proctoring() {
 
   // Heartbeat ping
   useEffect(() => {
-    if (!attemptId) return
+    if (!attemptId || !proctoringEnabled) return
     const interval = setInterval(() => {
       proctoringPing(attemptId, {
         focus: document.hasFocus(),
@@ -657,7 +681,7 @@ export default function Proctoring() {
       }).then(applyPingResponse).catch(() => {})
     }, 10000)
     return () => clearInterval(interval)
-  }, [applyPingResponse, attemptId, tabBlurs, cameraDark])
+  }, [applyPingResponse, attemptId, cameraDark, proctoringEnabled, tabBlurs])
 
   useEffect(() => {
     const onBeforeUnload = () => {
@@ -693,7 +717,7 @@ export default function Proctoring() {
         <div className={`${styles.examPane} ${styles.centerState}`}>
           <div className={styles.errorBanner}>{loadError}</div>
           <button type="button" className={styles.retryBtn} onClick={() => setReloadKey((current) => current + 1)}>
-            Retry
+            Retry loading test
           </button>
         </div>
       </div>
@@ -706,26 +730,33 @@ export default function Proctoring() {
   const unansweredCount = questions.length - answeredCount
   const progressPct = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0
   const showProgressBar = exam?.settings?.show_progress_bar !== false
+  const questionNavLabel = (question, index) => {
+    const state = hasAnswerValue(answers[question.id]) ? 'answered' : 'unanswered'
+    const current = index === currentIdx ? ', current question' : ''
+    return `Go to question ${index + 1} of ${questions.length}${current}, ${state}`
+  }
   const recordingBadgeClass = (status) => {
     if (status === 'saved' || status === 'recording') return styles.badgeConnected
     if (status === 'ready' || status === 'waiting' || status === 'checking' || status === 'saving' || status === 'disabled') return styles.badgePending
     return styles.badgeDisconnected
   }
   const proctorPane = (
-    <aside className={`${styles.proctorPane} glass`} aria-label="Proctoring panel">
-      <ProctorOverlay
-        attemptId={attemptId}
-        token={tokens?.access_token}
-        config={proctorCfg}
-        onViolation={handleViolation}
-        onForcedSubmit={handleForcedSubmit}
-        onStreamReady={setCameraStream}
-        onScreenStreamReady={setScreenStream}
-        onRegisterScreenShareRequest={registerScreenShareRequest}
-        onStatusChange={setProctorStatus}
-        onCameraStateChange={setCameraDark}
-      />
-    </aside>
+    proctoringEnabled ? (
+      <aside className={`${styles.proctorPane} glass`} aria-label="Proctoring panel">
+        <ProctorOverlay
+          attemptId={attemptId}
+          token={tokens?.access_token}
+          config={proctorCfg}
+          onViolation={handleViolation}
+          onForcedSubmit={handleForcedSubmit}
+          onStreamReady={setCameraStream}
+          onScreenStreamReady={setScreenStream}
+          onRegisterScreenShareRequest={registerScreenShareRequest}
+          onStatusChange={setProctorStatus}
+          onCameraStateChange={setCameraDark}
+        />
+      </aside>
+    ) : null
   )
   const toastNode = (
     <AnimatePresence>
@@ -741,7 +772,7 @@ export default function Proctoring() {
         <div className={`${styles.examPane} ${styles.centerState}`}>
           <div className={styles.stateMessage}>No questions are available for this attempt.</div>
           <button type="button" className={styles.retryBtn} onClick={() => navigate('/attempts')}>
-            Back to Attempts
+            Back to attempts list
           </button>
         </div>
         {proctorPane}
@@ -765,8 +796,9 @@ export default function Proctoring() {
             className={styles.retryBtn}
             onClick={() => void requestRequiredScreenShare()}
             disabled={!screenShareRequestReady || screenShareBusy}
+            aria-label={screenRecordingStatus === 'failed' ? `Retry entire-screen sharing for ${exam?.title || 'this test'}` : `Share your entire screen for ${exam?.title || 'this test'}`}
           >
-            {screenShareBusy ? 'Requesting Screen Share...' : screenRecordingStatus === 'failed' ? 'Retry Screen Share' : 'Share Entire Screen'}
+            {screenShareBusy ? 'Requesting screen share...' : screenRecordingStatus === 'failed' ? 'Retry entire-screen share' : 'Share entire screen'}
           </button>
         </div>
         {proctorPane}
@@ -794,20 +826,24 @@ export default function Proctoring() {
             {violations.MEDIUM > 0 && (
               <span className={styles.badgeMedium}>{violations.MEDIUM} MED</span>
             )}
-            <span className={proctorStatus === 'connected' ? styles.badgeConnected : styles.badgeDisconnected}>
-              Proctoring: {proctorStatus}
+            <span className={proctoringEnabled && proctorStatus === 'connected' ? styles.badgeConnected : styles.badgeDisconnected}>
+              Proctoring: {proctoringEnabled ? proctorStatus : 'off'}
             </span>
-            <span className={recordingBadgeClass(cameraRecordingStatus)}>
-              Camera: {cameraRecordingStatus}
-            </span>
-            {proctorCfg.screen_capture && (
+            {proctoringEnabled && (
+              <span className={recordingBadgeClass(cameraRecordingStatus)}>
+                Camera: {cameraRecordingStatus}
+              </span>
+            )}
+            {proctoringEnabled && proctorCfg.screen_capture && (
               <span className={recordingBadgeClass(screenRecordingStatus)}>
                 Screen: {screenRecordingStatus}
               </span>
             )}
-            <span className={styles.recordingHint}>
-              Saved recordings appear after submit in Manage Tests - Proctoring - Video
-            </span>
+            {proctoringEnabled && (
+              <span className={styles.recordingHint}>
+                Saved recordings appear after submit in Manage Tests - Proctoring - Video
+              </span>
+            )}
             <span
               className={
                 saveState === 'saved'
@@ -874,6 +910,9 @@ export default function Proctoring() {
                 setShowSubmitConfirm(false)
                 setCurrentIdx(i)
               }}
+              aria-label={questionNavLabel(q, i)}
+              title={questionNavLabel(q, i)}
+              aria-current={i === currentIdx ? 'step' : undefined}
               whileHover={{ y: -1, scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               transition={{ duration: 0.12 }}
@@ -992,9 +1031,10 @@ export default function Proctoring() {
                   setShowSubmitConfirm(false)
                   setCurrentIdx(i => i - 1)
                 }}
+                aria-label={currentIdx === 0 ? 'Previous question unavailable' : `Go to question ${currentIdx} of ${questions.length}`}
                 whileTap={{ scale: 0.97 }}
               >
-                Previous
+                Previous question
               </motion.button>
               {currentIdx < questions.length - 1 ? (
                 <motion.button
@@ -1004,9 +1044,10 @@ export default function Proctoring() {
                     setShowSubmitConfirm(false)
                     setCurrentIdx(i => i + 1)
                   }}
+                  aria-label={`Go to question ${currentIdx + 2} of ${questions.length}`}
                   whileTap={{ scale: 0.97 }}
                 >
-                  Next
+                  Next question
                 </motion.button>
               ) : (
                 <motion.button
@@ -1014,6 +1055,7 @@ export default function Proctoring() {
                   className={styles.btnSubmit}
                   onClick={handleSubmitRequest}
                   disabled={submitting}
+                  aria-label={showSubmitConfirm ? 'Review submission summary' : 'Review and submit test'}
                   whileTap={{ scale: submitting ? 1 : 0.97 }}
                 >
                   {submitting ? 'Submitting...' : showSubmitConfirm ? 'Review Submission' : 'Submit Test'}

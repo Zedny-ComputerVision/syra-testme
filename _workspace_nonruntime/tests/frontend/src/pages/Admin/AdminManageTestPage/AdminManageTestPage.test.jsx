@@ -122,7 +122,7 @@ describe('AdminManageTestPage', () => {
   })
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
 
     getTestRuntimeMock.mockResolvedValue({ data: runtimeExam })
     getTestMock.mockResolvedValue({ data: adminTest })
@@ -230,10 +230,10 @@ describe('AdminManageTestPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Test sections' }))
     await screen.findByText('What is 2 + 2?')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+    fireEvent.click(screen.getByRole('button', { name: /delete what is 2 \+ 2\?/i }))
+    fireEvent.click(screen.getByRole('button', { name: /confirm delete for what is 2 \+ 2\?/i }))
 
-    expect(screen.getByRole('button', { name: 'Deleting...' }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /confirm delete for what is 2 \+ 2\?/i }).disabled).toBe(true)
 
     resolveDelete({ data: { detail: 'Deleted' } })
 
@@ -348,12 +348,13 @@ describe('AdminManageTestPage', () => {
     await waitFor(() => expect(updateTestMock).toHaveBeenCalledWith(
       'test-1',
       expect.objectContaining({
-        certificate: {
+        certificate: expect.objectContaining({
           title: 'Certificate of Mastery',
           subtitle: 'Awarded for excellent completion',
           issuer: 'SYRA Institute',
           signer: 'Dr. Review',
-        },
+          issue_rule: 'ON_PASS',
+        }),
       }),
     ))
   })
@@ -595,7 +596,7 @@ describe('AdminManageTestPage', () => {
     await waitFor(() => expect(screen.getByText('88%')).toBeTruthy())
     await waitFor(() => expect(screen.getByText('Finalized')).toBeTruthy())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Result' }))
+    fireEvent.click(screen.getByRole('button', { name: /open result for/i }))
     await screen.findByText('Attempt result route')
   })
 
@@ -616,9 +617,10 @@ describe('AdminManageTestPage', () => {
 
     await screen.findByText('75%')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Video' }))
-
-    await screen.findByText('Attempt videos route')
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    fireEvent.click(screen.getByRole('button', { name: /open video for/i }))
+    expect(openSpy).toHaveBeenCalledWith('/admin/attempts/attempt-1/videos', '_blank', 'noopener,noreferrer')
+    openSpy.mockRestore()
   })
 
   it('does not bounce to the tests list when it is still mounted during a non-manage route transition', async () => {
@@ -653,10 +655,10 @@ describe('AdminManageTestPage', () => {
     expect(screen.getByText('L-001')).toBeTruthy()
     expect(screen.getByText('NOT STARTED')).toBeTruthy()
     expect(screen.getByText('Scheduled, not started')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Result' }).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: 'Analyze' }).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: 'Pause' }).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: 'Video' }).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: 'Report' }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /open result for/i }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /review attempt analysis for/i }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /pause monitoring for/i }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /open video for/i }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /open report for/i }).disabled).toBe(true)
   })
 })

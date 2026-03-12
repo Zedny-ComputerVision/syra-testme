@@ -66,7 +66,7 @@ describe('Attempts page', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Test 3')).toBeTruthy())
-    screen.getByRole('button', { name: 'Resume' }).click()
+    screen.getByRole('button', { name: 'Resume attempt for Test 3' }).click()
     expect(navigate).toHaveBeenCalledWith('/attempts/a3/take')
   })
 })

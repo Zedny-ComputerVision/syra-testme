@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends
 
 from ...models import RoleEnum
+from ...models import Schedule
 from ...schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
+from ...services import schedule_service as _schedule_service
+from ...services.audit import write_audit_log
 from ...services.schedule_service import (
     create_schedule as create_schedule_service,
     delete_schedule as delete_schedule_service,
@@ -12,6 +15,9 @@ from ...services.schedule_service import (
 from ..deps import get_current_user, get_db_dep, require_permission
 
 router = APIRouter()
+
+
+_schedule_service.write_audit_log = lambda *args, **kwargs: write_audit_log(*args, **kwargs)
 
 
 @router.post("/", response_model=ScheduleRead)
@@ -54,3 +60,15 @@ async def delete_schedule(
     current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
     return delete_schedule_service(db=db, schedule_id=schedule_id, actor=current)
+
+
+__all__ = [
+    "router",
+    "Schedule",
+    "write_audit_log",
+    "create_schedule",
+    "list_schedulable_tests",
+    "list_schedules",
+    "update_schedule",
+    "delete_schedule",
+]

@@ -385,24 +385,24 @@ export default function AdminSurveys() {
               <div className={styles.rowActions}>
                 {canManageSurvey(survey) && (
                   <>
-                    <button className={styles.btnSecondary} type="button" onClick={() => startEdit(survey)}>Edit</button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => void toggleActive(survey)} disabled={statusBusyId === survey.id}>
+                    <button className={styles.btnSecondary} type="button" onClick={() => startEdit(survey)} aria-label={`Edit survey ${survey.title || 'this survey'}`} title={`Edit survey ${survey.title || 'this survey'}`}>Edit</button>
+                    <button className={styles.btnSecondary} type="button" onClick={() => void toggleActive(survey)} disabled={statusBusyId === survey.id} aria-label={`${survey.is_active ? 'Deactivate' : 'Activate'} survey ${survey.title || 'this survey'}`}>
                       {statusBusyId === survey.id ? 'Saving...' : survey.is_active ? 'Deactivate' : 'Activate'}
                     </button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => void openResponses(survey.id)} disabled={responsesLoading && selectedSurvey === survey.id}>
+                    <button className={styles.btnSecondary} type="button" onClick={() => void openResponses(survey.id)} disabled={responsesLoading && selectedSurvey === survey.id} aria-label={`Open responses for survey ${survey.title || 'this survey'}`}>
                       {responsesLoading && selectedSurvey === survey.id ? 'Loading...' : 'Responses'}
                     </button>
                   </>
                 )}
                 {isAdmin && (deleteConfirmId === survey.id ? (
                   <>
-                    <button className={styles.dangerBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id}>
+                    <button className={styles.dangerBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id} aria-label={`Confirm delete for survey ${survey.title || 'this survey'}`}>
                       {deleteBusyId === survey.id ? 'Deleting...' : 'Confirm'}
                     </button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === survey.id}>Cancel</button>
+                    <button className={styles.btnSecondary} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === survey.id} aria-label={`Keep survey ${survey.title || 'this survey'}`}>Cancel</button>
                   </>
                 ) : (
-                  <button className={styles.deleteBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id}>Delete</button>
+                  <button className={styles.deleteBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id} aria-label={`Delete survey ${survey.title || 'this survey'}`} title={`Delete survey ${survey.title || 'this survey'}`}>Delete</button>
                 ))}
               </div>
             </div>

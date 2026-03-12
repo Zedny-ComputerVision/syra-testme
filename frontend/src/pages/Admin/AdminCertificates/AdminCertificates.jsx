@@ -2,9 +2,15 @@ import React, { useEffect, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
+import {
+  CERTIFICATE_ISSUE_RULE_OPTIONS,
+  DEFAULT_CERTIFICATE_ISSUE_RULE,
+  normalizeCertificateIssueRule,
+} from '../../../utils/certificates'
 import styles from './AdminCertificates.module.scss'
 
 const EMPTY_CERTIFICATE = {
+  issue_rule: DEFAULT_CERTIFICATE_ISSUE_RULE,
   title: '',
   subtitle: '',
   issuer: '',
@@ -17,12 +23,14 @@ function resolveError(err, fallback) {
 
 function normalizeCertificate(value) {
   const certificate = {
+    issue_rule: normalizeCertificateIssueRule(value?.issue_rule),
     title: value?.title?.trim() || '',
     subtitle: value?.subtitle?.trim() || '',
     issuer: value?.issuer?.trim() || '',
     signer: value?.signer?.trim() || '',
   }
-  return Object.values(certificate).some(Boolean) ? certificate : null
+  const hasContent = Object.entries(certificate).some(([key, item]) => key !== 'issue_rule' && Boolean(item))
+  return hasContent ? certificate : null
 }
 
 export default function AdminCertificates() {
@@ -185,6 +193,19 @@ export default function AdminCertificates() {
               )}
 
               <div className={styles.grid}>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Issue rule</span>
+                  <select
+                    className={styles.input}
+                    value={cert.issue_rule}
+                    disabled={exam.status !== 'DRAFT'}
+                    onChange={(e) => setDraft(exam.id, 'issue_rule', e.target.value)}
+                  >
+                    {CERTIFICATE_ISSUE_RULE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
                 <label className={styles.field}>
                   <span className={styles.fieldLabel}>Certificate Title</span>
                   <input

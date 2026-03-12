@@ -113,6 +113,7 @@ export const adminApi = {
   resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
   listAttemptVideos: (attemptId) => api.get(`proctoring/${attemptId}/videos`),
   getAttemptAnswers: (attemptId) => api.get(`attempts/${attemptId}/answers`),
+  reviewAttemptCertificate: (attemptId, decision) => api.post(`attempts/${attemptId}/certificate-review`, { decision }),
   testReportCsv: (testId) => api.get(`reports/test/${testId}`, { responseType: 'blob' }),
   generateTestReportPdf: (testId) => api.get(`reports/test/${testId}/pdf`, { responseType: 'blob' }),
   gradeAttempt: (id, score) => api.post(`attempts/${id}/grade`, null, { params: { score } }),

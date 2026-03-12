@@ -165,16 +165,10 @@ export default function AdminCandidates() {
     setLoadError('')
     try {
       const { data } = await adminApi.attempts({ skip: 0, limit: 200 })
-      const baseAttempts = readPaginatedItems(data)
-      const enriched = await Promise.all(baseAttempts.map(async (attempt) => {
-        try {
-          const { data: events } = await adminApi.getAttemptEvents(attempt.id)
-          const high = (events || []).filter((event) => event.severity === 'HIGH').length
-          const med = (events || []).filter((event) => event.severity === 'MEDIUM').length
-          return { ...attempt, high_violations: high, med_violations: med }
-        } catch {
-          return { ...attempt, high_violations: 0, med_violations: 0 }
-        }
+      const enriched = readPaginatedItems(data).map((attempt) => ({
+        ...attempt,
+        high_violations: Number(attempt.high_violations || 0),
+        med_violations: Number(attempt.med_violations || 0),
       }))
 
       const uniqueTests = new Map()
@@ -190,7 +184,7 @@ export default function AdminCandidates() {
 
       let scoreMap = {}
       try {
-        const { data: testsData } = await adminApi.tests({ page_size: 500 })
+        const { data: testsData } = await adminApi.allTests({ page_size: 200 })
         ;(testsData?.items || []).forEach((t) => {
           if (t.id && t.passing_score != null) scoreMap[t.id] = t.passing_score
         })
@@ -702,7 +696,10 @@ export default function AdminCandidates() {
                 </tr>
               </thead>
               <tbody>
-                {completedAttempts.map((attempt) => (
+                {completedAttempts.map((attempt) => {
+                  const attemptLabel = `${attempt.user_name || attempt.user_id || 'candidate'} for ${attempt.test_title || attempt.exam_title || 'test'}`
+
+                  return (
                   <React.Fragment key={attempt.id}>
                     <tr>
                       <td>{attempt.user_name || attempt.user_id || '-'}</td>
@@ -718,8 +715,9 @@ export default function AdminCandidates() {
                             className={styles.actionBtn}
                             onClick={() => toggleReschedule(attempt.id)}
                             disabled={reschedulingId === String(attempt.id)}
+                            aria-label={`${rescheduleId === attempt.id ? 'Cancel' : 'Open'} reschedule form for ${attemptLabel}`}
                           >
-                            {rescheduleId === attempt.id ? 'Close' : 'Reschedule'}
+                            {rescheduleId === attempt.id ? 'Cancel reschedule' : 'Reschedule'}
                           </button>
                         </div>
                       </td>
@@ -752,15 +750,17 @@ export default function AdminCandidates() {
                               className={styles.actionBtn}
                               disabled={reschedulingId === String(attempt.id) || !rescheduleDate}
                               onClick={() => void handleReschedule(attempt)}
+                              aria-label={`Save reschedule for ${attemptLabel}`}
                             >
-                              {reschedulingId === String(attempt.id) ? 'Saving...' : 'Confirm'}
+                              {reschedulingId === String(attempt.id) ? 'Saving...' : 'Save reschedule'}
                             </button>
                           </div>
                         </td>
                       </tr>
                     )}
                   </React.Fragment>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -774,19 +774,31 @@ export default function AdminCandidates() {
             <div className={styles.importHint}>
               CSV must have columns: <code>user_id</code>, <code>test_title</code> or <code>exam_title</code>, and <code>score</code>.
               <br />
-              <span className={styles.mutedText}>
+              <span id="results-import-help" className={styles.mutedText}>
                 user_id can be the learner ID or email. Score must be 0-100. Preview the file before import to catch missing headers early.
               </span>
             </div>
             <div className={styles.importControls}>
-              <input ref={fileRef} type="file" accept=".csv" onChange={handleFileChange} className={styles.filterSelect} />
+              <div className={styles.importFileField}>
+                <label className={styles.label} htmlFor="results-import-file">CSV file</label>
+                <input
+                  id="results-import-file"
+                  ref={fileRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className={styles.filterSelect}
+                  aria-describedby="results-import-help"
+                  aria-label="Choose CSV file to import candidate results"
+                />
+              </div>
               {csvRows.length > 0 && (
                 <>
                   <button type="button" className={styles.actionBtn} onClick={() => void handleImport()} disabled={importing || missingImportColumns.length > 0}>
-                    {importing ? 'Importing...' : `Import ${csvRows.length} row(s)`}
+                    {importing ? 'Importing...' : `Import ${csvRows.length} result row(s)`}
                   </button>
                   <button type="button" className={styles.secondaryBtn} onClick={clearImportPreview} disabled={importing}>
-                    Clear preview
+                    Clear CSV preview
                   </button>
                 </>
               )}
@@ -794,7 +806,7 @@ export default function AdminCandidates() {
             {missingImportColumns.length > 0 && csvRows.length > 0 && (
               <div className={styles.importError}>Missing required columns: {missingImportColumns.join(', ')}</div>
             )}
-            {importMsg && <div className={styles.importMsg}>{importMsg}</div>}
+            {importMsg && <div className={styles.importMsg} aria-live="polite">{importMsg}</div>}
           </div>
 
           {csvRows.length > 0 && (

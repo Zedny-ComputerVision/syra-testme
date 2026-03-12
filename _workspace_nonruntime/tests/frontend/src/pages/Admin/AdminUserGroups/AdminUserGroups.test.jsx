@@ -38,7 +38,7 @@ describe('AdminUserGroups page', () => {
   })
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     getUserGroupMembersMock.mockResolvedValue({ data: [] })
     createUserGroupMock.mockResolvedValue({ data: {} })
     deleteUserGroupMock.mockResolvedValue({ data: {} })
@@ -62,7 +62,7 @@ describe('AdminUserGroups page', () => {
     await waitFor(() => expect(screen.getByText('Cohort A')).toBeTruthy())
     expect(screen.getByText('Some group management data could not be loaded. Retry to enable member assignment and bulk scheduling.')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /Cohort A/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open group Cohort A' }))
 
     await waitFor(() => expect(screen.getByText('Learner lookup is temporarily unavailable. Retry to manage group members.')).toBeTruthy())
     expect(screen.getByText('Test and schedule data are temporarily unavailable. Retry before running bulk assignments.')).toBeTruthy()
@@ -83,10 +83,10 @@ describe('AdminUserGroups page', () => {
 
     await waitFor(() => expect(screen.getByText('Cohort A')).toBeTruthy())
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0])
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete group Cohort A' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete for group Cohort A' }))
 
-    expect(screen.getByRole('button', { name: 'Deleting...' }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Confirm delete for group Cohort A' }).disabled).toBe(true)
 
     resolveDelete({ data: {} })
 

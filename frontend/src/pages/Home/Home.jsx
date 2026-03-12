@@ -12,6 +12,7 @@ import styles from './Home.module.scss'
 
 const EMPTY_DASHBOARD = {
   total_exams: 0,
+  total_tests: 0,
   total_attempts: 0,
   in_progress_attempts: 0,
   completed_attempts: 0,
@@ -88,9 +89,28 @@ export default function Home() {
   if (loading && !dash) {
     return (
       <div className={styles.page}>
-        <div className={styles.header}>
-          <Skeleton variant="text" lines={2} className={styles.headerSkeleton} />
-        </div>
+        <ScrollReveal as="section" className={styles.hero}>
+          <div className={styles.heroContent}>
+            <div className={styles.heroEyebrow}>Learner workspace</div>
+            <div className={styles.header}>
+              <h1 className={styles.heading}>Welcome, {user?.name || 'User'}</h1>
+              <p className={styles.sub}>Here is an overview of your learning progress, upcoming schedule, and latest results.</p>
+            </div>
+            <div className={styles.heroActions}>
+              <PrefetchLink to="/tests" className={styles.primaryAction}>Browse Tests</PrefetchLink>
+              <PrefetchLink to="/attempts" className={styles.secondaryAction}>Review Attempts</PrefetchLink>
+              <PrefetchLink to="/schedule" className={styles.secondaryAction}>Open Schedule</PrefetchLink>
+            </div>
+          </div>
+          <div className={styles.heroPanel}>
+            <div className={styles.heroPanelTitle}>Today at a glance</div>
+            <div className={styles.heroMetricGrid}>
+              <Skeleton variant="card" className={styles.statSkeleton} />
+              <Skeleton variant="card" className={styles.statSkeleton} />
+              <Skeleton variant="card" className={styles.statSkeleton} />
+            </div>
+          </div>
+        </ScrollReveal>
         <div className={styles.statsRow}>
           {Array.from({ length: 5 }, (_, index) => (
             <Skeleton key={index} variant="card" className={styles.statSkeleton} />
@@ -109,7 +129,7 @@ export default function Home() {
   }
 
   const stats = [
-    { icon: 'TT', label: 'Total Tests', value: dash?.total_exams ?? 0 },
+    { icon: 'TT', label: 'Total Tests', value: dash?.total_tests ?? dash?.total_exams ?? 0 },
     { icon: 'TA', label: 'Total Attempts', value: dash?.total_attempts ?? 0 },
     { icon: 'CP', label: 'Completed', value: dash?.completed_attempts ?? 0 },
     { icon: 'IP', label: 'In Progress', value: dash?.in_progress_attempts ?? 0 },
@@ -189,7 +209,7 @@ export default function Home() {
         <div className={styles.errorRow}>
           <div className={styles.error}>{error}</div>
           <button type="button" className={styles.retryBtn} onClick={() => void loadDashboard()} disabled={loading}>
-            {loading ? 'Retrying...' : 'Retry'}
+            {loading ? 'Retrying dashboard...' : 'Retry dashboard'}
           </button>
         </div>
       )}
@@ -259,7 +279,7 @@ export default function Home() {
         <ScrollReveal className={styles.section} delay={200}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Recent Attempts</h2>
-            <PrefetchLink to="/attempts" className={styles.viewAll}>View all -&gt;</PrefetchLink>
+            <PrefetchLink to="/attempts" className={styles.viewAll}>Open all attempts</PrefetchLink>
           </div>
           <div className={styles.recentGrid}>
             {recentAttempts.map((attempt) => (
@@ -298,7 +318,7 @@ export default function Home() {
       )}
 
       <ScrollReveal className={styles.actions} delay={240}>
-        <PrefetchLink to="/tests" className={styles.viewAll}>View all tests -&gt;</PrefetchLink>
+        <PrefetchLink to="/tests" className={styles.viewAll}>Browse all tests</PrefetchLink>
       </ScrollReveal>
     </div>
   )

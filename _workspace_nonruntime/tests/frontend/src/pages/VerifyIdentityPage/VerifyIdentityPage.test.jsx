@@ -42,7 +42,7 @@ function renderPage() {
 
 describe('VerifyIdentityPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     fullscreenElement = null
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
@@ -90,9 +90,10 @@ describe('VerifyIdentityPage', () => {
     const confirmButton = screen.getByRole('button', { name: 'Confirm & Continue' })
     expect(confirmButton.disabled).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry requirements' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload verification requirements' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Capture Selfie' }).disabled).toBe(false))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload selfie image' }).disabled).toBe(false))
+    expect(screen.getByRole('button', { name: 'Upload ID image' }).disabled).toBe(false)
     expect(screen.getByRole('button', { name: 'Confirm & Continue' }).disabled).toBe(true)
   })
 
@@ -112,9 +113,9 @@ describe('VerifyIdentityPage', () => {
 
     renderPage()
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload ID' }).disabled).toBe(false))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload ID image' }).disabled).toBe(false))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Upload ID' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Upload ID image' }))
     fullscreenElement = null
     document.dispatchEvent(new Event('fullscreenchange'))
 

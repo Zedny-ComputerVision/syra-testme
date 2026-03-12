@@ -28,6 +28,8 @@ from ...services.integrations import send_proctoring_integration_event
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
 from ...services.cloudflare_media import cloudflare_video_storage_enabled, upload_video_content_to_cloudflare
+from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
+from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 
 router = APIRouter()
@@ -59,6 +61,18 @@ def _video_filename(attempt_id: str, session_id: str, source: str, extension: st
     return f"{attempt_id}_{safe_source}_{session_id}.{extension}"
 
 
+def _video_storage_provider() -> str:
+    return "cloudflare"
+
+
+def _remote_video_storage_enabled() -> bool:
+    return cloudflare_video_storage_enabled()
+
+
+def _remote_video_storage_error_detail() -> str:
+    return "Cloudflare video storage is not configured"
+
+
 def _is_absolute_http_url(value: object) -> bool:
     raw = str(value or "").strip()
     if not raw:
@@ -67,16 +81,39 @@ def _is_absolute_http_url(value: object) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
+async def _hydrate_video_file_info(item: dict[str, object]) -> dict[str, object]:
+    hydrated = dict(item or {})
+    if str(hydrated.get("provider") or "").strip().lower() != "supabase":
+        return hydrated
+
+    object_path = str(hydrated.get("path") or hydrated.get("object_path") or "").strip()
+    if not object_path:
+        return hydrated
+
+    signed_url = await create_supabase_signed_url(object_path)
+    hydrated["url"] = signed_url
+    hydrated["playback_url"] = signed_url
+    hydrated.setdefault("playback_type", "direct")
+    hydrated["ready_to_stream"] = True
+    hydrated.setdefault("status", "ready")
+    return hydrated
+
+
 def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = None) -> dict[str, object] | None:
     if not isinstance(meta, dict):
         return None
 
     url = str(meta.get("playback_url") or meta.get("url") or "").strip()
+    path = str(meta.get("path") or meta.get("object_path") or "").strip()
     name = str(meta.get("name") or "").strip()
     provider = str(meta.get("provider") or "").strip().lower()
-    if provider and provider != "cloudflare":
+    if not provider:
+        provider = "supabase" if path else "cloudflare"
+    if provider not in {"cloudflare", "supabase"}:
         return None
-    if not _is_absolute_http_url(url):
+    if provider == "cloudflare" and not _is_absolute_http_url(url):
+        return None
+    if provider == "supabase" and not (path or _is_absolute_http_url(url)):
         return None
 
     created_at = meta.get("created_at")
@@ -84,15 +121,19 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
         created_at = occurred_at.isoformat()
 
     item: dict[str, object] = {
-        "name": name or (str(meta.get("uid") or "").strip() or url.rstrip("/").rsplit("/", 1)[-1] or "recording"),
-        "url": url,
+        "name": name or (Path(path).name if path else "") or (str(meta.get("uid") or "").strip() or url.rstrip("/").rsplit("/", 1)[-1] or "recording"),
         "size": int(meta.get("size") or 0),
         "source": _normalize_video_source(meta.get("source")),
         "created_at": created_at,
-        "provider": "cloudflare",
+        "provider": provider,
     }
+    if path:
+        item["path"] = path
+    if _is_absolute_http_url(url):
+        item["url"] = url
+        item["playback_url"] = str(meta.get("playback_url") or url).strip()
 
-    for key in ("uid", "status", "thumbnail", "duration", "session_id", "playback_type", "recording_started_at", "recording_stopped_at"):
+    for key in ("uid", "status", "thumbnail", "duration", "session_id", "playback_type", "recording_started_at", "recording_stopped_at", "bucket"):
         if meta.get(key) not in (None, ""):
             item[key] = meta.get(key)
 
@@ -136,19 +177,28 @@ def _build_registered_video_info(
     raw = dict(payload or {})
     remote = raw.get("remote")
     remote = remote if isinstance(remote, dict) else {}
+    provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider() or "cloudflare").strip().lower()
+    if provider and provider != "cloudflare":
+        raise HTTPException(status_code=400, detail="provider must be cloudflare")
+
+    name = str(raw.get("name") or remote.get("name") or "").strip()
+    if not name:
+        extension = str(raw.get("extension") or "webm").replace(".", "").lower() or "webm"
+        name = _video_filename(attempt_id, session_id, source, extension)
+
+    created_at = raw.get("created_at") or remote.get("created_at") or remote.get("created")
+    if not created_at:
+        created_at = datetime.now(timezone.utc).isoformat()
+
+    recording_started_at = _normalize_iso_datetime(raw.get("recording_started_at"))
+    recording_stopped_at = _normalize_iso_datetime(raw.get("recording_stopped_at"))
+
     playback_url = str(raw.get("playback_url") or raw.get("url") or remote.get("playback_url") or remote.get("url") or "").strip()
     uid = str(raw.get("uid") or remote.get("uid") or "").strip()
-    name = str(raw.get("name") or remote.get("name") or "").strip()
     if not playback_url:
         raise HTTPException(status_code=400, detail="playback_url is required")
     if not _is_absolute_http_url(playback_url):
         raise HTTPException(status_code=400, detail="playback_url must be an absolute Cloudflare URL")
-    provider = str(raw.get("provider") or remote.get("provider") or "cloudflare").strip().lower()
-    if provider != "cloudflare":
-        raise HTTPException(status_code=400, detail="provider must be cloudflare")
-    if not name:
-        extension = str(raw.get("extension") or "webm").replace(".", "").lower() or "webm"
-        name = _video_filename(attempt_id, session_id, source, extension)
 
     playback_type = str(raw.get("playback_type") or "").strip().lower()
     if not playback_type:
@@ -161,11 +211,7 @@ def _build_registered_video_info(
     if ready_to_stream is None:
         ready_to_stream = bool(playback_url)
 
-    created_at = raw.get("created_at") or remote.get("created_at") or remote.get("created")
-    if not created_at:
-        created_at = datetime.now(timezone.utc).isoformat()
-
-    file_info: dict[str, object] = {
+    file_info = {
         "provider": "cloudflare",
         "name": name,
         "url": playback_url,
@@ -181,8 +227,6 @@ def _build_registered_video_info(
 
     thumbnail = raw.get("thumbnail") or remote.get("thumbnail")
     duration = raw.get("duration") or remote.get("duration")
-    recording_started_at = _normalize_iso_datetime(raw.get("recording_started_at"))
-    recording_stopped_at = _normalize_iso_datetime(raw.get("recording_stopped_at"))
     if uid:
         file_info["uid"] = uid
     if thumbnail:
@@ -222,11 +266,15 @@ def _load_integrations_config(db: Session) -> dict:
         return {}
 
 
-def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -> str | None:
+async def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -> str | None:
     """Save screenshot evidence for HIGH severity events."""
-    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     filename = f"{attempt_id}_{event_type}_{ts}.jpg"
+    if settings.MEDIA_STORAGE_PROVIDER == "supabase":
+        await upload_bytes_to_supabase("evidence", filename, frame_bytes, content_type="image/jpeg")
+        return f"/api/media/evidence/{filename}"
+
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     filepath = EVIDENCE_DIR / filename
     filepath.write_bytes(frame_bytes)
     return f"/api/media/evidence/{filename}"
@@ -279,6 +327,27 @@ def _ping_event_meta(*, focus: bool, visibility: str, blurs: int, fullscreen: bo
         "camera_dark": bool(camera_dark),
         "source": "client_ping",
     }
+
+
+def _runtime_proctoring_enabled(exam_cfg: Mapping[str, object] | None, requirements: Mapping[str, bool]) -> bool:
+    config = exam_cfg or {}
+    return bool(
+        config.get("face_detection")
+        or config.get("multi_face")
+        or config.get("audio_detection")
+        or config.get("object_detection")
+        or config.get("eye_tracking")
+        or config.get("head_pose_detection")
+        or config.get("mouth_detection")
+        or config.get("tab_switch_detect")
+        or requirements.get("camera_required")
+        or requirements.get("mic_required")
+        or requirements.get("fullscreen_required")
+        or requirements.get("lighting_required")
+        or requirements.get("screen_required")
+        or requirements.get("identity_required")
+        or bool(config.get("alert_rules"))
+    )
 
 
 def _is_serious_alert(raw_severity: str | None, severity: SeverityEnum) -> bool:
@@ -491,17 +560,33 @@ async def proctoring_ping(
     current=Depends(get_current_user),
 ):
     attempt = _attempt_or_forbidden(attempt_id, db, current)
+    exam_cfg = exam_proctoring(attempt.exam) if attempt.exam else {}
+    requirements = get_proctoring_requirements(exam_cfg)
+    if not _runtime_proctoring_enabled(exam_cfg, requirements):
+        return {
+            "detail": "ok",
+            "alerts": [],
+            "forced_submit": False,
+            "submit_reason": None,
+        }
     focus = payload.get("focus", True)
     visibility = payload.get("visibility", "visible")
     blurs = payload.get("blurs", 0)
     fullscreen = payload.get("fullscreen", True)
     camera_dark = bool(payload.get("camera_dark"))
     events = []
-    if not focus or visibility != "visible":
+    camera_monitoring_enabled = bool(
+        requirements["camera_required"]
+        or requirements["lighting_required"]
+        or requirements["identity_required"]
+        or exam_cfg.get("face_detection")
+        or exam_cfg.get("multi_face")
+    )
+    if (not focus or visibility != "visible") and exam_cfg.get("tab_switch_detect"):
         events.append(("FOCUS_LOSS", SeverityEnum.MEDIUM))
-    if not fullscreen:
+    if not fullscreen and requirements["fullscreen_required"]:
         events.append(("FULLSCREEN_EXIT", SeverityEnum.HIGH))
-    if camera_dark:
+    if camera_dark and camera_monitoring_enabled:
         events.append(("CAMERA_COVERED", SeverityEnum.HIGH))
 
     now = datetime.now(timezone.utc)
@@ -546,7 +631,7 @@ async def proctoring_ping(
         rule_result = _apply_alert_rules(
             db,
             attempt,
-            exam_proctoring(attempt.exam) if attempt.exam else {},
+            exam_cfg,
             ev,
             history_events,
             now,
@@ -624,8 +709,8 @@ async def upload_video_capture(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
-    if not cloudflare_video_storage_enabled():
-        raise HTTPException(status_code=503, detail="Cloudflare video storage is not enabled")
+    if not _remote_video_storage_enabled():
+        raise HTTPException(status_code=503, detail=_remote_video_storage_error_detail())
 
     normalized_source = _normalize_video_source(source)
     session_id = str(session_id or "").strip()
@@ -634,7 +719,7 @@ async def upload_video_capture(
 
     existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, normalized_source)
     if existing_file_info:
-        return {"detail": "video already uploaded", "file": existing_file_info}
+        return {"detail": "video already uploaded", "file": await _hydrate_video_file_info(existing_file_info)}
 
     content_type = str(request.headers.get("content-type") or "application/octet-stream").split(";", 1)[0].strip().lower()
     if not (content_type.startswith("video/") or content_type == "application/octet-stream"):
@@ -664,6 +749,7 @@ async def upload_video_capture(
     file_info = _build_registered_video_info(
         attempt_id,
         {
+            "provider": "cloudflare",
             "session_id": session_id,
             "source": normalized_source,
             "extension": extension,
@@ -695,7 +781,7 @@ async def upload_video_capture(
     )
     db.add(event)
     db.commit()
-    return {"detail": "video uploaded", "file": file_info}
+    return {"detail": "video uploaded", "file": await _hydrate_video_file_info(file_info)}
 
 
 @router.post("/{attempt_id}/video/register")
@@ -706,8 +792,8 @@ async def register_video_capture(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
-    if not cloudflare_video_storage_enabled():
-        raise HTTPException(status_code=503, detail="Cloudflare video storage is not enabled")
+    if not _remote_video_storage_enabled():
+        raise HTTPException(status_code=503, detail=_remote_video_storage_error_detail())
 
     session_id = str(payload.get("session_id") or "").strip()
     if not session_id:
@@ -716,7 +802,7 @@ async def register_video_capture(
 
     existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, source)
     if existing_file_info:
-        return {"detail": "video already registered", "file": existing_file_info}
+        return {"detail": "video already registered", "file": await _hydrate_video_file_info(existing_file_info)}
 
     file_info = _build_registered_video_info(attempt_id, payload, session_id=session_id, source=source)
     event = ProctoringEvent(
@@ -729,7 +815,7 @@ async def register_video_capture(
     )
     db.add(event)
     db.commit()
-    return {"detail": "video registered", "file": file_info}
+    return {"detail": "video registered", "file": await _hydrate_video_file_info(file_info)}
 
 
 @router.post("/{attempt_id}/pause", response_model=Message)
@@ -792,11 +878,14 @@ async def list_videos(
         item = _normalize_saved_video_meta(event.meta, event.occurred_at)
         if not item:
             continue
-        key = (str(item.get("session_id") or item.get("name") or item.get("url") or ""), str(item.get("source") or "camera"))
+        key = (
+            str(item.get("session_id") or item.get("path") or item.get("name") or item.get("url") or ""),
+            str(item.get("source") or "camera"),
+        )
         if key in seen_keys:
             continue
         seen_keys.add(key)
-        result.append(item)
+        result.append(await _hydrate_video_file_info(item))
     result.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
     return result
 
@@ -845,7 +934,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
             await websocket.close(code=4403)
             db.close()
             return
-    proctoring_requirements = get_proctoring_requirements(exam_proctoring(attempt.exam) if attempt.exam else None)
+    exam_cfg = exam_proctoring(attempt.exam) if attempt and attempt.exam else {}
+    exam_cfg = exam_cfg.copy() if exam_cfg else {}
+    proctoring_requirements = get_proctoring_requirements(exam_cfg)
+    if not _runtime_proctoring_enabled(exam_cfg, proctoring_requirements):
+        await websocket.send_json({"type": "disabled"})
+        await websocket.close(code=1000)
+        db.close()
+        return
     if (
         proctoring_requirements["identity_required"]
         and not attempt.precheck_passed_at
@@ -856,8 +952,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         db.close()
         return
 
-    exam_cfg = exam_proctoring(attempt.exam) if attempt and attempt.exam else {}
-    exam_cfg = exam_cfg.copy() if exam_cfg else {}
     if getattr(attempt, "face_signature", None):
         exam_cfg["face_signature"] = attempt.face_signature
     if (exam_cfg.get("face_detection") or exam_cfg.get("multi_face")) and get_face_model() is None:
@@ -923,7 +1017,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         meta = alert.get("meta") or {}
 
                         if _is_serious_alert(alert.get("severity"), severity):
-                            evidence_path = _save_evidence(attempt_id, frame_bytes, alert["event_type"])
+                            evidence_path = await _save_evidence(attempt_id, frame_bytes, alert["event_type"])
                             if evidence_path:
                                 meta["evidence"] = evidence_path
 
@@ -1086,7 +1180,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     if not b64:
                         continue
                     frame_bytes = base64.b64decode(b64)
-                    _save_evidence(attempt_id, frame_bytes, "SCREEN")
+                    await _save_evidence(attempt_id, frame_bytes, "SCREEN")
                     continue
             except Exception as exc:
                 logger.warning("Failed to process websocket message for attempt %s: %s", attempt_id, exc)

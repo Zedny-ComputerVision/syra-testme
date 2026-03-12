@@ -288,7 +288,10 @@ export default function AdminCategories() {
               </tr>
             </thead>
             <tbody>
-              {paginated.map((category) => (
+              {paginated.map((category) => {
+                const categoryLabel = category.name || 'this category'
+
+                return (
                 <tr key={category.id}>
                   <td className={styles.nameCell}>{category.name}</td>
                   <td>
@@ -301,27 +304,28 @@ export default function AdminCategories() {
                   </td>
                   <td>
                     <div className={styles.actionBtns}>
-                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(category)} disabled={deleteBusyId === category.id}>
+                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(category)} disabled={deleteBusyId === category.id} aria-label={`Edit category ${categoryLabel}`} title={`Edit category ${categoryLabel}`}>
                         Edit
                       </button>
                       {isAdmin && (deleteConfirmId === category.id ? (
                         <>
-                          <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id}>
+                          <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id} aria-label={`Confirm delete for category ${categoryLabel}`}>
                             {deleteBusyId === category.id ? 'Deleting...' : 'Confirm'}
                           </button>
-                          <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === category.id}>
+                          <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === category.id} aria-label={`Keep category ${categoryLabel}`}>
                             Cancel
                           </button>
                         </>
                       ) : (
-                        <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id}>
+                        <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id} aria-label={`Delete category ${categoryLabel}`} title={`Delete category ${categoryLabel}`}>
                           Delete
                         </button>
                       ))}
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}
@@ -337,8 +341,8 @@ export default function AdminCategories() {
 
       {modal && (
         <div className={styles.modalOverlay} onClick={close}>
-          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
-            <h3 className={styles.modalTitle}>{modal === 'create' ? 'New Category' : 'Edit Category'}</h3>
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="category-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="category-dialog-title" className={styles.modalTitle}>{modal === 'create' ? 'New Category' : 'Edit Category'}</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="category-name">Name</label>
