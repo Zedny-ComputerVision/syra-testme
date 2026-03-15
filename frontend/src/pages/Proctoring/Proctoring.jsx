@@ -415,13 +415,9 @@ export default function Proctoring() {
     screenSharePickerOpenRef.current = true
     try {
       await requestFn()
-      // Re-enter fullscreen after screen share picker closes.
-      // Delay by 1s to let the screen share track stabilize — entering
-      // fullscreen too quickly can kill the screen share in some browsers.
-      if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
-        await new Promise(r => setTimeout(r, 1000))
-        try { await document.documentElement.requestFullscreen() } catch { /* user may deny */ }
-      }
+      // Do NOT call requestFullscreen() after screen share — it kills the
+      // screen share track. Fullscreen was entered on RulesPage and the
+      // screen recording is more important than re-entering fullscreen.
     } catch (error) {
       setScreenRecordingStatus('failed')
       emitProctoringNotice(
@@ -431,11 +427,6 @@ export default function Proctoring() {
         'SCREEN_SHARE_REQUIRED',
         5000,
       )
-      // Still try to restore fullscreen even on failure — delay for stability
-      if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
-        await new Promise(r => setTimeout(r, 1000))
-        try { await document.documentElement.requestFullscreen() } catch { /* user may deny */ }
-      }
     } finally {
       screenSharePickerOpenRef.current = false
       // Grace period: suppress fullscreen/tab-switch violations for 5s after
@@ -660,9 +651,10 @@ export default function Proctoring() {
 
   useEffect(() => {
     if (!proctorCfg.fullscreen_enforce || document.fullscreenElement) return undefined
-    // Delay fullscreen entry until screen share is established (if required),
-    // because getDisplayMedia() forces the browser out of fullscreen.
-    if (proctorCfg.screen_capture && !screenStream) return undefined
+    // When screen capture is active, do NOT request fullscreen here —
+    // it was already entered on RulesPage, and calling requestFullscreen()
+    // now would kill the screen share track.
+    if (proctorCfg.screen_capture) return undefined
     const timeoutId = window.setTimeout(() => {
       document.documentElement.requestFullscreen?.().catch(() => {
         emitProctoringNotice(
@@ -673,7 +665,7 @@ export default function Proctoring() {
       })
     }, 200)
     return () => window.clearTimeout(timeoutId)
-  }, [emitProctoringNotice, proctorCfg.fullscreen_enforce, proctorCfg.screen_capture, screenStream])
+  }, [emitProctoringNotice, proctorCfg.fullscreen_enforce, proctorCfg.screen_capture])
 
   useEffect(() => {
     if (!proctorCfg.fullscreen_enforce) return undefined
@@ -686,10 +678,8 @@ export default function Proctoring() {
       const screenCaptureActive = proctorCfg.screen_capture && screenShareEstablishedRef.current
 
       if (screenShareTransition) {
-        // Silently re-enter fullscreen after picker closes, no violation
-        if (!document.fullscreenElement && !screenSharePickerOpenRef.current) {
-          document.documentElement.requestFullscreen?.().catch(() => {})
-        }
+        // Don't try to re-enter fullscreen during screen share transitions —
+        // requestFullscreen() kills the screen share track in all browsers.
         return
       }
 
@@ -705,11 +695,10 @@ export default function Proctoring() {
         })
       }
       if (!document.fullscreenElement) {
-        // When screen capture is active, downgrade from HIGH to LOW and
-        // silently restore fullscreen — the exit was likely caused by the
-        // browser's own screen-share / fullscreen conflict, not the user.
+        // When screen capture is active, do NOT call requestFullscreen() —
+        // it kills the screen share track. Just silently ignore the fullscreen
+        // exit since the screen recording is more important.
         if (screenCaptureActive) {
-          document.documentElement.requestFullscreen?.().catch(() => {})
           return
         }
         sendBrowserViolation('FULLSCREEN_EXIT', 'HIGH', 'Fullscreen mode exited during exam')
