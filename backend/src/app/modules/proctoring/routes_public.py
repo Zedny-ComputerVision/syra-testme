@@ -500,7 +500,12 @@ def _load_attempt_events(db: Session, attempt_id) -> list[ProctoringEvent]:
     ).all()
 
 
-AUTO_SUBMIT_EXCLUDED_EVENT_TYPES = {"VIDEO_SAVED", "FACE_REAPPEARED", "ATTEMPT_PAUSED", "ATTEMPT_RESUMED"}
+AUTO_SUBMIT_EXCLUDED_EVENT_TYPES = {
+    "VIDEO_SAVED", "VIDEO_UPLOADED", "FACE_REAPPEARED",
+    "ATTEMPT_PAUSED", "ATTEMPT_RESUMED",
+    "SCREEN_SHARE_LOST",  # browser fullscreen ↔ screen-share conflict, not cheating
+    "TAB_SWITCH",         # browser fires spurious blur events during screen share
+}
 
 
 def _count_auto_submit_alerts(events: list[ProctoringEvent]) -> int:

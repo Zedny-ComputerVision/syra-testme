@@ -840,9 +840,19 @@ export default function Proctoring() {
   useEffect(() => {
     const max = proctorCfg.max_tab_blurs
     if (max && tabBlurs > max) {
-      setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: 'Too many tab switches' })
-      lastToastBlursRef.current = tabBlurs
-      void handleSubmit()
+      // When screen capture is active, fullscreen exits cause spurious blur events.
+      // Warn the user but do NOT auto-submit — the screen recording already proves
+      // what the learner was doing.
+      if (proctorCfg.screen_capture) {
+        if (tabBlurs !== lastToastBlursRef.current) {
+          lastToastBlursRef.current = tabBlurs
+          setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: `Tab switches: ${tabBlurs}` })
+        }
+      } else {
+        setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: 'Too many tab switches' })
+        lastToastBlursRef.current = tabBlurs
+        void handleSubmit()
+      }
     } else if (tabBlurs > 0 && tabBlurs !== lastToastBlursRef.current && proctorCfg.tab_switch_detect) {
       lastToastBlursRef.current = tabBlurs
       setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: `Tab switches: ${tabBlurs}` })
