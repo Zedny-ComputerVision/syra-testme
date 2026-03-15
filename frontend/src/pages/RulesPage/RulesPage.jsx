@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getAttempt } from '../../services/attempt.service'
 import { getTest } from '../../services/test.service'
-import { getAttemptId, setAttemptId, clearAttemptId } from '../../utils/attemptSession'
+import { setAttemptId } from '../../utils/attemptSession'
 import { resolveAttempt } from '../../utils/journeyAttempt'
+import { requestEntireScreenShare, ENTIRE_SCREEN_REQUIRED } from '../../utils/screenCapture'
+import { storeScreenStream } from '../../utils/screenShareState'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import styles from './RulesPage.module.scss'
@@ -47,39 +49,62 @@ export default function RulesPage() {
     } catch {
       return {}
     }
-  }, [testId])
+  }, [])
   const systemCheckRecorded = Boolean(Object.keys(precheckFlags).length)
   const systemCheckSatisfied = !requirements.systemCheckRequired || systemCheckRecorded
-  const prerequisiteCards = [
-    {
-      label: 'System check',
-      value: requirements.systemCheckRequired ? (systemCheckSatisfied ? 'Completed' : 'Pending') : 'Skipped',
-      helper: requirements.systemCheckRequired
-        ? systemCheckSatisfied
+  const prerequisiteCards = useMemo(() => {
+    const cards = []
+    if (requirements.systemCheckRequired) {
+      cards.push({
+        label: 'System check',
+        value: systemCheckSatisfied ? 'Completed' : 'Pending',
+        helper: systemCheckSatisfied
           ? 'This browser session already passed the required device checks.'
-          : 'Return to the system check before entering the live attempt.'
-        : 'This test does not require device precheck.',
-    },
-    {
-      label: 'Identity',
-      value: requirements.identityRequired ? 'Required' : 'Skipped',
-      helper: requirements.identityRequired
-        ? 'Identity verification is checked again when you start the attempt.'
-        : 'Identity verification is not required for this test.',
-    },
-    {
-      label: 'Monitoring',
-      value: requirements.fullscreenRequired ? 'Fullscreen enforced' : 'Standard',
-      helper: requirements.fullscreenRequired
-        ? 'The live attempt will request fullscreen before entry.'
-        : 'The attempt can continue without fullscreen enforcement.',
-    },
-  ]
+          : 'Return to the system check before entering the live attempt.',
+      })
+    }
+    if (requirements.cameraRequired) {
+      cards.push({
+        label: 'Camera',
+        value: 'Required',
+        helper: 'Your camera will record you during the test.',
+      })
+    }
+    if (requirements.micRequired) {
+      cards.push({
+        label: 'Microphone',
+        value: 'Required',
+        helper: 'Your microphone will be monitored for audio during the test.',
+      })
+    }
+    if (requirements.screenRequired) {
+      cards.push({
+        label: 'Screen recording',
+        value: 'Required',
+        helper: 'Your entire screen will be recorded. You will be asked to share your screen when you start the test.',
+      })
+    }
+    if (requirements.fullscreenRequired) {
+      cards.push({
+        label: 'Fullscreen',
+        value: 'Enforced',
+        helper: 'The test will run in fullscreen mode. Exiting fullscreen will be flagged.',
+      })
+    }
+    if (requirements.identityRequired) {
+      cards.push({
+        label: 'Identity',
+        value: 'Required',
+        helper: 'Identity verification is checked before you enter the attempt.',
+      })
+    }
+    return cards
+  }, [requirements, systemCheckSatisfied])
   const startActionLabel = requirements.fullscreenRequired || requirements.cameraRequired || requirements.micRequired || requirements.screenRequired
-    ? 'Start monitored test'
+    ? 'Start test'
     : 'Start test'
 
-  const loadRules = async () => {
+  const loadRules = useCallback(async () => {
     setConfigLoading(true)
     setConfigError('')
     setError('')
@@ -95,11 +120,11 @@ export default function RulesPage() {
     } finally {
       setConfigLoading(false)
     }
-  }
+  }, [testId])
 
   useEffect(() => {
     void loadRules()
-  }, [testId])
+  }, [loadRules])
 
   useEffect(() => {
     if (configLoading) return
@@ -127,48 +152,58 @@ export default function RulesPage() {
     setLoading(true)
     setError('')
     try {
-      let attemptId = getAttemptId()
-      let currentAttempt = null
-
-      if (attemptId) {
-        try {
-          const existingAttempt = await getAttempt(attemptId)
-          if (
-            String(existingAttempt.data?.exam_id) === String(testId)
-            && existingAttempt.data?.status === 'IN_PROGRESS'
-          ) {
-            currentAttempt = existingAttempt.data
-          } else {
-            clearAttemptId()
-            attemptId = null
-          }
-        } catch {
-          clearAttemptId()
-          attemptId = null
-        }
-      }
-
-      if (requirements.identityRequired && !(currentAttempt?.identity_verified || currentAttempt?.id_verified)) {
-        navigate(`/tests/${testId}/verify-identity`)
+      // Resolve or reuse an IN_PROGRESS attempt for this test
+      let attemptId
+      try {
+        attemptId = await resolveAttempt(testId)
+      } catch (resolveErr) {
+        setError(resolveErr.response?.data?.detail || resolveErr.message || 'Failed to create or find an active attempt for this test.')
+        setLoading(false)
         return
       }
 
-      if (!currentAttempt) {
-        attemptId = await resolveAttempt(testId)
-        let { data } = await getAttempt(attemptId)
-        if (String(data.exam_id) !== String(testId) || data.status !== 'IN_PROGRESS') {
-          clearAttemptId()
-          attemptId = await resolveAttempt(testId)
-          const refreshed = await getAttempt(attemptId)
-          data = refreshed.data
+      // Check identity verification if required
+      if (requirements.identityRequired) {
+        try {
+          const { data: attemptData } = await getAttempt(attemptId)
+          if (!(attemptData?.identity_verified || attemptData?.id_verified)) {
+            setAttemptId(attemptId)
+            navigate(`/tests/${testId}/verify-identity`)
+            return
+          }
+        } catch {
+          // If we can't check identity status, let the proctoring WS handle it
         }
-        currentAttempt = data
       }
+
       setAttemptId(attemptId)
 
-      if (requirements.fullscreenRequired) {
-        try { await document.documentElement.requestFullscreen() } catch {}
+      // Screen share first (getDisplayMedia must run BEFORE fullscreen)
+      if (requirements.screenRequired) {
+        try {
+          const stream = await requestEntireScreenShare()
+          storeScreenStream(stream)
+        } catch (screenErr) {
+          const msg = screenErr?.code === ENTIRE_SCREEN_REQUIRED
+            ? 'You must share your entire screen. Please try again and select the full screen.'
+            : 'Screen sharing is required for this test. Please allow screen sharing and try again.'
+          setError(msg)
+          setLoading(false)
+          return
+        }
       }
+
+      // Enter fullscreen after screen share is established
+      if (requirements.fullscreenRequired) {
+        try {
+          await document.documentElement.requestFullscreen()
+        } catch {
+          setError('Fullscreen is required before the test can start. Please allow fullscreen and try again.')
+          setLoading(false)
+          return
+        }
+      }
+
       navigate(`/attempts/${attemptId}/take`)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to start test')
@@ -228,7 +263,7 @@ export default function RulesPage() {
             id="agree"
             disabled={configLoading || Boolean(configError) || loading}
           />
-          <label className={styles.agreeLabel} htmlFor="agree">I have read and agree to all test rules</label>
+          <label className={styles.agreeLabel} htmlFor="agree">I have read and agree to all test rules and consent to the monitoring described above</label>
         </div>
 
         <div className={styles.actions}>

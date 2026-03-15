@@ -23,6 +23,7 @@ from ...services.normalized_relations import exam_proctoring
 from ...schemas import ProctoringEventRead, Message, ProctoringPingResponse
 from ...detection.orchestrator import ProctoringOrchestrator
 from ...detection._yolo_face import get_face_model
+from ...detection.screen_analysis import analyze_screen_bytes
 from ...reporting.report_generator import generate_html_report
 from ...services.integrations import send_proctoring_integration_event
 from ...services.audit import write_audit_log
@@ -35,8 +36,9 @@ from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 router = APIRouter()
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
-HEARTBEAT_INTERVAL_SECONDS = 30
-INACTIVITY_TIMEOUT_SECONDS = 60
+VIDEO_DIR = BASE_STORAGE_DIR / "videos"
+HEARTBEAT_INTERVAL_SECONDS = 15
+INACTIVITY_TIMEOUT_SECONDS = 120
 ADMIN_PROCTORING_NOTIFICATION_WINDOW = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,16 @@ SEVERITY_MAP = {
     "LOW": SeverityEnum.LOW,
 }
 settings = get_settings()
+
+
+def _check_object_model_available() -> bool:
+    """Check if the general YOLOv8 object detection model can be loaded."""
+    try:
+        from ...detection.object_detection import ObjectDetector
+        det = ObjectDetector()
+        return det._get_model() is not None
+    except Exception:
+        return False
 
 
 def _normalize_video_source(value: object) -> str:
@@ -62,7 +74,9 @@ def _video_filename(attempt_id: str, session_id: str, source: str, extension: st
 
 
 def _video_storage_provider() -> str:
-    return "cloudflare"
+    if _remote_video_storage_enabled():
+        return "cloudflare"
+    return "local"
 
 
 def _remote_video_storage_enabled() -> bool:
@@ -83,7 +97,8 @@ def _is_absolute_http_url(value: object) -> bool:
 
 async def _hydrate_video_file_info(item: dict[str, object]) -> dict[str, object]:
     hydrated = dict(item or {})
-    if str(hydrated.get("provider") or "").strip().lower() != "supabase":
+    provider = str(hydrated.get("provider") or "").strip().lower()
+    if provider != "supabase":
         return hydrated
 
     object_path = str(hydrated.get("path") or hydrated.get("object_path") or "").strip()
@@ -108,20 +123,23 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     name = str(meta.get("name") or "").strip()
     provider = str(meta.get("provider") or "").strip().lower()
     if not provider:
-        provider = "supabase" if path else "cloudflare"
-    if provider not in {"cloudflare", "supabase"}:
+        provider = "supabase" if path.startswith("videos/") else ("local" if path else "cloudflare")
+    if provider not in {"cloudflare", "supabase", "local"}:
         return None
     if provider == "cloudflare" and not _is_absolute_http_url(url):
         return None
     if provider == "supabase" and not (path or _is_absolute_http_url(url)):
+        return None
+    if provider == "local" and not (name or path):
         return None
 
     created_at = meta.get("created_at")
     if not created_at and occurred_at:
         created_at = occurred_at.isoformat()
 
+    resolved_name = name or (Path(path).name if path else "") or (str(meta.get("uid") or "").strip() or url.rstrip("/").rsplit("/", 1)[-1] or "recording")
     item: dict[str, object] = {
-        "name": name or (Path(path).name if path else "") or (str(meta.get("uid") or "").strip() or url.rstrip("/").rsplit("/", 1)[-1] or "recording"),
+        "name": resolved_name,
         "size": int(meta.get("size") or 0),
         "source": _normalize_video_source(meta.get("source")),
         "created_at": created_at,
@@ -132,6 +150,13 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     if _is_absolute_http_url(url):
         item["url"] = url
         item["playback_url"] = str(meta.get("playback_url") or url).strip()
+    elif provider == "local":
+        local_url = f"/api/media/videos/{resolved_name}"
+        item["url"] = local_url
+        item["playback_url"] = local_url
+        item.setdefault("playback_type", "direct")
+        item.setdefault("status", "ready")
+        item["ready_to_stream"] = True
 
     for key in ("uid", "status", "thumbnail", "duration", "session_id", "playback_type", "recording_started_at", "recording_stopped_at", "bucket"):
         if meta.get(key) not in (None, ""):
@@ -240,6 +265,42 @@ def _build_registered_video_info(
     if remote:
         file_info["remote"] = remote
     return file_info
+
+
+def _build_local_video_info(
+    attempt_id: str,
+    *,
+    session_id: str,
+    source: str,
+    filename: str,
+    content: bytes,
+    recording_started_at: str | None,
+    recording_stopped_at: str | None,
+) -> dict[str, object]:
+    safe_filename = Path(filename).name
+    if not safe_filename:
+        raise HTTPException(status_code=400, detail="A valid video filename is required")
+
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = VIDEO_DIR / safe_filename
+    file_path.write_bytes(content)
+
+    return {
+        "provider": "local",
+        "name": safe_filename,
+        "path": safe_filename,
+        "url": f"/api/media/videos/{safe_filename}",
+        "playback_url": f"/api/media/videos/{safe_filename}",
+        "playback_type": "direct",
+        "size": len(content or b""),
+        "source": _normalize_video_source(source),
+        "session_id": session_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "ready_to_stream": True,
+        "status": "ready",
+        "recording_started_at": recording_started_at,
+        "recording_stopped_at": recording_stopped_at,
+    }
 
 
 def _normalize_iso_datetime(value: object) -> str | None:
@@ -437,6 +498,57 @@ def _load_attempt_events(db: Session, attempt_id) -> list[ProctoringEvent]:
         .where(ProctoringEvent.attempt_id == attempt_id)
         .order_by(ProctoringEvent.occurred_at)
     ).all()
+
+
+AUTO_SUBMIT_EXCLUDED_EVENT_TYPES = {"VIDEO_SAVED", "FACE_REAPPEARED", "ATTEMPT_PAUSED", "ATTEMPT_RESUMED"}
+
+
+def _count_auto_submit_alerts(events: list[ProctoringEvent]) -> int:
+    count = 0
+    for event in events:
+        if event.event_type in AUTO_SUBMIT_EXCLUDED_EVENT_TYPES:
+            continue
+        count += 1
+    return count
+
+
+def _maybe_auto_submit_from_history(
+    db: Session,
+    attempt: Attempt,
+    exam_cfg: Mapping[str, object] | None,
+    history_events: list[ProctoringEvent],
+    *,
+    occurred_at: datetime,
+    request_ip: str | None = None,
+    violation_score: float | int | None = None,
+) -> str | None:
+    if attempt.status == AttemptStatus.SUBMITTED:
+        return None
+
+    config = exam_cfg if isinstance(exam_cfg, Mapping) else {}
+    max_auto = config.get("max_alerts_before_autosubmit")
+    max_score = config.get("max_score_before_autosubmit")
+    violation_count = _count_auto_submit_alerts(history_events)
+
+    auto_by_count = bool(max_auto and violation_count >= int(max_auto))
+    auto_by_score = bool(max_score and violation_score is not None and float(violation_score) >= float(max_score))
+    if not auto_by_count and not auto_by_score:
+        return None
+
+    reason = (
+        f"Auto-submitted due to {violation_count} proctoring alerts"
+        if auto_by_count
+        else f"Auto-submitted due to risk score {float(violation_score):.2f}"
+    )
+    _auto_submit_attempt(
+        db,
+        attempt,
+        violation_count=violation_count,
+        reason=reason,
+        occurred_at=occurred_at,
+        request_ip=request_ip,
+    )
+    return reason
 
 
 def _latest_event_of_type(events: list[ProctoringEvent], event_type: str) -> ProctoringEvent | None:
@@ -709,9 +821,6 @@ async def upload_video_capture(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
-    if not _remote_video_storage_enabled():
-        raise HTTPException(status_code=503, detail=_remote_video_storage_error_detail())
-
     normalized_source = _normalize_video_source(source)
     session_id = str(session_id or "").strip()
     if not session_id:
@@ -736,41 +845,65 @@ async def upload_video_capture(
     normalized_recording_started_at = _normalize_iso_datetime(recording_started_at)
     normalized_recording_stopped_at = _normalize_iso_datetime(recording_stopped_at)
 
-    try:
-        remote = await upload_video_content_to_cloudflare(
-            content,
-            filename=safe_filename,
+    file_info: dict[str, object]
+    response_detail = "video uploaded"
+    if _remote_video_storage_enabled():
+        try:
+            remote = await upload_video_content_to_cloudflare(
+                content,
+                filename=safe_filename,
+                source=normalized_source,
+                content_type=content_type,
+            )
+            file_info = _build_registered_video_info(
+                attempt_id,
+                {
+                    "provider": "cloudflare",
+                    "session_id": session_id,
+                    "source": normalized_source,
+                    "extension": extension,
+                    "name": remote.get("name") or safe_filename,
+                    "url": remote.get("url") or remote.get("playback_url"),
+                    "playback_url": remote.get("playback_url") or remote.get("url"),
+                    "playback_type": remote.get("playback_type"),
+                    "thumbnail": remote.get("thumbnail"),
+                    "uid": remote.get("uid"),
+                    "status": remote.get("status"),
+                    "ready_to_stream": remote.get("ready_to_stream"),
+                    "duration": remote.get("duration"),
+                    "size": remote.get("size") or len(content),
+                    "created_at": remote.get("created_at"),
+                    "recording_started_at": normalized_recording_started_at,
+                    "recording_stopped_at": normalized_recording_stopped_at,
+                    "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
+                },
+                session_id=session_id,
+                source=normalized_source,
+            )
+        except Exception as exc:
+            logger.warning("Cloudflare video upload failed for attempt %s; falling back to local storage: %s", attempt_id, exc)
+            file_info = _build_local_video_info(
+                attempt_id,
+                session_id=session_id,
+                source=normalized_source,
+                filename=safe_filename,
+                content=content,
+                recording_started_at=normalized_recording_started_at,
+                recording_stopped_at=normalized_recording_stopped_at,
+            )
+            response_detail = "video saved locally"
+    else:
+        file_info = _build_local_video_info(
+            attempt_id,
+            session_id=session_id,
             source=normalized_source,
-            content_type=content_type,
+            filename=safe_filename,
+            content=content,
+            recording_started_at=normalized_recording_started_at,
+            recording_stopped_at=normalized_recording_stopped_at,
         )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Cloudflare video upload failed: {exc}") from exc
+        response_detail = "video saved locally"
 
-    file_info = _build_registered_video_info(
-        attempt_id,
-        {
-            "provider": "cloudflare",
-            "session_id": session_id,
-            "source": normalized_source,
-            "extension": extension,
-            "name": remote.get("name") or safe_filename,
-            "url": remote.get("url") or remote.get("playback_url"),
-            "playback_url": remote.get("playback_url") or remote.get("url"),
-            "playback_type": remote.get("playback_type"),
-            "thumbnail": remote.get("thumbnail"),
-            "uid": remote.get("uid"),
-            "status": remote.get("status"),
-            "ready_to_stream": remote.get("ready_to_stream"),
-            "duration": remote.get("duration"),
-            "size": remote.get("size") or len(content),
-            "created_at": remote.get("created_at"),
-            "recording_started_at": normalized_recording_started_at,
-            "recording_stopped_at": normalized_recording_stopped_at,
-            "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
-        },
-        session_id=session_id,
-        source=normalized_source,
-    )
     event = ProctoringEvent(
         attempt_id=attempt_id,
         event_type="VIDEO_SAVED",
@@ -781,7 +914,7 @@ async def upload_video_capture(
     )
     db.add(event)
     db.commit()
-    return {"detail": "video uploaded", "file": await _hydrate_video_file_info(file_info)}
+    return {"detail": response_detail, "file": await _hydrate_video_file_info(file_info)}
 
 
 @router.post("/{attempt_id}/video/register")
@@ -954,16 +1087,46 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
     if getattr(attempt, "face_signature", None):
         exam_cfg["face_signature"] = attempt.face_signature
-    if (exam_cfg.get("face_detection") or exam_cfg.get("multi_face")) and get_face_model() is None:
-        logger.error("Face detection model unavailable for attempt %s", attempt_id)
-        await websocket.send_json({
-            "type": "error",
-            "detail": "Face detection model unavailable. Face and multiple-face alerts are disabled until the model is restored.",
-        })
+
     orchestrator = ProctoringOrchestrator(exam_cfg)
+
+    # ── Model availability checks — run in background after orchestrator init ──
+    # These are deferred so the WS connect handshake isn't blocked by model loading.
+    async def _send_detection_status():
+        try:
+            face_model_ok = get_face_model() is not None
+            # Check object model via the already-initialised orchestrator's detector
+            obj_model_ok = orchestrator.object_detector._get_model() is not None
+
+            if (exam_cfg.get("face_detection") or exam_cfg.get("multi_face")) and not face_model_ok:
+                logger.error("Face detection model unavailable for attempt %s", attempt_id)
+                await websocket.send_json({
+                    "type": "error",
+                    "detail": "Face detection model unavailable. Face and multiple-face alerts are disabled until the model is restored.",
+                })
+            if exam_cfg.get("object_detection") and not obj_model_ok:
+                logger.error("Object detection model unavailable for attempt %s", attempt_id)
+                await websocket.send_json({
+                    "type": "error",
+                    "detail": "Object detection model unavailable. Forbidden-object alerts (phone, book, etc.) are disabled until the model is restored.",
+                })
+
+            detection_status = {
+                "face_detection": bool(exam_cfg.get("face_detection")) and face_model_ok,
+                "multi_face": bool(exam_cfg.get("multi_face")) and face_model_ok,
+                "object_detection": bool(exam_cfg.get("object_detection")) and obj_model_ok,
+                "eye_tracking": bool(exam_cfg.get("eye_tracking")),
+                "head_pose_detection": bool(exam_cfg.get("head_pose_detection")),
+                "audio_detection": bool(exam_cfg.get("audio_detection")),
+                "mouth_detection": bool(exam_cfg.get("mouth_detection")),
+            }
+            await websocket.send_json({"type": "detection_status", **detection_status})
+        except Exception as exc:
+            logger.debug("Could not send detection_status for attempt %s: %s", attempt_id, exc)
     last_activity = {"monotonic": time.monotonic()}
 
     async def heartbeat() -> None:
+        consecutive_failures = 0
         while True:
             await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
             try:
@@ -975,10 +1138,36 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     await websocket.close(code=1001)
                     return
                 await websocket.send_json({"type": "ping"})
+                consecutive_failures = 0
             except Exception:
-                return
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    logger.warning("Heartbeat failed 3 consecutive times for attempt %s, exiting", attempt_id)
+                    return
 
     heartbeat_task = asyncio.create_task(heartbeat())
+    # Fire-and-forget: send detection status without blocking the message loop
+    asyncio.create_task(_send_detection_status())
+
+    # Cache event history to avoid querying the DB on every frame/audio message
+    _cached_events: list[ProctoringEvent] = []
+    _cache_ts: float = 0.0
+    _EVENT_CACHE_TTL_S = 10
+
+    def _get_cached_events() -> list[ProctoringEvent]:
+        nonlocal _cached_events, _cache_ts
+        now = time.monotonic()
+        if now - _cache_ts >= _EVENT_CACHE_TTL_S:
+            try:
+                _cached_events = _load_attempt_events(db, attempt.id)
+                _cache_ts = now
+            except Exception as cache_err:
+                logger.warning("Failed to refresh event cache for attempt %s: %s", attempt_id, cache_err)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+        return list(_cached_events)
 
     try:
         while True:
@@ -990,8 +1179,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                 raise
             except Exception as exc:
                 logger.warning("Malformed websocket message for attempt %s: %s", attempt_id, exc)
-                if websocket.application_state == WebSocketState.CONNECTED:
-                    await websocket.send_json({"type": "error", "detail": "Malformed websocket message"})
+                if websocket.application_state != WebSocketState.CONNECTED:
+                    # WS is dead — break to avoid infinite tight loop
+                    logger.info("WebSocket no longer connected for attempt %s, exiting loop", attempt_id)
+                    break
+                await websocket.send_json({"type": "error", "detail": "Malformed websocket message"})
                 continue
 
             try:
@@ -1007,17 +1199,32 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     b64 = data.get("data")
                     if not b64:
                         continue
+                    logger.debug("WS frame received for attempt %s (b64 len=%d)", attempt_id, len(b64))
                     frame_bytes = base64.b64decode(b64)
-                    alerts = orchestrator.process_frame(frame_bytes)
-                    history_events = _load_attempt_events(db, attempt.id)
+                    # Run CPU-heavy detection in thread pool to avoid blocking event loop
+                    loop = asyncio.get_event_loop()
+                    alerts = await loop.run_in_executor(None, orchestrator.process_frame, frame_bytes)
+                    logger.debug("Frame processed for attempt %s: %d alerts, score=%d", attempt_id, len(alerts), orchestrator.violation_score)
+                    if alerts:
+                        logger.debug("Alerts: %s", [a.get("event_type") for a in alerts])
+                    history_events = _get_cached_events()
                     integrations_config = _load_integrations_config(db)
+
+                    # Collect serious events for post-commit notification
+                    _serious_batch: list[ProctoringEvent] = []
+                    _integration_batch: list[ProctoringEvent] = []
+                    _frame_forced_submit = False
 
                     for alert in alerts:
                         severity = SEVERITY_MAP.get(alert.get("severity", "LOW"), SeverityEnum.LOW)
                         meta = alert.get("meta") or {}
 
                         if _is_serious_alert(alert.get("severity"), severity):
-                            evidence_path = await _save_evidence(attempt_id, frame_bytes, alert["event_type"])
+                            try:
+                                evidence_path = await _save_evidence(attempt_id, frame_bytes, alert["event_type"])
+                            except Exception as ev_err:
+                                logger.warning("Evidence save failed for attempt %s: %s", attempt_id, ev_err)
+                                evidence_path = None
                             if evidence_path:
                                 meta["evidence"] = evidence_path
 
@@ -1042,21 +1249,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             event_time,
                             request_ip=_client_ip(websocket.client),
                         )
-                        db.commit()
-                        if _is_serious_alert(alert.get("severity"), severity):
-                            _handle_serious_proctoring_event(db, attempt, event)
-                        for escalated_event in rule_result["created_events"]:
-                            _handle_serious_proctoring_event(db, attempt, escalated_event)
 
-                        try:
-                            await send_proctoring_integration_event(event, integrations_config)
-                        except Exception:
-                            pass
+                        # Collect for post-commit processing (no per-alert commit)
+                        if _is_serious_alert(alert.get("severity"), severity):
+                            _serious_batch.append(event)
                         for escalated_event in rule_result["created_events"]:
-                            try:
-                                await send_proctoring_integration_event(escalated_event, integrations_config)
-                            except Exception:
-                                pass
+                            _serious_batch.append(escalated_event)
+                        _integration_batch.append(event)
+                        _integration_batch.extend(rule_result["created_events"])
 
                         await websocket.send_json({
                             "type": "alert",
@@ -1075,25 +1275,43 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 "rule_id": rule_alert["rule_id"],
                             })
                         if rule_result["forced_submit"]:
+                            _frame_forced_submit = True
                             await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
                             break
+
+                    # Single commit for all events from this frame
+                    if alerts:
+                        try:
+                            db.commit()
+                        except Exception as commit_err:
+                            logger.warning("DB commit failed for frame alerts (attempt %s): %s", attempt_id, commit_err)
+                            try:
+                                db.rollback()
+                            except Exception:
+                                pass
+                    # Post-commit: notifications & integrations
+                    for _evt in _serious_batch:
+                        _handle_serious_proctoring_event(db, attempt, _evt)
+                    for _evt in _integration_batch:
+                        try:
+                            await send_proctoring_integration_event(_evt, integrations_config)
+                        except Exception:
+                            pass
 
                     summary = orchestrator.get_summary()
                     await websocket.send_json({"type": "summary", "precheck_passed": bool(attempt.precheck_passed_at), **summary})
                     if attempt.status == AttemptStatus.SUBMITTED:
                         break
-                    max_auto = exam_cfg.get("max_alerts_before_autosubmit")
-                    max_score = exam_cfg.get("max_score_before_autosubmit")
-                    if (max_auto and orchestrator.alert_count >= max_auto) or (max_score and orchestrator.violation_score >= max_score):
-                        reason = f"Auto-submitted due to {orchestrator.alert_count} violations"
-                        _auto_submit_attempt(
-                            db,
-                            attempt,
-                            violation_count=orchestrator.alert_count,
-                            reason=reason,
-                            occurred_at=datetime.now(timezone.utc),
-                            request_ip=_client_ip(websocket.client),
-                        )
+                    reason = _maybe_auto_submit_from_history(
+                        db,
+                        attempt,
+                        exam_cfg,
+                        history_events,
+                        occurred_at=datetime.now(timezone.utc),
+                        request_ip=_client_ip(websocket.client),
+                        violation_score=orchestrator.violation_score,
+                    )
+                    if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})
                         break
                     continue
@@ -1103,8 +1321,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     if not b64:
                         continue
                     audio_bytes = base64.b64decode(b64)
-                    alerts = orchestrator.process_audio(audio_bytes)
-                    history_events = _load_attempt_events(db, attempt.id)
+                    _sr = data.get("sample_rate")
+                    logger.debug("WS audio chunk for attempt %s (bytes=%d, sr=%s)", attempt_id, len(audio_bytes), _sr)
+                    alerts = orchestrator.process_audio(audio_bytes, sample_rate=int(_sr) if _sr else None)
+                    if alerts:
+                        logger.debug("Audio alerts: %s", [a.get("event_type") for a in alerts])
+                    history_events = _get_cached_events()
+
+                    _audio_serious: list[ProctoringEvent] = []
 
                     for alert in alerts:
                         severity = SEVERITY_MAP.get(alert.get("severity", "LOW"), SeverityEnum.LOW)
@@ -1129,11 +1353,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             event_time,
                             request_ip=_client_ip(websocket.client),
                         )
-                        db.commit()
+
                         if _is_serious_alert(alert.get("severity"), severity):
-                            _handle_serious_proctoring_event(db, attempt, event)
+                            _audio_serious.append(event)
                         for escalated_event in rule_result["created_events"]:
-                            _handle_serious_proctoring_event(db, attempt, escalated_event)
+                            _audio_serious.append(escalated_event)
 
                         await websocket.send_json({
                             "type": "alert",
@@ -1155,22 +1379,32 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
                             break
 
+                    if alerts:
+                        try:
+                            db.commit()
+                        except Exception as commit_err:
+                            logger.warning("DB commit failed for audio alerts (attempt %s): %s", attempt_id, commit_err)
+                            try:
+                                db.rollback()
+                            except Exception:
+                                pass
+                    for _evt in _audio_serious:
+                        _handle_serious_proctoring_event(db, attempt, _evt)
+
                     summary = orchestrator.get_summary()
                     await websocket.send_json({"type": "summary", **summary})
                     if attempt.status == AttemptStatus.SUBMITTED:
                         break
-                    max_auto = exam_cfg.get("max_alerts_before_autosubmit")
-                    max_score = exam_cfg.get("max_score_before_autosubmit")
-                    if (max_auto and orchestrator.alert_count >= max_auto) or (max_score and orchestrator.violation_score >= max_score):
-                        reason = f"Auto-submitted due to {orchestrator.alert_count} violations"
-                        _auto_submit_attempt(
-                            db,
-                            attempt,
-                            violation_count=orchestrator.alert_count,
-                            reason=reason,
-                            occurred_at=datetime.now(timezone.utc),
-                            request_ip=_client_ip(websocket.client),
-                        )
+                    reason = _maybe_auto_submit_from_history(
+                        db,
+                        attempt,
+                        exam_cfg,
+                        history_events,
+                        occurred_at=datetime.now(timezone.utc),
+                        request_ip=_client_ip(websocket.client),
+                        violation_score=orchestrator.violation_score,
+                    )
+                    if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})
                         break
                     continue
@@ -1180,12 +1414,242 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     if not b64:
                         continue
                     frame_bytes = base64.b64decode(b64)
-                    await _save_evidence(attempt_id, frame_bytes, "SCREEN")
+                    try:
+                        await _save_evidence(attempt_id, frame_bytes, "SCREEN")
+                    except Exception as ev_err:
+                        logger.warning("Screen evidence save failed for attempt %s: %s", attempt_id, ev_err)
+                    # OCR analysis for forbidden content (runs in executor to avoid blocking)
+                    try:
+                        import asyncio as _asyncio
+                        screen_alert = await _asyncio.get_event_loop().run_in_executor(
+                            None, analyze_screen_bytes, frame_bytes
+                        )
+                        if screen_alert:
+                            severity = SEVERITY_MAP.get(screen_alert.get("severity", "HIGH"), SeverityEnum.HIGH)
+                            event_time = datetime.now(timezone.utc)
+                            event = ProctoringEvent(
+                                attempt_id=attempt_id,
+                                event_type=screen_alert["event_type"],
+                                severity=severity,
+                                detail=screen_alert.get("detail"),
+                                ai_confidence=screen_alert.get("confidence"),
+                                meta=screen_alert.get("meta"),
+                                occurred_at=event_time,
+                            )
+                            db.add(event)
+                            try:
+                                db.commit()
+                            except Exception as commit_err:
+                                logger.warning("DB commit failed for screen alert (attempt %s): %s", attempt_id, commit_err)
+                                try:
+                                    db.rollback()
+                                except Exception:
+                                    pass
+                            await websocket.send_json({
+                                "type": "alert",
+                                "event_type": screen_alert["event_type"],
+                                "severity": screen_alert["severity"],
+                                "detail": screen_alert.get("detail", ""),
+                                "confidence": screen_alert.get("confidence", 0),
+                            })
+                            screen_history = _get_cached_events()
+                            reason = _maybe_auto_submit_from_history(
+                                db,
+                                attempt,
+                                exam_cfg,
+                                screen_history,
+                                occurred_at=event_time,
+                                request_ip=_client_ip(websocket.client),
+                            )
+                            if reason:
+                                await websocket.send_json({"type": "forced_submit", "detail": reason})
+                                break
+                    except Exception as _se:
+                        logger.debug("Screen OCR analysis error for attempt %s: %s", attempt_id, _se)
+                    continue
+
+                if msg_type == "answer_timing":
+                    # Frontend reports time-per-question; flag suspiciously fast answers.
+                    # Payload: {question_id, elapsed_ms, question_index}
+                    elapsed_ms = int(data.get("elapsed_ms") or 0)
+                    q_index = int(data.get("question_index") or 0) + 1
+                    q_id = str(data.get("question_id") or "")[:64]
+                    FAST_ANSWER_THRESHOLD_MS = 3000  # < 3 s is almost certainly random
+                    if elapsed_ms > 0 and elapsed_ms < FAST_ANSWER_THRESHOLD_MS:
+                        sev = SeverityEnum.MEDIUM
+                        detail = (
+                            f"Question {q_index} answered in {elapsed_ms} ms "
+                            f"(threshold: {FAST_ANSWER_THRESHOLD_MS} ms)"
+                        )
+                        event = ProctoringEvent(
+                            attempt_id=attempt_id,
+                            event_type="FAST_ANSWER",
+                            severity=sev,
+                            detail=detail,
+                            ai_confidence=0.85,
+                            occurred_at=datetime.now(timezone.utc),
+                            meta={"question_id": q_id, "elapsed_ms": elapsed_ms},
+                        )
+                        db.add(event)
+                        try:
+                            db.commit()
+                        except Exception as commit_err:
+                            logger.warning("DB commit failed for FAST_ANSWER (attempt %s): %s", attempt_id, commit_err)
+                            try:
+                                db.rollback()
+                            except Exception:
+                                pass
+                        await websocket.send_json({
+                            "type": "alert",
+                            "event_type": "FAST_ANSWER",
+                            "severity": "MEDIUM",
+                            "detail": detail,
+                            "confidence": 0.85,
+                        })
+                        history_events = _get_cached_events()
+                        reason = _maybe_auto_submit_from_history(
+                            db,
+                            attempt,
+                            exam_cfg,
+                            history_events,
+                            occurred_at=event.occurred_at,
+                            request_ip=_client_ip(websocket.client),
+                        )
+                        if reason:
+                            await websocket.send_json({"type": "forced_submit", "detail": reason})
+                            break
+                    continue
+
+                if msg_type == "keystroke_anomaly":
+                    # Frontend reports suspiciously fast inter-key intervals (avg < 50 ms).
+                    # Payload: {avg_interval_ms, sample_size}
+                    avg_ms = float(data.get("avg_interval_ms") or 0)
+                    samples = int(data.get("sample_size") or 0)
+                    if avg_ms > 0 and samples >= 5:
+                        detail = (
+                            f"Abnormal keystroke cadence: avg {avg_ms:.0f} ms between keys "
+                            f"({samples} keystrokes) — possible auto-fill or macro"
+                        )
+                        event = ProctoringEvent(
+                            attempt_id=attempt_id,
+                            event_type="KEYSTROKE_ANOMALY",
+                            severity=SeverityEnum.MEDIUM,
+                            detail=detail,
+                            ai_confidence=0.80,
+                            occurred_at=datetime.now(timezone.utc),
+                            meta={"avg_interval_ms": avg_ms, "sample_size": samples},
+                        )
+                        db.add(event)
+                        try:
+                            db.commit()
+                        except Exception as commit_err:
+                            logger.warning("DB commit failed for KEYSTROKE_ANOMALY (attempt %s): %s", attempt_id, commit_err)
+                            try:
+                                db.rollback()
+                            except Exception:
+                                pass
+                        await websocket.send_json({
+                            "type": "alert",
+                            "event_type": "KEYSTROKE_ANOMALY",
+                            "severity": "MEDIUM",
+                            "detail": detail,
+                            "confidence": 0.80,
+                        })
+                        history_events = _get_cached_events()
+                        reason = _maybe_auto_submit_from_history(
+                            db,
+                            attempt,
+                            exam_cfg,
+                            history_events,
+                            occurred_at=event.occurred_at,
+                            request_ip=_client_ip(websocket.client),
+                        )
+                        if reason:
+                            await websocket.send_json({"type": "forced_submit", "detail": reason})
+                            break
+                    continue
+
+                if msg_type == "client_event":
+                    # Browser-level violation sent directly by the frontend
+                    # (copy/paste, keyboard shortcuts, tab switch, fullscreen exit, etc.)
+                    ce_type = str(data.get("event_type") or "BROWSER_EVENT").upper()[:64]
+                    ce_sev_str = str(data.get("severity") or "MEDIUM").upper()
+                    ce_detail = str(data.get("detail") or "Browser-level proctoring event")[:500]
+                    ce_severity = SEVERITY_MAP.get(ce_sev_str, SeverityEnum.MEDIUM)
+                    event_time = datetime.now(timezone.utc)
+                    event = ProctoringEvent(
+                        attempt_id=attempt_id,
+                        event_type=ce_type,
+                        severity=ce_severity,
+                        detail=ce_detail,
+                        ai_confidence=0.99,
+                        occurred_at=event_time,
+                    )
+                    db.add(event)
+                    history_events = _get_cached_events()
+                    history_events.append(event)
+                    rule_result = _apply_alert_rules(
+                        db, attempt, exam_cfg, event, history_events,
+                        event_time, request_ip=_client_ip(websocket.client),
+                    )
+                    try:
+                        db.commit()
+                    except Exception as commit_err:
+                        logger.warning("DB commit failed for client_event (attempt %s): %s", attempt_id, commit_err)
+                        try:
+                            db.rollback()
+                        except Exception:
+                            pass
+                    if _is_serious_alert(ce_sev_str, ce_severity):
+                        _handle_serious_proctoring_event(db, attempt, event)
+                    for escalated_event in rule_result["created_events"]:
+                        _handle_serious_proctoring_event(db, attempt, escalated_event)
+                    await websocket.send_json({
+                        "type": "alert",
+                        "event_type": ce_type,
+                        "severity": ce_sev_str,
+                        "detail": ce_detail,
+                        "confidence": 0.99,
+                    })
+                    for rule_alert in rule_result["alerts"]:
+                        await websocket.send_json({
+                            "type": "alert",
+                            "event_type": rule_alert["event_type"],
+                            "severity": rule_alert["severity"].value,
+                            "detail": rule_alert["detail"],
+                            "action": rule_alert["action"],
+                            "rule_id": rule_alert["rule_id"],
+                        })
+                    if rule_result["forced_submit"]:
+                        await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
+                        break
+                    reason = _maybe_auto_submit_from_history(
+                        db,
+                        attempt,
+                        exam_cfg,
+                        history_events,
+                        occurred_at=event_time,
+                        request_ip=_client_ip(websocket.client),
+                    )
+                    if reason:
+                        await websocket.send_json({"type": "forced_submit", "detail": reason})
+                        break
                     continue
             except Exception as exc:
-                logger.warning("Failed to process websocket message for attempt %s: %s", attempt_id, exc)
+                logger.exception("Failed to process websocket message for attempt %s: %s", attempt_id, exc)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
                 if websocket.application_state == WebSocketState.CONNECTED:
-                    await websocket.send_json({"type": "error", "detail": "Failed to process message"})
+                    err_detail = str(exc)[:300] if str(exc) else "Unknown processing error"
+                    try:
+                        await websocket.send_json({
+                            "type": "error",
+                            "detail": f"Detection processing failed: {err_detail}",
+                        })
+                    except Exception:
+                        pass
 
     except WebSocketDisconnect:
         pass

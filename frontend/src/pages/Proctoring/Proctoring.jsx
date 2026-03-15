@@ -9,6 +9,7 @@ import { getTestQuestions, getTest } from '../../services/test.service'
 import { proctoringPing, uploadProctoringVideo } from '../../services/proctoring.service'
 import { normalizeQuestion, normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements, normalizeProctoringConfig } from '../../utils/proctoringRequirements'
+import { consumeScreenStream } from '../../utils/screenShareState'
 import styles from './Proctoring.module.scss'
 
 const DEFAULT_PROCTORING = {
@@ -24,11 +25,20 @@ const DEFAULT_PROCTORING = {
   copy_paste_block: false,
   screen_capture: false,
   object_confidence_threshold: 0.5,
-  max_face_absence_sec: 3,
-  frame_interval_ms: 1500,
-  audio_chunk_ms: 3000,
+  multi_face_min_area_ratio: 0.008,
+  max_face_absence_sec: 1.5,
+  frame_interval_ms: 900,
+  audio_chunk_ms: 2000,
   audio_consecutive_chunks: 2,
+  audio_speech_consecutive_chunks: 2,
+  audio_speech_min_rms: 0.03,
+  audio_speech_baseline_multiplier: 1.35,
   audio_window: 5,
+  camera_cover_hard_luma: 20,
+  camera_cover_soft_luma: 40,
+  camera_cover_stddev_max: 16,
+  camera_cover_hard_consecutive_frames: 1,
+  camera_cover_soft_consecutive_frames: 2,
   screenshot_interval_sec: 60,
   max_tab_blurs: 3,
 }
@@ -190,6 +200,8 @@ export default function Proctoring() {
   const screenShareRequestRef = useRef(null)
   const screenShareEstablishedRef = useRef(false)
   const screenShareLossHandledRef = useRef(false)
+  const screenSharePickerOpenRef = useRef(false)
+  const screenShareGraceRef = useRef(false)
 
   const { save, flush, saveState, lastSavedAt, saveError } = useAutoSave(attemptId)
   const cameraRecordingRef = useRef(createRecordingController('camera'))
@@ -197,7 +209,29 @@ export default function Proctoring() {
   const wsWarnedRef = useRef(false)
   const lastToastBlursRef = useRef(0)
   const timerExpiredRef = useRef(false)
+  const proctorNoticeCooldownRef = useRef(new Map())
+  const lastTabSwitchEventRef = useRef(0)
   const [reloadKey, setReloadKey] = useState(0)
+  const sendClientEventRef = useRef(null)
+  // Raw WS send (any JSON payload); registered by ProctorOverlay
+  const wsRawSendRef = useRef(null)
+
+  // ── Answer timing ─────────────────────────────────────────────────────────
+  // Tracks when the current question was first shown so we can report fast answers
+  const questionStartTimeRef = useRef(Date.now())
+
+  // ── Keystroke dynamics ────────────────────────────────────────────────────
+  // Tracks inter-key intervals inside any text input / textarea
+  const lastKeyTimeRef = useRef(0)
+  const keyIntervalsRef = useRef([])    // rolling window of inter-key ms values
+  const KEY_INTERVAL_WINDOW = 20        // analyse last N key gaps
+  const KEY_ANOMALY_THRESHOLD_MS = 50   // avg < 50 ms → suspiciously fast (macro/autofill)
+  const lastKeystrokeAlertRef = useRef(0)
+
+  // ── Mouse inactivity ──────────────────────────────────────────────────────
+  const lastMouseMoveRef = useRef(Date.now())
+  const mouseInactiveAlertedRef = useRef(false)
+  const MOUSE_INACTIVE_MS = 120000      // 2 minutes
 
   // Load attempt, exam, and questions
   useEffect(() => {
@@ -221,7 +255,15 @@ export default function Proctoring() {
         const ex = normalizeTest(examRes.value.data)
         if (cancelled) return
         setExam(ex)
-        setProctorCfg({ ...DEFAULT_PROCTORING, ...normalizeProctoringConfig(ex.proctoring_config || {}) })
+        const merged = { ...DEFAULT_PROCTORING, ...normalizeProctoringConfig(ex.proctoring_config || {}) }
+        setProctorCfg(merged)
+
+        // Pick up screen stream established on RulesPage (survives SPA navigation)
+        const preStream = consumeScreenStream()
+        if (preStream && preStream.getVideoTracks().some(t => t.readyState === 'live')) {
+          setScreenStream(preStream)
+          screenShareEstablishedRef.current = true
+        }
         setQuestions((qRes.value.data || []).map(normalizeQuestion))
         if (answersRes.status === 'fulfilled') {
           setAnswers(
@@ -261,9 +303,16 @@ export default function Proctoring() {
       wsConnectedRef.current = true
       return
     }
-    if ((proctorStatus === 'closed' || proctorStatus === 'disconnected') && wsConnectedRef.current && !wsWarnedRef.current) {
+    if (proctorStatus === 'disconnected') {
+      // WS is reconnecting — update ref but don't fire an alert.
+      // The ProctorOverlay already shows "Reconnecting..." in its status.
+      wsConnectedRef.current = false
+      return
+    }
+    if (proctorStatus === 'closed' && wsConnectedRef.current && !wsWarnedRef.current) {
       wsWarnedRef.current = true
-      setToast({ severity: 'HIGH', event_type: 'PROCTORING_CONNECTION', detail: 'Proctoring connection lost' })
+      wsConnectedRef.current = false
+      setToast({ severity: 'MEDIUM', event_type: 'PROCTORING_CONNECTION', detail: 'Proctoring connection interrupted. Your answers are still being saved.' })
     }
   }, [proctorStatus])
 
@@ -283,10 +332,66 @@ export default function Proctoring() {
     || (Array.isArray(proctorCfg.alert_rules) && proctorCfg.alert_rules.length > 0)
   )
 
+  const registerSendClientEvent = useCallback((fn) => {
+    sendClientEventRef.current = fn || null
+  }, [])
+
+  const registerWsRawSend = useCallback((fn) => {
+    wsRawSendRef.current = fn || null
+  }, [])
+
+  const handleViolation = useCallback((event) => {
+    if (event.severity === 'HIGH' || event.severity === 'MEDIUM') {
+      setViolations(prev => ({
+        ...prev,
+        [event.severity]: prev[event.severity] + 1
+      }))
+    }
+    setToast(event)
+  }, [])
+
+  const emitProctoringNotice = useCallback((key, detail, severity = 'LOW', eventType = 'PROCTORING_ERROR', cooldownMs = 8000) => {
+    const now = Date.now()
+    const lastSeen = proctorNoticeCooldownRef.current.get(key) || 0
+    if (now - lastSeen < cooldownMs) return
+    proctorNoticeCooldownRef.current.set(key, now)
+    const event = {
+      severity,
+      event_type: eventType,
+      detail,
+    }
+    if (severity === 'HIGH' || severity === 'MEDIUM') {
+      handleViolation(event)
+      return
+    }
+    setToast(event)
+  }, [handleViolation])
+
+  // Send a browser-level violation. If WS is connected the backend creates a
+  // ProctoringEvent and echoes back an alert → handleViolation. If not connected
+  // we fall back to a local-only toast.
+  const sendBrowserViolation = useCallback((eventType, severity, detail) => {
+    if (sendClientEventRef.current) {
+      sendClientEventRef.current(eventType, severity, detail)
+    } else {
+      handleViolation({ event_type: eventType, severity, detail })
+    }
+  }, [handleViolation])
+
   const handleAnswer = (questionId, answer) => {
     setShowSubmitConfirm(false)
     setAnswers(prev => ({ ...prev, [questionId]: answer }))
     save(questionId, answer)
+    // Report answer timing if question was answered suspiciously fast
+    const elapsed = Date.now() - questionStartTimeRef.current
+    if (elapsed > 0 && elapsed < 3000 && wsRawSendRef.current) {
+      wsRawSendRef.current({
+        type: 'answer_timing',
+        question_id: questionId,
+        question_index: currentIdx,
+        elapsed_ms: elapsed,
+      })
+    }
   }
 
   const setRecordingStatusForSource = useCallback((source, value) => {
@@ -307,14 +412,40 @@ export default function Proctoring() {
     if (!requestFn || screenShareBusy) return
     setScreenShareBusy(true)
     setScreenRecordingStatus('checking')
+    screenSharePickerOpenRef.current = true
     try {
       await requestFn()
-    } catch {
+      // Re-enter fullscreen after screen share picker closes.
+      // Delay by 1s to let the screen share track stabilize — entering
+      // fullscreen too quickly can kill the screen share in some browsers.
+      if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
+        await new Promise(r => setTimeout(r, 1000))
+        try { await document.documentElement.requestFullscreen() } catch { /* user may deny */ }
+      }
+    } catch (error) {
       setScreenRecordingStatus('failed')
+      emitProctoringNotice(
+        'screen_share_request',
+        error?.message || 'Screen sharing could not be started. Choose your entire screen to continue.',
+        'MEDIUM',
+        'SCREEN_SHARE_REQUIRED',
+        5000,
+      )
+      // Still try to restore fullscreen even on failure — delay for stability
+      if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
+        await new Promise(r => setTimeout(r, 1000))
+        try { await document.documentElement.requestFullscreen() } catch { /* user may deny */ }
+      }
     } finally {
+      screenSharePickerOpenRef.current = false
+      // Grace period: suppress fullscreen/tab-switch violations for 5s after
+      // picker closes so the fullscreen re-entry transition and focus shifts
+      // from the picker dialog don't trigger false violations.
+      screenShareGraceRef.current = true
+      window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
       setScreenShareBusy(false)
     }
-  }, [screenShareBusy])
+  }, [emitProctoringNotice, proctorCfg.fullscreen_enforce, screenShareBusy])
 
   const pickRecorderMimeType = (stream) => {
     const hasAudio = Boolean(stream?.getAudioTracks?.().length)
@@ -352,14 +483,18 @@ export default function Proctoring() {
         recording.chunks.push(event.data)
         recording.bytesRecorded += event.data.size
       }
-      recorder.onerror = () => setRecordingStatusForSource(source, 'failed')
+      recorder.onerror = () => {
+        setRecordingStatusForSource(source, 'failed')
+        emitProctoringNotice(`recorder_error_${source}`, `Browser ${source} recording encountered an error.`, 'LOW')
+      }
       recorder.start(2000)
       recording.recorder = recorder
       setRecordingStatusForSource(source, 'recording')
-    } catch {
+    } catch (error) {
       setRecordingStatusForSource(source, 'failed')
+      emitProctoringNotice(`recording_start_${source}`, error?.message || `Unable to start ${source} recording.`, 'LOW')
     }
-  }, [attemptId, setRecordingStatusForSource])
+  }, [attemptId, emitProctoringNotice, setRecordingStatusForSource])
 
   const stopAndFinalizeSingleRecording = useCallback(async (source) => {
     const recording = source === 'screen' ? screenRecordingRef.current : cameraRecordingRef.current
@@ -377,7 +512,9 @@ export default function Proctoring() {
           clearTimeout(timeout)
           resolve()
         }, { once: true })
-        try { recorder.requestData?.() } catch (_) {}
+        try { recorder.requestData?.() } catch (error) {
+          console.error(`Failed to request final ${source} recorder data before stopping.`, error)
+        }
         recorder.stop()
       })
     }
@@ -415,18 +552,25 @@ export default function Proctoring() {
       recording.stoppedAt = null
       recording.chunks = []
       recording.bytesRecorded = 0
-    } catch {
+    } catch (error) {
       setRecordingStatusForSource(source, 'failed')
+      emitProctoringNotice(
+        `recording_finalize_${source}`,
+        error?.response?.data?.detail || error?.message || `Unable to save the ${source} recording.`,
+        'LOW',
+      )
     } finally {
       recording.finalizing = false
     }
-  }, [attemptId, setRecordingStatusForSource])
+  }, [attemptId, emitProctoringNotice, setRecordingStatusForSource])
 
   const stopAndFinalizeRecordings = useCallback(async () => {
-    await stopAndFinalizeSingleRecording('camera')
+    // Run camera and screen finalization in parallel to avoid sequential delay
+    const tasks = [stopAndFinalizeSingleRecording('camera')]
     if (proctorCfg.screen_capture) {
-      await stopAndFinalizeSingleRecording('screen')
+      tasks.push(stopAndFinalizeSingleRecording('screen'))
     }
+    await Promise.allSettled(tasks)
   }, [proctorCfg.screen_capture, stopAndFinalizeSingleRecording])
 
   useEffect(() => {
@@ -463,27 +607,21 @@ export default function Proctoring() {
     setSubmitError('')
     try {
       await flush()
-      await stopAndFinalizeRecordings()
+      // Submit the attempt first (fast) — don't block on video uploads
       await submitAttempt(attemptId)
       if (document.fullscreenElement) {
-        document.exitFullscreen?.().catch(() => {})
+        document.exitFullscreen?.().catch((error) => {
+          emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
+        })
       }
+      // Finalize recordings in background — don't block navigation
+      stopAndFinalizeRecordings().catch(() => { /* best-effort */ })
       navigate(`/attempts/${attemptId}`)
     } catch (e) {
       setSubmitError(e.response?.data?.detail || 'Submission failed. Please try again.')
       setSubmitting(false)
     }
-  }, [attemptId, flush, navigate, stopAndFinalizeRecordings, submitting])
-
-  const handleViolation = useCallback((event) => {
-    if (event.severity === 'HIGH' || event.severity === 'MEDIUM') {
-      setViolations(prev => ({
-        ...prev,
-        [event.severity]: prev[event.severity] + 1
-      }))
-    }
-    setToast(event)
-  }, [])
+  }, [attemptId, emitProctoringNotice, flush, navigate, stopAndFinalizeRecordings, submitting])
 
   const handleForcedSubmit = useCallback((detail = 'Test auto-submitted due to violations.') => {
     const event = normalizeProctoringAlert({
@@ -521,8 +659,40 @@ export default function Proctoring() {
   }, [proctoringEnabled])
 
   useEffect(() => {
+    if (!proctorCfg.fullscreen_enforce || document.fullscreenElement) return undefined
+    // Delay fullscreen entry until screen share is established (if required),
+    // because getDisplayMedia() forces the browser out of fullscreen.
+    if (proctorCfg.screen_capture && !screenStream) return undefined
+    const timeoutId = window.setTimeout(() => {
+      document.documentElement.requestFullscreen?.().catch(() => {
+        emitProctoringNotice(
+          'fullscreen_entry',
+          'Fullscreen could not be enabled automatically. Use the browser prompt to continue.',
+          'LOW',
+        )
+      })
+    }, 200)
+    return () => window.clearTimeout(timeoutId)
+  }, [emitProctoringNotice, proctorCfg.fullscreen_enforce, proctorCfg.screen_capture, screenStream])
+
+  useEffect(() => {
     if (!proctorCfg.fullscreen_enforce) return undefined
     const handleFullscreenChange = () => {
+      // Suppress fullscreen violations while the screen share picker is open,
+      // during the grace period after it closes, or when screen capture is
+      // enabled (getDisplayMedia and requestFullscreen fight each other in
+      // browsers — toggling one always exits the other).
+      const screenShareTransition = screenSharePickerOpenRef.current || screenShareGraceRef.current
+      const screenCaptureActive = proctorCfg.screen_capture && screenShareEstablishedRef.current
+
+      if (screenShareTransition) {
+        // Silently re-enter fullscreen after picker closes, no violation
+        if (!document.fullscreenElement && !screenSharePickerOpenRef.current) {
+          document.documentElement.requestFullscreen?.().catch(() => {})
+        }
+        return
+      }
+
       if (attemptId) {
         proctoringPing(attemptId, {
           focus: document.hasFocus(),
@@ -530,15 +700,27 @@ export default function Proctoring() {
           blurs: tabBlurs,
           fullscreen: !!document.fullscreenElement,
           camera_dark: cameraDark,
-        }).then(applyPingResponse).catch(() => {})
+        }).then(applyPingResponse).catch(() => {
+          emitProctoringNotice('fullscreen_ping', 'Unable to sync fullscreen status with the server.', 'LOW')
+        })
       }
       if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen?.().catch(() => {})
+        // When screen capture is active, downgrade from HIGH to LOW and
+        // silently restore fullscreen — the exit was likely caused by the
+        // browser's own screen-share / fullscreen conflict, not the user.
+        if (screenCaptureActive) {
+          document.documentElement.requestFullscreen?.().catch(() => {})
+          return
+        }
+        sendBrowserViolation('FULLSCREEN_EXIT', 'HIGH', 'Fullscreen mode exited during exam')
+        document.documentElement.requestFullscreen?.().catch(() => {
+          emitProctoringNotice('fullscreen_restore', 'Fullscreen is required for this test. Re-enter fullscreen to continue.', 'MEDIUM', 'FULLSCREEN_REQUIRED', 5000)
+        })
       }
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [applyPingResponse, attemptId, cameraDark, proctorCfg.fullscreen_enforce, tabBlurs])
+  }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.fullscreen_enforce, sendBrowserViolation, tabBlurs])
 
   useEffect(() => {
     if (!proctorCfg.screen_capture) {
@@ -554,13 +736,31 @@ export default function Proctoring() {
     if (loading || submitting) return
     if (!screenShareEstablishedRef.current || screenShareLossHandledRef.current) return
     screenShareLossHandledRef.current = true
+
+    // When fullscreen is also enforced the browser's own fullscreen ↔ screen-share
+    // conflict can kill the screen track. Give the user a chance to re-share instead
+    // of immediately auto-submitting.
+    if (proctorCfg.fullscreen_enforce) {
+      sendBrowserViolation('SCREEN_SHARE_LOST', 'MEDIUM', 'Screen sharing was interrupted. Please re-share your entire screen.')
+      setToast({
+        severity: 'MEDIUM',
+        event_type: 'SCREEN_SHARE_LOST',
+        detail: 'Screen sharing stopped. Please re-share your entire screen to continue.',
+      })
+      // Allow the user to re-share (reset the loss flag after a short delay so the
+      // watcher can fire again if the user still hasn't re-shared)
+      window.setTimeout(() => { screenShareLossHandledRef.current = false }, 8000)
+      return
+    }
+
+    sendBrowserViolation('SCREEN_SHARE_LOST', 'HIGH', 'Screen sharing stopped during the exam session.')
     setToast({
       severity: 'HIGH',
       event_type: 'SCREEN_SHARE_LOST',
       detail: 'Screen sharing stopped. The attempt will be submitted.',
     })
     void handleSubmit()
-  }, [handleSubmit, loading, proctorCfg.screen_capture, screenStream, submitting])
+  }, [handleSubmit, loading, proctorCfg.screen_capture, screenStream, sendBrowserViolation, submitting])
 
   // Countdown timer
   useEffect(() => {
@@ -576,7 +776,7 @@ export default function Proctoring() {
       })
     }, 1000)
     return () => clearInterval(interval)
-  }, [timeLeft !== null, handleSubmit])
+  }, [timeLeft])
 
   useEffect(() => {
     if (timeLeft !== 0 || !timerExpiredRef.current) return
@@ -604,35 +804,39 @@ export default function Proctoring() {
   // Tab blur / visibility tracking
   useEffect(() => {
     if (!proctorCfg.tab_switch_detect) return
+    const reportTabSwitch = (next, detail, visibility) => {
+      // Suppress tab switch violations while screen share picker is open or grace period
+      if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return next
+      const now = Date.now()
+      if (now - lastTabSwitchEventRef.current < 750) {
+        return next
+      }
+      lastTabSwitchEventRef.current = now
+      sendBrowserViolation('TAB_SWITCH', 'MEDIUM', detail)
+      if (attemptId) {
+        proctoringPing(attemptId, {
+          focus: false,
+          visibility,
+          blurs: next,
+          fullscreen: !!document.fullscreenElement,
+          camera_dark: cameraDark,
+        }).then(applyPingResponse).catch(() => {
+          emitProctoringNotice('tab_switch_ping', 'Unable to sync the tab-switch event with the server.', 'LOW')
+        })
+      }
+      return next
+    }
     const onBlur = () => {
       setTabBlurs((count) => {
         const next = count + 1
-        if (attemptId) {
-          proctoringPing(attemptId, {
-            focus: false,
-            visibility: document.visibilityState,
-            blurs: next,
-            fullscreen: !!document.fullscreenElement,
-            camera_dark: cameraDark,
-          }).then(applyPingResponse).catch(() => {})
-        }
-        return next
+        return reportTabSwitch(next, `Window lost focus (switch #${next})`, document.visibilityState)
       })
     }
     const onVisibility = () => {
       if (document.hidden) {
         setTabBlurs((count) => {
           const next = count + 1
-          if (attemptId) {
-            proctoringPing(attemptId, {
-              focus: false,
-              visibility: 'hidden',
-              blurs: next,
-              fullscreen: !!document.fullscreenElement,
-              camera_dark: cameraDark,
-            }).then(applyPingResponse).catch(() => {})
-          }
-          return next
+          return reportTabSwitch(next, `Tab hidden / switched (switch #${next})`, 'hidden')
         })
       }
     }
@@ -642,7 +846,7 @@ export default function Proctoring() {
       window.removeEventListener('blur', onBlur)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [applyPingResponse, attemptId, cameraDark, proctorCfg.tab_switch_detect])
+  }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.tab_switch_detect, sendBrowserViolation])
 
   useEffect(() => {
     const max = proctorCfg.max_tab_blurs
@@ -656,17 +860,225 @@ export default function Proctoring() {
     }
   }, [handleSubmit, tabBlurs, proctorCfg.max_tab_blurs, proctorCfg.tab_switch_detect])
 
-  // Copy/paste block
+  // ── Copy / cut / paste blocking ────────────────────────────────────────────
   useEffect(() => {
     if (!proctorCfg.copy_paste_block) return
+    const lastAlert = { t: 0 }
     const handler = (e) => {
-      if (e.ctrlKey && (e.key === 'c' || e.key === 'v')) {
-        e.preventDefault()
+      e.preventDefault()
+      const now = Date.now()
+      if (now - lastAlert.t > 6000) {
+        lastAlert.t = now
+        sendBrowserViolation('COPY_PASTE_ATTEMPT', 'MEDIUM',
+          `${e.type.toUpperCase()} attempt blocked during exam`)
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [proctorCfg.copy_paste_block])
+    document.addEventListener('copy', handler)
+    document.addEventListener('cut', handler)
+    document.addEventListener('paste', handler)
+    return () => {
+      document.removeEventListener('copy', handler)
+      document.removeEventListener('cut', handler)
+      document.removeEventListener('paste', handler)
+    }
+  }, [proctorCfg.copy_paste_block, sendBrowserViolation])
+
+  // ── Keyboard shortcut blocking (DevTools, PrintScreen, view-source…) ───────
+  useEffect(() => {
+    if (!proctoringEnabled) return
+    const lastAlert = {}
+    const throttled = (key, ms = 12000) => {
+      const now = Date.now()
+      if (now - (lastAlert[key] || 0) < ms) return false
+      lastAlert[key] = now
+      return true
+    }
+    const handler = (e) => {
+      const key = e.key?.toLowerCase() || ''
+      const ctrl = e.ctrlKey || e.metaKey
+      // F12 – DevTools
+      if (e.key === 'F12') {
+        e.preventDefault()
+        if (throttled('f12')) sendBrowserViolation('SHORTCUT_BLOCKED', 'HIGH', 'F12 (DevTools) key blocked')
+        return
+      }
+      // Ctrl+Shift+I/J/K/C – DevTools panels
+      if (ctrl && e.shiftKey && ['i', 'j', 'k', 'c'].includes(key)) {
+        e.preventDefault()
+        if (throttled(`csi_${key}`)) sendBrowserViolation('SHORTCUT_BLOCKED', 'HIGH', `Ctrl+Shift+${key.toUpperCase()} (DevTools) blocked`)
+        return
+      }
+      // Ctrl+U – View Source
+      if (ctrl && key === 'u') {
+        e.preventDefault()
+        if (throttled('cu')) sendBrowserViolation('SHORTCUT_BLOCKED', 'MEDIUM', 'Ctrl+U (view source) blocked')
+        return
+      }
+      // Ctrl+S – Save dialog
+      if (ctrl && key === 's') { e.preventDefault(); return }
+      // Ctrl+P – Print
+      if (ctrl && key === 'p') { e.preventDefault(); return }
+      // Ctrl+A – Select-all (only when copy/paste block is on)
+      if (proctorCfg.copy_paste_block && ctrl && key === 'a') { e.preventDefault(); return }
+      // PrintScreen
+      if (e.key === 'PrintScreen') {
+        e.preventDefault()
+        if (throttled('ps')) sendBrowserViolation('SCREENSHOT_ATTEMPT', 'MEDIUM', 'PrintScreen key blocked')
+        return
+      }
+    }
+    // Use capture phase so we intercept before any React handler
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [proctoringEnabled, proctorCfg.copy_paste_block, sendBrowserViolation])
+
+  // ── Right-click / context menu blocking ────────────────────────────────────
+  useEffect(() => {
+    if (!proctoringEnabled) return
+    const lastAlert = { t: 0 }
+    const handler = (e) => {
+      e.preventDefault()
+      const now = Date.now()
+      if (now - lastAlert.t > 30000) {
+        lastAlert.t = now
+        sendBrowserViolation('RIGHT_CLICK_ATTEMPT', 'LOW', 'Context menu blocked during exam')
+      }
+    }
+    document.addEventListener('contextmenu', handler)
+    return () => document.removeEventListener('contextmenu', handler)
+  }, [proctoringEnabled, sendBrowserViolation])
+
+  // ── Multiple monitor detection ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!proctoringEnabled) return
+    const alerted = { current: false }
+    const check = () => {
+      const isExtended = 'isExtended' in window.screen ? window.screen.isExtended : false
+      // Fallback: screen resolution significantly larger than the available viewport
+      const likelyExtended = window.screen.width > window.screen.availWidth + 300
+      if ((isExtended || likelyExtended) && !alerted.current) {
+        alerted.current = true
+        sendBrowserViolation('MULTIPLE_MONITORS', 'MEDIUM',
+          `Multiple monitors detected (screen ${window.screen.width}×${window.screen.height})`)
+      }
+    }
+    check()
+    const interval = setInterval(check, 30000)
+    return () => clearInterval(interval)
+  }, [proctoringEnabled, sendBrowserViolation])
+
+  // ── Virtual machine / remote desktop detection ─────────────────────────────
+  useEffect(() => {
+    if (!proctoringEnabled) return
+    try {
+      const canvas = document.createElement('canvas')
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+      if (gl) {
+        const dbg = gl.getExtension('WEBGL_debug_renderer_info')
+        if (dbg) {
+          const renderer = (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase()
+          const vendor = (gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || '').toLowerCase()
+          const vmKeywords = ['vmware', 'virtualbox', 'llvm', 'parallels', 'microsoft basic render',
+            'swiftshader', 'softpipe', 'llvmpipe', 'citrix', 'rdp display']
+          const combined = `${renderer} ${vendor}`
+          const hit = vmKeywords.find(kw => combined.includes(kw))
+          if (hit) {
+            sendBrowserViolation('VIRTUAL_MACHINE', 'HIGH',
+              `Virtual machine / remote desktop environment detected (${hit})`)
+          }
+        }
+      }
+    } catch (error) {
+      emitProctoringNotice('vm_detection', error?.message || 'Unable to inspect the browser graphics environment.', 'LOW')
+    }
+  }, [emitProctoringNotice, proctoringEnabled, sendBrowserViolation])
+
+  // ── Developer tools open detection ─────────────────────────────────────────
+  useEffect(() => {
+    if (!proctoringEnabled) return
+    const lastAlert = { t: 0 }
+    const check = () => {
+      const widthDiff = window.outerWidth - window.innerWidth
+      const heightDiff = window.outerHeight - window.innerHeight
+      if ((widthDiff > 160 || heightDiff > 160)) {
+        const now = Date.now()
+        if (now - lastAlert.t > 30000) {
+          lastAlert.t = now
+          sendBrowserViolation('DEV_TOOLS_OPEN', 'HIGH', 'Browser developer tools appear to be open')
+        }
+      }
+    }
+    const interval = setInterval(check, 4000)
+    return () => clearInterval(interval)
+  }, [proctoringEnabled, sendBrowserViolation])
+
+  // ── Answer timing: reset clock when question changes ─────────────────────
+  useEffect(() => {
+    questionStartTimeRef.current = Date.now()
+  }, [currentIdx])
+
+  // ── Keystroke dynamics ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!proctoringEnabled) return
+    const handler = (e) => {
+      // Only track typing in text inputs / textareas (answers)
+      const tag = e.target?.tagName
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA') return
+      const now = Date.now()
+      const last = lastKeyTimeRef.current
+      if (last > 0) {
+        const interval = now - last
+        keyIntervalsRef.current.push(interval)
+        if (keyIntervalsRef.current.length > KEY_INTERVAL_WINDOW) {
+          keyIntervalsRef.current.shift()
+        }
+        if (keyIntervalsRef.current.length >= KEY_INTERVAL_WINDOW) {
+          const avg = keyIntervalsRef.current.reduce((a, b) => a + b, 0) / keyIntervalsRef.current.length
+          if (avg < KEY_ANOMALY_THRESHOLD_MS) {
+            const alertNow = Date.now()
+            if (alertNow - lastKeystrokeAlertRef.current > 60000) {
+              lastKeystrokeAlertRef.current = alertNow
+              if (wsRawSendRef.current) {
+                wsRawSendRef.current({
+                  type: 'keystroke_anomaly',
+                  avg_interval_ms: Math.round(avg),
+                  sample_size: keyIntervalsRef.current.length,
+                })
+              }
+            }
+          }
+        }
+      }
+      lastKeyTimeRef.current = now
+    }
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
+  }, [proctoringEnabled])
+
+  // ── Mouse inactivity detection ────────────────────────────────────────────
+  useEffect(() => {
+    if (!proctoringEnabled) return
+    const onMove = () => {
+      lastMouseMoveRef.current = Date.now()
+      mouseInactiveAlertedRef.current = false
+    }
+    document.addEventListener('mousemove', onMove, { passive: true })
+    const interval = setInterval(() => {
+      const idle = Date.now() - lastMouseMoveRef.current
+      if (idle >= MOUSE_INACTIVE_MS && !mouseInactiveAlertedRef.current) {
+        mouseInactiveAlertedRef.current = true
+        sendBrowserViolation(
+          'MOUSE_INACTIVE',
+          'LOW',
+          `No mouse movement for ${Math.round(idle / 1000)}s — possible unattended session`,
+        )
+      }
+    }, 15000)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      clearInterval(interval)
+    }
+  }, [proctoringEnabled, sendBrowserViolation])
 
   // Heartbeat ping
   useEffect(() => {
@@ -678,10 +1090,15 @@ export default function Proctoring() {
         blurs: tabBlurs,
         fullscreen: !!document.fullscreenElement,
         camera_dark: cameraDark,
-      }).then(applyPingResponse).catch(() => {})
-    }, 10000)
+      }).then(applyPingResponse).catch(() => {
+        // Suppress HTTP ping error toasts entirely — the ProctorOverlay
+        // already shows "Reconnecting..." when the WS is down, and that
+        // is sufficient feedback for the learner.
+        console.debug('[Proctoring] HTTP ping failed, WS connected:', wsConnectedRef.current)
+      })
+    }, 5000)
     return () => clearInterval(interval)
-  }, [applyPingResponse, attemptId, cameraDark, proctoringEnabled, tabBlurs])
+  }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctoringEnabled, tabBlurs])
 
   useEffect(() => {
     const onBeforeUnload = () => {
@@ -692,12 +1109,16 @@ export default function Proctoring() {
             recording.recorder.stop()
           }
         }
-      } catch (_) {}
+      } catch (error) {
+        console.error('Failed to stop proctoring recorder during page unload.', error)
+      }
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload)
-      stopAndFinalizeRecordings().catch(() => {})
+      void stopAndFinalizeRecordings().catch((error) => {
+        console.error('Failed to finalize proctoring recordings during unmount.', error)
+      })
     }
   }, [stopAndFinalizeRecordings])
 
@@ -747,11 +1168,14 @@ export default function Proctoring() {
           attemptId={attemptId}
           token={tokens?.access_token}
           config={proctorCfg}
+          initialScreenStream={screenStream}
           onViolation={handleViolation}
           onForcedSubmit={handleForcedSubmit}
           onStreamReady={setCameraStream}
           onScreenStreamReady={setScreenStream}
           onRegisterScreenShareRequest={registerScreenShareRequest}
+          onRegisterSendClientEvent={registerSendClientEvent}
+          onRegisterWsRawSend={registerWsRawSend}
           onStatusChange={setProctorStatus}
           onCameraStateChange={setCameraDark}
         />
@@ -773,32 +1197,6 @@ export default function Proctoring() {
           <div className={styles.stateMessage}>No questions are available for this attempt.</div>
           <button type="button" className={styles.retryBtn} onClick={() => navigate('/attempts')}>
             Back to attempts list
-          </button>
-        </div>
-        {proctorPane}
-        {toastNode}
-      </div>
-    )
-  }
-
-  if (proctorCfg.screen_capture && !screenStream) {
-    return (
-      <div className={styles.page}>
-        <div className={`${styles.examPane} ${styles.centerState}`}>
-          <div className={styles.warningBanner}>
-            Screen sharing is required for this test. Choose your entire screen in the browser picker before the attempt can continue.
-          </div>
-          <p className={styles.stateMessage}>
-            The test stays blocked until desktop sharing is active. If screen sharing stops after the test starts, the attempt is submitted automatically.
-          </p>
-          <button
-            type="button"
-            className={styles.retryBtn}
-            onClick={() => void requestRequiredScreenShare()}
-            disabled={!screenShareRequestReady || screenShareBusy}
-            aria-label={screenRecordingStatus === 'failed' ? `Retry entire-screen sharing for ${exam?.title || 'this test'}` : `Share your entire screen for ${exam?.title || 'this test'}`}
-          >
-            {screenShareBusy ? 'Requesting screen share...' : screenRecordingStatus === 'failed' ? 'Retry entire-screen share' : 'Share entire screen'}
           </button>
         </div>
         {proctorPane}
@@ -910,7 +1308,7 @@ export default function Proctoring() {
                 setShowSubmitConfirm(false)
                 setCurrentIdx(i)
               }}
-              aria-label={questionNavLabel(q, i)}
+              aria-label={String(i + 1)}
               title={questionNavLabel(q, i)}
               aria-current={i === currentIdx ? 'step' : undefined}
               whileHover={{ y: -1, scale: 1.03 }}
@@ -1031,7 +1429,6 @@ export default function Proctoring() {
                   setShowSubmitConfirm(false)
                   setCurrentIdx(i => i - 1)
                 }}
-                aria-label={currentIdx === 0 ? 'Previous question unavailable' : `Go to question ${currentIdx} of ${questions.length}`}
                 whileTap={{ scale: 0.97 }}
               >
                 Previous question
@@ -1044,7 +1441,6 @@ export default function Proctoring() {
                     setShowSubmitConfirm(false)
                     setCurrentIdx(i => i + 1)
                   }}
-                  aria-label={`Go to question ${currentIdx + 2} of ${questions.length}`}
                   whileTap={{ scale: 0.97 }}
                 >
                   Next question
