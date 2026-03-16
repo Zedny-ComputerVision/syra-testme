@@ -253,13 +253,25 @@ def test_list_exams_orders_newest_first():
         def all():
             return []
 
+    class DummyExecuteResult:
+        @staticmethod
+        def all():
+            return []
+
     class DummySession:
         def __init__(self):
             self.query = None
 
+        def scalar(self, query):
+            return 0
+
         def scalars(self, query):
             self.query = query
             return DummyScalarResult()
+
+        def execute(self, query):
+            self.query = query
+            return DummyExecuteResult()
 
     session = DummySession()
     out = asyncio.run(exams_routes.list_exams(db=session, current=learner))
@@ -268,6 +280,152 @@ def test_list_exams_orders_newest_first():
         "exams.updated_at DESC",
         "exams.created_at DESC",
     ]
+
+
+def test_list_exams_applies_custom_search_and_sort_for_learner():
+    learner = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.LEARNER)
+
+    class DummyScalarResult:
+        @staticmethod
+        def all():
+            return []
+
+    class DummyExecuteResult:
+        @staticmethod
+        def all():
+            return []
+
+    class DummySession:
+        def __init__(self):
+            self.query = None
+            self.scalar_calls = 0
+
+        def scalar(self, _query):
+            self.scalar_calls += 1
+            return 0
+
+        def execute(self, query):
+            self.query = query
+            return DummyExecuteResult()
+
+    session = DummySession()
+    out = asyncio.run(
+        exams_routes.list_exams(
+            db=session,
+            current=learner,
+            page=3,
+            page_size=7,
+            search="  Algebra  ",
+            sort="title",
+            order="asc",
+        )
+    )
+
+    assert out == {"items": [], "total": 0, "skip": 14, "limit": 7}
+    assert [str(clause) for clause in session.query._order_by_clauses] == [
+        "exams.title ASC",
+        "exams.created_at DESC",
+    ]
+    query_text = str(session.query)
+    assert "exams.status" in query_text.lower()
+    assert ":status_" in query_text
+    normalized_query_text = query_text.lower()
+    assert "exists (select" in normalized_query_text
+    assert "lower(exams.title)" in normalized_query_text
+
+
+def test_list_exams_prefers_page_over_skip_when_both_provided():
+    learner = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.LEARNER)
+
+    class DummyScalarResult:
+        @staticmethod
+        def all():
+            return []
+
+    class DummyExecuteResult:
+        @staticmethod
+        def all():
+            return []
+
+    class DummySession:
+        def __init__(self):
+            self.query = None
+
+        def scalar(self, _query):
+            return 0
+
+        def execute(self, query):
+            self.query = query
+            return DummyExecuteResult()
+
+    session = DummySession()
+    out = asyncio.run(
+        exams_routes.list_exams(
+            db=session,
+            current=learner,
+            page=2,
+            page_size=5,
+            skip=99,
+            limit=1,
+        )
+    )
+
+    assert out["skip"] == 5
+    assert out["limit"] == 5
+    assert [str(clause) for clause in session.query._order_by_clauses] == [
+        "exams.updated_at DESC",
+        "exams.created_at DESC",
+    ]
+
+
+def test_list_exams_does_not_apply_learner_schedule_filters_for_admin():
+    admin = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.ADMIN)
+
+    class DummyScalarResult:
+        @staticmethod
+        def all():
+            return []
+
+    class DummyExecuteResult:
+        @staticmethod
+        def all():
+            return []
+
+    class DummySession:
+        def __init__(self):
+            self.query = None
+            self.calls = 0
+
+        def scalar(self, _query):
+            self.calls += 1
+            if self.calls == 1:
+                return SimpleNamespace(
+                    value='[{"feature":"Edit Tests","admin":true,"instructor":true,"learner":false}]',
+                )
+            return 0
+
+        def execute(self, query):
+            self.query = query
+            return DummyExecuteResult()
+
+    session = DummySession()
+    out = asyncio.run(
+        exams_routes.list_exams(
+            db=session,
+            current=admin,
+            page=1,
+            page_size=20,
+            search=None,
+            sort="updated_at",
+            order="desc",
+        )
+    )
+
+    assert out == {"items": [], "total": 0, "skip": 0, "limit": 20}
+    query_text = str(session.query)
+    assert "exams.status = :status_1" not in query_text
+    assert "exists (select" not in query_text.lower()
+    assert "exams.library_pool_id IS NULL" in query_text
 
 
 def test_create_attempt_blocks_retake_when_disabled():

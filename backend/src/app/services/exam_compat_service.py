@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from ..api.deps import ensure_permission, learner_can_access_exam
 from ..models import AccessMode, Course, CourseStatus, Exam, ExamStatus, Node, Question, RoleEnum, Schedule
@@ -15,9 +15,11 @@ from ..modules.tests.proctoring_requirements import normalize_proctoring_config
 from ..schemas import ExamCreate, ExamRead, ExamUpdate, Message
 from ..utils.pagination import build_page_response, clamp_sort_field, normalize_pagination
 from .normalized_relations import (
+    apply_runtime_attempt_policy_defaults,
     exam_certificate,
     exam_proctoring,
     exam_runtime_settings,
+    runtime_attempt_policy_conflicts,
     set_exam_certificate,
     set_exam_proctoring,
     set_exam_runtime_settings,
@@ -44,7 +46,7 @@ DEFAULT_PROCTORING = {
     "eye_deviation_deg": 12,
     "mouth_open_threshold": 0.35,
     "audio_rms_threshold": 0.08,
-    "max_face_absence_sec": 3,
+    "max_face_absence_sec": 1.5,
     "max_tab_blurs": 3,
     "max_alerts_before_autosubmit": 5,
     "max_fullscreen_exits": 2,
@@ -52,8 +54,8 @@ DEFAULT_PROCTORING = {
     "lighting_min_score": 0.35,
     "face_verify_id_threshold": 0.18,
     "max_score_before_autosubmit": 15,
-    "frame_interval_ms": 1500,
-    "audio_chunk_ms": 3000,
+    "frame_interval_ms": 900,
+    "audio_chunk_ms": 2000,
     "screenshot_interval_sec": 60,
     "face_verify_threshold": 0.15,
     "cheating_consecutive_frames": 5,
@@ -61,7 +63,11 @@ DEFAULT_PROCTORING = {
     "eye_consecutive": 5,
     "object_confidence_threshold": 0.5,
     "audio_consecutive_chunks": 2,
+    "audio_speech_consecutive_chunks": 2,
+    "audio_speech_min_rms": 0.03,
+    "audio_speech_baseline_multiplier": 1.35,
     "audio_window": 5,
+    "multi_face_min_area_ratio": 0.008,
     "head_pose_yaw_deg": 20,
     "head_pose_pitch_deg": 20,
     "head_pitch_min_rad": -0.3,
@@ -74,7 +80,17 @@ DEFAULT_PROCTORING = {
     "eye_yaw_max_rad": 0.5,
     "pose_change_threshold_rad": 0.1,
     "eye_change_threshold_rad": 0.2,
+    "camera_cover_hard_luma": 20.0,
+    "camera_cover_soft_luma": 40.0,
+    "camera_cover_stddev_max": 16.0,
+    "camera_cover_hard_consecutive_frames": 1,
+    "camera_cover_soft_consecutive_frames": 2,
 }
+
+
+def _assert_runtime_attempt_policy(settings: dict | None, max_attempts: int | None) -> None:
+    if runtime_attempt_policy_conflicts(settings, max_attempts):
+        raise HTTPException(status_code=422, detail="Enable retakes or reduce max attempts to 1.")
 
 
 def list_tests(
@@ -104,12 +120,18 @@ def list_tests(
     order_column = getattr(Exam, sort_field)
     order_column = order_column.asc() if pagination.order == "asc" else order_column.desc()
 
+    question_count_sq = (
+        select(func.count(Question.id))
+        .where(Question.exam_id == Exam.id)
+        .correlate(Exam)
+        .scalar_subquery()
+        .label("_question_count")
+    )
     query = (
-        select(Exam)
+        select(Exam, question_count_sq)
         .options(
             joinedload(Exam.node).joinedload(Node.course),
             joinedload(Exam.category),
-            selectinload(Exam.questions),
         )
         .where(Exam.library_pool_id.is_(None))
         .order_by(order_column, Exam.created_at.desc())
@@ -142,20 +164,20 @@ def list_tests(
             Exam.status == ExamStatus.OPEN,
             or_(~restricted_schedule_exists, learner_schedule_available),
         )
-        total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-        page_items = db.scalars(query.offset(pagination.offset).limit(pagination.limit)).all()
+        total = db.scalar(select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())) or 0
+        rows = db.execute(query.offset(pagination.offset).limit(pagination.limit)).all()
         return build_page_response(
-            items=[serialize_legacy_test(test) for test in page_items],
+            items=[serialize_legacy_test(test, qcount=qc) for test, qc in rows],
             total=total,
             pagination=pagination,
             extended=False,
         )
 
     ensure_permission(db, current, "Edit Tests")
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    tests = db.scalars(query.offset(pagination.offset).limit(pagination.limit)).all()
+    total = db.scalar(select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())) or 0
+    rows = db.execute(query.offset(pagination.offset).limit(pagination.limit)).all()
     return build_page_response(
-        items=[serialize_legacy_test(test) for test in tests],
+        items=[serialize_legacy_test(test, qcount=qc) for test, qc in rows],
         total=total,
         pagination=pagination,
         extended=False,
@@ -166,6 +188,8 @@ def create_test(*, db: Session, body: ExamCreate, current) -> ExamRead:
     now = datetime.now(timezone.utc)
     payload = sanitize_exam_payload(body.model_dump(exclude={"questions"}))
     _validate_create_payload(body)
+    runtime_settings = apply_runtime_attempt_policy_defaults(payload.get("settings"), body.max_attempts)
+    _assert_runtime_attempt_policy(runtime_settings, body.max_attempts)
 
     node = _resolve_node(db=db, node_id=body.node_id, actor=current, now=now)
     test = Exam(
@@ -184,7 +208,7 @@ def create_test(*, db: Session, body: ExamCreate, current) -> ExamRead:
         created_by_id=current.id,
     )
     set_exam_proctoring(test, normalize_proctoring(body.proctoring_config))
-    set_exam_runtime_settings(test, payload.get("settings"))
+    set_exam_runtime_settings(test, runtime_settings)
     set_exam_certificate(test, body.certificate)
     db.add(test)
     try:
@@ -222,6 +246,7 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
     if not data:
         return serialize_legacy_test(test)
     _validate_update_payload(data)
+    next_max_attempts = data.get("max_attempts", test.max_attempts)
 
     for field, value in data.items():
         if field == "node_id":
@@ -234,12 +259,19 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
             set_exam_proctoring(test, normalize_proctoring(value))
             continue
         if field == "settings":
-            set_exam_runtime_settings(test, value)
+            normalized_settings = apply_runtime_attempt_policy_defaults(value, next_max_attempts)
+            _assert_runtime_attempt_policy(normalized_settings, next_max_attempts)
+            set_exam_runtime_settings(test, normalized_settings)
             continue
         if field == "certificate":
             set_exam_certificate(test, value)
             continue
         setattr(test, field, value)
+
+    if "settings" not in data and "max_attempts" in data and next_max_attempts > 1:
+        current_settings = exam_runtime_settings(test)
+        if current_settings.get("allow_retake") is False:
+            set_exam_runtime_settings(test, {**current_settings, "allow_retake": True})
 
     test.updated_at = datetime.now(timezone.utc)
     target_status = data.get("status", test.status)
@@ -270,7 +302,7 @@ def delete_test(*, db: Session, test_id: str) -> Message:
     return Message(detail="Deleted")
 
 
-def serialize_legacy_test(test: Exam) -> ExamRead:
+def serialize_legacy_test(test: Exam, *, qcount: int | None = None) -> ExamRead:
     node = test.node
     course = node.course if node else None
     category_name = test.category.name if test.category else None
@@ -296,7 +328,7 @@ def serialize_legacy_test(test: Exam) -> ExamRead:
         time_limit_minutes=test.time_limit,
         created_at=test.created_at,
         updated_at=test.updated_at,
-        question_count=test.question_count,
+        question_count=qcount if qcount is not None else test.question_count,
     )
 
 

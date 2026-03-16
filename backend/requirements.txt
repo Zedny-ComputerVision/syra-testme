@@ -23,3 +23,7 @@ openai>=1.12.0
 croniter
 pytesseract
 bleach
+# AI Proctoring upgrades
+deepface>=0.0.93          # Neural face recognition (Facenet512 / ArcFace) - 512-D embeddings
+webrtcvad-wheels>=2.0.14  # Google's WebRTC Voice Activity Detector (pre-built Windows wheels)
+scipy>=1.11.0             # Audio resampling for WebRTC VAD

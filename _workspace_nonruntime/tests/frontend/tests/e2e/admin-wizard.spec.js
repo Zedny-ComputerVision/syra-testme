@@ -5,6 +5,16 @@ import { ensureAdmin, createLearner, createCourseAndNode } from './helpers/api'
 
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
 
+test.use({
+  permissions: ['camera', 'microphone'],
+  launchOptions: {
+    args: [
+      '--use-fake-ui-for-media-stream',
+      '--use-fake-device-for-media-stream',
+    ],
+  },
+})
+
 async function findNamedFile(rootDir, fileNames, depth = 0) {
   if (depth > 5) return null
   let entries = []
@@ -30,9 +40,10 @@ async function loadIdentityFixtureDataUrl() {
   const candidates = [
     path.resolve(process.cwd(), '..', 'backend', '.venv'),
     path.resolve(process.cwd(), '..', 'backend', 'storage'),
+    path.resolve(process.cwd(), 'tests', 'e2e', 'fixtures'),
   ]
   for (const rootDir of candidates) {
-    const filePath = await findNamedFile(rootDir, ['grace_hopper.jpg', 'zidane.jpg'])
+    const filePath = await findNamedFile(rootDir, ['grace_hopper.jpg', 'zidane.jpg', 'ocr-selfie-grace.jpg'])
     if (filePath) {
       const raw = await fs.readFile(filePath)
       return `data:image/jpeg;base64,${raw.toString('base64')}`
@@ -40,9 +51,16 @@ async function loadIdentityFixtureDataUrl() {
   }
   return null
 }
+const STEP_TIMEOUT = 20000
+
+async function waitForNextButtonReady(page) {
+  const nextButton = page.getByRole('button', { name: /^(Next|Continue)$/i })
+  await expect(nextButton).toBeEnabled({ timeout: STEP_TIMEOUT })
+}
 
 test.describe('Admin New Test Wizard end-to-end', () => {
   test('admin can create exam with question and learner can take it', async ({ page, context }) => {
+    test.setTimeout(180000)
     const { token: adminToken } = await ensureAdmin(context)
     const learner = await createLearner(context, adminToken)
     const { node } = await createCourseAndNode(adminToken)
@@ -76,15 +94,17 @@ test.describe('Admin New Test Wizard end-to-end', () => {
 
     // Step 1 - Method
     await expect(page.getByRole('heading', { name: 'Test Creation Method' })).toBeVisible()
-    await page.getByRole('button', { name: /Next/i }).click()
+    await waitForNextButtonReady(page)
+    await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
 
-    // Step 2 - Proctoring & settings
-    await expect(page.getByRole('heading', { name: 'Proctoring & Test Settings' })).toBeVisible()
+    // Step 2 - Proctoring/settings step (label may drift by route changes).
+    await expect(page.getByRole('heading', { level: 3, name: /Proctoring/i })).toBeVisible({ timeout: STEP_TIMEOUT })
     await page.fill('input[name="time_limit"]', '20')
-    await page.getByRole('button', { name: /Next/i }).click()
+    await waitForNextButtonReady(page)
+    await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
 
     // Step 3 - Questions
-    await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Questions/i }).first()).toBeVisible({ timeout: STEP_TIMEOUT })
     await page.getByRole('button', { name: /Add Single Choice/i }).click()
     await page.fill('input[placeholder="Enter question..."]', 'Warm-up question')
     await page.fill('input[placeholder="Option A"]', 'Option A')

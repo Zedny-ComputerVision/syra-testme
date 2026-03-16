@@ -65,10 +65,4 @@ except Exception as exc:
     raise RuntimeError("Failed to register admin tests router (/admin/tests)") from exc
 router.include_router(tests_router, tags=["tests"])
 router.include_router(health.router, tags=["health"])
-
-try:
-    from ..core.config import get_settings
-    if get_settings().E2E_SEED_ENABLED:
-        router.include_router(testing.router, tags=["testing"])
-except Exception:
-    pass
+router.include_router(testing.router, tags=["testing"])

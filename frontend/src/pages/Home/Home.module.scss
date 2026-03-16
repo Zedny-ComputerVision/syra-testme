@@ -81,6 +81,10 @@
   font-size: 0.85rem;
   font-weight: 700;
   transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: inherit;
 }
 
 .primaryAction {
@@ -100,6 +104,14 @@
 .secondaryAction:hover,
 .focusLink:hover {
   transform: translateY(-1px);
+}
+
+.primaryAction:disabled,
+.secondaryAction:disabled,
+.focusLink:disabled {
+  cursor: progress;
+  opacity: 0.72;
+  transform: none;
 }
 
 .secondaryAction:hover,
@@ -182,6 +194,11 @@
   color: var(--color-muted);
 }
 
+.statusNote {
+  font-size: 0.76rem;
+  color: var(--color-muted);
+}
+
 .error {
   color: var(--color-danger-text-muted);
   background: var(--color-danger-bg);
@@ -204,6 +221,11 @@
   padding: 0.65rem 0.9rem;
   cursor: pointer;
   flex-shrink: 0;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
 }
 
 /* ---- Stats Row ---- */
@@ -321,6 +343,15 @@
   border: 1px solid var(--color-border);
   border-radius: calc(var(--radius) + 2px);
   padding: 1rem;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+    box-shadow: 0 16px 26px color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
 }
 
 .scheduleSkeleton {
@@ -353,12 +384,24 @@
   color: var(--color-primary);
 }
 
+.schedHint {
+  margin-top: 0.55rem;
+  font-size: 0.78rem;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 .emptySchedule {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   color: var(--color-muted);
   padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .emptyRecent {
@@ -378,6 +421,28 @@
   margin-top: 0.35rem;
   font-size: 0.88rem;
   color: var(--color-muted);
+}
+
+.emptyAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.85rem;
+  min-height: 2.4rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  }
 }
 
 /* ---- Actions ---- */
@@ -411,6 +476,26 @@
 .sectionHeader {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.8rem;
   .sectionTitle { margin: 0; }
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.warningRow {
+  margin-bottom: 0.85rem;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--color-warning-text, var(--color-primary)) 24%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-warning-bg) 75%, transparent);
+}
+
+.warningText {
+  font-size: 0.85rem;
+  color: var(--color-warning-text, var(--color-text));
 }
 
 .recentGrid {
@@ -469,6 +554,11 @@
 
   .errorRow {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .emptySchedule,
+  .sectionHeader {
     align-items: stretch;
   }
 }

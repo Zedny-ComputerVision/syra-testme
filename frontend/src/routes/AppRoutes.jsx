@@ -76,10 +76,19 @@ const AdminAuditLog = lazyPage(() => import('../pages/Admin/AdminAuditLog/AdminA
 const Maintenance = lazyPage(() => import('../pages/Maintenance/Maintenance'), { fullPage: true, label: 'Loading maintenance notice...' })
 
 function ProtectedRoute({ children, roles, permission }) {
+  const location = useLocation()
   const { user, loading, hasPermission } = useAuth()
 
   if (loading) return <Loader fullPage label="Authenticating..." />
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
+      />
+    )
+  }
   if (roles && roles.length > 0 && !roles.includes(user.role)) {
     return <Navigate to="/access-denied" replace />
   }
@@ -335,6 +344,7 @@ const router = createBrowserRouter(
 
     { path: '/admin/users', element: withAuth(<AdminUsers />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Users') },
     { path: '/admin/roles', element: withAuth(<AdminRolesPermissions />, SUPER_ADMIN, 'Manage Roles') },
+    { path: '/admin/roles-permissions', element: <Navigate to="/admin/roles" replace /> },
 
     { path: '/admin/templates', element: withAuth(<AdminTemplates />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
     { path: '/admin/certificates', element: withAuth(<AdminCertificates />, ADMIN_ROLES, 'Edit Tests') },

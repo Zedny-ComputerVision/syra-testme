@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
@@ -78,6 +78,7 @@ export default function AdminExams() {
   const [reportBusyId, setReportBusyId] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState('')
   const [openMenuId, setOpenMenuId] = useState('')
+  const abortRef = useRef(null)
 
   const load = async ({
     nextSearch = search,
@@ -86,6 +87,10 @@ export default function AdminExams() {
     nextPageSize = pageSize,
     nextSort = sort,
   } = {}) => {
+    // Cancel any in-flight request to prevent stale results
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     setError('')
     try {
@@ -97,15 +102,17 @@ export default function AdminExams() {
       if (nextSearch.trim()) params.search = nextSearch.trim()
       if (nextFilters.status) params.status = nextFilters.status
       if (nextFilters.type) params.type = nextFilters.type
-      const { data } = await adminApi.tests(params)
+      const { data } = await adminApi.tests(params, { signal: controller.signal })
+      if (controller.signal.aborted) return
       setTests((data?.items || []).map(normalizeAdminTest))
       setTotal(data?.total || 0)
     } catch (err) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return
       setError(resolveError(err) || 'Failed to load tests.')
       setTests([])
       setTotal(0)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }
 
@@ -201,13 +208,16 @@ export default function AdminExams() {
     setOpenMenuId('')
     try {
       const { data } = await adminApi.downloadTestReport(test.id)
-      const reportWindow = window.open('', '_blank', 'noopener,noreferrer')
+      const blob = new Blob([data], { type: 'text/html; charset=utf-8' })
+      const blobUrl = URL.createObjectURL(blob)
+      const reportWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer')
       if (!reportWindow) {
+        URL.revokeObjectURL(blobUrl)
         setError('Popup blocked. Allow pop-ups to open the report preview.')
         return
       }
-      reportWindow.document.write(data)
-      reportWindow.document.close()
+      // Revoke after a short delay so the browser has time to load the blob
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
     } catch (err) {
       setError(resolveError(err) || 'Failed to open report.')
     } finally {

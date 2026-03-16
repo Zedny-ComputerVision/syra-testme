@@ -161,10 +161,8 @@ export default function VerifyIdentityPage() {
   }, [navigate, startCamera, testId])
 
   useEffect(() => {
-    let cancelled = false
-    loadRequirements().catch(() => {})
+    void loadRequirements()
     return () => {
-      cancelled = true
       stopCamera()
     }
   }, [loadRequirements, stopCamera])
@@ -515,6 +513,9 @@ export default function VerifyIdentityPage() {
                 <p className={styles.helper}>If the ID number is not detected from the image, you can type it here.</p>
               </div>
               <div className={styles.photoActions}>
+                <button type="button" className={styles.btnSecondary} onClick={() => navigate(`/tests/${testId}/system-check`)} disabled={submitting || loadingConfig}>
+                  Back to system check
+                </button>
                 <button type="button" className={styles.btnSecondary} onClick={retake} disabled={submitting || !configResolved}>Retake identity photos</button>
                 <button type="button" className={styles.btnPrimary} onClick={confirm} disabled={submitting || loadingConfig || !configResolved || !selfie || !idPhoto || (requirements.fullscreenRequired && !fullscreenActive)}>
                   {submitting ? 'Verifying...' : 'Confirm & Continue'}

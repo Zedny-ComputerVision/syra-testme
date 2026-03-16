@@ -892,6 +892,11 @@ export default function AdminManageTestPage() {
       setQuestions(questionsData || [])
       hydrateSettingsForm(mergedExam)
 
+      // Render the page shell as soon as the primary test payload is ready.
+      // Attempt/video enrichment can continue in the background without
+      // blocking the selected tab from becoming visible.
+      if (showSpinner) setLoading(false)
+
       const examScheds = (scheds || []).filter((s) => String(s.exam_id) === String(id))
       setSessions(examScheds)
       const userMap = new Map(userItems.map((u) => [String(u.id), u]))
@@ -1236,6 +1241,7 @@ export default function AdminManageTestPage() {
     if (!trimmedTitle) return withError('Title is required.')
     if (timeLimit != null && (!Number.isFinite(timeLimit) || timeLimit <= 0)) return withError('Time limit must be positive.')
     if (!Number.isFinite(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) return withError('Max attempts must be between 1 and 20.')
+    if (maxAttempts > 1 && !form.allow_retake) return withError('Enable retakes or reduce max attempts to 1.')
     if (passingScore != null && (!Number.isFinite(passingScore) || passingScore < 0 || passingScore > 100)) return withError('Passing score must be between 0 and 100.')
     if (!Number.isFinite(sectionCount) || sectionCount < 0 || sectionCount > 99) return withError('Test sections must be between 0 and 99.')
     if (form.allow_pause && pauseDurationMinutes != null && (!Number.isFinite(pauseDurationMinutes) || pauseDurationMinutes <= 0)) {
@@ -1355,14 +1361,18 @@ export default function AdminManageTestPage() {
         }
 
     setSavingSettings(true)
+    let saved = false
     try {
       await adminApi.updateTest(exam.id, adminPayload)
-      await loadAll(false)
+      saved = true
       withNotice('Settings saved.')
     } catch (e) {
       withError(e.response?.data?.detail || 'Failed to save settings.')
     } finally {
       setSavingSettings(false)
+    }
+    if (saved) {
+      void loadAll(false)
     }
   }
 

@@ -33,6 +33,7 @@ test.describe('Admin system pages', () => {
 
     await page.goto('/admin/subscribers')
     await expect(page.getByRole('heading', { name: 'Subscribers' })).toBeVisible()
+    await expect(page.getByPlaceholder('user@example.com')).toBeEnabled({ timeout: 15000 })
 
     await page.getByPlaceholder('user@example.com').fill('bad-email')
     await page.getByRole('button', { name: 'Add' }).click()
@@ -78,7 +79,8 @@ test.describe('Admin system pages', () => {
     await subscriberRow.getByRole('button', { name: 'Remove' }).nth(0).click()
     await subscriberRow.getByRole('button', { name: 'Confirm remove' }).click()
     await expect(page.getByText('Subscriber removed.')).toBeVisible()
-    await expect(subscriberRow).toHaveCount(0)
+    await page.reload()
+    await expect(page.getByText(email)).toHaveCount(0)
   })
 
   test('integrations require a URL before enabling and persist saved values', async ({ page, context }) => {

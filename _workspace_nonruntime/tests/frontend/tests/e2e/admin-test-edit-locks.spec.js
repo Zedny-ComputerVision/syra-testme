@@ -51,7 +51,7 @@ test.describe('Admin test edit lock rules', () => {
     await page.goto(`/admin/tests/${testId}`)
     await expect(page).toHaveURL(new RegExp(`/admin/tests/${testId}/manage`))
 
-    const nameInput = page.locator('label:has-text("Test name") input').first()
+    const nameInput = page.getByRole('textbox', { name: 'Test name *' })
     await expect(nameInput).toBeVisible()
     await expect(nameInput).toHaveValue(name)
     await expect(nameInput).toBeEnabled()

@@ -70,6 +70,35 @@ describe('ExamInstructions page', () => {
     expect(screen.getByText('40 min')).toBeTruthy()
   })
 
+  it('uses runtime settings for learner instructions when settings are absent', async () => {
+    getTestMock.mockResolvedValueOnce({
+      data: {
+        id: '4',
+        title: 'Managed Physics',
+        exam_type: 'MCQ',
+        time_limit_minutes: 30,
+        max_attempts: 2,
+        runtime_settings: {
+          instructions_heading: 'Read carefully before you begin',
+          instructions_body: 'Managed instructions should appear for learners.',
+        },
+        proctoring_config: {},
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/tests/4']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/tests/:testId" element={<ExamInstructions />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => expect(screen.getByText('Managed Physics')).toBeTruthy())
+    expect(screen.getByText('Read carefully before you begin')).toBeTruthy()
+    expect(screen.getByText('Managed instructions should appear for learners.')).toBeTruthy()
+  })
+
   it('shows a retry path when loading the test fails', async () => {
     getTestMock
       .mockRejectedValueOnce(new Error('boom'))

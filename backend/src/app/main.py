@@ -105,7 +105,7 @@ MAINTENANCE_ALLOWED_WRITE_PATHS = {
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
 }
-MAINTENANCE_CACHE_TTL_SECONDS = 5.0
+MAINTENANCE_CACHE_TTL_SECONDS = 60.0
 _maintenance_mode_cache = {
     "mode": "off",
     "expires_at": 0.0,
@@ -352,6 +352,41 @@ def _run_retention_cleanup() -> None:
     )
 
 
+def _prewarm_detection_models() -> None:
+    """Pre-load YOLO and MediaPipe models at startup to avoid cold-start lag on first frame."""
+    try:
+        from .detection._yolo_face import get_face_model
+        model = get_face_model()
+        if model is not None:
+            logger.info("YOLO face model pre-warmed successfully")
+        else:
+            logger.warning("YOLO face model not available for pre-warming")
+    except Exception as exc:
+        logger.warning("Failed to pre-warm YOLO face model: %s", exc)
+
+    try:
+        from .detection.object_detection import preload as preload_object_model
+        preload_object_model()
+        logger.info("YOLO object model pre-warmed successfully")
+    except Exception as exc:
+        logger.warning("Failed to pre-warm YOLO object model: %s", exc)
+
+    try:
+        import mediapipe as mp
+        if hasattr(mp, "solutions"):
+            _mesh = mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=False, refine_landmarks=True, max_num_faces=1
+            )
+            # Run a dummy frame to trigger internal model loading
+            import numpy as np
+            dummy = np.zeros((120, 160, 3), dtype=np.uint8)
+            _mesh.process(dummy)
+            _mesh.close()
+            logger.info("MediaPipe FaceMesh pre-warmed successfully")
+    except Exception as exc:
+        logger.warning("Failed to pre-warm MediaPipe FaceMesh: %s", exc)
+
+
 def _run_startup_initialization(*, is_test_env: bool) -> None:
     _assert_required_api_routes()
     if settings.PRECHECK_ALLOW_TEST_BYPASS:
@@ -369,10 +404,13 @@ def _run_startup_initialization(*, is_test_env: bool) -> None:
         return
     _run_alembic_upgrade()
     logger.info("Alembic migrations applied successfully")
+    # Pre-warm detection models after migrations are applied
+    _prewarm_detection_models()
 
 
 async def _schedule_loop():
     while True:
+        await asyncio.sleep(300)  # check every 5 min instead of 60s to reduce DB pressure
         try:
             with SessionLocal() as db:
                 schedules = db.scalars(
@@ -384,7 +422,6 @@ async def _schedule_loop():
                         await run_report_schedule(db, sched)
         except Exception as exc:
             logger.error("Report scheduler error: %s", exc)
-        await asyncio.sleep(60)
 
 
 async def _retention_cleanup_loop():

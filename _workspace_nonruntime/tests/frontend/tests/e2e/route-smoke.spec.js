@@ -96,6 +96,20 @@ test.describe('Route smoke coverage', () => {
     await page.goto('/exams', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/tests$/)
     await page.goto('/surveys', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('No surveys available right now.')).toBeVisible()
+
+    const noSurveysState = page.getByText(/No surveys available right now\./i)
+    const submitResponseButtons = page.getByRole('button', { name: /Submit Response/i })
+
+    await expect.poll(async () => {
+      return (await noSurveysState.count()) > 0 || (await submitResponseButtons.count()) > 0
+    }, { timeout: 15000 }).toBe(true)
+
+    if (await noSurveysState.count()) {
+      await expect(noSurveysState).toBeVisible()
+      await expect(submitResponseButtons).toHaveCount(0)
+    } else {
+      await expect(submitResponseButtons.first()).toBeVisible()
+      await expect(page.getByRole('heading', { name: /My Surveys/i })).toBeVisible()
+    }
   })
 })

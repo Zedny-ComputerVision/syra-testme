@@ -41,15 +41,18 @@ class HeadPoseDetector:
         self._prev_pitch: float | None = None
         self._prev_yaw: float | None = None
         self._warned_unavailable = False
+        # Expose latest computed angles so orchestrator can pass them to eye_tracker
+        self.last_yaw_rad: float | None = None
+        self.last_pitch_rad: float | None = None
         self._mesh = (
             mp.solutions.face_mesh.FaceMesh(static_image_mode=False, refine_landmarks=True, max_num_faces=1)
             if hasattr(mp, "solutions")
             else None
         )
 
-    def _pose_angles(self, frame, landmarks) -> Optional[tuple[float, float, float]]:
+    def _pose_angles(self, landmarks, frame_shape) -> Optional[tuple[float, float, float]]:
         """Return (yaw, pitch, roll) in radians."""
-        h, w, _ = frame.shape
+        h, w = frame_shape[:2]
         pts_2d = np.array(
             [
                 (landmarks[1].x * w, landmarks[1].y * h),      # Nose tip
@@ -122,31 +125,38 @@ class HeadPoseDetector:
             and abs(self._prev_pitch - pitch_rad) < self.change_threshold_rad
         )
 
-    def process(self, frame_bytes: bytes) -> dict | None:
+    def process_ndarray(self, frame: np.ndarray) -> dict | None:
+        """Process an already-decoded frame (avoids re-decode when called from orchestrator)."""
         if self._mesh is None:
             if not self._warned_unavailable:
                 logger.warning("Head pose model unavailable - detection disabled")
                 self._warned_unavailable = True
             return None
-
-        np_arr = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if frame is None:
             return None
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = self._mesh.process(rgb)
-        if not res.multi_face_landmarks:
+        lm = res.multi_face_landmarks[0].landmark if res.multi_face_landmarks else None
+        return self.process_landmarks(lm, frame.shape)
+
+    def process_landmarks(self, lm, frame_shape) -> dict | None:
+        """Process pre-computed FaceMesh landmarks (skips redundant FaceMesh inference)."""
+        if lm is None:
             self._consecutive_bad = 0
             self._prev_pitch = None
             self._prev_yaw = None
+            self.last_yaw_rad = None
+            self.last_pitch_rad = None
             return None
 
-        angles = self._pose_angles(frame, res.multi_face_landmarks[0].landmark)
+        angles = self._pose_angles(lm, frame_shape)
         if angles is None:
             return None
 
         yaw_rad, pitch_rad, roll_rad = angles
+        self.last_yaw_rad = yaw_rad
+        self.last_pitch_rad = pitch_rad
         reasons = self._pose_reasons(yaw_rad, pitch_rad)
 
         if reasons:
@@ -186,3 +196,8 @@ class HeadPoseDetector:
         self._prev_pitch = pitch_rad
         self._prev_yaw = yaw_rad
         return None
+
+    def process(self, frame_bytes: bytes) -> dict | None:
+        np_arr = np.frombuffer(frame_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        return self.process_ndarray(frame)

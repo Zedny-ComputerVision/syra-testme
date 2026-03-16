@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 import {
@@ -6,12 +6,17 @@ import {
   canonicalizePermissionRows,
   hasPermission as checkPermission,
 } from '../utils/permissions';
+import { clearAttemptId } from '../utils/attemptSession';
 
 export const AuthContext = createContext(null);
 
 const STORAGE_KEY = 'syra_tokens';
 const rawBase = import.meta.env.VITE_API_BASE_URL || '/api/';
 const apiBaseURL = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+
+function resolveApiUrl(path) {
+  return new URL(path, new URL(apiBaseURL, window.location.origin)).toString();
+}
 
 function safeSetItem(key, value) {
   try {
@@ -26,6 +31,43 @@ function safeRemoveItem(key) {
     localStorage.removeItem(key);
   } catch {
     // ignore storage failures
+  }
+}
+
+function safeSessionRemoveItem(key) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function clearSessionArtifacts() {
+  clearAttemptId();
+  safeSessionRemoveItem('precheck_flags');
+  try {
+    const keys = [];
+    for (let index = 0; index < sessionStorage.length; index += 1) {
+      const key = sessionStorage.key(index);
+      if (key && key.startsWith('journey_start_error:')) {
+        keys.push(key);
+      }
+    }
+    keys.forEach((key) => sessionStorage.removeItem(key));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function isJwtLike(token) {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.split('.');
+  if (parts.length !== 3 || parts.some((part) => part.length === 0)) return false;
+  try {
+    jwtDecode(token);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -74,25 +116,51 @@ function decodeUser(accessToken) {
 }
 
 export function AuthProvider({ children }) {
-  const [tokens, setTokens] = useState(loadStoredTokens);
+  const initialTokens = useMemo(() => loadStoredTokens(), []);
+  const [tokens, setTokens] = useState(initialTokens);
   const [user, setUser] = useState(() => {
-    const stored = loadStoredTokens();
-    return stored ? decodeUser(stored.access_token) : null;
+    return initialTokens ? decodeUser(initialTokens.access_token) : null;
   });
   const [permissionRows, setPermissionRows] = useState(DEFAULT_PERMISSION_ROWS);
   const [loading, setLoading] = useState(true);
+  const refreshPromiseRef = useRef(null);
+
+  const clearAuthState = useCallback(() => {
+    safeRemoveItem(STORAGE_KEY);
+    clearSessionArtifacts();
+    setTokens(null);
+    setUser(null);
+    setPermissionRows(DEFAULT_PERMISSION_ROWS);
+    setLoading(false);
+  }, []);
 
   const refreshAccessToken = useCallback(async (currentTokens) => {
     if (!currentTokens?.refresh_token) return null;
+    if (!isJwtLike(currentTokens.refresh_token)) return null;
+    if (!refreshPromiseRef.current) {
+      refreshPromiseRef.current = (async () => {
+        try {
+          const refreshUrl = resolveApiUrl('auth/refresh');
+          const { data } = await axios.post(
+            refreshUrl,
+            { refresh_token: currentTokens.refresh_token },
+            { timeout: 5000 },
+          );
+          if (!data?.access_token) return null;
+          return {
+            ...currentTokens,
+            access_token: data.access_token,
+            token_type: data.token_type || currentTokens.token_type || 'bearer',
+          };
+        } catch {
+          return null;
+        } finally {
+          refreshPromiseRef.current = null;
+        }
+      })();
+    }
     try {
-      const refreshUrl = new URL('auth/refresh', apiBaseURL).toString();
-      const { data } = await axios.post(refreshUrl, { refresh_token: currentTokens.refresh_token });
-      if (!data?.access_token) return null;
-      return {
-        ...currentTokens,
-        access_token: data.access_token,
-        token_type: data.token_type || currentTokens.token_type || 'bearer',
-      };
+      return await refreshPromiseRef.current;
     } catch {
       return null;
     }
@@ -123,10 +191,7 @@ export function AuthProvider({ children }) {
       const refreshed = await refreshAccessToken(tokens);
       if (!refreshed) {
         if (!cancelled) {
-          safeRemoveItem(STORAGE_KEY);
-          setTokens(null);
-          setUser(null);
-          setLoading(false);
+          clearAuthState();
         }
         return;
       }
@@ -143,7 +208,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [tokens, refreshAccessToken]);
+  }, [clearAuthState, tokens, refreshAccessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,7 +221,7 @@ export function AuthProvider({ children }) {
         return;
       }
       try {
-        const permissionsUrl = new URL('admin-settings/permissions/public', apiBaseURL).toString();
+        const permissionsUrl = resolveApiUrl('admin-settings/permissions/public');
         const { data } = await axios.get(permissionsUrl, {
           headers: { Authorization: `Bearer ${tokens.access_token}` },
         });
@@ -181,6 +246,10 @@ export function AuthProvider({ children }) {
    * @param {{ access_token: string, refresh_token?: string }} payload
    */
   const login = useCallback((payload) => {
+    if (!payload?.access_token) {
+      throw new Error('Missing access token');
+    }
+    clearSessionArtifacts();
     safeSetItem(STORAGE_KEY, JSON.stringify(payload));
     setUser(decodeUser(payload.access_token));
     setLoading(false);
@@ -191,20 +260,20 @@ export function AuthProvider({ children }) {
   /**
    * Clear all auth state and redirect-worthy data.
    */
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     const accessToken = tokens?.access_token;
-    if (accessToken) {
-      const logoutUrl = new URL('auth/logout', apiBaseURL).toString();
-      void axios.post(logoutUrl, null, {
+    clearAuthState();
+    if (!accessToken) return;
+    const logoutUrl = resolveApiUrl('auth/logout');
+    try {
+      await axios.post(logoutUrl, null, {
         headers: { Authorization: `Bearer ${accessToken}` },
-      }).catch(() => {});
+        timeout: 5000,
+      });
+    } catch (error) {
+      console.error('Server-side logout failed after local session cleanup.', error);
     }
-    safeRemoveItem(STORAGE_KEY);
-    setTokens(null);
-    setUser(null);
-    setLoading(false);
-    setPermissionRows(DEFAULT_PERMISSION_ROWS);
-  }, [tokens]);
+  }, [clearAuthState, tokens]);
 
   /**
    * Update stored tokens (e.g. after a token refresh).
@@ -233,6 +302,49 @@ export function AuthProvider({ children }) {
     },
     [permissionRows, user]
   );
+
+  // Proactive token refresh: refresh the access token before it expires
+  useEffect(() => {
+    if (!tokens?.access_token) return;
+    let timer;
+    try {
+      const decoded = jwtDecode(tokens.access_token);
+      if (!decoded.exp) return;
+      // Refresh 2 minutes before expiry (or immediately if less than 2 min left)
+      const msUntilExpiry = decoded.exp * 1000 - Date.now();
+      const refreshAt = Math.max(msUntilExpiry - 2 * 60 * 1000, 0);
+      timer = setTimeout(async () => {
+        const refreshed = await refreshAccessToken(tokens);
+        if (refreshed) {
+          safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
+          setTokens(refreshed);
+          setUser(decodeUser(refreshed.access_token));
+        } else {
+          clearAuthState();
+        }
+      }, refreshAt);
+    } catch {
+      // invalid token, ignore
+    }
+    return () => clearTimeout(timer);
+  }, [tokens, refreshAccessToken, clearAuthState]);
+
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key && event.key !== STORAGE_KEY) return;
+      const nextTokens = loadStoredTokens();
+      if (!nextTokens?.access_token) {
+        clearAuthState();
+        return;
+      }
+      setTokens(nextTokens);
+      setUser(decodeUser(nextTokens.access_token));
+      setLoading(false);
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [clearAuthState]);
 
   const isAuthenticated = Boolean(user);
 

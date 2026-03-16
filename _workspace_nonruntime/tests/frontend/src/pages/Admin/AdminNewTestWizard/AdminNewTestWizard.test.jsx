@@ -119,6 +119,48 @@ describe('AdminNewTestWizard', () => {
     expect(screen.queryByText('Test Creation Method')).toBeNull()
   })
 
+  it('validates the external code length before saving', async () => {
+    renderWizard()
+
+    fireEvent.change(await screen.findByLabelText(/Test Name/i), {
+      target: { value: 'Core Cycle Test' },
+    })
+    fireEvent.change(screen.getByLabelText('External Code / ID'), {
+      target: { value: 'CODE-TOO-LONG-123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/i }))
+
+    await waitFor(() => expect(screen.getAllByText('External code / ID must be between 6 and 12 characters.').length).toBeGreaterThan(0))
+    expect(createTestMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Test Information' })).toBeTruthy()
+  })
+
+  it('renders validation payloads without crashing when the API returns detail objects', async () => {
+    createTestMock.mockRejectedValue({
+      response: {
+        data: {
+          detail: [
+            { loc: ['body', 'code'], msg: 'code must be between 6 and 12 characters' },
+          ],
+        },
+      },
+    })
+
+    renderWizard()
+
+    fireEvent.change(await screen.findByLabelText(/Test Name/i), {
+      target: { value: 'Core Cycle Test' },
+    })
+    fireEvent.change(screen.getByLabelText('External Code / ID'), {
+      target: { value: 'VALID12' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/i }))
+
+    await waitFor(() => expect(screen.getByText('code: code must be between 6 and 12 characters')).toBeTruthy())
+    expect(screen.getByRole('heading', { name: 'Test Information' })).toBeTruthy()
+    expect(screen.queryByText('Something went wrong.')).toBeNull()
+  })
+
   it('keeps the wizard usable when a non-critical bootstrap lookup fails', async () => {
     coursesMock.mockResolvedValue({
       data: [{ id: 'course-1', title: 'Course One' }],

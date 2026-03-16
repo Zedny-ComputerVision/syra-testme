@@ -7,6 +7,15 @@ import { getUnreadCount, markAllRead, listNotifications } from '../../services/n
 import { searchAll } from '../../services/search.service'
 import styles from './Navbar.module.scss'
 
+function getErrorMessage(error, fallback) {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  const message = error?.response?.data?.message
+  if (typeof message === 'string' && message.trim()) return message
+  if (typeof error?.message === 'string' && error.message.trim()) return error.message
+  return fallback
+}
+
 export default function Navbar({ onMenuToggle }) {
   const { user, logout, hasPermission } = useAuth()
   const { theme, toggleTheme, accent, setAccent } = useContext(ThemeContext)
@@ -25,6 +34,10 @@ export default function Navbar({ onMenuToggle }) {
   const [searching, setSearching] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [results, setResults] = useState([])
+  const [notifLoading, setNotifLoading] = useState(false)
+  const [notifError, setNotifError] = useState('')
+  const [notifSyncError, setNotifSyncError] = useState('')
+  const [notifActionLoading, setNotifActionLoading] = useState(false)
   const menuRef = useRef(null)
   const bellRef = useRef(null)
   const searchRef = useRef(null)
@@ -33,7 +46,13 @@ export default function Navbar({ onMenuToggle }) {
   const latestSearchRequest = useRef(0)
 
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      setUnread(0)
+      setNotifications([])
+      setNotifError('')
+      setNotifSyncError('')
+      return
+    }
     let cancelled = false
     const loadUnread = async () => {
       if (document.visibilityState === 'hidden') {
@@ -43,9 +62,12 @@ export default function Navbar({ onMenuToggle }) {
         const { data } = await getUnreadCount()
         if (!cancelled) {
           setUnread(data?.count || 0)
+          setNotifSyncError('')
         }
-      } catch {
-        // ignore
+      } catch (error) {
+        if (!cancelled) {
+          setNotifSyncError(getErrorMessage(error, 'Live notification updates are temporarily unavailable.'))
+        }
       }
     }
 
@@ -113,19 +135,33 @@ export default function Navbar({ onMenuToggle }) {
     const next = !notifOpen
     setNotifOpen(next)
     if (next) {
+      setNotifLoading(true)
+      setNotifError('')
       try {
         const { data } = await listNotifications()
         setNotifications(data || [])
-      } catch (e) {}
+        setNotifSyncError('')
+      } catch (error) {
+        setNotifError(getErrorMessage(error, 'Could not load notifications.'))
+      } finally {
+        setNotifLoading(false)
+      }
     }
   }
 
   const handleMarkAllRead = async () => {
+    if (notifActionLoading) return
+    setNotifActionLoading(true)
+    setNotifError('')
     try {
       await markAllRead()
       setUnread(0)
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
-    } catch (e) {}
+    } catch (error) {
+      setNotifError(getErrorMessage(error, 'Failed to mark notifications as read.'))
+    } finally {
+      setNotifActionLoading(false)
+    }
   }
 
   const initials = (user?.name || user?.user_id || 'U').slice(0, 2).toUpperCase()
@@ -189,9 +225,13 @@ export default function Navbar({ onMenuToggle }) {
           ? mapped
           : [{ type: 'Info', label: 'No results found', meta: `for "${query}"` }],
       )
-    } catch (e) {
+    } catch (error) {
       if (requestId === latestSearchRequest.current) {
-        setResults([{ type: 'Error', label: 'Search failed', meta: 'Try again' }])
+        setResults([{
+          type: 'Error',
+          label: 'Search failed',
+          meta: getErrorMessage(error, 'Try again in a moment'),
+        }])
       }
     } finally {
       if (requestId === latestSearchRequest.current) {
@@ -199,6 +239,19 @@ export default function Navbar({ onMenuToggle }) {
       }
     }
   }, [isAdmin, isPrivileged])
+
+  const clearSearch = () => {
+    latestSearchRequest.current += 1
+    if (searchDebounce.current) {
+      clearTimeout(searchDebounce.current)
+      searchDebounce.current = null
+    }
+    setSearchQuery('')
+    setResults([])
+    setSearchOpen(false)
+    setSearching(false)
+    searchInputRef.current?.focus()
+  }
 
   const handleSearchChange = (e) => {
     const q = e.target.value
@@ -248,15 +301,39 @@ export default function Navbar({ onMenuToggle }) {
             ref={searchInputRef}
             className={styles.searchInput}
             placeholder="Search tests, attempts, users..."
+            type="search"
+            aria-label="Search tests, attempts, and users"
+            aria-expanded={searchOpen}
+            aria-controls="navbar-search-results"
             value={searchQuery}
             onChange={handleSearchChange}
-            onFocus={() => { if (results.length > 0) setSearchOpen(true) }}
+            onFocus={() => {
+              if (results.length > 0) {
+                setSearchOpen(true)
+              } else if (searchQuery.trim().length >= 2) {
+                void performSearch(searchQuery)
+              }
+            }}
           />
         </form>
+        {searchQuery ? (
+          <button
+            type="button"
+            className={styles.searchClear}
+            onClick={clearSearch}
+            aria-label="Clear search"
+            title="Clear search"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        ) : null}
         <span className={styles.searchShortcut} aria-hidden="true">/</span>
         <AnimatePresence>
           {searchOpen && results.length > 0 && (
             <motion.div
+              id="navbar-search-results"
               className={styles.searchResults}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -315,6 +392,7 @@ export default function Navbar({ onMenuToggle }) {
               className={`${styles.accentChip} ${a.toneClass} ${accent === a.key ? styles.accentChipActive : ''}`}
               onClick={() => setAccent(a.key)}
               aria-label={`Use ${a.key} accent`}
+              aria-pressed={accent === a.key}
               title={`Use ${a.key} accent`}
               type="button"
             />
@@ -346,6 +424,8 @@ export default function Navbar({ onMenuToggle }) {
             className={styles.iconBtn}
             onClick={openNotifications}
             aria-label="Open notifications"
+            aria-expanded={notifOpen}
+            aria-haspopup="dialog"
             title="Notifications"
             type="button"
           >
@@ -359,13 +439,25 @@ export default function Navbar({ onMenuToggle }) {
               <div className={styles.notifHeader}>
                 <span className={styles.notifTitle}>Notifications</span>
                 {unread > 0 && (
-                  <button type="button" className={styles.notifMarkAll} onClick={handleMarkAllRead}>
-                    Mark all read
+                  <button
+                    type="button"
+                    className={styles.notifMarkAll}
+                    onClick={handleMarkAllRead}
+                    disabled={notifActionLoading}
+                  >
+                    {notifActionLoading ? 'Marking...' : 'Mark all read'}
                   </button>
                 )}
               </div>
+              {notifSyncError && !notifError && (
+                <div className={styles.notifNotice}>{notifSyncError}</div>
+              )}
               <div className={styles.notifList}>
-                {notifications.length === 0 ? (
+                {notifLoading ? (
+                  <div className={styles.notifEmpty}>Loading...</div>
+                ) : notifError ? (
+                  <div className={styles.notifEmpty}>{notifError}</div>
+                ) : notifications.length === 0 ? (
                   <div className={styles.notifEmpty}>No notifications</div>
                 ) : (
                   notifications.map((n, i) => (
@@ -402,6 +494,8 @@ export default function Navbar({ onMenuToggle }) {
             <button
               className={styles.avatarBtn}
               onClick={() => setUserMenuOpen(o => !o)}
+              aria-expanded={userMenuOpen}
+              aria-haspopup="menu"
               type="button"
             >
               <div className={styles.avatarCircle}>{initials}</div>

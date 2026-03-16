@@ -45,11 +45,11 @@ test.describe('Admin Manage Tests page', () => {
 
     await page.goto('/admin/tests')
     await expect(page).toHaveURL(/\/admin\/tests/)
-    await page.getByRole('button', { name: 'Displayed columns', exact: true }).click()
+    await page.getByRole('button', { name: 'Edit columns', exact: true }).click()
     await page.getByLabel('Code').uncheck()
     await page.getByRole('button', { name: 'Save displayed column set', exact: true }).click()
     await expect(page.locator('table thead th', { hasText: 'Code' })).toHaveCount(0)
-    await page.getByRole('button', { name: 'Displayed columns', exact: true }).click()
+    await page.getByRole('button', { name: 'Edit columns', exact: true }).click()
     await page.getByLabel('Code').check()
     await page.getByRole('button', { name: 'Save displayed column set', exact: true }).click()
     await expect(page.locator('table thead th', { hasText: 'Code' })).toBeVisible()
@@ -57,7 +57,7 @@ test.describe('Admin Manage Tests page', () => {
     const openFilterPanel = async () => {
       const panel = page.locator('div[class*="filterPanel"]')
       if (await panel.count()) return
-      await page.getByRole('button', { name: 'Filter', exact: true }).click()
+      await page.getByRole('button', { name: 'Show filters', exact: true }).click()
       await expect(page.locator('div[class*="filterPanel"]')).toBeVisible()
     }
 

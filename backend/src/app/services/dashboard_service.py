@@ -76,45 +76,38 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
             upcoming_schedules=[_serialize_schedule(schedule) for schedule in upcoming],
         )
 
-    attempts_metrics = db.execute(
-        select(
-            func.count(Attempt.id),
-            func.sum(case((Attempt.status == AttemptStatus.IN_PROGRESS, 1), else_=0)),
-            func.max(Attempt.score),
-            func.avg(Attempt.score),
-        )
-    ).one()
-    total_attempts = int(attempts_metrics[0] or 0)
-    in_progress = int(attempts_metrics[1] or 0)
-    best_score = attempts_metrics[2]
-    average_score = attempts_metrics[3]
-
-    schedules_query = select(Schedule).where(Schedule.scheduled_at >= now).order_by(Schedule.scheduled_at.asc())
-    upcoming = db.scalars(schedules_query).all()
-
-    tests_metrics = db.execute(
-        select(
-            func.count(Exam.id),
-            func.sum(case((Exam.status == ExamStatus.OPEN, 1), else_=0)),
-        ).where(Exam.library_pool_id.is_(None))
-    ).one()
-    total_tests = int(tests_metrics[0] or 0)
-    published_tests = int(tests_metrics[1] or 0)
-
-    total_users = 0
-    total_learners = 0
-    total_admins = 0
+    # Batch all scalar metrics into a single query to avoid multiple DB round-trips.
+    agg_columns = [
+        # Attempt metrics
+        func.count(Attempt.id).label("att_total"),
+        func.sum(case((Attempt.status == AttemptStatus.IN_PROGRESS, 1), else_=0)).label("att_ip"),
+        func.max(Attempt.score).label("att_best"),
+        func.avg(Attempt.score).label("att_avg"),
+        # Test metrics (scalar subqueries)
+        select(func.count(Exam.id)).where(Exam.library_pool_id.is_(None)).correlate(None).scalar_subquery().label("total_tests"),
+        select(func.count(Exam.id)).where(Exam.library_pool_id.is_(None), Exam.status == ExamStatus.OPEN).correlate(None).scalar_subquery().label("published_tests"),
+    ]
     if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
-        users_metrics = db.execute(
-            select(
-                func.count(User.id),
-                func.sum(case((User.role == RoleEnum.LEARNER, 1), else_=0)),
-                func.sum(case((User.role == RoleEnum.ADMIN, 1), else_=0)),
-            )
-        ).one()
-        total_users = int(users_metrics[0] or 0)
-        total_learners = int(users_metrics[1] or 0)
-        total_admins = int(users_metrics[2] or 0)
+        agg_columns.extend([
+            select(func.count(User.id)).correlate(None).scalar_subquery().label("total_users"),
+            select(func.count(User.id)).where(User.role == RoleEnum.LEARNER).correlate(None).scalar_subquery().label("total_learners"),
+            select(func.count(User.id)).where(User.role == RoleEnum.ADMIN).correlate(None).scalar_subquery().label("total_admins"),
+        ])
+
+    row = db.execute(select(*agg_columns)).one()
+    total_attempts = int(row.att_total or 0)
+    in_progress = int(row.att_ip or 0)
+    best_score = row.att_best
+    average_score = row.att_avg
+    total_tests = int(row.total_tests or 0)
+    published_tests = int(row.published_tests or 0)
+    total_users = int(getattr(row, "total_users", 0) or 0)
+    total_learners = int(getattr(row, "total_learners", 0) or 0)
+    total_admins = int(getattr(row, "total_admins", 0) or 0)
+
+    upcoming = db.scalars(
+        select(Schedule).where(Schedule.scheduled_at >= now).order_by(Schedule.scheduled_at.asc())
+    ).all()
 
     return DashboardRead(
         total_exams=total_tests,

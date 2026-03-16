@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Skeleton from '../../components/Skeleton/Skeleton'
 import { listAttempts } from '../../services/attempt.service'
@@ -30,24 +30,40 @@ export default function Attempts() {
   const [statusTab, setStatusTab] = useState('All')
   const [sortBy, setSortBy] = useState('newest')
   const [page, setPage] = useState(1)
+  const emptyRetryTimeoutRef = useRef(null)
   const navigate = useNavigate()
 
-  const loadAttempts = async () => {
+  const loadAttempts = useCallback(async ({ allowEmptyRetry = false } = {}) => {
     setLoading(true)
     try {
-      const { data } = await listAttempts({ skip: 0, limit: 200 })
-      setAttempts(readPaginatedItems(data).map(normalizeAttempt))
+      const { data } = await listAttempts({ skip: 0, limit: 50 })
+      const nextAttempts = readPaginatedItems(data).map(normalizeAttempt)
+      setAttempts(nextAttempts)
       setLoadError('')
+      if (emptyRetryTimeoutRef.current) {
+        window.clearTimeout(emptyRetryTimeoutRef.current)
+        emptyRetryTimeoutRef.current = null
+      }
+      if (allowEmptyRetry && nextAttempts.length === 0) {
+        emptyRetryTimeoutRef.current = window.setTimeout(() => {
+          void loadAttempts({ allowEmptyRetry: false })
+        }, 1200)
+      }
     } catch {
       setLoadError('Failed to load attempts.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    void loadAttempts()
-  }, [])
+    void loadAttempts({ allowEmptyRetry: true })
+    return () => {
+      if (emptyRetryTimeoutRef.current) {
+        window.clearTimeout(emptyRetryTimeoutRef.current)
+      }
+    }
+  }, [loadAttempts])
 
   const completed = attempts.filter((attempt) => attempt.is_completed || isAttemptCompletedStatus(attempt.status))
   const avgScore = completed.length

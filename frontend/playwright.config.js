@@ -39,6 +39,7 @@ export default defineConfig({
         BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || 'http://127.0.0.1:8000',
         FRONTEND_BASE_URL: process.env.FRONTEND_BASE_URL || 'http://127.0.0.1:5173',
         E2E_SEED_ENABLED: process.env.E2E_SEED_ENABLED || 'true',
+        PRECHECK_ALLOW_TEST_BYPASS: process.env.PRECHECK_ALLOW_TEST_BYPASS || 'true',
         MEDIA_STORAGE_PROVIDER: process.env.MEDIA_STORAGE_PROVIDER || 'local',
         PROCTORING_VIDEO_STORAGE_PROVIDER: process.env.PROCTORING_VIDEO_STORAGE_PROVIDER || 'cloudflare',
       },

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class MouthMonitor:
-    def __init__(self, open_threshold: float = 0.35, consecutive_threshold: int = 6):
+    def __init__(self, open_threshold: float = 0.35, consecutive_threshold: int = 3):
         self.open_threshold = open_threshold
         self.consecutive_threshold = consecutive_threshold
         self._consecutive_talking = 0
@@ -22,9 +22,8 @@ class MouthMonitor:
         else:
             self._mesh = None
 
-    def process(self, frame_bytes: bytes) -> dict | None:
-        np_arr = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    def process_ndarray(self, frame: np.ndarray) -> dict | None:
+        """Process an already-decoded frame (avoids re-decode when called from orchestrator)."""
         if frame is None:
             return None
         if self._mesh is None:
@@ -34,11 +33,15 @@ class MouthMonitor:
             return None
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = self._mesh.process(rgb)
-        if not res.multi_face_landmarks:
+        lm = res.multi_face_landmarks[0].landmark if res.multi_face_landmarks else None
+        return self.process_landmarks(lm)
+
+    def process_landmarks(self, lm) -> dict | None:
+        """Process pre-computed FaceMesh landmarks (skips redundant FaceMesh inference)."""
+        if lm is None:
             self._consecutive_talking = 0
             return None
 
-        lm = res.multi_face_landmarks[0].landmark
         upper = lm[13]
         lower = lm[14]
         chin = lm[152]
@@ -58,4 +61,9 @@ class MouthMonitor:
         else:
             self._consecutive_talking = 0
         return None
+
+    def process(self, frame_bytes: bytes) -> dict | None:
+        np_arr = np.frombuffer(frame_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        return self.process_ndarray(frame)
 

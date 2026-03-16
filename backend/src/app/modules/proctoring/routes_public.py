@@ -328,7 +328,7 @@ def _load_integrations_config(db: Session) -> dict:
 
 
 async def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -> str | None:
-    """Save screenshot evidence for HIGH severity events."""
+    """Save screenshot evidence for proctoring events."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     filename = f"{attempt_id}_{event_type}_{ts}.jpg"
     if settings.MEDIA_STORAGE_PROVIDER == "supabase":
@@ -1174,6 +1174,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     pass
         return list(_cached_events)
 
+    _frame_proc_end = 0.0  # monotonic timestamp of last frame processing completion
+
     try:
         while True:
             try:
@@ -1204,12 +1206,22 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     b64 = data.get("data")
                     if not b64:
                         continue
-                    logger.debug("WS frame received for attempt %s (b64 len=%d)", attempt_id, len(b64))
+                    # Gate: skip frames that were buffered during previous processing
+                    _recv_mono = time.monotonic()
+                    if _recv_mono - _frame_proc_end < 0.03:
+                        logger.debug("Dropping buffered frame for attempt %s (%.0fms after last)", attempt_id, (_recv_mono - _frame_proc_end) * 1000)
+                        continue
                     frame_bytes = base64.b64decode(b64)
                     # Run CPU-heavy detection in thread pool to avoid blocking event loop
                     loop = asyncio.get_event_loop()
+                    _proc_start = time.monotonic()
                     alerts = await loop.run_in_executor(None, orchestrator.process_frame, frame_bytes)
-                    logger.debug("Frame processed for attempt %s: %d alerts, score=%d", attempt_id, len(alerts), orchestrator.violation_score)
+                    _frame_proc_end = time.monotonic()
+                    _proc_ms = (_frame_proc_end - _proc_start) * 1000
+                    if _proc_ms > 500:
+                        logger.warning("Slow frame processing for attempt %s: %.0fms, %d alerts", attempt_id, _proc_ms, len(alerts))
+                    else:
+                        logger.debug("Frame processed for attempt %s: %.0fms, %d alerts, score=%d", attempt_id, _proc_ms, len(alerts), orchestrator.violation_score)
                     if alerts:
                         logger.debug("Alerts: %s", [a.get("event_type") for a in alerts])
                     history_events = _get_cached_events()
@@ -1224,14 +1236,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         severity = SEVERITY_MAP.get(alert.get("severity", "LOW"), SeverityEnum.LOW)
                         meta = alert.get("meta") or {}
 
-                        if _is_serious_alert(alert.get("severity"), severity):
-                            try:
-                                evidence_path = await _save_evidence(attempt_id, frame_bytes, alert["event_type"])
-                            except Exception as ev_err:
-                                logger.warning("Evidence save failed for attempt %s: %s", attempt_id, ev_err)
-                                evidence_path = None
-                            if evidence_path:
-                                meta["evidence"] = evidence_path
+                        # Save evidence screenshot for every alert (not just HIGH)
+                        try:
+                            evidence_path = await _save_evidence(attempt_id, frame_bytes, alert["event_type"])
+                        except Exception as ev_err:
+                            logger.warning("Evidence save failed for attempt %s: %s", attempt_id, ev_err)
+                            evidence_path = None
+                        if evidence_path:
+                            meta["evidence"] = evidence_path
 
                         event_time = datetime.now(timezone.utc)
                         event = ProctoringEvent(
@@ -1303,8 +1315,10 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         except Exception:
                             pass
 
-                    summary = orchestrator.get_summary()
-                    await websocket.send_json({"type": "summary", "precheck_passed": bool(attempt.precheck_passed_at), **summary})
+                    # Send summary every 5th frame or when alerts fired (reduces WS traffic)
+                    if alerts or orchestrator.face_checks % 5 == 0:
+                        summary = orchestrator.get_summary()
+                        await websocket.send_json({"type": "summary", "precheck_passed": bool(attempt.precheck_passed_at), **summary})
                     if attempt.status == AttemptStatus.SUBMITTED:
                         break
                     reason = _maybe_auto_submit_from_history(
@@ -1327,7 +1341,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         continue
                     audio_bytes = base64.b64decode(b64)
                     _sr = data.get("sample_rate")
-                    logger.debug("WS audio chunk for attempt %s (bytes=%d, sr=%s)", attempt_id, len(audio_bytes), _sr)
+                    logger.info("WS audio chunk for attempt %s (bytes=%d, sr=%s)", attempt_id, len(audio_bytes), _sr)
                     alerts = orchestrator.process_audio(audio_bytes, sample_rate=int(_sr) if _sr else None)
                     if alerts:
                         logger.debug("Audio alerts: %s", [a.get("event_type") for a in alerts])

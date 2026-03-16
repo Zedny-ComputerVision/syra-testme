@@ -66,14 +66,14 @@ const DEFAULT_PROCTORING_CONFIG = normalizeProctoringConfig({
   eye_deviation_deg: 12,
   mouth_open_threshold: 0.35,
   audio_rms_threshold: 0.08,
-  max_face_absence_sec: 3,
+  max_face_absence_sec: 1.5,
   max_tab_blurs: 3,
   max_alerts_before_autosubmit: 5,
   lighting_min_score: 0.35,
   face_verify_id_threshold: 0.18,
   max_score_before_autosubmit: 15,
-  frame_interval_ms: 1500,
-  audio_chunk_ms: 3000,
+  frame_interval_ms: 900,
+  audio_chunk_ms: 2000,
   screenshot_interval_sec: 60,
   face_verify_threshold: 0.15,
   cheating_consecutive_frames: 5,
@@ -83,7 +83,16 @@ const DEFAULT_PROCTORING_CONFIG = normalizeProctoringConfig({
   head_pose_pitch_deg: 20,
   object_confidence_threshold: 0.5,
   audio_consecutive_chunks: 2,
+  audio_speech_consecutive_chunks: 2,
+  audio_speech_min_rms: 0.03,
+  audio_speech_baseline_multiplier: 1.35,
   audio_window: 5,
+  multi_face_min_area_ratio: 0.008,
+  camera_cover_hard_luma: 20,
+  camera_cover_soft_luma: 40,
+  camera_cover_stddev_max: 16,
+  camera_cover_hard_consecutive_frames: 1,
+  camera_cover_soft_consecutive_frames: 2,
 })
 
 const PROCTORING_REQUIREMENTS = [
@@ -103,11 +112,17 @@ const PROCTORING_CONTROL_GROUPS = [
     title: 'Identity & environment thresholds',
     description: 'Tune how strict the journey checks are before the learner can start.',
     controls: [
-      { key: 'max_face_absence_sec', label: 'Face absence grace period', desc: 'Lower is stricter. Missing faces trigger alerts sooner.', min: 1, max: 15, step: 1, unit: 'sec', enabledBy: 'face_detection' },
+      { key: 'max_face_absence_sec', label: 'Face absence grace period', desc: 'Lower is stricter. Missing faces trigger alerts sooner.', min: 0.5, max: 15, step: 0.5, unit: 'sec', enabledBy: 'face_detection' },
       { key: 'lighting_min_score', label: 'Minimum lighting score', desc: 'Higher is stricter. Darker rooms will fail the precheck.', min: 0.1, max: 0.8, step: 0.05, unit: 'score', enabledBy: 'lighting_required' },
       { key: 'face_verify_id_threshold', label: 'ID verification distance', desc: 'Lower is stricter. Tightens selfie-to-ID matching.', min: 0.05, max: 0.4, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
       { key: 'face_verify_threshold', label: 'Live face verification distance', desc: 'Lower is stricter. Tightens ongoing face verification.', min: 0.05, max: 0.35, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
       { key: 'object_confidence_threshold', label: 'Forbidden object confidence', desc: 'Higher is stricter. Require stronger model confidence before flagging objects.', min: 0.1, max: 0.95, step: 0.05, unit: 'confidence', enabledBy: 'object_detection' },
+      { key: 'multi_face_min_area_ratio', label: 'Secondary face size floor', desc: 'Higher is stricter about ignoring tiny false-positive faces before raising a multiple-face alert.', min: 0.002, max: 0.03, step: 0.001, unit: 'ratio', enabledBy: 'multi_face' },
+      { key: 'camera_cover_hard_luma', label: 'Camera cover hard darkness', desc: 'Frames darker than this trigger an immediate camera-covered streak.', min: 5, max: 60, step: 1, unit: 'luma', enabledBy: 'camera_required' },
+      { key: 'camera_cover_soft_luma', label: 'Camera cover soft darkness', desc: 'Dark flat frames below this luma can trigger a softer camera-covered streak.', min: 10, max: 90, step: 1, unit: 'luma', enabledBy: 'camera_required' },
+      { key: 'camera_cover_stddev_max', label: 'Camera cover texture ceiling', desc: 'Lower values require the frame to be flatter before it counts as softly covered.', min: 4, max: 32, step: 1, unit: 'stddev', enabledBy: 'camera_required' },
+      { key: 'camera_cover_hard_consecutive_frames', label: 'Hard cover consecutive frames', desc: 'How many fully blocked frames are needed before warning immediately.', min: 1, max: 4, step: 1, unit: 'frames', enabledBy: 'camera_required' },
+      { key: 'camera_cover_soft_consecutive_frames', label: 'Soft cover consecutive frames', desc: 'How many dark flat frames are needed before warning for a covered camera.', min: 1, max: 6, step: 1, unit: 'frames', enabledBy: 'camera_required' },
     ],
   },
   {
@@ -123,6 +138,9 @@ const PROCTORING_CONTROL_GROUPS = [
       { key: 'mouth_open_threshold', label: 'Mouth movement threshold', desc: 'Lower is stricter. Smaller mouth motion can trigger talking alerts.', min: 0.1, max: 0.8, step: 0.05, unit: 'ratio', enabledBy: 'mouth_detection' },
       { key: 'audio_rms_threshold', label: 'Audio RMS threshold', desc: 'Lower is stricter. Quieter noise can trigger audio alerts.', min: 0.02, max: 0.25, step: 0.01, unit: 'rms', enabledBy: 'audio_detection' },
       { key: 'audio_consecutive_chunks', label: 'Audio consecutive chunks', desc: 'Lower is stricter. Fewer noisy chunks are needed before alerting.', min: 1, max: 6, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
+      { key: 'audio_speech_consecutive_chunks', label: 'Speech consecutive chunks', desc: 'Lower is stricter. Fewer speech-like chunks are needed before the anomaly path fires.', min: 1, max: 6, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
+      { key: 'audio_speech_min_rms', label: 'Speech minimum RMS', desc: 'Raise this to ignore quieter background noise when speech detection is enabled.', min: 0.01, max: 0.12, step: 0.005, unit: 'rms', enabledBy: 'audio_detection' },
+      { key: 'audio_speech_baseline_multiplier', label: 'Speech baseline multiplier', desc: 'Higher values require speech-like audio to stand out more clearly above the rolling baseline.', min: 1, max: 2.5, step: 0.05, unit: 'x', enabledBy: 'audio_detection' },
       { key: 'audio_window', label: 'Audio anomaly window', desc: 'How many recent chunks are considered when detecting sustained audio anomalies.', min: 3, max: 10, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
     ],
   },
@@ -142,8 +160,8 @@ const PROCTORING_CONTROL_GROUPS = [
     title: 'Capture cadence & evidence',
     description: 'Control how often visual/audio evidence is sampled and sent for analysis.',
     controls: [
-      { key: 'frame_interval_ms', label: 'Frame analysis interval', desc: 'Higher saves bandwidth. Lower gives denser monitoring.', min: 1200, max: 6000, step: 200, unit: 'ms' },
-      { key: 'audio_chunk_ms', label: 'Audio chunk interval', desc: 'Higher sends fewer but larger audio chunks.', min: 1000, max: 6000, step: 250, unit: 'ms', enabledBy: 'audio_detection' },
+      { key: 'frame_interval_ms', label: 'Frame analysis interval', desc: 'Higher saves bandwidth. Lower gives denser monitoring.', min: 750, max: 6000, step: 150, unit: 'ms' },
+      { key: 'audio_chunk_ms', label: 'Audio chunk interval', desc: 'Higher sends fewer but larger audio chunks.', min: 750, max: 6000, step: 250, unit: 'ms', enabledBy: 'audio_detection' },
       { key: 'screenshot_interval_sec', label: 'Screen capture interval', desc: 'Only used when screen recording is enabled.', min: 15, max: 180, step: 5, unit: 'sec', enabledBy: 'screen_capture' },
     ],
   },
@@ -187,6 +205,32 @@ function humanizeSettingLabel(value) {
   return value
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function formatApiErrorMessage(error, fallback) {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail
+  }
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail.map((item) => {
+      if (typeof item === 'string' && item.trim()) {
+        return item
+      }
+      if (item && typeof item === 'object') {
+        const loc = Array.isArray(item.loc)
+          ? item.loc.filter((segment) => !['body', 'query', 'path'].includes(String(segment))).join('.')
+          : ''
+        const message = item.msg || item.message || 'Request validation failed'
+        return loc ? `${loc}: ${message}` : message
+      }
+      return 'Request validation failed'
+    }).join(' ')
+  }
+  if (detail && typeof detail === 'object') {
+    return detail.message || detail.msg || fallback
+  }
+  return error?.validation?.message || fallback
 }
 
 function createAlertRule(seed = {}) {
@@ -469,7 +513,7 @@ export default function AdminNewTestWizard() {
       setNewCourseDescription('')
       setNewModuleTitle('Module 1')
     } catch (e) {
-      setPanelError(e.response?.data?.detail || 'Failed to create the course. Please try again.')
+      setPanelError(formatApiErrorMessage(e, 'Failed to create the course. Please try again.'))
     } finally {
       setCreatingCourse(false)
     }
@@ -503,10 +547,11 @@ export default function AdminNewTestWizard() {
 
       if (courseList.length) {
         const first = courseList[0]
-        setCourseId((current) => current || first.id)
-        if (!courseId) {
+        setCourseId((current) => {
+          if (current) return current
           void loadNodesForCourse(first.id, { createIfEmpty: true })
-        }
+          return first.id
+        })
       }
 
       const failedBootstrap = results.some((result) => result.status === 'rejected')
@@ -617,12 +662,6 @@ export default function AdminNewTestWizard() {
   useEffect(() => {
     loadAssignedSessions(examId)
   }, [examId, users, loadAssignedSessions])
-
-  useEffect(() => {
-    if (step === 3 && !examId) {
-      ensureExamCreated()
-    }
-  }, [step, examId])
 
   const applyTemplate = (tplId) => {
     const tpl = examTemplates.find(t => t.id === tplId)
@@ -804,7 +843,7 @@ export default function AdminNewTestWizard() {
     wizardBaselineRef.current = wizardSnapshot
   }, [wizardReady, wizardBaselineVersion, wizardSnapshot])
 
-  const saveExam = async () => {
+  const saveExam = useCallback(async () => {
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
@@ -820,13 +859,13 @@ export default function AdminNewTestWizard() {
     }
     setWizardBaselineVersion((current) => current + 1)
     return id
-  }
+  }, [examId, testPayload])
 
   useEffect(() => {
     saveExamRef.current = saveExam
   }, [saveExam])
 
-  const ensureExamCreated = async () => {
+  const ensureExamCreated = useCallback(async () => {
     if (examId || saving) return examId
     setSaving(true)
     setQuestionInitError('')
@@ -843,7 +882,13 @@ export default function AdminNewTestWizard() {
     } finally {
       setSaving(false)
     }
-  }
+  }, [examId, saveExam, saving])
+
+  useEffect(() => {
+    if (step === 3 && !examId) {
+      ensureExamCreated()
+    }
+  }, [step, examId, ensureExamCreated])
 
   const autoPersist = async () => {
     if (!examId || editorLocked) return
@@ -874,7 +919,7 @@ export default function AdminNewTestWizard() {
         setNodes([node])
         setNodeId(node.id)
       } catch (e) {
-        setPanelError(e.response?.data?.detail || 'Could not create module. Please try again.')
+        setPanelError(formatApiErrorMessage(e, 'Could not create module. Please try again.'))
       } finally {
         setSaving(false)
       }
@@ -893,7 +938,7 @@ export default function AdminNewTestWizard() {
         await saveExam()
       } catch (e) {
         saveSucceeded = false
-        setPanelError(e.response?.data?.detail || 'Could not save. Please check required fields and try again.')
+        setPanelError(formatApiErrorMessage(e, 'Could not save. Please check required fields and try again.'))
       } finally {
         setSaving(false)
       }
@@ -916,7 +961,7 @@ export default function AdminNewTestWizard() {
       await adminApi.seedExamFromPool(selectedPool, examId, seedCount)
       const { data } = await adminApi.getQuestions(examId)
       setQuestions(data || [])
-    } catch (e) { setPanelError(e.response?.data?.detail || 'Failed to seed questions from pool.') }
+    } catch (e) { setPanelError(formatApiErrorMessage(e, 'Failed to seed questions from pool.')) }
   }
 
   const handleAIGenerate = async () => {
@@ -950,7 +995,7 @@ export default function AdminNewTestWizard() {
       const refreshed = await adminApi.getQuestions(ensuredId)
       setQuestions(refreshed.data || [])
     } catch (e) {
-      setPanelError(e.response?.data?.detail || 'AI generation failed')
+      setPanelError(formatApiErrorMessage(e, 'AI generation failed'))
     } finally {
       setAiLoading(false)
     }
@@ -991,7 +1036,7 @@ export default function AdminNewTestWizard() {
       await loadAssignedSessions(examId)
       setWizardBaselineVersion((current) => current + 1)
     } catch (e) {
-      setPanelError(e.response?.data?.detail || 'Failed to assign sessions. Please try again.')
+      setPanelError(formatApiErrorMessage(e, 'Failed to assign sessions. Please try again.'))
     } finally {
       setSessionBusy(false)
     }
@@ -1016,7 +1061,7 @@ export default function AdminNewTestWizard() {
       }
       setWizardBaselineVersion((current) => current + 1)
     } catch (e) {
-      setPanelError(e.response?.data?.detail || 'Failed to remove the session.')
+      setPanelError(formatApiErrorMessage(e, 'Failed to remove the session.'))
     } finally {
       setSessionBusy(false)
     }
@@ -1046,7 +1091,7 @@ export default function AdminNewTestWizard() {
       }
       setExitingWizard(true)
       window.location.assign('/admin/tests')
-    } catch (e) { setPanelError(e.response?.data?.detail || 'Could not save. Please add questions and try again.') } finally { setSaving(false) }
+    } catch (e) { setPanelError(formatApiErrorMessage(e, 'Could not save. Please add questions and try again.')) } finally { setSaving(false) }
   }
 
   const toggleDetector = (key) => {
@@ -1099,6 +1144,9 @@ export default function AdminNewTestWizard() {
         mouth_open_threshold: 0.45,
         audio_rms_threshold: 0.12,
         audio_consecutive_chunks: 3,
+        audio_speech_consecutive_chunks: 3,
+        audio_speech_min_rms: 0.04,
+        audio_speech_baseline_multiplier: 1.5,
         max_face_absence_sec: 6,
         max_tab_blurs: 5,
         max_alerts_before_autosubmit: 10,
@@ -1110,6 +1158,12 @@ export default function AdminNewTestWizard() {
         face_verify_id_threshold: 0.24,
         face_verify_threshold: 0.2,
         object_confidence_threshold: 0.65,
+        multi_face_min_area_ratio: 0.012,
+        camera_cover_hard_luma: 16,
+        camera_cover_soft_luma: 34,
+        camera_cover_stddev_max: 14,
+        camera_cover_hard_consecutive_frames: 2,
+        camera_cover_soft_consecutive_frames: 3,
       },
       standard: {
         eye_deviation_deg: 12,
@@ -1120,17 +1174,26 @@ export default function AdminNewTestWizard() {
         mouth_open_threshold: 0.35,
         audio_rms_threshold: 0.08,
         audio_consecutive_chunks: 2,
-        max_face_absence_sec: 3,
+        audio_speech_consecutive_chunks: 2,
+        audio_speech_min_rms: 0.03,
+        audio_speech_baseline_multiplier: 1.35,
+        max_face_absence_sec: 1.5,
         max_tab_blurs: 3,
         max_alerts_before_autosubmit: 5,
         max_score_before_autosubmit: 15,
-        frame_interval_ms: 1500,
-        audio_chunk_ms: 3000,
+        frame_interval_ms: 900,
+        audio_chunk_ms: 2000,
         screenshot_interval_sec: 60,
         lighting_min_score: 0.35,
         face_verify_id_threshold: 0.18,
         face_verify_threshold: 0.15,
         object_confidence_threshold: 0.5,
+        multi_face_min_area_ratio: 0.008,
+        camera_cover_hard_luma: 20,
+        camera_cover_soft_luma: 40,
+        camera_cover_stddev_max: 16,
+        camera_cover_hard_consecutive_frames: 1,
+        camera_cover_soft_consecutive_frames: 2,
       },
       strict: {
         eye_deviation_deg: 8,
@@ -1141,17 +1204,26 @@ export default function AdminNewTestWizard() {
         mouth_open_threshold: 0.22,
         audio_rms_threshold: 0.05,
         audio_consecutive_chunks: 1,
-        max_face_absence_sec: 3,
+        audio_speech_consecutive_chunks: 1,
+        audio_speech_min_rms: 0.025,
+        audio_speech_baseline_multiplier: 1.2,
+        max_face_absence_sec: 1,
         max_tab_blurs: 1,
         max_alerts_before_autosubmit: 3,
         max_score_before_autosubmit: 9,
-        frame_interval_ms: 1200,
+        frame_interval_ms: 750,
         audio_chunk_ms: 2000,
         screenshot_interval_sec: 30,
         lighting_min_score: 0.45,
         face_verify_id_threshold: 0.12,
         face_verify_threshold: 0.1,
         object_confidence_threshold: 0.35,
+        multi_face_min_area_ratio: 0.006,
+        camera_cover_hard_luma: 24,
+        camera_cover_soft_luma: 46,
+        camera_cover_stddev_max: 18,
+        camera_cover_hard_consecutive_frames: 1,
+        camera_cover_soft_consecutive_frames: 1,
         screen_capture: true,
       },
     }
@@ -1199,6 +1271,9 @@ export default function AdminNewTestWizard() {
   const validateStep = (targetStep, { forPublish = false } = {}) => {
     if (targetStep === 0) {
       if (!title.trim()) return 'Test name is required.'
+      if (examCode.trim() && (examCode.trim().length < 6 || examCode.trim().length > 12)) {
+        return 'External code / ID must be between 6 and 12 characters.'
+      }
       if (courseId && !nodeId) return 'Select or create a module before continuing.'
     }
     if (targetStep === 1 && method === 'generator') {
@@ -2644,7 +2719,7 @@ export default function AdminNewTestWizard() {
             </div>
           </div>
           <div className={styles.publishSummary}>
-            <strong className={styles.publishSummaryStrong}>Summary:</strong> "{title || 'Unnamed Test'}" with {questions.length} questions, {assignedSessions.length} sessions assigned.
+            <strong className={styles.publishSummaryStrong}>Summary:</strong> &quot;{title || 'Unnamed Test'}&quot; with {questions.length} questions, {assignedSessions.length} sessions assigned.
           </div>
         </>
       )

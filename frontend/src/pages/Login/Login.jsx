@@ -1,12 +1,17 @@
 import React, { useState } from 'react'
 import axios from 'axios'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { jwtDecode } from 'jwt-decode'
 import { login as loginApi, setup as setupAdminApi } from '../../services/auth.service'
 import useAuth from '../../hooks/useAuth'
+import { resolvePostLoginPath } from '../../utils/postLoginRedirect'
 import styles from './Login.module.scss'
 
 const apiBaseURL = (import.meta.env.VITE_API_BASE_URL || '/api/').replace(/\/?$/, '/')
+
+function resolveApiUrl(path) {
+  return new URL(path, new URL(apiBaseURL, window.location.origin)).toString()
+}
 
 const DEV_USERS = {
   admin: {
@@ -51,7 +56,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const showDevTools = isLocalDevHost()
+  const returnTo = typeof location.state?.from === 'string' && location.state.from.startsWith('/')
+    ? location.state.from
+    : ''
 
   const clearStoredSession = () => {
     try {
@@ -69,11 +78,7 @@ export default function Login() {
   const finalizeLogin = (data) => {
     login(data)
     const role = data?.access_token ? jwtDecode(data.access_token)?.role : null
-    if (role === 'ADMIN') {
-      navigate('/admin/dashboard')
-      return
-    }
-    navigate('/')
+    navigate(resolvePostLoginPath(role, returnTo), { replace: true })
   }
 
   const completeLogin = async (nextEmail, nextPassword) => {
@@ -83,7 +88,7 @@ export default function Login() {
   }
 
   const createUserAsAdmin = async (adminAccessToken, payload) => {
-    const usersUrl = new URL('users/', apiBaseURL).toString()
+    const usersUrl = resolveApiUrl('users/')
     return axios.post(usersUrl, payload, {
       headers: {
         Authorization: `Bearer ${adminAccessToken}`,
@@ -113,11 +118,21 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const nextEmail = email.trim()
+    const nextPassword = password
     setError('')
+    if (!nextEmail) {
+      setError('Email is required.')
+      return
+    }
+    if (!nextPassword) {
+      setError('Password is required.')
+      return
+    }
     setLoading(true)
     clearStoredSession()
     try {
-      await completeLogin(email, password)
+      await completeLogin(nextEmail, nextPassword)
     } catch (err) {
       setError(getErrorMessage(err, 'Login failed'))
     } finally {
@@ -216,7 +231,7 @@ export default function Login() {
         </div>
 
         <button type="submit" className={styles.btn} disabled={loading}>
-          {loading ? <div className={styles.spinner} /> : 'Sign In'}
+          {loading ? 'Logging in...' : 'Sign In'}
         </button>
 
         {showDevTools && (

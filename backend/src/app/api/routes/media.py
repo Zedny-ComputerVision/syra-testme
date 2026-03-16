@@ -91,10 +91,7 @@ async def get_video(
     db: Session = Depends(get_db_dep),
     current_user: User = Depends(get_current_user),
 ):
-    raise HTTPException(
-        status_code=status.HTTP_410_GONE,
-        detail="Local proctoring video serving has been removed. Use the playback URL returned by /proctoring/{attempt_id}/videos.",
-    )
+    return _serve_media_file(VIDEO_DIR, filename, db, current_user)
 
 
 @router.get("/evidence/{filename}")

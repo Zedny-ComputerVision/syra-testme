@@ -24,7 +24,7 @@ from ...models import (
 )
 from ...services.normalized_relations import (
     ADMIN_META_KEY,
-    is_exam_pool_library,
+    exam_runtime_settings,
     set_exam_certificate,
     set_exam_proctoring,
     set_exam_runtime_settings,
@@ -57,10 +57,18 @@ class TestRepository:
             .options(
                 joinedload(Exam.node).joinedload(Node.course),
                 joinedload(Exam.category),
-                selectinload(Exam.questions),
             )
         )
-        statement = statement.where(Exam.library_pool_id.is_(None))
+        # Filter library/pool exams in SQL (column + legacy JSON) so pagination is accurate.
+        legacy_pool = Exam.settings["_pool_library"].as_boolean()
+        statement = statement.where(
+            Exam.library_pool_id.is_(None),
+            or_(
+                Exam.settings.is_(None),
+                legacy_pool.is_(None),
+                legacy_pool == False,  # noqa: E712
+            ),
+        )
         statement = self._apply_filters(statement, query)
         statement = statement.order_by(self._order_by_column(query.sort, query.order), Exam.created_at.desc())
 
@@ -68,7 +76,6 @@ class TestRepository:
         items = self.db.scalars(
             statement.offset((query.page - 1) * query.page_size).limit(query.page_size)
         ).all()
-        items = [item for item in items if not is_exam_pool_library(item)]
 
         exam_ids = [item.id for item in items]
         if not exam_ids:
@@ -229,7 +236,7 @@ class TestRepository:
         self.db.flush()
 
         set_exam_proctoring(duplicate, deepcopy(exam.proctoring_config or {}))
-        set_exam_runtime_settings(duplicate, deepcopy(exam.settings or {}))
+        set_exam_runtime_settings(duplicate, exam_runtime_settings(exam))
         set_exam_certificate(duplicate, deepcopy(exam.certificate or {}))
 
         for question in exam.questions:

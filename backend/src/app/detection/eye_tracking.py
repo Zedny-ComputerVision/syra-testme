@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class EyeTracker:
     def __init__(
         self,
-        max_deviation: float | None = 0.13,
+        max_deviation: float | None = 0.35,
         consecutive_threshold: int = 5,
         pitch_min: float | None = None,
         pitch_max: float | None = None,
@@ -23,10 +23,13 @@ class EyeTracker:
         yaw_max: float | None = None,
         change_threshold: float = 0.2,
     ):
-        deviation = abs(float(max_deviation if max_deviation is not None else 0.13))
+        # Default 0.35 rad ≈ ±20° — wide enough to avoid false positives from normal
+        # reading saccades and glancing at keyboard, yet catches sustained off-screen gaze.
+        deviation = abs(float(max_deviation if max_deviation is not None else 0.35))
 
-        self.pitch_min = float(-0.5 if pitch_min is None else pitch_min)
-        self.pitch_max = float(0.2 if pitch_max is None else pitch_max)
+        # Symmetric pitch range: ±20° (was -28°/+11° which was asymmetric and too strict)
+        self.pitch_min = float(-deviation if pitch_min is None else pitch_min)
+        self.pitch_max = float(deviation if pitch_max is None else pitch_max)
         self.yaw_min = float(-deviation if yaw_min is None else yaw_min)
         self.yaw_max = float(deviation if yaw_max is None else yaw_max)
         self.change_threshold = float(max(1e-6, change_threshold))
@@ -39,6 +42,10 @@ class EyeTracker:
         self._prev_right_pitch: float | None = None
         self._prev_right_yaw: float | None = None
         self._warned_unavailable = False
+
+        # Last normalised gaze position (x, y) ∈ [0, 1]×[0, 1] for heatmap.
+        # Updated on every frame where a face is detected; None otherwise.
+        self.last_gaze_normalized: tuple[float, float] | None = None
 
         if hasattr(mp, "solutions"):
             self._mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=False, refine_landmarks=True, max_num_faces=1)
@@ -88,27 +95,58 @@ class EyeTracker:
             and abs(cur_yaw - prev_yaw) < self.change_threshold
         )
 
-    def process(self, frame_bytes: bytes) -> dict | None:
+    def process_ndarray(
+        self,
+        frame: np.ndarray,
+        head_yaw_rad: float | None = None,
+        head_pitch_rad: float | None = None,
+    ) -> dict | None:
+        """Process an already-decoded frame.
+
+        Parameters
+        ----------
+        head_yaw_rad, head_pitch_rad:
+            Head orientation from HeadPoseDetector (optional).  When provided,
+            the raw iris gaze is compensated so that a student looking straight
+            ahead with a turned head is not falsely flagged.
+            Compensation factor 0.35: empirically chosen to correct ~35% of the
+            head-rotation artefact that appears in the iris-relative measurement.
+        """
         if self._mesh is None:
             if not self._warned_unavailable:
                 logger.warning("Eye tracking model unavailable - detection disabled")
                 self._warned_unavailable = True
             return None
-
-        np_arr = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if frame is None:
             return None
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = self._mesh.process(rgb)
-        if not res.multi_face_landmarks:
+        lm = res.multi_face_landmarks[0].landmark if res.multi_face_landmarks else None
+        return self.process_landmarks(lm, head_yaw_rad, head_pitch_rad)
+
+    def process_landmarks(
+        self,
+        lm,
+        head_yaw_rad: float | None = None,
+        head_pitch_rad: float | None = None,
+    ) -> dict | None:
+        """Process pre-computed FaceMesh landmarks (skips redundant FaceMesh inference)."""
+        if lm is None:
             self._reset_tracking()
+            self.last_gaze_normalized = None
             return None
 
-        lm = res.multi_face_landmarks[0].landmark
         left_pitch, left_yaw = self._calculate_eye_gaze(lm, "left")
         right_pitch, right_yaw = self._calculate_eye_gaze(lm, "right")
+
+        # Head-pose compensation (0.35 factor corrects ~35% of head-rotation artefact)
+        if head_yaw_rad is not None:
+            left_yaw = left_yaw - head_yaw_rad * 0.35
+            right_yaw = right_yaw - head_yaw_rad * 0.35
+        if head_pitch_rad is not None:
+            left_pitch = left_pitch - head_pitch_rad * 0.35
+            right_pitch = right_pitch - head_pitch_rad * 0.35
 
         left_out = self._is_out_of_range(left_pitch, left_yaw)
         right_out = self._is_out_of_range(right_pitch, right_yaw)
@@ -125,6 +163,14 @@ class EyeTracker:
         self._prev_left_yaw = left_yaw
         self._prev_right_pitch = right_pitch
         self._prev_right_yaw = right_yaw
+
+        avg_yaw = (left_yaw + right_yaw) / 2.0
+        avg_pitch = (left_pitch + right_pitch) / 2.0
+        yaw_span = max(1e-6, self.yaw_max - self.yaw_min)
+        pitch_span = max(1e-6, self.pitch_max - self.pitch_min)
+        gaze_x = max(0.0, min(1.0, (avg_yaw - self.yaw_min) / yaw_span))
+        gaze_y = max(0.0, min(1.0, (avg_pitch - self.pitch_min) / pitch_span))
+        self.last_gaze_normalized = (round(gaze_x, 4), round(gaze_y, 4))
 
         if bad_left or bad_right:
             self._consecutive_away += 1
@@ -165,4 +211,9 @@ class EyeTracker:
             self._consecutive_away = 0
 
         return None
+
+    def process(self, frame_bytes: bytes) -> dict | None:
+        np_arr = np.frombuffer(frame_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        return self.process_ndarray(frame)
 

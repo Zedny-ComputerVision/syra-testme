@@ -21,30 +21,7 @@ const ICONS = {
   attempts:   'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z',
 }
 
-const PANEL_TIMEOUT_MS = 8000
-const DASHBOARD_ATTEMPT_LIMIT = 24
-
-function createTimeoutError(label, timeoutMs) {
-  const error = new Error(`${label} timed out after ${Math.ceil(timeoutMs / 1000)}s`)
-  error.name = 'TimeoutError'
-  return error
-}
-
-function withTimeout(request, label, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(createTimeoutError(label, timeoutMs)), timeoutMs)
-
-    Promise.resolve(request)
-      .then((value) => {
-        window.clearTimeout(timer)
-        resolve(value)
-      })
-      .catch((error) => {
-        window.clearTimeout(timer)
-        reject(error)
-      })
-  })
-}
+const DASHBOARD_ATTEMPT_LIMIT = 10
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -80,9 +57,9 @@ export default function AdminDashboard() {
 
     try {
       const results = await Promise.allSettled([
-        withTimeout(adminApi.dashboard(), 'dashboard', PANEL_TIMEOUT_MS),
-        withTimeout(adminApi.auditLog({ skip: 0, limit: 10 }), 'audit log', PANEL_TIMEOUT_MS),
-        withTimeout(adminApi.attempts({ skip: 0, limit: DASHBOARD_ATTEMPT_LIMIT }), 'attempts', PANEL_TIMEOUT_MS),
+        adminApi.dashboard(),
+        adminApi.auditLog({ skip: 0, limit: 10 }),
+        adminApi.attempts({ skip: 0, limit: DASHBOARD_ATTEMPT_LIMIT }),
       ])
 
       if (!mountedRef.current || loadSequence !== loadSequenceRef.current) return

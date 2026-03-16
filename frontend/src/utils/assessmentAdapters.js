@@ -7,6 +7,7 @@ export function normalizeTest(test) {
   const title = test.test_title ?? test.title ?? test.test_name ?? test.name ?? ''
   const type = test.test_type ?? test.exam_type ?? test.type ?? null
   const timeLimit = test.time_limit_minutes ?? test.test_time_limit ?? test.exam_time_limit ?? test.time_limit ?? null
+  const settings = test.runtime_settings ?? test.settings ?? {}
   return {
     ...test,
     title,
@@ -17,6 +18,8 @@ export function normalizeTest(test) {
     test_type: type,
     time_limit_minutes: timeLimit,
     test_time_limit: timeLimit,
+    settings,
+    runtime_settings: test.runtime_settings ?? settings,
     proctoring_config: normalizeProctoringConfig(test.proctoring_config),
   }
 }

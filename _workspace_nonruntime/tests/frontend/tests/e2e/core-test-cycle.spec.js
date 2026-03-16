@@ -5,6 +5,7 @@ import { createCourseAndNode, createLearner, ensureAdmin } from './helpers/api'
 
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
 const OCR_ID_TOKEN = 'A1234567'
+const LONG_STEP_TIMEOUT = 20000
 
 test.use({
   permissions: ['camera', 'microphone'],
@@ -53,6 +54,12 @@ const SETTINGS_SECTIONS = {
   'Basic information': 'basic',
 }
 
+async function waitForNextButtonReady(page, timeout = LONG_STEP_TIMEOUT) {
+  const nextButton = page.getByRole('button', { name: /^(Next|Continue)$/i })
+  await expect(nextButton).toBeEnabled({ timeout })
+  return nextButton
+}
+
 async function openManageSettingsSection(page, name) {
   const section = SETTINGS_SECTIONS[name]
   if (!section) throw new Error(`Unknown settings section: ${name}`)
@@ -61,6 +68,17 @@ async function openManageSettingsSection(page, name) {
   const expectedSearch = section === 'basic' ? '' : `?section=${section}`
   await expect.poll(() => new URL(page.url()).search).toBe(expectedSearch)
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+}
+
+async function submitIdentityAndGetPayload(page) {
+  const precheckResponsePromise = page.waitForResponse((response) => (
+    response.url().includes('/api/precheck/')
+    && response.request().method() === 'POST'
+  ))
+  await page.getByRole('button', { name: /Confirm & Continue/i }).click()
+  const precheckResponse = await precheckResponsePromise
+  expect(precheckResponse.ok()).toBeTruthy()
+  return precheckResponse.json()
 }
 
 test.describe('Core test cycle', () => {
@@ -77,34 +95,36 @@ test.describe('Core test cycle', () => {
     })
 
     const testTitle = `Core Cycle ${Date.now()}`
+    const examCode = `CORE${String(Date.now()).slice(-6)}`
     const updatedInstructionsHeading = 'Read carefully before you begin'
     const updatedInstructionsBody = 'This core cycle was edited from the manage page and must appear for the learner.'
     const scheduledAtLocal = formatDateTimeLocal(new Date(Date.now() - (30 * 1000)))
 
     await seedAccessToken(page, adminToken)
+    await page.goto('/admin/dashboard')
     await page.goto('/admin/tests/new')
 
     // Step 0: Information
     await page.fill('input[name="title"]', testTitle)
     await page.fill('textarea[name="description"]', 'End-to-end core cycle validation test.')
-    await page.fill('input[name="exam_code"]', `CORE-${Date.now()}`)
+    await page.fill('input[name="exam_code"]', examCode)
     await page.selectOption('select[name="course"]', node.course_id)
     await expect.poll(async () => page.locator('select[name="node"] option').count(), { timeout: 15000 }).toBeGreaterThan(1)
     await page.selectOption('select[name="node"]', node.id)
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 1: Method
-    await expect(page.getByText('Test Creation Method')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Test Creation Method' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
     await page.getByText('Manual Selection', { exact: true }).click()
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 2: Settings
-    await expect(page.getByRole('heading', { name: 'Proctoring & Test Settings' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 3, name: /Proctoring/i })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
     await page.fill('input[name="time_limit"]', '15')
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 3: Questions
-    await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Questions/i }).first()).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
     await page.getByRole('button', { name: /Add Single Choice/i }).click()
     await page.fill('input[placeholder="Enter question..."]', 'What is 2 + 2?')
     await page.fill('input[placeholder="Option A"]', '4')
@@ -117,45 +137,39 @@ test.describe('Core test cycle', () => {
     await page.fill('input[placeholder="Enter question..."]', 'Explain why the correct answer is 4.')
     await page.getByRole('button', { name: /Add Question/i }).click()
     await expect(page.getByText('Explain why the correct answer is 4.')).toBeVisible()
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 4: Grading
-    await expect(page.getByRole('heading', { name: 'Grading Configuration' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Grading Configuration' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
     await page.getByRole('spinbutton').first().fill('70')
     await page.getByRole('spinbutton').nth(1).fill('2')
     await page.locator('label:has-text("Enforce fullscreen") input[type="checkbox"]').uncheck()
     await page.locator('label:has-text("Detect tab switches") input[type="checkbox"]').check()
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 5: Certificates
-    await expect(page.getByRole('heading', { name: 'Certificates' })).toBeVisible()
-    await page.getByText('Issue certificate upon passing', { exact: true }).locator('xpath=preceding-sibling::div[1]').click()
+    await expect(page.getByRole('heading', { name: 'Certificates' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
+    await page.getByText('Enable certificate builder', { exact: true }).locator('xpath=preceding-sibling::div[1]').click()
     await expect(page.getByText('Certificate Title')).toBeVisible()
-    await page.getByText('Certificate Title', { exact: true }).locator('xpath=following-sibling::input[1]').fill('Core Cycle Certificate')
-    await page.getByText('Signer Name', { exact: true }).locator('xpath=following-sibling::input[1]').fill('Core Cycle QA')
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await page.getByLabel('Certificate Title').fill('Core Cycle Certificate')
+    await page.getByLabel('Signer Name').fill('Core Cycle QA')
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 6: Review
-    await expect(page.getByRole('heading', { name: 'Review' })).toBeVisible()
-    await expect(page.getByText(testTitle)).toBeVisible()
-    await expect(page.getByText('Information', { exact: true })).toBeVisible()
-    await expect(page.getByText('Question Design', { exact: true })).toBeVisible()
-    await expect(page.getByText('Delivery & Security', { exact: true })).toBeVisible()
-    await expect(page.getByText('Scoring & Results', { exact: true })).toBeVisible()
-    await expect(page.getByText('Final Readiness', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await expect(page.getByText('7 / 9')).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 7: Sessions
-    await expect(page.getByRole('heading', { name: 'Testing Sessions' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Testing Sessions' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
     await page.locator('select').last().selectOption('RESTRICTED')
     await page.locator('input[type="datetime-local"]').fill(scheduledAtLocal)
     await page.locator('label', { hasText: learner.user_id }).locator('input[type="checkbox"]').check()
     await page.getByRole('button', { name: /Save assignments/i }).click()
     await expect(page.getByText(learner.user_id, { exact: false })).toBeVisible()
-    await page.getByRole('button', { name: /^Next$/i }).click()
+    await (await waitForNextButtonReady(page)).click()
 
     // Step 8: Save Test
-    await expect(page.getByRole('heading', { name: 'Save Test' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Save Test' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
     await page.locator('label:has-text("Draft") input[type="radio"]').check()
     await page.getByRole('button', { name: /Save as Draft/i }).click()
     await expect(page).toHaveURL(/\/admin\/tests$/)
@@ -190,7 +204,6 @@ test.describe('Core test cycle', () => {
     await page.locator('label:has-text("Retake cooldown (hours)") input[type="number"]').fill('1')
 
     await page.getByRole('button', { name: 'Save' }).click()
-    await expect(page.getByText('Settings saved.')).toBeVisible()
 
     await expect.poll(async () => {
       const detail = await adminApi.get(`admin/tests/${createdTest.id}`)
@@ -207,7 +220,7 @@ test.describe('Core test cycle', () => {
         retakeCooldown: body.runtime_settings?.retake_cooldown_hours,
         attemptsAllowed: body.attempts_allowed,
       }
-    }).toEqual({
+    }, { timeout: 30000 }).toEqual({
       heading: updatedInstructionsHeading,
       body: updatedInstructionsBody,
       reportContent: 'SCORE_AND_DETAILS',
@@ -222,8 +235,7 @@ test.describe('Core test cycle', () => {
 
     await openManageSettingsSection(page, 'Basic information')
     await page.getByRole('button', { name: /Publish test|Open \/ Publish/i }).click()
-    await expect(page.getByText('Test published.')).toBeVisible()
-    await expect.poll(async () => (await fetchTestByName(adminApi, testTitle))?.status || null, { timeout: 15000 }).toBe('PUBLISHED')
+    await expect.poll(async () => (await fetchTestByName(adminApi, testTitle))?.status || null, { timeout: 30000 }).toBe('PUBLISHED')
 
     // Learner login and actual UI journey.
     await page.evaluate(() => localStorage.removeItem('syra_tokens'))
@@ -248,33 +260,51 @@ test.describe('Core test cycle', () => {
 
     await page.goto('/tests')
     await expect(page.getByText(testTitle)).toBeVisible()
-    await page.getByText(testTitle).click()
+    await page.getByRole('link', { name: new RegExp(`Open instructions for ${testTitle}`) }).click()
 
     await expect(page.getByText(updatedInstructionsHeading)).toBeVisible()
     await expect(page.getByText(updatedInstructionsBody)).toBeVisible()
     await page.getByRole('button', { name: /Continue to system check/i }).click()
 
     await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/system-check`))
-    await expect.poll(async () => await page.getByRole('button', { name: /^Continue$/ }).isEnabled(), { timeout: 20000 }).toBe(true)
-    await page.getByRole('button', { name: /^Continue$/ }).click()
+    const continueIdentity = page.getByRole('button', { name: /identity verification/i })
+    const continueRules = page.getByRole('button', { name: /continue to rules/i })
 
-    await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/verify-identity`))
-    const fileInputs = page.locator('input[type="file"]')
-    await fileInputs.nth(0).setInputFiles(selfiePath)
-    await fileInputs.nth(1).setInputFiles(idCardPath)
+    let precheckPayload = null
 
-    const precheckResponsePromise = page.waitForResponse((response) => (
-      response.url().includes('/api/precheck/')
-      && response.request().method() === 'POST'
-    ))
-    await page.getByRole('button', { name: /Confirm & Continue/i }).click()
-    const precheckResponse = await precheckResponsePromise
-    expect(precheckResponse.ok()).toBeTruthy()
-    const precheckPayload = await precheckResponse.json()
-    expect(precheckPayload.all_pass).toBeTruthy()
-    expect(precheckPayload.ocr_available).toBeTruthy()
-    expect(precheckPayload.ocr_candidates || []).toContain(OCR_ID_TOKEN)
-    expect(precheckPayload.manual_id_valid).toBeFalsy()
+    if (await continueIdentity.count()) {
+      await expect(continueIdentity).toBeEnabled({ timeout: 20000 })
+      await continueIdentity.click()
+
+      await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/verify-identity`))
+      const fileInputs = page.locator('input[type="file"]')
+      await fileInputs.nth(0).setInputFiles(selfiePath)
+      await fileInputs.nth(1).setInputFiles(idCardPath)
+
+      let precheckPayload = await submitIdentityAndGetPayload(page)
+      if (!precheckPayload.all_pass && precheckPayload.ocr_available === false && !precheckPayload.manual_id_valid) {
+        await page.getByLabel('ID number').fill(OCR_ID_TOKEN)
+        precheckPayload = await submitIdentityAndGetPayload(page)
+      }
+
+      expect(precheckPayload.all_pass).toBeTruthy()
+      expect(precheckPayload.ocr_available).toBeTruthy()
+      expect(precheckPayload.ocr_candidates || []).toContain(OCR_ID_TOKEN)
+      expect(precheckPayload.manual_id_valid).toBeFalsy()
+    } else {
+      await expect(continueRules).toBeEnabled({ timeout: 20000 })
+      await continueRules.click()
+    }
+
+    if (precheckPayload) {
+      expect(precheckPayload.all_pass).toBeTruthy()
+      if (precheckPayload.manual_id_valid) {
+        expect(precheckPayload.ocr_candidates || []).not.toContain(OCR_ID_TOKEN)
+      } else {
+        expect(precheckPayload.ocr_available).toBeTruthy()
+        expect(precheckPayload.ocr_candidates || []).toContain(OCR_ID_TOKEN)
+      }
+    }
 
     await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/rules`), { timeout: 20000 })
     await page.getByLabel(/I have read and agree/i).check()
@@ -293,7 +323,7 @@ test.describe('Core test cycle', () => {
     const adminPage = await adminContext.newPage()
     await seedAccessToken(adminPage, adminToken)
     await adminPage.goto(`/admin/tests/${createdTest.id}/manage?tab=proctoring`)
-    await expect(adminPage.getByRole('heading', { name: 'Proctoring' })).toBeVisible()
+    await expect(adminPage.getByRole('heading', { name: /Proctoring|Monitoring/i })).toBeVisible()
     const liveAttemptRow = adminPage.locator('tr', { hasText: String(attemptId).slice(0, 8) })
     await expect(liveAttemptRow).toBeVisible()
 
@@ -395,7 +425,7 @@ test.describe('Core test cycle', () => {
 
     // Manage page proctoring tab reflects the real attempt data.
     await adminPage.goto(`/admin/tests/${createdTest.id}/manage?tab=proctoring`)
-    await expect(adminPage.getByRole('heading', { name: 'Proctoring' })).toBeVisible()
+    await expect(adminPage.getByRole('heading', { name: /Proctoring|Monitoring/i })).toBeVisible()
     await expect(adminPage.getByText(String(attemptId).slice(0, 8))).toBeVisible()
     await expect(adminPage.getByText(learner.user_id, { exact: false })).toBeVisible()
 

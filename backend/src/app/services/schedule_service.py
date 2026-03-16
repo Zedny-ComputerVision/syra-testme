@@ -139,7 +139,7 @@ def list_schedules(*, db: Session, current) -> list[ScheduleRead]:
         query = query.where(Schedule.user_id == current.id)
     else:
         ensure_permission(db, current, "Assign Schedules")
-    schedules = db.scalars(query).all()
+    schedules = db.execute(query).unique().scalars().all()
     return [serialize_schedule(schedule) for schedule in schedules]
 
 

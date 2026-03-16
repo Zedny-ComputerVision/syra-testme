@@ -24,7 +24,17 @@ else:
         }
     )
 
-engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
+_connect_args = {}
+# Supabase free tier has very low connection limits — reduce pool size and
+# recycle aggressively to avoid "MaxClientsInSessionMode" errors.
+if "supabase" in settings.DATABASE_URL or "pooler" in settings.DATABASE_URL:
+    _connect_args["connect_timeout"] = 10
+    if not settings.db_disable_pooling:
+        engine_kwargs["pool_size"] = min(engine_kwargs.get("pool_size", 3), 2)
+        engine_kwargs["max_overflow"] = 0
+        engine_kwargs["pool_recycle"] = 120  # recycle every 2 min
+
+engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args, **engine_kwargs)
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,

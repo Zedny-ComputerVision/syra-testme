@@ -11,6 +11,7 @@ from ...models import Exam, ExamStatus, ExamType, RoleEnum
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_user
 from ...services.normalized_relations import (
+    apply_runtime_attempt_policy_defaults,
     exam_archived_at,
     exam_certificate,
     exam_code,
@@ -23,6 +24,8 @@ from ...services.normalized_relations import (
     exam_security_settings,
     exam_ui_config,
     mutate_exam_admin_meta,
+    runtime_attempt_policy_conflicts,
+    set_exam_runtime_settings,
 )
 from ...services.report_rendering import render_report_template
 from ...services.sanitization import sanitize_html_fragment, sanitize_instructions
@@ -109,6 +112,12 @@ class TestService:
         if body.code and self.repository.code_exists(body.code.strip()):
             self._raise("VALIDATION_ERROR", "Code already exists", status_code=400)
 
+        runtime_settings = apply_runtime_attempt_policy_defaults(
+            sanitize_instructions(body.runtime_settings or {}),
+            body.attempts_allowed or 1,
+        )
+        self._assert_runtime_attempt_policy(runtime_settings, body.attempts_allowed or 1)
+
         node = self._ensure_node(actor, body.node_id)
         now = datetime.now(timezone.utc)
         exam = Exam(
@@ -128,7 +137,7 @@ class TestService:
         )
         self.repository.create_test(
             exam=exam,
-            runtime_settings=sanitize_instructions(body.runtime_settings or {}),
+            runtime_settings=runtime_settings,
             proctoring_config=normalize_proctoring_config(body.proctoring_config or {}),
             certificate=body.certificate,
         )
@@ -169,6 +178,7 @@ class TestService:
         exam = self._get_test_for_write_or_raise(test_id)
         payload = body.model_dump(exclude_unset=True, exclude_none=True)
         self._assert_can_mutate(exam, set(payload.keys()))
+        next_max_attempts = payload.get("attempts_allowed", exam.max_attempts)
 
         if "code" in payload:
             next_code = payload["code"].strip() if payload["code"] else None
@@ -194,12 +204,18 @@ class TestService:
         if "passing_score" in payload:
             exam.passing_score = payload["passing_score"]
         if "runtime_settings" in payload:
-            sanitized_runtime = sanitize_instructions(
-                deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+            sanitized_runtime = apply_runtime_attempt_policy_defaults(
+                sanitize_instructions(
+                    deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+                ),
+                next_max_attempts,
             )
-            from ...services.normalized_relations import set_exam_runtime_settings
-
+            self._assert_runtime_attempt_policy(sanitized_runtime, next_max_attempts)
             set_exam_runtime_settings(exam, sanitized_runtime)
+        elif "attempts_allowed" in payload and next_max_attempts > 1:
+            current_runtime = exam_runtime_settings(exam)
+            if current_runtime.get("allow_retake") is False:
+                set_exam_runtime_settings(exam, { **current_runtime, "allow_retake": True })
         if "proctoring_config" in payload:
             from ...services.normalized_relations import set_exam_proctoring
 
@@ -228,6 +244,14 @@ class TestService:
             request_ip=request_ip,
         )
         return self._serialize_detail(exam)
+
+    def _assert_runtime_attempt_policy(self, runtime_settings: dict | None, max_attempts: int | None) -> None:
+        if runtime_attempt_policy_conflicts(runtime_settings, max_attempts):
+            self._raise(
+                "VALIDATION_ERROR",
+                "Enable retakes or reduce max attempts to 1.",
+                status_code=422,
+            )
 
     def publish_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
         exam = self._get_test_for_write_or_raise(test_id)

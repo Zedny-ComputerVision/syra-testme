@@ -923,6 +923,9 @@ export default function AdminAttemptVideos() {
                     >
                       <div className={styles.eventBtnTop}>
                         <span className={`${styles.eventSeverity} ${severityClass(e.severity)}`}>{e.severity}</span>
+                        {typeof e.ai_confidence === 'number' && (
+                          <span className={styles.eventConfidence}>{Math.round(e.ai_confidence * 100)}%</span>
+                        )}
                         <span className={styles.eventTimestamp}>{formatSeconds(e.second)}</span>
                       </div>
                       <span className={styles.eventMeta}>{e.event_type}</span>

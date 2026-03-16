@@ -17,7 +17,6 @@ from .schemas import (
     TestUpdate,
     TestUpdateDTO,
 )
-from .routes_admin import router
 
 __all__ = [
     "TestStatus",
@@ -44,3 +43,11 @@ __all__ = [
     "ErrorResponseDTO",
     "router",
 ]
+
+
+def __getattr__(name):
+    if name == "router":
+        from .routes_admin import router
+
+        return router
+    raise AttributeError(name)

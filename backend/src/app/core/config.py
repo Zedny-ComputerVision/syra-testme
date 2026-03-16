@@ -65,7 +65,6 @@ class Settings(BaseSettings):
     PROCTORING_VIDEO_RETENTION_DAYS: int = Field(default=90, ge=1)
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
     MEDIA_STORAGE_PROVIDER: str = Field(default="local")
-    # Proctoring videos always use Cloudflare streaming; legacy env values are coerced.
     PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
@@ -126,8 +125,8 @@ class Settings(BaseSettings):
     def normalize_video_storage_provider(cls, value: str) -> str:
         normalized = str(value or "cloudflare").strip().lower()
         if normalized not in {"local", "cloudflare", "supabase"}:
-            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'cloudflare'")
-        return "cloudflare"
+            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'local', 'cloudflare', or 'supabase'")
+        return normalized
 
     @field_validator("CLOUDFLARE_MEDIA_API_BASE_URL", mode="before")
     @classmethod

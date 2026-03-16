@@ -26,6 +26,7 @@ describe('Attempts page', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     cleanup()
   })
 
@@ -68,5 +69,28 @@ describe('Attempts page', () => {
     await waitFor(() => expect(screen.getByText('Test 3')).toBeTruthy())
     screen.getByRole('button', { name: 'Resume attempt for Test 3' }).click()
     expect(navigate).toHaveBeenCalledWith('/attempts/a3/take')
+  })
+
+  it('retries once when the initial attempt load is empty', async () => {
+    listAttemptsMock
+      .mockResolvedValueOnce({ data: { items: [] } })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            { id: 'a4', test_title: 'Recovered Attempt', status: 'SUBMITTED', score: 75, started_at: '2026-03-05T13:00:00Z', submitted_at: '2026-03-05T13:20:00Z' },
+          ],
+        },
+      })
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Attempts />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => expect(listAttemptsMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(listAttemptsMock).toHaveBeenCalledTimes(2), { timeout: 3000 })
+    await waitFor(() => expect(screen.getByText('Recovered Attempt')).toBeTruthy())
+    expect(listAttemptsMock).toHaveBeenCalledTimes(2)
   })
 })

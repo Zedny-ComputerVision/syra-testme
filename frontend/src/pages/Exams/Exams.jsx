@@ -46,9 +46,9 @@ export default function Exams() {
   const loadTests = () => {
     setLoading(true)
     setError('')
-    listTests({ skip: 0, limit: 200 })
+    listTests({ skip: 0, limit: 50 })
       .then(({ data }) => setTests(readPaginatedItems(data).map(normalizeTest)))
-      .catch(() => setError('Failed to load tests'))
+      .catch((err) => setError(err.response?.data?.detail || err.message || 'Failed to load tests'))
       .finally(() => setLoading(false))
   }
 

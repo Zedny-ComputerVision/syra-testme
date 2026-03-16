@@ -35,7 +35,7 @@ describe('AdminDashboard', () => {
   })
 
   it('keeps the page usable when one dashboard panel fails', async () => {
-    usersMock.mockRejectedValue(new Error('users unavailable'))
+    auditLogMock.mockRejectedValue(new Error('audit unavailable'))
 
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -43,15 +43,15 @@ describe('AdminDashboard', () => {
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(screen.getByText('Some dashboard panels could not be loaded. Refresh to retry.')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Some dashboard panels could not be loaded in time. Refresh to retry.')).toBeTruthy())
     expect(screen.getByText('Total Attempts')).toBeTruthy()
     expect(screen.getAllByText('7').length).toBeGreaterThan(0)
     expect(screen.getByText('No activity yet.')).toBeTruthy()
   })
 
   it('retries dashboard loading from the refresh action', async () => {
-    usersMock
-      .mockRejectedValueOnce(new Error('users unavailable'))
+    auditLogMock
+      .mockRejectedValueOnce(new Error('audit unavailable'))
       .mockResolvedValueOnce({ data: [] })
 
     render(
@@ -60,10 +60,10 @@ describe('AdminDashboard', () => {
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(screen.getByText('Some dashboard panels could not be loaded. Refresh to retry.')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Some dashboard panels could not be loaded in time. Refresh to retry.')).toBeTruthy())
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Refresh' })[0])
 
-    await waitFor(() => expect(usersMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(auditLogMock).toHaveBeenCalledTimes(2))
   })
 })

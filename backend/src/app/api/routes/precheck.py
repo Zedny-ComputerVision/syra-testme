@@ -304,18 +304,19 @@ async def precheck(
         except (TypeError, ValueError):
             return default
 
-    if ALLOW_TEST_BYPASS and _payload_flag("test_pass", default=False):
-        logger.warning("Identity verification bypassed for attempt %s via test_pass flag", attempt_id)
+    proctoring_payload = exam_proctoring(attempt.exam) if attempt and attempt.exam else {}
+    requirements = get_proctoring_requirements(proctoring_payload)
+    lighting_min = float((proctoring_payload or {}).get("lighting_min_score", 0.35))
+
+    test_pass = _payload_flag("test_pass", default=False)
+    if test_pass and (not requirements["identity_required"] or ALLOW_TEST_BYPASS):
+        logger.warning("Precheck bypassed for attempt %s via test_pass flag", attempt_id)
         attempt.id_verified = True
         attempt.precheck_passed_at = datetime.now(timezone.utc)
         attempt.identity_verified = True
         db.add(attempt)
         db.commit()
         return {"status": "ok", "face_match_score": 0.0, "lighting_ok": True, "id_verified": True, "all_pass": True}
-
-    proctoring_payload = exam_proctoring(attempt.exam) if attempt and attempt.exam else {}
-    requirements = get_proctoring_requirements(proctoring_payload)
-    lighting_min = float((proctoring_payload or {}).get("lighting_min_score", 0.35))
 
     manual_id_text = _payload_value("id_text") or _payload_value("id_number")
     manual_token = _normalized_id_text(manual_id_text)

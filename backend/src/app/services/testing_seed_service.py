@@ -17,12 +17,19 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+def _clear_seed_tables(db: Session) -> None:
+    for table in reversed(Base.metadata.sorted_tables):
+        db.execute(text(f"DELETE FROM {table.name}"))
+
+
 def reset_seed(db: Session):
     if not settings.E2E_SEED_ENABLED:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seed endpoint disabled")
 
-    table_names = ", ".join(table.name for table in reversed(Base.metadata.sorted_tables))
-    db.execute(text(f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE"))
+    # Avoid TRUNCATE here. E2E uses the live app process, and TRUNCATE takes
+    # stronger locks that can block behind routine reads (for example settings
+    # or auth bootstrap queries) until PostgreSQL statement timeout fires.
+    _clear_seed_tables(db)
     now = datetime.now(timezone.utc)
 
     admin_email = "admin@example.com"

@@ -59,7 +59,7 @@ DEFAULT_PROCTORING = {
     "eye_deviation_deg": 12,
     "mouth_open_threshold": 0.35,
     "audio_rms_threshold": 0.08,
-    "max_face_absence_sec": 3,
+    "max_face_absence_sec": 1.5,
     "max_tab_blurs": 3,
     "max_alerts_before_autosubmit": 5,
     "max_fullscreen_exits": 2,
@@ -67,8 +67,8 @@ DEFAULT_PROCTORING = {
     "lighting_min_score": 0.35,
     "face_verify_id_threshold": 0.18,
     "max_score_before_autosubmit": 15,
-    "frame_interval_ms": 1500,
-    "audio_chunk_ms": 3000,
+    "frame_interval_ms": 900,
+    "audio_chunk_ms": 2000,
     "screenshot_interval_sec": 60,
     "face_verify_threshold": 0.15,
     "cheating_consecutive_frames": 5,
@@ -76,7 +76,11 @@ DEFAULT_PROCTORING = {
     "eye_consecutive": 5,
     "object_confidence_threshold": 0.5,
     "audio_consecutive_chunks": 2,
+    "audio_speech_consecutive_chunks": 2,
+    "audio_speech_min_rms": 0.03,
+    "audio_speech_baseline_multiplier": 1.35,
     "audio_window": 5,
+    "multi_face_min_area_ratio": 0.008,
     "head_pose_yaw_deg": 20,
     "head_pose_pitch_deg": 20,
     "head_pitch_min_rad": -0.3,
@@ -89,6 +93,11 @@ DEFAULT_PROCTORING = {
     "eye_yaw_max_rad": 0.5,
     "pose_change_threshold_rad": 0.1,
     "eye_change_threshold_rad": 0.2,
+    "camera_cover_hard_luma": 20.0,
+    "camera_cover_soft_luma": 40.0,
+    "camera_cover_stddev_max": 16.0,
+    "camera_cover_hard_consecutive_frames": 1,
+    "camera_cover_soft_consecutive_frames": 2,
     "identity_required": True,
     "camera_required": True,
     "mic_required": True,
@@ -182,6 +191,25 @@ _RUNTIME_DEFAULTS = {
     "auto_logout_after_finish_or_pause": False,
     "score_report_include_certificate_status": False,
 }
+
+
+def _max_attempts_value(max_attempts: Any) -> int:
+    try:
+        value = int(max_attempts or 1)
+    except (TypeError, ValueError):
+        value = 1
+    return max(value, 1)
+
+
+def runtime_attempt_policy_conflicts(payload: dict[str, Any] | None, max_attempts: Any) -> bool:
+    return _max_attempts_value(max_attempts) > 1 and isinstance(payload, dict) and payload.get("allow_retake") is False
+
+
+def apply_runtime_attempt_policy_defaults(payload: dict[str, Any] | None, max_attempts: Any) -> dict[str, Any]:
+    data = deepcopy(payload) if isinstance(payload, dict) else {}
+    if "allow_retake" not in data and _max_attempts_value(max_attempts) > 1:
+        data["allow_retake"] = True
+    return data
 
 
 def _legacy_exam_settings(exam: Exam) -> dict[str, Any]:
@@ -410,7 +438,11 @@ def _ensure_proctoring_config(exam: Exam) -> ExamProctoringConfig:
     proctoring_config = getattr(exam, "proctoring_config_rel", None)
     if proctoring_config is None:
         proctoring_config = ExamProctoringConfig(
-            **{key: value for key, value in DEFAULT_PROCTORING.items() if key != "alert_rules"}
+            **{
+                key: DEFAULT_PROCTORING[key]
+                for key in _PROCTORING_SCALAR_FIELDS
+                if key in DEFAULT_PROCTORING
+            }
         )
         setattr(exam, "proctoring_config_rel", proctoring_config)
     return proctoring_config
@@ -562,7 +594,7 @@ def exam_runtime_settings(exam: Exam) -> dict[str, Any]:
 
 def set_exam_runtime_settings(exam: Exam, payload: dict[str, Any] | None) -> None:
     runtime = _ensure_runtime_config(exam)
-    data = deepcopy(payload) if isinstance(payload, dict) else {}
+    data = apply_runtime_attempt_policy_defaults(payload, getattr(exam, "max_attempts", 1))
     for field in _RUNTIME_SCALAR_FIELDS:
         if field in data:
             setattr(runtime, field, data.get(field))
@@ -812,9 +844,17 @@ def normalize_certificate_issue_rule(value: Any) -> str:
 
 
 def exam_proctoring(exam: Exam) -> dict[str, Any]:
+    raw = exam.proctoring_config
+    payload = deepcopy(DEFAULT_PROCTORING)
+    if isinstance(raw, dict):
+        payload.update(deepcopy(raw))
+
     config = getattr(exam, "proctoring_config_rel", None)
     if config:
-        payload = {key: getattr(config, key) for key in _PROCTORING_SCALAR_FIELDS if getattr(config, key) is not None}
+        for key in _PROCTORING_SCALAR_FIELDS:
+            value = getattr(config, key)
+            if value is not None:
+                payload[key] = value
         payload["alert_rules"] = [
             {
                 "id": rule.rule_key,
@@ -827,10 +867,9 @@ def exam_proctoring(exam: Exam) -> dict[str, Any]:
             for rule in sorted(config.alert_rules, key=lambda item: item.position)
         ]
         return payload
-    raw = exam.proctoring_config
-    if isinstance(raw, dict):
-        return deepcopy(raw)
-    return deepcopy(DEFAULT_PROCTORING)
+    if not isinstance(payload.get("alert_rules"), list):
+        payload["alert_rules"] = []
+    return payload
 
 
 def set_exam_proctoring(exam: Exam, payload: dict[str, Any] | None) -> None:

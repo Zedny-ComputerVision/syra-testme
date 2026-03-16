@@ -102,6 +102,7 @@ export default function ProctorOverlay({
   const recentAlertRef = useRef(new Map())
   const keepaliveLastMessageRef = useRef(Date.now())
   const systemErrorCooldownRef = useRef(new Map())
+  const audioStartedRef = useRef(false)
   // Adaptive frame rate: slow down when calm, speed up on violation
   const adaptiveIntervalRef = useRef(null) // current effective interval ms
   const lastViolationTimeRef = useRef(0)
@@ -227,13 +228,13 @@ export default function ProctorOverlay({
     if (!videoRef.current) return null
     const canvas = canvasRef.current || document.createElement('canvas')
     canvasRef.current = canvas
-    canvas.width = 320
-    canvas.height = 240
+    canvas.width = 640
+    canvas.height = 480
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    ctx.drawImage(videoRef.current, 0, 0, 320, 240)
+    ctx.drawImage(videoRef.current, 0, 0, 640, 480)
 
     try {
-      const image = ctx.getImageData(0, 0, 320, 240).data
+      const image = ctx.getImageData(0, 0, 640, 480).data
       let total = 0
       let totalSq = 0
       let samples = 0
@@ -265,8 +266,8 @@ export default function ProctorOverlay({
     } catch (error) {
       emitRateLimitedSystemError('camera_frame_read', error?.message || 'Unable to inspect the current camera frame for proctoring.', 10000)
     }
-    // 0.65 quality: optimized for fast transmission while keeping detection accuracy
-    return canvas.toDataURL('image/jpeg', 0.65).split(',')[1]
+    // 0.75 quality: balances transmission speed with detection accuracy
+    return canvas.toDataURL('image/jpeg', 0.75).split(',')[1]
   }, [cameraBlockedHardConsecutiveFrames, cameraBlockedLumaHard, cameraBlockedLumaSoft, cameraBlockedSoftConsecutiveFrames, cameraBlockedStddevMax, emitLocalCameraCoveredAlert, emitRateLimitedSystemError, onCameraStateChange])
 
   // Start camera
@@ -310,6 +311,30 @@ export default function ProctorOverlay({
     }
   }, [audioRequired, emitRateLimitedSystemError, onCameraStateChange, onStreamReady, videoRequired])
 
+  // Retry audio capture when stream becomes ready (fixes race with WebSocket)
+  useEffect(() => {
+    if (!audioRequired || audioStartedRef.current) return
+    const interval = setInterval(() => {
+      if (audioStartedRef.current) { clearInterval(interval); return }
+      const ws = wsRef.current
+      const stream = streamRef.current
+      if (ws && ws.readyState === WebSocket.OPEN && stream && stream.getAudioTracks().length > 0) {
+        audioStartedRef.current = true
+        startAudioCapture(stream, (b64, sampleRate) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'audio', data: b64, sample_rate: sampleRate || 16000 }))
+          }
+        }, audioChunkInterval).then(() => {
+          clearInterval(interval)
+        }).catch(() => {
+          audioStartedRef.current = false
+        })
+        clearInterval(interval)
+      }
+    }, 500)
+    return () => clearInterval(interval)
+  }, [audioRequired, audioChunkInterval])
+
   useEffect(() => {
     if (!attemptId || !videoRequired) return
     localFrameIntervalRef.current = setInterval(() => {
@@ -345,6 +370,7 @@ export default function ProctorOverlay({
         intervalRef.current = null
       }
       if (screenIntervalRef.current) { clearInterval(screenIntervalRef.current); screenIntervalRef.current = null }
+      audioStartedRef.current = false
     }
 
     function startScreenCaptureLoop(screenStream) {
@@ -427,6 +453,22 @@ export default function ProctorOverlay({
 
     onRegisterScreenShareRequest?.(() => ensureScreenStream())
 
+    function tryStartAudio(ws) {
+      if (audioStartedRef.current) return
+      const stream = streamRef.current
+      if (!stream || stream.getAudioTracks().length === 0) return
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+      audioStartedRef.current = true
+      startAudioCapture(stream, (b64, sampleRate) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'audio', data: b64, sample_rate: sampleRate || 16000 }))
+        }
+      }, audioChunkInterval).catch(() => {
+        audioStartedRef.current = false
+        emitRateLimitedSystemError('audio_capture', 'Unable to capture microphone audio for proctoring.')
+      })
+    }
+
     function connect() {
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
@@ -497,16 +539,8 @@ export default function ProctorOverlay({
           startScreenCaptureLoop(screenStreamRef.current)
         }
 
-        const stream = streamRef.current
-        if (stream && stream.getAudioTracks().length > 0) {
-          startAudioCapture(stream, (b64, sampleRate) => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'audio', data: b64, sample_rate: sampleRate || 16000 }))
-            }
-          }, audioChunkInterval).catch(() => {
-            emitRateLimitedSystemError('audio_capture', 'Unable to capture microphone audio for proctoring.')
-          })
-        }
+        // Try to start audio capture (may fail if stream not ready yet — retried in stream useEffect)
+        tryStartAudio(ws)
       }
 
       ws.onmessage = (ev) => {
@@ -550,6 +584,11 @@ export default function ProctorOverlay({
         if (reconnectTimerRef.current) return
         if (reconnectAttemptsRef.current >= WS_MAX_ATTEMPTS) {
           setStatus('closed')
+          pushAlert({
+            severity: 'HIGH',
+            event_type: 'PROCTORING_OFFLINE',
+            detail: 'Proctoring connection could not be restored. Your answers are still being saved.',
+          })
           return
         }
         const delay = Math.min(WS_BASE_DELAY_MS * 2 ** reconnectAttemptsRef.current, WS_MAX_DELAY_MS)

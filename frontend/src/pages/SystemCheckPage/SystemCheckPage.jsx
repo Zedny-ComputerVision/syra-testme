@@ -81,7 +81,9 @@ export default function SystemCheckPage() {
       micStreamRef.current = null
     }
     if (micAudioCtxRef.current) {
-      micAudioCtxRef.current.close().catch(() => {})
+      micAudioCtxRef.current.close().catch(() => {
+        setConfigError('The microphone monitor could not be released cleanly. Refresh the page if the mic stays unavailable.')
+      })
       micAudioCtxRef.current = null
     }
     setMicLevel(0)
@@ -243,12 +245,13 @@ export default function SystemCheckPage() {
   ])
 
   useEffect(() => {
-    let cancelled = false
-    loadConfig().catch(() => {})
+    void loadConfig()
     return () => {
-      cancelled = true
+      stopCamera()
+      stopScreenShareCheck()
+      stopMicMonitor()
     }
-  }, [loadConfig])
+  }, [loadConfig, stopCamera, stopMicMonitor, stopScreenShareCheck])
 
   useEffect(() => {
     if (configLoading) return
@@ -513,6 +516,9 @@ export default function SystemCheckPage() {
 
         {!configError && !configLoading && (
           <div className={styles.actionsRow}>
+            <button type="button" className={styles.secondaryBtn} onClick={() => navigate(`/tests/${testId}`)} disabled={checksBusy || continueBusy}>
+              Back to instructions
+            </button>
             <button type="button" className={styles.secondaryBtn} onClick={() => void rerunChecks()} disabled={checksBusy || continueBusy}>
               {checksBusy ? 'Re-running checks...' : 'Re-run checks'}
             </button>

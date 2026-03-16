@@ -182,6 +182,9 @@ export default function RulesPage() {
       if (requirements.screenRequired) {
         try {
           const stream = await requestEntireScreenShare()
+          if (!stream.getVideoTracks().some(t => t.readyState === 'live')) {
+            throw new Error('Screen share stream is not active')
+          }
           storeScreenStream(stream)
         } catch (screenErr) {
           const msg = screenErr?.code === ENTIRE_SCREEN_REQUIRED

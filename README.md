@@ -32,3 +32,21 @@ Env files already populated with local defaults.
 - Proctoring video uploads stream through Cloudflare. Set `CLOUDFLARE_MEDIA_API_BASE_URL` in the backend env before running recorded exams.
 - Reports are written to `backend/storage/reports`.
 - Evidence screenshots are written to `backend/storage/evidence`.
+
+## Full test run
+
+Run the full suite (backend tests + frontend unit tests + frontend end-to-end tests):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-full-tests.ps1
+```
+
+You can skip Playwright/E2E with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-full-tests.ps1 -SkipFrontendE2E
+```
+
+Requirements for the backend test run:
+- Postgres available at `DATABASE_URL` (or local default `postgresql+psycopg://postgres:password@localhost:5432/syra_lms`)
+- Frontend E2E depends on Playwright dependencies already installed (`npm install` in `frontend` is already set up in the project).

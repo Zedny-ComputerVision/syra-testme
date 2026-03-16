@@ -27,7 +27,7 @@ const DEFAULT_PROCTORING = {
   object_confidence_threshold: 0.5,
   multi_face_min_area_ratio: 0.008,
   max_face_absence_sec: 1.5,
-  frame_interval_ms: 900,
+  frame_interval_ms: 500,
   audio_chunk_ms: 2000,
   audio_consecutive_chunks: 2,
   audio_speech_consecutive_chunks: 2,
@@ -40,7 +40,7 @@ const DEFAULT_PROCTORING = {
   camera_cover_hard_consecutive_frames: 1,
   camera_cover_soft_consecutive_frames: 2,
   screenshot_interval_sec: 60,
-  max_tab_blurs: 3,
+  max_tab_blurs: 0,
 }
 
 function normalizeProctoringAlert(rawAlert) {
@@ -327,6 +327,7 @@ export default function Proctoring() {
     || proctorCfg.audio_detection
     || proctorCfg.object_detection
     || proctorCfg.mouth_detection
+    || proctorCfg.screen_capture
     || journeyRequirements.systemCheckRequired
     || journeyRequirements.identityRequired
     || (Array.isArray(proctorCfg.alert_rules) && proctorCfg.alert_rules.length > 0)
@@ -436,7 +437,7 @@ export default function Proctoring() {
       window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
       setScreenShareBusy(false)
     }
-  }, [emitProctoringNotice, proctorCfg.fullscreen_enforce, screenShareBusy])
+  }, [emitProctoringNotice, screenShareBusy])
 
   const pickRecorderMimeType = (stream) => {
     const hasAudio = Boolean(stream?.getAudioTracks?.().length)
@@ -597,7 +598,10 @@ export default function Proctoring() {
     setSubmitting(true)
     setSubmitError('')
     try {
-      await flush()
+      await Promise.race([
+        flush(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Save timed out')), 8000)),
+      ]).catch(() => { /* best-effort flush — proceed with submission */ })
       // Submit the attempt first (fast) — don't block on video uploads
       await submitAttempt(attemptId)
       if (document.fullscreenElement) {
@@ -696,9 +700,9 @@ export default function Proctoring() {
       }
       if (!document.fullscreenElement) {
         // When screen capture is active, do NOT call requestFullscreen() —
-        // it kills the screen share track. Just silently ignore the fullscreen
-        // exit since the screen recording is more important.
+        // it kills the screen share track. Warn the user but keep recording.
         if (screenCaptureActive) {
+          sendBrowserViolation('FULLSCREEN_EXIT', 'MEDIUM', 'Fullscreen exited while screen is being recorded')
           return
         }
         sendBrowserViolation('FULLSCREEN_EXIT', 'HIGH', 'Fullscreen mode exited during exam')
@@ -726,30 +730,17 @@ export default function Proctoring() {
     if (!screenShareEstablishedRef.current || screenShareLossHandledRef.current) return
     screenShareLossHandledRef.current = true
 
-    // When fullscreen is also enforced the browser's own fullscreen ↔ screen-share
-    // conflict can kill the screen track. Give the user a chance to re-share instead
-    // of immediately auto-submitting.
-    if (proctorCfg.fullscreen_enforce) {
-      sendBrowserViolation('SCREEN_SHARE_LOST', 'MEDIUM', 'Screen sharing was interrupted. Please re-share your entire screen.')
-      setToast({
-        severity: 'MEDIUM',
-        event_type: 'SCREEN_SHARE_LOST',
-        detail: 'Screen sharing stopped. Please re-share your entire screen to continue.',
-      })
-      // Allow the user to re-share (reset the loss flag after a short delay so the
-      // watcher can fire again if the user still hasn't re-shared)
-      window.setTimeout(() => { screenShareLossHandledRef.current = false }, 8000)
-      return
-    }
-
-    sendBrowserViolation('SCREEN_SHARE_LOST', 'HIGH', 'Screen sharing stopped during the exam session.')
+    // Screen share lost — warn the learner and give them a chance to re-share.
+    // Never auto-submit on screen share loss; just log a violation and retry.
+    sendBrowserViolation('SCREEN_SHARE_LOST', 'MEDIUM', 'Screen sharing was interrupted. Please re-share your entire screen.')
     setToast({
-      severity: 'HIGH',
+      severity: 'MEDIUM',
       event_type: 'SCREEN_SHARE_LOST',
-      detail: 'Screen sharing stopped. The attempt will be submitted.',
+      detail: 'Screen sharing stopped. Please re-share your entire screen to continue.',
     })
-    void handleSubmit()
-  }, [handleSubmit, loading, proctorCfg.screen_capture, screenStream, sendBrowserViolation, submitting])
+    // Reset the loss flag after a delay so the watcher fires again if still not re-shared
+    window.setTimeout(() => { screenShareLossHandledRef.current = false }, 8000)
+  }, [loading, proctorCfg.screen_capture, screenStream, sendBrowserViolation, submitting])
 
   // Countdown timer
   useEffect(() => {
@@ -793,14 +784,13 @@ export default function Proctoring() {
   // Tab blur / visibility tracking
   useEffect(() => {
     if (!proctorCfg.tab_switch_detect) return
-    const reportTabSwitch = (next, detail, visibility) => {
+    const reportTabSwitch = (count, detail, visibility) => {
       // Suppress tab switch violations while screen share picker is open or grace period
-      if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return next
+      if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return count
       const now = Date.now()
-      if (now - lastTabSwitchEventRef.current < 750) {
-        return next
-      }
+      if (now - lastTabSwitchEventRef.current < 750) return count
       lastTabSwitchEventRef.current = now
+      const next = count + 1
       sendBrowserViolation('TAB_SWITCH', 'MEDIUM', detail)
       if (attemptId) {
         proctoringPing(attemptId, {
@@ -815,24 +805,13 @@ export default function Proctoring() {
       }
       return next
     }
-    const onBlur = () => {
-      setTabBlurs((count) => {
-        const next = count + 1
-        return reportTabSwitch(next, `Window lost focus (switch #${next})`, document.visibilityState)
-      })
-    }
     const onVisibility = () => {
       if (document.hidden) {
-        setTabBlurs((count) => {
-          const next = count + 1
-          return reportTabSwitch(next, `Tab hidden / switched (switch #${next})`, 'hidden')
-        })
+        setTabBlurs((count) => reportTabSwitch(count, `Tab hidden / switched (switch #${count + 1})`, 'hidden'))
       }
     }
-    window.addEventListener('blur', onBlur)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      window.removeEventListener('blur', onBlur)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.tab_switch_detect, sendBrowserViolation])
@@ -1043,6 +1022,8 @@ export default function Proctoring() {
                   avg_interval_ms: Math.round(avg),
                   sample_size: keyIntervalsRef.current.length,
                 })
+              } else if (sendClientEventRef.current) {
+                sendClientEventRef.current('KEYSTROKE_ANOMALY', 'LOW', `Suspiciously fast typing detected (${Math.round(avg)}ms avg interval)`)
               }
             }
           }

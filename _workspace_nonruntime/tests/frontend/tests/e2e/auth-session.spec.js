@@ -15,6 +15,18 @@ test.describe('Auth session handling', () => {
     await expect(page).toHaveURL(/\/login$/)
   })
 
+  test('admin login falls back to the dashboard when the saved return path is learner-only', async ({ page, context }) => {
+    const admin = await ensureAdmin(context)
+
+    await page.goto('/tests')
+    await page.fill('input[type="email"]', admin.email)
+    await page.fill('input[type="password"]', admin.password)
+    await page.getByRole('button', { name: /sign in/i }).click()
+
+    await expect(page).toHaveURL(/\/admin\/dashboard$/)
+    await expect(page.getByRole('heading', { name: 'Admin Dashboard' })).toBeVisible()
+  })
+
   test('logout clears tokens and returns the user to login', async ({ page, context }) => {
     const admin = await ensureAdmin(context)
 

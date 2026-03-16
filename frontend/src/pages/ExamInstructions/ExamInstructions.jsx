@@ -18,7 +18,13 @@ export default function ExamInstructions() {
     setLoading(true)
     setError('')
     getTest(testId)
-      .then(({ data }) => setTest(normalizeTest(data)))
+      .then(({ data }) => {
+        try {
+          setTest(normalizeTest(data))
+        } catch (parseErr) {
+          setError('Failed to parse test data. The test may be misconfigured.')
+        }
+      })
       .catch((err) => setError(err.response?.data?.detail || err.message || 'Failed to load test details'))
       .finally(() => setLoading(false))
   }

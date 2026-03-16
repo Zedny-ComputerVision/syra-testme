@@ -83,6 +83,26 @@
   flex: 1;
 }
 
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  border: none;
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
+  color: var(--color-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    color: var(--color-primary);
+  }
+}
+
 .searchShortcut {
   display: inline-flex;
   align-items: center;
@@ -476,6 +496,21 @@
   padding: 0;
 
   &:hover { text-decoration: underline; }
+}
+
+.notifMarkAll:disabled {
+  opacity: 0.65;
+  cursor: progress;
+  text-decoration: none;
+}
+
+.notifNotice {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-warning-bg) 72%, transparent);
+  color: var(--color-warning-text, var(--color-text));
+  font-size: 0.76rem;
+  line-height: 1.45;
 }
 
 .notifList {

@@ -8,7 +8,7 @@ const deleteTestRuntime = (id) => api.delete(`exams/${id}`)
 
 export const adminApi = {
   // Canonical admin tests
-  tests: (params) => api.get('admin/tests', { params }),
+  tests: (params, opts) => api.get('admin/tests', { params, ...opts }),
   allTests: (params = {}) => api.get('admin/tests', {
     params: {
       page_size: 100,

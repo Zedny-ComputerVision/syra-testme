@@ -15,7 +15,7 @@ export default function ScrollReveal({
   className = '',
   delay = 0,
   once = true,
-  threshold = 0.18,
+  threshold = 0.05,
 }) {
   const ref = useRef(null)
   const [visible, setVisible] = useState(!canAnimate())
@@ -37,7 +37,7 @@ export default function ScrollReveal({
       },
       {
         threshold,
-        rootMargin: '0px 0px -10% 0px',
+        rootMargin: '0px 0px 0px 0px',
       },
     )
 
