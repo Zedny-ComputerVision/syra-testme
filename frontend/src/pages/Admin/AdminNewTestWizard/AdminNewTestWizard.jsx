@@ -375,6 +375,7 @@ export default function AdminNewTestWizard() {
 
   /* ─── Step 8: Save ─── */
   const [publishStatus, setPublishStatus] = useState('CLOSED')
+  const publishStatusRef = useRef('CLOSED')
   const wizardBaselineRef = useRef('')
   const [wizardReady, setWizardReady] = useState(!editId)
   const [wizardBaselineVersion, setWizardBaselineVersion] = useState(0)
@@ -387,6 +388,11 @@ export default function AdminNewTestWizard() {
     const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000))
     return local.toISOString().slice(0, 16)
   }
+
+  const updatePublishStatus = useCallback((nextStatus) => {
+    publishStatusRef.current = nextStatus
+    setPublishStatus(nextStatus)
+  }, [])
 
   useEffect(() => () => {
     if (autosaveTimerRef.current) {
@@ -599,7 +605,7 @@ export default function AdminNewTestWizard() {
       setPassingScore(test.passing_score ?? 60)
       setMaxAttempts(test.attempts_allowed ?? 1)
       setGradingScaleId(test.grading_scale_id || '')
-      setPublishStatus(test.status === 'PUBLISHED' ? 'OPEN' : 'CLOSED')
+      updatePublishStatus(test.status === 'PUBLISHED' ? 'OPEN' : 'CLOSED')
       if (test.proctoring_config) setProctoring({ ...DEFAULT_PROCTORING_CONFIG, ...normalizeProctoringConfig(test.proctoring_config) })
       if (test.time_limit_minutes != null) {
         setUnlimitedTime(false)
@@ -657,7 +663,7 @@ export default function AdminNewTestWizard() {
       setWizardReady(true)
       setWizardBaselineVersion((current) => current + 1)
     })
-  }, [editId])
+  }, [editId, updatePublishStatus])
 
   useEffect(() => {
     loadAssignedSessions(examId)
@@ -1068,11 +1074,12 @@ export default function AdminNewTestWizard() {
   }
 
   const handlePublish = async () => {
+    const targetPublishStatus = publishStatusRef.current
     if (editorLocked) {
       setPanelError('Published and archived tests must be edited from Manage Tests.')
       return
     }
-    if (publishStatus === 'OPEN') {
+    if (targetPublishStatus === 'OPEN') {
       const publishGateSteps = [0, 1, 2, 4, 5, 7]
       for (const gateStep of publishGateSteps) {
         const validationMessage = validateStep(gateStep, { forPublish: true })
@@ -1086,11 +1093,11 @@ export default function AdminNewTestWizard() {
     setSaving(true)
     try {
       const id = await saveExam()
-      if (publishStatus === 'OPEN') {
+      if (targetPublishStatus === 'OPEN') {
         await adminApi.publishTest(id)
       }
       setExitingWizard(true)
-      window.location.assign('/admin/tests')
+      navigate('/admin/tests', { replace: true })
     } catch (e) { setPanelError(formatApiErrorMessage(e, 'Could not save. Please add questions and try again.')) } finally { setSaving(false) }
   }
 
@@ -2703,14 +2710,14 @@ export default function AdminNewTestWizard() {
             <label className={styles.label}>Publication Status</label>
             <div className={styles.publishOptions}>
               <label className={`${styles.publishOption} ${publishStatus === 'CLOSED' ? styles.publishOptionActive : ''}`}>
-                <input type="radio" checked={publishStatus === 'CLOSED'} onChange={() => setPublishStatus('CLOSED')} />
+                <input type="radio" checked={publishStatus === 'CLOSED'} onChange={() => updatePublishStatus('CLOSED')} />
                 <div className={styles.publishOptionCopy}>
                   <div className={styles.publishOptionTitle}>Draft</div>
                   <div className={styles.publishOptionSubtitle}>Not visible to candidates</div>
                 </div>
               </label>
               <label className={`${styles.publishOption} ${publishStatus === 'OPEN' ? styles.publishOptionActive : ''}`}>
-                <input type="radio" checked={publishStatus === 'OPEN'} onChange={() => setPublishStatus('OPEN')} />
+                <input type="radio" checked={publishStatus === 'OPEN'} onChange={() => updatePublishStatus('OPEN')} />
                 <div className={styles.publishOptionCopy}>
                   <div className={styles.publishOptionTitle}>Published</div>
                   <div className={styles.publishOptionSubtitle}>Visible and active for candidates</div>

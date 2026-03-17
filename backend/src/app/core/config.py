@@ -64,8 +64,9 @@ class Settings(BaseSettings):
     IDENTITY_RETENTION_DAYS: int = Field(default=7, ge=1)
     PROCTORING_VIDEO_RETENTION_DAYS: int = Field(default=90, ge=1)
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
+    MAX_VIDEO_UPLOAD_MB: int = Field(default=512, ge=16, le=4096)
     MEDIA_STORAGE_PROVIDER: str = Field(default="local")
-    PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
+    PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="local")
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_MEDIA_WATERMARK_UID: str | None = None

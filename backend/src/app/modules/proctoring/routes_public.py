@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import tempfile
 import time
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -28,9 +29,10 @@ from ...reporting.report_generator import generate_html_report
 from ...services.integrations import send_proctoring_integration_event
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
-from ...services.cloudflare_media import cloudflare_video_storage_enabled, upload_video_content_to_cloudflare
+from ...services.cloudflare_media import cloudflare_video_storage_enabled, upload_video_to_cloudflare
 from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
+from ...utils.request_ip import get_request_ip, get_websocket_ip
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 
 router = APIRouter()
@@ -74,17 +76,23 @@ def _video_filename(attempt_id: str, session_id: str, source: str, extension: st
 
 
 def _video_storage_provider() -> str:
-    if _remote_video_storage_enabled():
+    provider = get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER
+    if provider == "cloudflare" and cloudflare_video_storage_enabled():
         return "cloudflare"
+    if provider == "supabase":
+        from ...services.supabase_storage import supabase_video_storage_enabled
+        if supabase_video_storage_enabled():
+            return "supabase"
     return "local"
 
 
 def _remote_video_storage_enabled() -> bool:
-    return cloudflare_video_storage_enabled()
+    return _video_storage_provider() in ("cloudflare", "supabase")
 
 
 def _remote_video_storage_error_detail() -> str:
-    return "Cloudflare video storage is not configured"
+    provider = get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER
+    return f"{provider.title()} video storage is not configured"
 
 
 def _is_absolute_http_url(value: object) -> bool:
@@ -202,7 +210,7 @@ def _build_registered_video_info(
     raw = dict(payload or {})
     remote = raw.get("remote")
     remote = remote if isinstance(remote, dict) else {}
-    provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider() or "cloudflare").strip().lower()
+    provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider() or "local").strip().lower()
     if provider and provider != "cloudflare":
         raise HTTPException(status_code=400, detail="provider must be cloudflare")
 
@@ -273,7 +281,8 @@ def _build_local_video_info(
     session_id: str,
     source: str,
     filename: str,
-    content: bytes,
+    content: bytes | None = None,
+    upload_path: Path | None = None,
     recording_started_at: str | None,
     recording_stopped_at: str | None,
 ) -> dict[str, object]:
@@ -283,7 +292,13 @@ def _build_local_video_info(
 
     VIDEO_DIR.mkdir(parents=True, exist_ok=True)
     file_path = VIDEO_DIR / safe_filename
-    file_path.write_bytes(content)
+    if upload_path is not None:
+        upload_path.replace(file_path)
+        file_size = file_path.stat().st_size
+    else:
+        payload = bytes(content or b"")
+        file_path.write_bytes(payload)
+        file_size = len(payload)
 
     return {
         "provider": "local",
@@ -292,7 +307,7 @@ def _build_local_video_info(
         "url": f"/api/media/videos/{safe_filename}",
         "playback_url": f"/api/media/videos/{safe_filename}",
         "playback_type": "direct",
-        "size": len(content or b""),
+        "size": file_size,
         "source": _normalize_video_source(source),
         "session_id": session_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -366,8 +381,35 @@ def _action_label(action: str) -> str:
     return labels.get(str(action or "").upper(), "Warn learner")
 
 
-def _client_ip(client) -> str | None:
-    return getattr(client, "host", None) if client else None
+async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> tuple[Path, int]:
+    upload_limit_bytes = settings.MAX_VIDEO_UPLOAD_MB * 1024 * 1024
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    temp_path = Path(temp_file.name)
+    total_size = 0
+
+    try:
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            total_size += len(chunk)
+            if total_size > upload_limit_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Video upload exceeds the {settings.MAX_VIDEO_UPLOAD_MB} MB limit",
+                )
+            temp_file.write(chunk)
+    except Exception:
+        temp_file.close()
+        temp_path.unlink(missing_ok=True)
+        raise
+    finally:
+        temp_file.close()
+
+    if total_size == 0:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Empty video upload")
+
+    return temp_path, total_size
 
 
 def _ping_event_detail(event_type: str) -> str:
@@ -753,7 +795,7 @@ async def proctoring_ping(
             history_events,
             now,
             actor_user_id=current.id,
-            request_ip=_client_ip(request.client if request else None),
+            request_ip=get_request_ip(request),
         )
         response_alerts.extend(rule_result["alerts"])
         created_events.extend(rule_result["created_events"])
@@ -839,75 +881,74 @@ async def upload_video_capture(
     if not (content_type.startswith("video/") or content_type == "application/octet-stream"):
         raise HTTPException(status_code=415, detail="Invalid video upload content type")
 
-    content = await request.body()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty video upload")
-
     extension = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else (
         "mp4" if "mp4" in content_type else "webm"
     )
     safe_filename = filename or _video_filename(attempt_id, session_id, normalized_source, extension)
     normalized_recording_started_at = _normalize_iso_datetime(recording_started_at)
     normalized_recording_stopped_at = _normalize_iso_datetime(recording_stopped_at)
+    temp_path, upload_size = await _write_video_upload_to_temp_file(request, suffix=f".{extension}")
 
     file_info: dict[str, object]
     response_detail = "video uploaded"
-    if _remote_video_storage_enabled():
-        try:
-            remote = await upload_video_content_to_cloudflare(
-                content,
-                filename=safe_filename,
-                source=normalized_source,
-                content_type=content_type,
-            )
-            file_info = _build_registered_video_info(
-                attempt_id,
-                {
-                    "provider": "cloudflare",
-                    "session_id": session_id,
-                    "source": normalized_source,
-                    "extension": extension,
-                    "name": remote.get("name") or safe_filename,
-                    "url": remote.get("url") or remote.get("playback_url"),
-                    "playback_url": remote.get("playback_url") or remote.get("url"),
-                    "playback_type": remote.get("playback_type"),
-                    "thumbnail": remote.get("thumbnail"),
-                    "uid": remote.get("uid"),
-                    "status": remote.get("status"),
-                    "ready_to_stream": remote.get("ready_to_stream"),
-                    "duration": remote.get("duration"),
-                    "size": remote.get("size") or len(content),
-                    "created_at": remote.get("created_at"),
-                    "recording_started_at": normalized_recording_started_at,
-                    "recording_stopped_at": normalized_recording_stopped_at,
-                    "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
-                },
-                session_id=session_id,
-                source=normalized_source,
-            )
-        except Exception as exc:
-            logger.warning("Cloudflare video upload failed for attempt %s; falling back to local storage: %s", attempt_id, exc)
+    try:
+        if _remote_video_storage_enabled():
+            try:
+                remote = await upload_video_to_cloudflare(
+                    temp_path,
+                    filename=safe_filename,
+                    source=normalized_source,
+                )
+                file_info = _build_registered_video_info(
+                    attempt_id,
+                    {
+                        "provider": "cloudflare",
+                        "session_id": session_id,
+                        "source": normalized_source,
+                        "extension": extension,
+                        "name": remote.get("name") or safe_filename,
+                        "url": remote.get("url") or remote.get("playback_url"),
+                        "playback_url": remote.get("playback_url") or remote.get("url"),
+                        "playback_type": remote.get("playback_type"),
+                        "thumbnail": remote.get("thumbnail"),
+                        "uid": remote.get("uid"),
+                        "status": remote.get("status"),
+                        "ready_to_stream": remote.get("ready_to_stream"),
+                        "duration": remote.get("duration"),
+                        "size": remote.get("size") or upload_size,
+                        "created_at": remote.get("created_at"),
+                        "recording_started_at": normalized_recording_started_at,
+                        "recording_stopped_at": normalized_recording_stopped_at,
+                        "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
+                    },
+                    session_id=session_id,
+                    source=normalized_source,
+                )
+            except Exception as exc:
+                logger.warning("Cloudflare video upload failed for attempt %s; falling back to local storage: %s", attempt_id, exc)
+                file_info = _build_local_video_info(
+                    attempt_id,
+                    session_id=session_id,
+                    source=normalized_source,
+                    filename=safe_filename,
+                    upload_path=temp_path,
+                    recording_started_at=normalized_recording_started_at,
+                    recording_stopped_at=normalized_recording_stopped_at,
+                )
+                response_detail = "video saved locally"
+        else:
             file_info = _build_local_video_info(
                 attempt_id,
                 session_id=session_id,
                 source=normalized_source,
                 filename=safe_filename,
-                content=content,
+                upload_path=temp_path,
                 recording_started_at=normalized_recording_started_at,
                 recording_stopped_at=normalized_recording_stopped_at,
             )
             response_detail = "video saved locally"
-    else:
-        file_info = _build_local_video_info(
-            attempt_id,
-            session_id=session_id,
-            source=normalized_source,
-            filename=safe_filename,
-            content=content,
-            recording_started_at=normalized_recording_started_at,
-            recording_stopped_at=normalized_recording_stopped_at,
-        )
-        response_detail = "video saved locally"
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     event = ProctoringEvent(
         attempt_id=attempt_id,
@@ -1264,7 +1305,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             event,
                             history_events,
                             event_time,
-                            request_ip=_client_ip(websocket.client),
+                            request_ip=get_websocket_ip(websocket),
                         )
 
                         # Collect for post-commit processing (no per-alert commit)
@@ -1327,7 +1368,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         exam_cfg,
                         history_events,
                         occurred_at=datetime.now(timezone.utc),
-                        request_ip=_client_ip(websocket.client),
+                        request_ip=get_websocket_ip(websocket),
                         violation_score=orchestrator.violation_score,
                     )
                     if reason:
@@ -1370,7 +1411,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             event,
                             history_events,
                             event_time,
-                            request_ip=_client_ip(websocket.client),
+                            request_ip=get_websocket_ip(websocket),
                         )
 
                         if _is_serious_alert(alert.get("severity"), severity):
@@ -1420,7 +1461,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         exam_cfg,
                         history_events,
                         occurred_at=datetime.now(timezone.utc),
-                        request_ip=_client_ip(websocket.client),
+                        request_ip=get_websocket_ip(websocket),
                         violation_score=orchestrator.violation_score,
                     )
                     if reason:
@@ -1478,7 +1519,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 exam_cfg,
                                 screen_history,
                                 occurred_at=event_time,
-                                request_ip=_client_ip(websocket.client),
+                                request_ip=get_websocket_ip(websocket),
                             )
                             if reason:
                                 await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1532,7 +1573,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             exam_cfg,
                             history_events,
                             occurred_at=event.occurred_at,
-                            request_ip=_client_ip(websocket.client),
+                            request_ip=get_websocket_ip(websocket),
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1581,7 +1622,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             exam_cfg,
                             history_events,
                             occurred_at=event.occurred_at,
-                            request_ip=_client_ip(websocket.client),
+                            request_ip=get_websocket_ip(websocket),
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1609,7 +1650,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     history_events.append(event)
                     rule_result = _apply_alert_rules(
                         db, attempt, exam_cfg, event, history_events,
-                        event_time, request_ip=_client_ip(websocket.client),
+                        event_time, request_ip=get_websocket_ip(websocket),
                     )
                     try:
                         db.commit()
@@ -1648,7 +1689,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         exam_cfg,
                         history_events,
                         occurred_at=event_time,
-                        request_ip=_client_ip(websocket.client),
+                        request_ip=get_websocket_ip(websocket),
                     )
                     if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})

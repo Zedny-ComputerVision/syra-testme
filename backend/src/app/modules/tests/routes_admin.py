@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from ...api.deps import get_db_dep, require_permission
 from ...models import RoleEnum
+from ...utils.request_ip import get_request_ip
 from ...utils.pagination import MAX_PAGE_SIZE, normalize_pagination
 from .enums import TestStatus, TestType
 from .repository import TestRepository
@@ -31,7 +32,7 @@ def _json_error(exc: TestServiceError) -> JSONResponse:
 
 
 def _request_ip(request: Request | None) -> str | None:
-    return getattr(getattr(request, "client", None), "host", None)
+    return get_request_ip(request)
 
 
 def _actor_from_current(current) -> ServiceActor:

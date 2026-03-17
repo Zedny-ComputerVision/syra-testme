@@ -9,6 +9,7 @@ import { getTestQuestions, getTest } from '../../services/test.service'
 import { proctoringPing, uploadProctoringVideo } from '../../services/proctoring.service'
 import { normalizeQuestion, normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements, normalizeProctoringConfig } from '../../utils/proctoringRequirements'
+import { requestEntireScreenShare, ENTIRE_SCREEN_REQUIRED } from '../../utils/screenCapture'
 import { consumeScreenStream } from '../../utils/screenShareState'
 import styles from './Proctoring.module.scss'
 
@@ -202,6 +203,10 @@ export default function Proctoring() {
   const screenShareLossHandledRef = useRef(false)
   const screenSharePickerOpenRef = useRef(false)
   const screenShareGraceRef = useRef(false)
+  const [screenShareGranted, setScreenShareGranted] = useState(false)
+  const [screenShareGateError, setScreenShareGateError] = useState('')
+  const [screenShareGateLoading, setScreenShareGateLoading] = useState(false)
+  const screenStreamCleanupRef = useRef(null)
 
   const { save, flush, saveState, lastSavedAt, saveError } = useAutoSave(attemptId)
   const cameraRecordingRef = useRef(createRecordingController('camera'))
@@ -233,6 +238,37 @@ export default function Proctoring() {
   const mouseInactiveAlertedRef = useRef(false)
   const MOUSE_INACTIVE_MS = 120000      // 2 minutes
 
+  // Keep screen stream cleanup ref in sync with state
+  useEffect(() => { screenStreamCleanupRef.current = screenStream }, [screenStream])
+
+  useEffect(() => {
+    if (!proctorCfg.screen_capture || screenStream || screenShareGranted) return
+    const storedStream = consumeScreenStream()
+    if (!storedStream) return
+    const isLive = storedStream.getVideoTracks?.().some((track) => track.readyState === 'live')
+    if (!isLive) {
+      storedStream.getTracks?.().forEach((track) => track.stop())
+      return
+    }
+    setScreenStream(storedStream)
+    screenShareEstablishedRef.current = true
+    setScreenShareGranted(true)
+    setScreenShareGateError('')
+  }, [proctorCfg.screen_capture, screenShareGranted, screenStream])
+
+  // If the screen stream dies mid-exam (user clicked "Stop sharing"), re-gate
+  useEffect(() => {
+    if (screenShareGranted && !screenStream && proctorCfg.screen_capture) {
+      setScreenShareGranted(false)
+      setScreenShareGateError('Screen sharing was stopped. You must share your screen again to continue.')
+    }
+  }, [screenStream, screenShareGranted, proctorCfg.screen_capture])
+
+  // Stop screen tracks on component unmount to prevent orphaned MediaStreams
+  useEffect(() => {
+    return () => { screenStreamCleanupRef.current?.getTracks?.().forEach(t => t.stop()) }
+  }, [])
+
   // Load attempt, exam, and questions
   useEffect(() => {
     let cancelled = false
@@ -258,12 +294,6 @@ export default function Proctoring() {
         const merged = { ...DEFAULT_PROCTORING, ...normalizeProctoringConfig(ex.proctoring_config || {}) }
         setProctorCfg(merged)
 
-        // Pick up screen stream established on RulesPage (survives SPA navigation)
-        const preStream = consumeScreenStream()
-        if (preStream && preStream.getVideoTracks().some(t => t.readyState === 'live')) {
-          setScreenStream(preStream)
-          screenShareEstablishedRef.current = true
-        }
         setQuestions((qRes.value.data || []).map(normalizeQuestion))
         if (answersRes.status === 'fulfilled') {
           setAnswers(
@@ -332,6 +362,43 @@ export default function Proctoring() {
     || journeyRequirements.identityRequired
     || (Array.isArray(proctorCfg.alert_rules) && proctorCfg.alert_rules.length > 0)
   )
+
+  const screenShareRequired = Boolean(proctorCfg.screen_capture) && !screenShareGranted
+
+  const handleScreenShareGate = useCallback(async () => {
+    setScreenShareGateError('')
+    setScreenShareGateLoading(true)
+    screenSharePickerOpenRef.current = true
+    try {
+      const stream = await requestEntireScreenShare()
+      setScreenStream(stream)
+      screenShareEstablishedRef.current = true
+      setScreenShareGranted(true)
+      // Enter fullscreen after a short delay — calling requestFullscreen()
+      // immediately after getDisplayMedia() can kill the screen share track
+      // in some browsers. The delay lets the track stabilize first.
+      if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        // Verify the track is still alive before entering fullscreen
+        if (stream.getVideoTracks().some((t) => t.readyState === 'live')) {
+          try { await document.documentElement.requestFullscreen() } catch { /* non-blocking */ }
+        }
+      }
+    } catch (err) {
+      if (err.code === ENTIRE_SCREEN_REQUIRED) {
+        setScreenShareGateError('You must share your entire screen (not a window or tab). Please try again and select "Entire screen".')
+      } else if (err.name === 'NotAllowedError') {
+        setScreenShareGateError('Screen sharing was denied. You must share your screen to continue with this test.')
+      } else {
+        setScreenShareGateError(err.message || 'Failed to start screen sharing. Please try again.')
+      }
+    } finally {
+      screenSharePickerOpenRef.current = false
+      screenShareGraceRef.current = true
+      window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
+      setScreenShareGateLoading(false)
+    }
+  }, [proctorCfg.fullscreen_enforce])
 
   const registerSendClientEvent = useCallback((fn) => {
     sendClientEventRef.current = fn || null
@@ -609,8 +676,12 @@ export default function Proctoring() {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
         })
       }
-      // Finalize recordings in background — don't block navigation
-      stopAndFinalizeRecordings().catch(() => { /* best-effort */ })
+      // Finalize recordings before navigating — but cap the wait to 15s so
+      // submission doesn't hang on slow/large uploads.
+      await Promise.race([
+        stopAndFinalizeRecordings(),
+        new Promise((resolve) => setTimeout(resolve, 15000)),
+      ]).catch(() => { /* best-effort */ })
       navigate(`/attempts/${attemptId}`)
     } catch (e) {
       setSubmitError(e.response?.data?.detail || 'Submission failed. Please try again.')
@@ -680,10 +751,12 @@ export default function Proctoring() {
       // browsers — toggling one always exits the other).
       const screenShareTransition = screenSharePickerOpenRef.current || screenShareGraceRef.current
       const screenCaptureActive = proctorCfg.screen_capture && screenShareEstablishedRef.current
+      const screenSharePending = proctorCfg.screen_capture && !screenShareEstablishedRef.current
 
-      if (screenShareTransition) {
-        // Don't try to re-enter fullscreen during screen share transitions —
-        // requestFullscreen() kills the screen share track in all browsers.
+      if (screenShareTransition || screenSharePending) {
+        // Don't enforce fullscreen while screen share picker is open, during
+        // grace period, or before screen share is established — the picker
+        // dialog forces the browser out of fullscreen.
         return
       }
 
@@ -1169,6 +1242,30 @@ export default function Proctoring() {
       )}
     </AnimatePresence>
   )
+
+  // ── Screen share gate: block exam until learner grants screen share ──────
+  if (screenShareRequired) {
+    return (
+      <div className={styles.page}>
+        <div className={`${styles.examPane} ${styles.centerState}`}>
+          <h2 className={styles.examTitle}>Screen Sharing Required</h2>
+          <p className={styles.stateMessage}>
+            This test requires you to share your <strong>entire screen</strong> for the duration of the exam.
+            Your screen will be recorded and monitored.
+          </p>
+          {screenShareGateError && <div className={styles.errorBanner}>{screenShareGateError}</div>}
+          <button
+            type="button"
+            className={styles.retryBtn}
+            disabled={screenShareGateLoading}
+            onClick={handleScreenShareGate}
+          >
+            {screenShareGateLoading ? 'Requesting screen share...' : 'Share your screen to continue'}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (!currentQ) {
     return (

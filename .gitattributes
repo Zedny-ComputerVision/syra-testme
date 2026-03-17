@@ -1,0 +1,16 @@
+# Force LF line endings for all text files so Linux Docker builds
+# and server deploys work correctly from a Windows-developed repo.
+* text=auto eol=lf
+
+# Explicitly mark binary files
+*.pt binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary

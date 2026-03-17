@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import axios from 'axios'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { jwtDecode } from 'jwt-decode'
-import { login as loginApi, setup as setupAdminApi } from '../../services/auth.service'
+import { login as loginApi, setup as setupAdminApi, signupStatus as signupStatusApi } from '../../services/auth.service'
 import useAuth from '../../hooks/useAuth'
 import { resolvePostLoginPath } from '../../utils/postLoginRedirect'
 import styles from './Login.module.scss'
@@ -35,7 +35,17 @@ function isLocalDevHost() {
   return ['localhost', '127.0.0.1'].includes(window.location.hostname)
 }
 
+function normalizeComparable(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
 function getErrorMessage(err, fallback) {
+  if (typeof err?.userMessage === 'string' && err.userMessage.trim()) {
+    return err.userMessage
+  }
+  if (typeof err?.message === 'string' && err.message.trim() && err.message !== 'Network Error') {
+    return err.message
+  }
   const detail = err?.response?.data?.detail
   if (typeof detail === 'string' && detail.trim()) {
     return detail
@@ -75,6 +85,12 @@ export default function Login() {
     return data
   }
 
+  const adminAlreadySetupError = () => {
+    const error = new Error('Admin already set up')
+    error.response = { status: 409, data: { detail: 'Admin already set up' } }
+    return error
+  }
+
   const finalizeLogin = (data) => {
     login(data)
     const role = data?.access_token ? jwtDecode(data.access_token)?.role : null
@@ -96,24 +112,95 @@ export default function Login() {
     })
   }
 
-  const ensureAdminTokens = async () => {
-    try {
-      return await requestLogin(DEV_USERS.admin.email, DEV_USERS.admin.password)
-    } catch (err) {
-      if (err.response?.status !== 401) {
-        throw err
+  const listUsersAsAdmin = async (adminAccessToken, search) => {
+    const usersUrl = new URL(resolveApiUrl('users/'))
+    usersUrl.searchParams.set('page_size', '100')
+    if (search) {
+      usersUrl.searchParams.set('search', search)
+    }
+    const { data } = await axios.get(usersUrl.toString(), {
+      headers: {
+        Authorization: `Bearer ${adminAccessToken}`,
+      },
+    })
+    return Array.isArray(data?.items) ? data.items : []
+  }
+
+  const findDevLearnerAsAdmin = async (adminAccessToken) => {
+    const exactEmail = normalizeComparable(DEV_USERS.learner.email)
+    const exactUserId = normalizeComparable(DEV_USERS.learner.user_id)
+    for (const search of [DEV_USERS.learner.email, DEV_USERS.learner.user_id]) {
+      const items = await listUsersAsAdmin(adminAccessToken, search)
+      const match = items.find((item) =>
+        normalizeComparable(item?.email) === exactEmail
+        || normalizeComparable(item?.user_id) === exactUserId,
+      )
+      if (match) {
+        return match
       }
     }
+    return null
+  }
 
+  const patchUserAsAdmin = async (adminAccessToken, userId, payload) => {
+    const userUrl = resolveApiUrl(`users/${userId}`)
+    return axios.patch(userUrl, payload, {
+      headers: {
+        Authorization: `Bearer ${adminAccessToken}`,
+      },
+    })
+  }
+
+  const resetUserPasswordAsAdmin = async (adminAccessToken, userId, nextPassword) => {
+    const resetUrl = resolveApiUrl(`users/${userId}/reset-password`)
+    return axios.post(resetUrl, { new_password: nextPassword }, {
+      headers: {
+        Authorization: `Bearer ${adminAccessToken}`,
+      },
+    })
+  }
+
+  const repairDevLearnerAsAdmin = async (adminAccessToken) => {
     try {
-      await setupAdminApi(DEV_USERS.admin)
+      await createUserAsAdmin(adminAccessToken, DEV_USERS.learner)
+      return
     } catch (err) {
       if (err.response?.status !== 409) {
         throw err
       }
     }
 
-    return requestLogin(DEV_USERS.admin.email, DEV_USERS.admin.password)
+    const existingUser = await findDevLearnerAsAdmin(adminAccessToken)
+    if (!existingUser?.id) {
+      throw new Error('Existing dev learner account could not be repaired automatically.')
+    }
+
+    await patchUserAsAdmin(adminAccessToken, existingUser.id, {
+      email: DEV_USERS.learner.email,
+      name: DEV_USERS.learner.name,
+      user_id: DEV_USERS.learner.user_id,
+      role: DEV_USERS.learner.role,
+      is_active: true,
+    })
+    await resetUserPasswordAsAdmin(adminAccessToken, existingUser.id, DEV_USERS.learner.password)
+  }
+
+  const ensureAdminTokens = async () => {
+    const { data } = await signupStatusApi()
+    const setupAllowed = Boolean(data?.allowed)
+
+    if (setupAllowed) {
+      await setupAdminApi(DEV_USERS.admin)
+    }
+
+    try {
+      return await requestLogin(DEV_USERS.admin.email, DEV_USERS.admin.password)
+    } catch (err) {
+      if (!setupAllowed && err.response?.status === 401) {
+        throw adminAlreadySetupError()
+      }
+      throw err
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -170,24 +257,8 @@ export default function Login() {
     clearStoredSession()
 
     try {
-      try {
-        await completeLogin(DEV_USERS.learner.email, DEV_USERS.learner.password)
-        return
-      } catch (err) {
-        if (err.response?.status !== 401) {
-          throw err
-        }
-      }
-
       const adminTokens = await ensureAdminTokens()
-      try {
-        await createUserAsAdmin(adminTokens.access_token, DEV_USERS.learner)
-      } catch (err) {
-        if (err.response?.status !== 409) {
-          throw err
-        }
-      }
-
+      await repairDevLearnerAsAdmin(adminTokens.access_token)
       await completeLogin(DEV_USERS.learner.email, DEV_USERS.learner.password)
     } catch (err) {
       const detail = err?.response?.data?.detail

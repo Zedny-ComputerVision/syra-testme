@@ -5,7 +5,9 @@ build/
 .env.*
 !.env.example
 !backend/.env.example
+!backend/.env.docker.example
 !frontend/.env.example
+!frontend/.env.production.example
 *.log
 coverage/
 .DS_Store

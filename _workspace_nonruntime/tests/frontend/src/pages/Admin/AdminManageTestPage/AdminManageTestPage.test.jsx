@@ -551,7 +551,7 @@ describe('AdminManageTestPage', () => {
     await screen.findByText('Learner access')
     expect(screen.getByText('0 open / 1 restricted')).toBeTruthy()
     expect(screen.getByText('Proctoring profile')).toBeTruthy()
-    expect(screen.getByText(/Fullscreen Enforce, Tab Switch Detection, Lighting Quality Check, Face Detection/)).toBeTruthy()
+    expect(screen.getByText(/Fullscreen Enforce, Tab Switch Detection, Face Detection/)).toBeTruthy()
     expect(screen.getAllByText('Certificates').length).toBeGreaterThan(0)
     expect(screen.getByText('Issued by Dr. Review')).toBeTruthy()
     expect(screen.getByText('Retake policy')).toBeTruthy()

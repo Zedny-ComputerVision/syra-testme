@@ -41,6 +41,16 @@ def setup_logging() -> None:
                     "level": settings.LOG_LEVEL,
                     "propagate": False,
                 },
+                "gunicorn.error": {
+                    "handlers": ["default"],
+                    "level": settings.LOG_LEVEL,
+                    "propagate": False,
+                },
+                "gunicorn.access": {
+                    "handlers": ["default"],
+                    "level": settings.LOG_LEVEL,
+                    "propagate": False,
+                },
             },
         }
     )

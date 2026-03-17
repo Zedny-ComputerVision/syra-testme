@@ -82,7 +82,7 @@ export function getJourneyRequirements(rawConfig) {
   if (cameraRequired === null) cameraRequired = Boolean(faceDetection)
   if (micRequired === null) micRequired = Boolean(audioDetection)
   if (fullscreenRequired === null) fullscreenRequired = false
-  if (lightingRequired === null) lightingRequired = Boolean(cameraRequired)
+  if (lightingRequired === null) lightingRequired = false
   if (identityRequired === null) identityRequired = Boolean(faceDetection)
 
   const systemCheckRequired = Boolean(cameraRequired || micRequired || fullscreenRequired || lightingRequired || screenRequired)

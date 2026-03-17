@@ -1,18 +1,57 @@
+# ── Git / IDE ──────────────────────────────
 .git
 .gitignore
+.vscode
+.idea
+*.swp
+*.swo
+
+# ── Dependencies & build artifacts ────────
 node_modules
 frontend/node_modules
 backend/.venv
+backend/venv
+frontend/dist
 output
+
+# ── Runtime data (mounted as volume) ──────
+backend/storage
+
+# ── Test & dev files ──────────────────────
+docs
+_workspace_nonruntime
+.playwright-cli
+.pytest_cache
+**/__pycache__
+*.pyc
+*.pyo
+*.log
+**/*.test.js
+**/*.test.jsx
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.js
+**/*.spec.jsx
+
+# ── Environment files (secrets) ───────────
 .env
 .env.*
 !.env.example
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
-!frontend/.env.example
 !frontend/.env.production
 backend/.env
 backend/.env.local
 backend/.env.*.local
 !backend/.env.example
+
+# ── Misc ──────────────────────────────────
+*.md
+!frontend/README.md
+LICENSE
+.editorconfig
+.eslintcache
+coverage
+.nyc_output
+youtestme-clone-main

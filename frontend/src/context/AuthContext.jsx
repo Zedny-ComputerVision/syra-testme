@@ -7,6 +7,7 @@ import {
   hasPermission as checkPermission,
 } from '../utils/permissions';
 import { clearAttemptId } from '../utils/attemptSession';
+import { clearScreenStream } from '../utils/screenShareState';
 
 export const AuthContext = createContext(null);
 
@@ -44,6 +45,7 @@ function safeSessionRemoveItem(key) {
 
 function clearSessionArtifacts() {
   clearAttemptId();
+  clearScreenStream();
   safeSessionRemoveItem('precheck_flags');
   try {
     const keys = [];

@@ -433,14 +433,51 @@ async def _retention_cleanup_loop():
         await asyncio.sleep(24 * 60 * 60)
 
 
+def _try_acquire_leader_lock() -> bool:
+    """Acquire an exclusive file lock so only one gunicorn worker runs background tasks.
+
+    Returns True if this process acquired the lock (becomes the leader).
+    The lock file is held open for the process lifetime — OS releases it on exit.
+    Falls back to True (run tasks) if locking is unavailable (e.g. Windows dev).
+    """
+    lock_path = STORAGE_DIR / ".leader.lock"
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        # Open in append mode so we don't truncate if another worker holds it
+        lock_fd = open(lock_path, "a")  # noqa: SIM115
+        try:
+            import fcntl
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (ImportError, AttributeError):
+            # Windows or missing fcntl — single-worker dev mode, always leader
+            lock_fd.close()
+            return True
+        except OSError:
+            # Another worker already holds the lock
+            lock_fd.close()
+            return False
+        # Keep lock_fd open (process-lifetime lock)
+        _try_acquire_leader_lock._fd = lock_fd  # prevent GC from closing it
+        return True
+    except Exception as exc:
+        logger.warning("Could not acquire leader lock, assuming leader: %s", exc)
+        return True
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     is_test_env = _is_test_env()
     _run_startup_initialization(is_test_env=is_test_env)
-    background_tasks = [] if is_test_env else [
-        asyncio.create_task(_schedule_loop()),
-        asyncio.create_task(_retention_cleanup_loop()),
-    ]
+    is_leader = _try_acquire_leader_lock()
+    background_tasks = []
+    if not is_test_env and is_leader:
+        logger.info("This worker is the background-task leader (PID %s)", os.getpid())
+        background_tasks = [
+            asyncio.create_task(_schedule_loop()),
+            asyncio.create_task(_retention_cleanup_loop()),
+        ]
+    elif not is_test_env:
+        logger.info("This worker defers background tasks to the leader (PID %s)", os.getpid())
     try:
         yield
     finally:

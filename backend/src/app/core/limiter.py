@@ -1,4 +1,10 @@
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+from ..utils.request_ip import get_request_ip
+
+
+def _rate_limit_key(request) -> str:
+    return get_request_ip(request) or "unknown"
+
+
+limiter = Limiter(key_func=_rate_limit_key)

@@ -4,8 +4,6 @@ import { getAttempt } from '../../services/attempt.service'
 import { getTest } from '../../services/test.service'
 import { setAttemptId } from '../../utils/attemptSession'
 import { resolveAttempt } from '../../utils/journeyAttempt'
-import { requestEntireScreenShare, ENTIRE_SCREEN_REQUIRED } from '../../utils/screenCapture'
-import { storeScreenStream } from '../../utils/screenShareState'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import styles from './RulesPage.module.scss'
@@ -81,7 +79,7 @@ export default function RulesPage() {
       cards.push({
         label: 'Screen recording',
         value: 'Required',
-        helper: 'Your entire screen will be recorded. You will be asked to share your screen when you start the test.',
+        helper: 'Your entire screen must be shared before the live attempt starts. If the share stops, you will be prompted again on the test page.',
       })
     }
     if (requirements.fullscreenRequired) {
@@ -178,26 +176,11 @@ export default function RulesPage() {
 
       setAttemptId(attemptId)
 
-      // Screen share first (getDisplayMedia must run BEFORE fullscreen)
-      if (requirements.screenRequired) {
-        try {
-          const stream = await requestEntireScreenShare()
-          if (!stream.getVideoTracks().some(t => t.readyState === 'live')) {
-            throw new Error('Screen share stream is not active')
-          }
-          storeScreenStream(stream)
-        } catch (screenErr) {
-          const msg = screenErr?.code === ENTIRE_SCREEN_REQUIRED
-            ? 'You must share your entire screen. Please try again and select the full screen.'
-            : 'Screen sharing is required for this test. Please allow screen sharing and try again.'
-          setError(msg)
-          setLoading(false)
-          return
-        }
-      }
-
-      // Enter fullscreen after screen share is established
-      if (requirements.fullscreenRequired) {
+      // System check requests the initial screen share. The exam page re-prompts
+      // only if that share is missing or gets interrupted.
+      // Enter fullscreen (skip when screen capture is required — getDisplayMedia
+      // and requestFullscreen conflict in browsers, and the exam page handles it).
+      if (requirements.fullscreenRequired && !requirements.screenRequired) {
         try {
           await document.documentElement.requestFullscreen()
         } catch {

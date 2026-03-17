@@ -50,6 +50,13 @@ def test_fullscreen_only_config_does_not_require_identity():
     assert req["identity_required"] is False
 
 
+def test_face_detection_does_not_imply_lighting_check():
+    req = get_proctoring_requirements({"face_detection": True})
+    assert req["identity_required"] is True
+    assert req["camera_required"] is True
+    assert req["lighting_required"] is False
+
+
 def test_proctoring_orchestrator_uses_configured_object_and_audio_thresholds():
     orchestrator = ProctoringOrchestrator({
         "object_confidence_threshold": 0.72,

@@ -91,9 +91,38 @@ async def _lookup_video_by_name(filename: str, source: str, fallback_size: int) 
 
 async def upload_video_to_cloudflare(file_path: Path, *, filename: str, source: str) -> dict:
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    with file_path.open("rb") as handle:
-        payload = handle.read()
-    return await upload_video_content_to_cloudflare(payload, filename=filename, source=source, content_type=content_type)
+    file_size = file_path.stat().st_size if file_path.exists() else 0
+    params = {
+        "require_signed_urls": settings.CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS,
+    }
+    if settings.CLOUDFLARE_MEDIA_WATERMARK_UID:
+        params["watermark_uid"] = settings.CLOUDFLARE_MEDIA_WATERMARK_UID
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        with file_path.open("rb") as handle:
+            response = await client.post(
+                f"{_base_url()}/upload/single",
+                params=params,
+                files={"file": (filename, handle, content_type)},
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+    normalized = _normalize_remote_video(
+        _extract_video_payload(payload),
+        filename=filename,
+        source=source,
+        fallback_size=file_size,
+        fallback_created_at=datetime.now(timezone.utc),
+    )
+    if normalized.get("url"):
+        return normalized
+
+    looked_up = await _lookup_video_by_name(filename, source, normalized.get("size") or file_size)
+    if looked_up.get("url"):
+        return looked_up
+
+    raise RuntimeError("Cloudflare upload succeeded but no playback URL was returned")
 
 
 async def upload_video_content_to_cloudflare(

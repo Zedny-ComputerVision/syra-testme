@@ -630,14 +630,21 @@ export default function ProctorOverlay({
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
       clearFrameIntervals()
       stopAudioCapture()
-      stopScreenStream()
+      // Don't stop screen tracks here — the WS effect re-runs on dep changes
+      // (e.g., token refresh) and stopping tracks would kill the screen share
+      // mid-exam. Track cleanup is handled by Proctoring.jsx on unmount.
+      if (screenIntervalRef.current) {
+        clearInterval(screenIntervalRef.current)
+        screenIntervalRef.current = null
+      }
+      screenStreamRef.current = null
       onRegisterScreenShareRequest?.(null)
       onRegisterSendClientEvent?.(null)
       onRegisterWsRawSend?.(null)
       wsRef.current?.close()
       wsRef.current = null
     }
-  }, [analyzeLocalFrame, attemptId, audioChunkInterval, emitRateLimitedSystemError, emitSystemError, onForcedSubmit, onRegisterScreenShareRequest, onRegisterSendClientEvent, onRegisterWsRawSend, onScreenStreamReady, pushAlert, realtimeMonitoring, screenCaptureEnabled, screenshotIntervalMs, token, triggerForcedSubmit, visualFrameInterval, wsUrl])
+  }, [analyzeLocalFrame, attemptId, audioChunkInterval, emitRateLimitedSystemError, emitSystemError, initialScreenStream, onForcedSubmit, onRegisterScreenShareRequest, onRegisterSendClientEvent, onRegisterWsRawSend, onScreenStreamReady, pushAlert, realtimeMonitoring, screenCaptureEnabled, screenshotIntervalMs, token, triggerForcedSubmit, visualFrameInterval, wsUrl])
 
   return (
     <div className={styles.overlay}>

@@ -57,6 +57,8 @@ export default function VerifyIdentityPage() {
   const [fullscreenActive, setFullscreenActive] = useState(Boolean(document.fullscreenElement))
   const [fullscreenResumeNeeded, setFullscreenResumeNeeded] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
+  // When screen capture is required, defer fullscreen to the exam page
+  const fullscreenRequiredHere = requirements.fullscreenRequired && !requirements.screenRequired
 
   const requirementCards = [
     {
@@ -90,7 +92,7 @@ export default function VerifyIdentityPage() {
   }, [])
 
   const requestFullscreen = useCallback(async () => {
-    if (!requirements.fullscreenRequired) return true
+    if (!fullscreenRequiredHere) return true
     if (document.fullscreenElement) {
       setFullscreenActive(true)
       setFullscreenResumeNeeded(false)
@@ -109,7 +111,7 @@ export default function VerifyIdentityPage() {
       setFullscreenActive(Boolean(document.fullscreenElement))
       return false
     }
-  }, [requirements.fullscreenRequired])
+  }, [fullscreenRequiredHere])
 
   const startCamera = useCallback(async () => {
     try {
@@ -130,12 +132,12 @@ export default function VerifyIdentityPage() {
   }, [stopCamera])
 
   const openUploadPicker = useCallback((inputRef) => {
-    pickerExitedFullscreenRef.current = requirements.fullscreenRequired && Boolean(document.fullscreenElement)
+    pickerExitedFullscreenRef.current = fullscreenRequiredHere && Boolean(document.fullscreenElement)
     if (pickerExitedFullscreenRef.current) {
       setFullscreenResumeNeeded(false)
     }
     inputRef.current?.click()
-  }, [requirements.fullscreenRequired])
+  }, [fullscreenRequiredHere])
 
   const loadRequirements = useCallback(async () => {
     setLoadingConfig(true)
@@ -171,7 +173,7 @@ export default function VerifyIdentityPage() {
     const handleFullscreenChange = () => {
       const active = Boolean(document.fullscreenElement)
       setFullscreenActive(active)
-      if (!requirements.fullscreenRequired) {
+      if (!fullscreenRequiredHere) {
         setFullscreenResumeNeeded(false)
         pickerExitedFullscreenRef.current = false
         return
@@ -187,7 +189,7 @@ export default function VerifyIdentityPage() {
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [requirements.fullscreenRequired])
+  }, [fullscreenRequiredHere])
 
   const capture = () => {
     const video = videoRef.current
@@ -261,7 +263,7 @@ export default function VerifyIdentityPage() {
       setFullscreenResumeNeeded(false)
       return
     }
-    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+    if (fullscreenRequiredHere && !document.fullscreenElement) {
       setFullscreenResumeNeeded(true)
     }
     try {
@@ -284,7 +286,7 @@ export default function VerifyIdentityPage() {
       setFullscreenResumeNeeded(false)
       return
     }
-    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+    if (fullscreenRequiredHere && !document.fullscreenElement) {
       setFullscreenResumeNeeded(true)
     }
     try {
@@ -321,7 +323,7 @@ export default function VerifyIdentityPage() {
       setError('Capture or upload both your selfie and your ID photo first.')
       return
     }
-    if (requirements.fullscreenRequired && !document.fullscreenElement) {
+    if (fullscreenRequiredHere && !document.fullscreenElement) {
       setFullscreenResumeNeeded(true)
       setError('Return to fullscreen before continuing.')
       return
@@ -339,7 +341,7 @@ export default function VerifyIdentityPage() {
         lighting_score: flags.lighting_score ?? lightingScore,
         mic_ok: flags.mic_ok ?? !requirements.micRequired,
         cam_ok: flags.cam_ok ?? Boolean(selfie),
-        fs_ok: !requirements.fullscreenRequired || Boolean(document.fullscreenElement),
+        fs_ok: !fullscreenRequiredHere || Boolean(document.fullscreenElement),
         id_text: idNumber || undefined,
       }
       const { data } = await precheckAttempt(attemptId, payload)
@@ -393,7 +395,7 @@ export default function VerifyIdentityPage() {
 
         {loadingConfig && <div className={styles.errorBox}>Loading verification requirements...</div>}
         {error && <div className={styles.errorBox}>{error}</div>}
-        {!loadingConfig && requirements.fullscreenRequired && (!fullscreenActive || fullscreenResumeNeeded) && (
+        {!loadingConfig && fullscreenRequiredHere && (!fullscreenActive || fullscreenResumeNeeded) && (
           <div className={styles.helperRow}>
             <div className={styles.warningBox}>
               Opening the browser file picker can exit fullscreen. Return to fullscreen before continuing.
@@ -517,7 +519,7 @@ export default function VerifyIdentityPage() {
                   Back to system check
                 </button>
                 <button type="button" className={styles.btnSecondary} onClick={retake} disabled={submitting || !configResolved}>Retake identity photos</button>
-                <button type="button" className={styles.btnPrimary} onClick={confirm} disabled={submitting || loadingConfig || !configResolved || !selfie || !idPhoto || (requirements.fullscreenRequired && !fullscreenActive)}>
+                <button type="button" className={styles.btnPrimary} onClick={confirm} disabled={submitting || loadingConfig || !configResolved || !selfie || !idPhoto || (fullscreenRequiredHere && !fullscreenActive)}>
                   {submitting ? 'Verifying...' : 'Confirm & Continue'}
                 </button>
               </div>

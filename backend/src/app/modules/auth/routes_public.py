@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from ...api.deps import get_current_user, get_db_dep
 from ...core.config import get_settings
+from ...core.limiter import limiter
 from ...models import User
+from ...utils.request_ip import get_request_ip
 from ...services.email import (
     get_email_delivery_status,
     send_password_changed_email,
@@ -33,7 +33,6 @@ from .service import AuthService
 
 router = APIRouter()
 settings = get_settings()
-limiter = Limiter(key_func=get_remote_address)
 
 
 def _service_from_db(db=Depends(get_db_dep)) -> AuthService:
@@ -41,7 +40,7 @@ def _service_from_db(db=Depends(get_db_dep)) -> AuthService:
 
 
 def _request_ip(request: Request | None) -> str | None:
-    return getattr(getattr(request, "client", None), "host", None)
+    return get_request_ip(request)
 
 
 def _run_email_background_task(email_task, *args):

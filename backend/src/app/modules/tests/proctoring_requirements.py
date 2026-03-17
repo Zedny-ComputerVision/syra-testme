@@ -100,7 +100,7 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
     if fullscreen_required is None:
         fullscreen_required = False
     if lighting_required is None:
-        lighting_required = bool(camera_required)
+        lighting_required = False
     if explicit_identity_required is None:
         explicit_identity_required = bool(face_detection)
 

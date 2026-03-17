@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: syra_lms
+      POSTGRES_USER: syra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-syra-local-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U syra -d syra_lms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+
+  backend:
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local
