@@ -1,10 +1,14 @@
 """Seed a large demo dataset for local UI testing.
 
 Run from backend folder:
-  set DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/syra_lms
-  .\\.venv\\Scripts\\python.exe scripts\\seed_mass_data.py
+  export DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/syra_lms
+  python scripts/seed_mass_data.py
+
+Run inside the Docker backend container:
+  python scripts/seed_mass_data.py
 """
 
+import argparse
 import logging
 import os
 import random
@@ -48,6 +52,13 @@ from src.app.models import (
 logger = logging.getLogger(__name__)
 
 
+def env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def random_name(prefix: str, idx: int) -> str:
     return f"{prefix} {idx:03d}"
 
@@ -57,7 +68,7 @@ def chunked(lst, size):
         yield lst[i : i + size]
 
 
-def seed():
+def seed(*, force: bool = False):
     random.seed(42)
     run_tag = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     now = datetime.now(timezone.utc)
@@ -66,6 +77,15 @@ def seed():
     db = SessionLocal()
 
     try:
+        existing_users = db.query(User).count()
+        if existing_users and not force:
+            logger.info(
+                "Existing users detected (%s). Skipping mass seed to avoid duplicate demo data. "
+                "Re-run with --force or SYRA_SEED_FORCE=1 to append another batch.",
+                existing_users,
+            )
+            return
+
         # Core users (keep known credentials predictable).
         admin = db.query(User).filter(User.email == "admin@example.com").first()
         if not admin:
@@ -90,10 +110,35 @@ def seed():
                 is_active=True,
             )
             db.add(instructor)
+
+        student1 = db.query(User).filter(User.email == "student1@example.com").first()
+        if not student1:
+            student1 = User(
+                email="student1@example.com",
+                name="Omar Hassan",
+                user_id="STU001",
+                role=RoleEnum.LEARNER,
+                hashed_password=hash_password("Student1234!"),
+                is_active=True,
+            )
+            db.add(student1)
+
+        student2 = db.query(User).filter(User.email == "student2@example.com").first()
+        if not student2:
+            student2 = User(
+                email="student2@example.com",
+                name="Fatima Ali",
+                user_id="STU002",
+                role=RoleEnum.LEARNER,
+                hashed_password=hash_password("Student1234!"),
+                is_active=True,
+            )
+            db.add(student2)
         db.flush()
 
         # Many learners.
-        learners = []
+        learners = [student1, student2]
+        bulk_learners = []
         for i in range(1, 81):
             email = f"learner{run_tag}_{i:03d}@example.com"
             user = User(
@@ -104,8 +149,9 @@ def seed():
                 hashed_password=hash_password("Student1234!"),
                 is_active=True,
             )
+            bulk_learners.append(user)
             learners.append(user)
-        db.add_all(learners)
+        db.add_all(bulk_learners)
         db.flush()
 
         # Categories and grading scales.
@@ -380,7 +426,10 @@ def seed():
         logger.info("Mass seed completed for run %s", run_tag)
         logger.info("Login credentials: admin@example.com / Admin1234!")
         logger.info("Login credentials: instructor@example.com / Instructor1234!")
-        logger.info("Login credentials: learnerxxxx@example.com / Student1234!")
+        logger.info("Login credentials: student1@example.com / Student1234!")
+        logger.info("Login credentials: student2@example.com / Student1234!")
+        logger.info("Additional learner password: Student1234!")
+        logger.info("Example generated learner: learner%s_001@example.com", run_tag)
         logger.info("Created learners=%s", len(learners))
         logger.info("Created exams=%s questions=%s", len(exams), len(questions))
         logger.info(
@@ -403,4 +452,11 @@ def seed():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
-    seed()
+    parser = argparse.ArgumentParser(description="Seed a large demo dataset for the SYRA LMS stack.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Append another seeded batch even when users already exist.",
+    )
+    args = parser.parse_args()
+    seed(force=args.force or env_flag("SYRA_SEED_FORCE"))

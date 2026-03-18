@@ -26,7 +26,14 @@ Default local URLs:
 bash scripts/setup-linux.sh
 ```
 
-That script prepares `backend/.env.docker` and `frontend/.env.production`, starts a local PostgreSQL container, builds the images, and brings up the full stack at `http://localhost`.
+That script prepares `backend/.env.docker` and `frontend/.env.production`, starts a local PostgreSQL container, builds the images, seeds a large demo dataset, and brings up the full stack at `http://localhost`.
+
+Default seeded credentials:
+
+- `admin@example.com` / `Admin1234!`
+- `instructor@example.com` / `Instructor1234!`
+- `student1@example.com` / `Student1234!`
+- `student2@example.com` / `Student1234!`
 
 ## Docker Deployment
 

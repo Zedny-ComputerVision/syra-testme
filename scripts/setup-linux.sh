@@ -19,6 +19,7 @@ Prepares a Linux Docker stack for local development:
 - creates frontend/.env.production if missing
 - creates backend/storage if missing
 - starts frontend, backend, and a local PostgreSQL container
+- seeds a large demo dataset after the backend becomes healthy
 
 Environment overrides:
 - SYRA_DATABASE_URL
@@ -28,6 +29,8 @@ Environment overrides:
 - SYRA_BACKEND_URL
 - SYRA_CORS_ORIGINS
 - SYRA_NGINX_CLIENT_MAX_BODY_SIZE
+- SYRA_SEED_DEMO_DATA=0 to skip automatic seeding
+- SYRA_SEED_FORCE=1 to append another seeded batch even if users already exist
 EOF
 }
 
@@ -64,6 +67,10 @@ ensure_file() {
   cp "$source_file" "$target_file"
 }
 
+compose() {
+  POSTGRES_PASSWORD="$POSTGRES_PASSWORD" docker compose "${COMPOSE_FILES[@]}" "$@"
+}
+
 generate_secret() {
   printf '%s%s\n' "$(tr -d '-' </proc/sys/kernel/random/uuid)" "$(tr -d '-' </proc/sys/kernel/random/uuid)"
 }
@@ -91,6 +98,51 @@ set_env_value() {
   mv "$tmp_file" "$file"
 }
 
+wait_for_service_health() {
+  local service="$1"
+  local timeout_seconds="${2:-900}"
+  local interval_seconds=5
+  local elapsed=0
+  local container_id
+  local status
+
+  container_id="$(compose ps -q "$service")"
+  [[ -n "$container_id" ]] || die "Could not determine container id for service: $service"
+
+  while (( elapsed < timeout_seconds )); do
+    status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+    case "$status" in
+      healthy)
+        log "Service '$service' is healthy."
+        return 0
+        ;;
+      unhealthy|exited|dead)
+        docker logs --tail 80 "$container_id" >&2 || true
+        die "Service '$service' became $status."
+        ;;
+    esac
+    sleep "$interval_seconds"
+    elapsed=$((elapsed + interval_seconds))
+  done
+
+  docker logs --tail 80 "$container_id" >&2 || true
+  die "Timed out waiting for service '$service' to become healthy."
+}
+
+seed_demo_data() {
+  if [[ "$SEED_DEMO_DATA" != "1" ]]; then
+    log "Skipping demo seed because SYRA_SEED_DEMO_DATA=${SEED_DEMO_DATA}."
+    return
+  fi
+
+  log "Seeding demo data."
+  if [[ "$SEED_FORCE" == "1" ]]; then
+    compose run --rm -T -v "${REPO_ROOT}/backend/scripts:/app/scripts:ro" backend python scripts/seed_mass_data.py --force
+  else
+    compose run --rm -T -v "${REPO_ROOT}/backend/scripts:/app/scripts:ro" backend python scripts/seed_mass_data.py
+  fi
+}
+
 for arg in "$@"; do
   case "$arg" in
     --prepare-only)
@@ -116,6 +168,8 @@ BACKEND_URL="${SYRA_BACKEND_URL:-http://localhost/api}"
 CORS_ORIGINS="${SYRA_CORS_ORIGINS:-http://localhost}"
 DATABASE_URL="${SYRA_DATABASE_URL:-postgresql+psycopg://syra:${POSTGRES_PASSWORD}@db:5432/syra_lms}"
 NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-512m}"
+SEED_DEMO_DATA="${SYRA_SEED_DEMO_DATA:-1}"
+SEED_FORCE="${SYRA_SEED_FORCE:-0}"
 
 ensure_file "$BACKEND_ENV_EXAMPLE" "$BACKEND_ENV"
 ensure_file "$FRONTEND_ENV_EXAMPLE" "$FRONTEND_ENV"
@@ -148,13 +202,17 @@ fi
 log "Starting frontend, backend, and local PostgreSQL with Docker Compose."
 (
   cd "$REPO_ROOT"
-  POSTGRES_PASSWORD="$POSTGRES_PASSWORD" docker compose "${COMPOSE_FILES[@]}" up --build -d
+  compose up --build -d
 )
+
+wait_for_service_health backend
+seed_demo_data
+wait_for_service_health frontend
 
 log "Stack started."
 (
   cd "$REPO_ROOT"
-  POSTGRES_PASSWORD="$POSTGRES_PASSWORD" docker compose "${COMPOSE_FILES[@]}" ps
+  compose ps
 )
 
 API_HEALTH_URL="${BACKEND_URL%/}"
@@ -168,6 +226,12 @@ cat <<EOF
 
 App: ${FRONTEND_URL}
 API health: ${API_HEALTH_URL}
+
+Demo credentials:
+  admin@example.com / Admin1234!
+  instructor@example.com / Instructor1234!
+  student1@example.com / Student1234!
+  student2@example.com / Student1234!
 
 Stop the stack with:
   docker compose -f docker-compose.yml -f docker-compose.local-db.yml down
