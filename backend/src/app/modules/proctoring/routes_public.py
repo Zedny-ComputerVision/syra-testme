@@ -523,8 +523,10 @@ def _load_integrations_config(db: Session) -> dict:
 
 async def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -> str | None:
     """Save screenshot evidence for proctoring events."""
+    import secrets
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    filename = f"{attempt_id}_{event_type}_{ts}.jpg"
+    token = secrets.token_hex(8)
+    filename = f"{attempt_id}_{event_type}_{ts}_{token}.jpg"
     if settings.MEDIA_STORAGE_PROVIDER == "supabase":
         await upload_bytes_to_supabase("evidence", filename, frame_bytes, content_type="image/jpeg")
         return f"/api/media/evidence/{filename}"
@@ -1123,6 +1125,7 @@ async def upload_video_capture(
     finally:
         temp_path.unlink(missing_ok=True)
 
+    file_info["upload_ip"] = get_request_ip(request)
     event = ProctoringEvent(
         attempt_id=attempt_id,
         event_type="VIDEO_SAVED",
@@ -1501,6 +1504,36 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
     _frame_proc_end = 0.0  # monotonic timestamp of last frame processing completion
 
+    async def _async_db_commit():
+        """Run db.commit() in executor to avoid blocking the event loop."""
+        _loop = asyncio.get_running_loop()
+        await _loop.run_in_executor(None, db.commit)
+
+    # ── WebSocket rate limiting ──────────────────────────────────────
+    _RATE_WINDOW_S = 5.0
+    _RATE_GLOBAL_MAX = 30  # max messages per window across all types
+    _RATE_TYPE_MAX = {"frame": 20, "audio": 10, "screen": 5, "client_event": 25}
+    _rate_global_ts: list[float] = []
+    _rate_type_ts: dict[str, list[float]] = {}
+
+    def _rate_limit_ok(msg_type: str) -> bool:
+        now_mono = time.monotonic()
+        cutoff = now_mono - _RATE_WINDOW_S
+        # Global check
+        _rate_global_ts[:] = [t for t in _rate_global_ts if t > cutoff]
+        if len(_rate_global_ts) >= _RATE_GLOBAL_MAX:
+            return False
+        # Per-type check
+        type_max = _RATE_TYPE_MAX.get(msg_type)
+        if type_max is not None:
+            bucket = _rate_type_ts.setdefault(msg_type, [])
+            bucket[:] = [t for t in bucket if t > cutoff]
+            if len(bucket) >= type_max:
+                return False
+            bucket.append(now_mono)
+        _rate_global_ts.append(now_mono)
+        return True
+
     try:
         while True:
             try:
@@ -1527,6 +1560,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                 if msg_type == "pong":
                     continue
 
+                if not _rate_limit_ok(msg_type or ""):
+                    logger.warning("Rate limit exceeded for attempt %s, msg_type=%s", attempt_id, msg_type)
+                    await websocket.send_json({"type": "error", "detail": "Rate limit exceeded"})
+                    continue
+
                 if msg_type == "frame":
                     b64 = data.get("data")
                     if not b64:
@@ -1545,6 +1583,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     _proc_ms = (_frame_proc_end - _proc_start) * 1000
                     if _proc_ms > 500:
                         logger.warning("Slow frame processing for attempt %s: %.0fms, %d alerts", attempt_id, _proc_ms, len(alerts))
+                        # Tell client to slow down frame capture to avoid queue buildup
+                        try:
+                            await websocket.send_json({
+                                "type": "slow_mode",
+                                "interval_ms": min(int(_proc_ms * 1.5), 5000),
+                            })
+                        except Exception:
+                            pass
                     else:
                         logger.debug("Frame processed for attempt %s: %.0fms, %d alerts, score=%d", attempt_id, _proc_ms, len(alerts), orchestrator.violation_score)
                     if alerts:
@@ -1624,7 +1670,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     # Single commit for all events from this frame
                     if alerts:
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for frame alerts (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1725,7 +1771,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
                     if alerts:
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for audio alerts (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1782,7 +1828,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             )
                             db.add(event)
                             try:
-                                db.commit()
+                                await _async_db_commit()
                             except Exception as commit_err:
                                 logger.warning("DB commit failed for screen alert (attempt %s): %s", attempt_id, commit_err)
                                 try:
@@ -1836,7 +1882,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         )
                         db.add(event)
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for FAST_ANSWER (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1885,7 +1931,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         )
                         db.add(event)
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for KEYSTROKE_ANOMALY (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1937,7 +1983,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         event_time, request_ip=get_websocket_ip(websocket),
                     )
                     try:
-                        db.commit()
+                        await _async_db_commit()
                     except Exception as commit_err:
                         logger.warning("DB commit failed for client_event (attempt %s): %s", attempt_id, commit_err)
                         try:
@@ -2005,6 +2051,17 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         heartbeat_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await heartbeat_task
+        # Flush any uncommitted events before closing
+        try:
+            db.commit()
+        except Exception:
+            with contextlib.suppress(Exception):
+                db.rollback()
+        # Notify client of graceful close
+        if websocket.application_state == WebSocketState.CONNECTED:
+            with contextlib.suppress(Exception):
+                await websocket.send_json({"type": "server_shutdown"})
+                await websocket.close(code=1001)
         db.close()
 
 

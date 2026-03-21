@@ -402,35 +402,57 @@ export default function Proctoring() {
     setScreenShareGateError('')
     setScreenShareGateLoading(true)
     screenSharePickerOpenRef.current = true
-    try {
-      const stream = await requestEntireScreenShare()
-      setScreenStream(stream)
-      screenShareEstablishedRef.current = true
-      setScreenShareGranted(true)
-      // Enter fullscreen after a short delay — calling requestFullscreen()
-      // immediately after getDisplayMedia() can kill the screen share track
-      // in some browsers. The delay lets the track stabilize first.
-      if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        // Verify the track is still alive before entering fullscreen
-        if (stream.getVideoTracks().some((t) => t.readyState === 'live')) {
-          try { await document.documentElement.requestFullscreen() } catch { /* non-blocking */ }
+
+    const MAX_SCREEN_SHARE_ATTEMPTS = 2
+
+    for (let attempt = 0; attempt < MAX_SCREEN_SHARE_ATTEMPTS; attempt++) {
+      try {
+        const stream = await requestEntireScreenShare()
+        setScreenStream(stream)
+        screenShareEstablishedRef.current = true
+        setScreenShareGranted(true)
+
+        // Enter fullscreen after delay — calling requestFullscreen()
+        // immediately after getDisplayMedia() can kill the screen share track
+        // in some browsers. The delay lets the track stabilize first.
+        if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
+          await new Promise((resolve) => setTimeout(resolve, 800))
+          if (stream.getVideoTracks().some((t) => t.readyState === 'live')) {
+            try { await document.documentElement.requestFullscreen() } catch { /* non-blocking */ }
+          }
+          // Verify screen share survived fullscreen transition
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          if (!stream.getVideoTracks().some((t) => t.readyState === 'live')) {
+            // Screen share died after fullscreen — exit and retry
+            if (document.fullscreenElement) {
+              try { await document.exitFullscreen() } catch { /* ignore */ }
+            }
+            stream.getTracks().forEach((t) => t.stop())
+            if (attempt < MAX_SCREEN_SHARE_ATTEMPTS - 1) continue
+            setScreenShareGateError('Screen sharing stopped after entering fullscreen. Please try again.')
+            setScreenShareGranted(false)
+            screenShareEstablishedRef.current = false
+            break
+          }
         }
+        // Success — exit retry loop
+        break
+      } catch (err) {
+        if (err.code === ENTIRE_SCREEN_REQUIRED) {
+          setScreenShareGateError('You must share your entire screen (not a window or tab). Please try again and select "Entire screen".')
+        } else if (err.name === 'NotAllowedError') {
+          setScreenShareGateError('Screen sharing was denied. You must share your screen to continue with this test.')
+        } else {
+          setScreenShareGateError(err.message || 'Failed to start screen sharing. Please try again.')
+        }
+        break
       }
-    } catch (err) {
-      if (err.code === ENTIRE_SCREEN_REQUIRED) {
-        setScreenShareGateError('You must share your entire screen (not a window or tab). Please try again and select "Entire screen".')
-      } else if (err.name === 'NotAllowedError') {
-        setScreenShareGateError('Screen sharing was denied. You must share your screen to continue with this test.')
-      } else {
-        setScreenShareGateError(err.message || 'Failed to start screen sharing. Please try again.')
-      }
-    } finally {
-      screenSharePickerOpenRef.current = false
-      screenShareGraceRef.current = true
-      window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
-      setScreenShareGateLoading(false)
     }
+
+    screenSharePickerOpenRef.current = false
+    screenShareGraceRef.current = true
+    window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
+    setScreenShareGateLoading(false)
   }, [proctorCfg.fullscreen_enforce])
 
   const registerSendClientEvent = useCallback((fn) => {
@@ -607,16 +629,19 @@ export default function Proctoring() {
     recording.finalizing = true
     setRecordingStatusForSource(source, 'saving')
     if (recorder && recorder.state !== 'inactive') {
+      // Request final data chunk before stopping to avoid losing the tail end
+      try { recorder.requestData?.() } catch (error) {
+        console.error(`Failed to request final ${source} recorder data before stopping.`, error)
+      }
+      // Brief wait for the final dataavailable event to fire
+      await new Promise((resolve) => setTimeout(resolve, 250))
       await new Promise((resolve) => {
-        const timeout = setTimeout(resolve, 3000)
+        const timeout = setTimeout(resolve, 5000)
         recorder.addEventListener('stop', () => {
           recording.stoppedAt = recording.stoppedAt || new Date().toISOString()
           clearTimeout(timeout)
           resolve()
         }, { once: true })
-        try { recorder.requestData?.() } catch (error) {
-          console.error(`Failed to request final ${source} recorder data before stopping.`, error)
-        }
         recorder.stop()
       })
     }
@@ -762,7 +787,8 @@ export default function Proctoring() {
         break
       } catch (error) {
         lastError = error
-        await new Promise((resolve) => setTimeout(resolve, 300))
+        const backoffMs = 1000 * Math.pow(2, i) + Math.random() * 1000
+        await new Promise((resolve) => setTimeout(resolve, backoffMs))
       }
     }
     if (lastError) {
@@ -836,7 +862,10 @@ export default function Proctoring() {
       ]).catch(() => { /* best-effort flush — proceed with submission */ })
       if (requiredRecordingSources.length > 0) {
         setSubmitPhase('Saving proctoring recordings before final submission...')
-        await uploadRecordingSources(requiredRecordingSources)
+        await Promise.race([
+          uploadRecordingSources(requiredRecordingSources),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Recording upload timed out after 60 seconds')), 60000)),
+        ])
       }
       setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)

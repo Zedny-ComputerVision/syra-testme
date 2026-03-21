@@ -390,7 +390,17 @@ def _prewarm_detection_models() -> None:
 def _run_startup_initialization(*, is_test_env: bool) -> None:
     _assert_required_api_routes()
     if settings.precheck_test_bypass_enabled:
+        if settings.AUTO_APPLY_MIGRATIONS and not getattr(settings, "E2E_SEED_ENABLED", False):
+            raise RuntimeError(
+                "PRECHECK_ALLOW_TEST_BYPASS=true is not allowed when AUTO_APPLY_MIGRATIONS=true (production mode). "
+                "Either disable the bypass or set E2E_SEED_ENABLED=true to confirm this is a test environment."
+            )
         logger.critical("PRECHECK_ALLOW_TEST_BYPASS is enabled - identity verification accepts the local test bypass flag.")
+    if str(settings.CLOUDFLARE_MEDIA_API_BASE_URL or "").strip() and not settings.CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS:
+        logger.critical(
+            "SECURITY: Cloudflare video storage is configured but CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS is false. "
+            "Proctoring videos will be publicly accessible. Set CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS=true for production."
+        )
     if is_test_env:
         logger.info("Skipping automatic Alembic migrations in test environment")
         return
