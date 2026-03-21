@@ -25,11 +25,11 @@ pytest_cache/
 .mypy_cache/
 output/
 .playwright-cli/
-backend/storage/reports/
-backend/storage/evidence/
-backend/storage/videos/
-backend/storage/video_chunks/
-backend/storage/identity/
+backend/storage/
+# Codex runtime artifacts
+.codex-runtime/
+# Backend dependency cache
+backend/.deps/
 # Local reference clone; keep out of version control.
 youtestme-clone-main/
 backend/*.err
@@ -40,3 +40,5 @@ frontend/.generated-tests/
 frontend/tmp-*.cjs
 tmp-*.js
 merge-*.cjs
+# DB management scripts (local tooling)
+scripts/manage-test-db.py

@@ -230,7 +230,7 @@ describe('AdminNewTestWizard', () => {
     expect(screen.getByText('Advanced detector tuning')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /^Next$/i }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Questions' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Add questions directly or seed from a question pool.')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: /^Next$/i }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Grading Configuration' })).toBeTruthy())

@@ -5,6 +5,34 @@ _TRUTHY = {"1", "true", "yes", "y", "on", "enabled", "required"}
 _FALSY = {"0", "false", "no", "n", "off", "disabled"}
 _ALERT_RULE_ACTIONS = {"FLAG_REVIEW", "WARN", "AUTO_SUBMIT"}
 _ALERT_RULE_SEVERITIES = {"LOW", "MEDIUM", "HIGH"}
+_RECORDED_VIDEO_KEYS = (
+    "camera_required",
+    "require_camera",
+    "camera_enforce",
+    "mic_required",
+    "microphone_required",
+    "require_microphone",
+    "lighting_required",
+    "require_lighting_check",
+    "identity_required",
+    "id_verification_required",
+    "require_identity_verification",
+    "require_id_verification",
+    "face_verify",
+    "face_verify_enabled",
+    "require_id_document",
+    "id_document_required",
+    "face_detection",
+    "multi_face",
+    "eye_tracking",
+    "head_pose_detection",
+    "audio_detection",
+    "object_detection",
+    "mouth_detection",
+    "screen_capture",
+    "screen_required",
+    "require_screen_share",
+)
 
 
 def _coerce_bool(value: Any, default: bool = False) -> bool:
@@ -70,6 +98,17 @@ def normalize_alert_rules(rules: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _has_recorded_video_journey(config: Mapping[str, Any]) -> bool:
+    rules = config.get("alert_rules")
+    if isinstance(rules, list) and len(rules) > 0:
+        return True
+
+    for key in _RECORDED_VIDEO_KEYS:
+        if key in config and _coerce_bool(config.get(key), default=False):
+            return True
+    return False
+
+
 def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> dict[str, bool]:
     cfg: Mapping[str, Any] = proctoring_config or {}
 
@@ -103,6 +142,10 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
         lighting_required = False
     if explicit_identity_required is None:
         explicit_identity_required = bool(face_detection)
+
+    if _has_recorded_video_journey(cfg):
+        camera_required = True
+        screen_required = True
 
     identity_required = bool(explicit_identity_required)
     system_check_required = bool(

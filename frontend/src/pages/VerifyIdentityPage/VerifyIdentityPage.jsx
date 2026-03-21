@@ -24,6 +24,9 @@ const REASON_MESSAGES = {
 
 const toReasonText = (reason) => REASON_MESSAGES[reason] || reason
 const START_ERROR_STORAGE_PREFIX = 'journey_start_error:'
+const precheckTestBypassEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(import.meta.env.VITE_PRECHECK_TEST_BYPASS || '').trim().toLowerCase(),
+)
 
 function persistJourneyStartError(testId, message) {
   if (!message) return
@@ -64,7 +67,13 @@ export default function VerifyIdentityPage() {
     {
       label: 'Identity check',
       value: requirements.identityRequired ? 'Required' : 'Skipped',
-      helper: requirements.identityRequired ? 'Selfie and ID evidence are required before the learner can continue.' : 'This test skips identity verification.',
+      helper: requirements.identityRequired
+        ? (
+            precheckTestBypassEnabled
+              ? 'Local QA bypass is active: captures are still collected, but heavy identity analysis is skipped.'
+              : 'Selfie and ID evidence are required before the learner can continue.'
+          )
+        : 'This test skips identity verification.',
     },
     {
       label: 'Camera',
@@ -143,6 +152,12 @@ export default function VerifyIdentityPage() {
     setLoadingConfig(true)
     setError('')
     setConfigResolved(false)
+    if (!testId) {
+      setRequirements(getJourneyRequirements({ identity_required: true, camera_required: true, lighting_required: true }))
+      setError('Invalid test link. Return to the available tests list and try again.')
+      setLoadingConfig(false)
+      return
+    }
     try {
       const { data } = await getTest(testId)
       const normalized = normalizeTest(data)
@@ -343,6 +358,7 @@ export default function VerifyIdentityPage() {
         cam_ok: flags.cam_ok ?? Boolean(selfie),
         fs_ok: !fullscreenRequiredHere || Boolean(document.fullscreenElement),
         id_text: idNumber || undefined,
+        test_pass: precheckTestBypassEnabled,
       }
       const { data } = await precheckAttempt(attemptId, payload)
       setResult(data)

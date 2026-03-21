@@ -4,14 +4,15 @@ Full-stack LMS with a FastAPI backend and React frontend.
 
 ## Setup Guides
 
-- Windows: [docs/setup-windows.md](/e:/codexxx/docs/setup-windows.md)
-- Linux: [docs/setup-linux.md](/e:/codexxx/docs/setup-linux.md)
+- Windows: [docs/setup-windows.md](docs/setup-windows.md)
+- Linux: [docs/setup-linux.md](docs/setup-linux.md)
 
 ## Quick Start
 
 1. Copy `.env.example` to `.env`.
 2. Copy `frontend/.env.example` to `frontend/.env`.
-3. Set `DATABASE_URL` and `JWT_SECRET` in `.env`.
+3. Set `DATABASE_URL` and `JWT_SECRET` in `.env`, then either:
+   - set `CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint.
 4. Follow the platform-specific guide above.
 
 Default local URLs:
@@ -27,6 +28,7 @@ bash scripts/setup-linux.sh
 ```
 
 That script prepares `backend/.env.docker` and `frontend/.env.production`, starts a local PostgreSQL container, builds the images, seeds a large demo dataset, and brings up the full stack at `http://localhost`.
+Proctoring recordings are stored on Cloudflare Stream. Set `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint.
 
 Default seeded credentials:
 
@@ -43,7 +45,7 @@ Default seeded credentials:
 cp backend/.env.docker.example backend/.env.docker
 cp frontend/.env.production.example frontend/.env.production
 # Edit backend/.env.docker — at minimum set:
-#   DATABASE_URL, JWT_SECRET, FRONTEND_BASE_URL, BACKEND_BASE_URL, CORS_ORIGINS
+#   DATABASE_URL, JWT_SECRET, FRONTEND_BASE_URL, BACKEND_BASE_URL, CORS_ORIGINS, CLOUDFLARE_MEDIA_API_BASE_URL
 ```
 
 **Required** `backend/.env.docker` values for Docker:
@@ -55,6 +57,7 @@ cp frontend/.env.production.example frontend/.env.production
 | `FRONTEND_BASE_URL` | `https://your-domain.com` |
 | `BACKEND_BASE_URL` | `https://your-domain.com/api` |
 | `CORS_ORIGINS` | `https://your-domain.com` |
+| `CLOUDFLARE_MEDIA_API_BASE_URL` | `https://your-cloudflare-media-gateway.example/api` |
 
 **Optional** backend tuning:
 
@@ -62,7 +65,7 @@ cp frontend/.env.production.example frontend/.env.production
 |---|---|---|
 | `MAX_VIDEO_UPLOAD_MB` | `512` | Max proctoring video upload size |
 | `MEDIA_STORAGE_PROVIDER` | `local` | `local` or `supabase` |
-| `PROCTORING_VIDEO_STORAGE_PROVIDER` | `local` | `local`, `cloudflare`, or `supabase` |
+| `PROCTORING_VIDEO_STORAGE_PROVIDER` | `cloudflare` | Proctoring recordings are uploaded to Cloudflare and streamed from there |
 
 ### 2. Build and start
 
@@ -101,7 +104,7 @@ bash scripts/setup-linux.sh
 ## Notes
 
 - AI proctoring uses YOLO + MediaPipe + DeepFace for face/object detection. Models are pre-warmed at startup.
-- Proctoring videos default to local storage. Set `PROCTORING_VIDEO_STORAGE_PROVIDER=cloudflare` and `CLOUDFLARE_MEDIA_API_BASE_URL` for Cloudflare Stream.
+- Proctoring videos use local storage by default in the one-command Linux stack. Set `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` if you want Cloudflare streaming there.
 - Data retention cleanup runs every 24h (configurable via `*_RETENTION_DAYS` env vars).
 - Reports are written to `backend/storage/reports/`, evidence to `backend/storage/evidence/`.
 
@@ -140,3 +143,4 @@ Requirements for the backend test run:
 
 - Postgres available at `DATABASE_URL` or the local default `postgresql+psycopg://postgres:password@localhost:5432/syra_lms`
 - Frontend E2E depends on Playwright dependencies already installed
+- CI uses the same mirrored backend suite path and a PostgreSQL service rather than SQLite

@@ -6,6 +6,7 @@ const DEFAULT_MESSAGE = 'You have unsaved changes. Leave this page?'
 export default function useUnsavedChanges(isDirty, message = DEFAULT_MESSAGE) {
   const shouldBlock = useCallback(({ currentLocation, nextLocation }) => {
     if (!isDirty) return false
+    if (nextLocation?.state?.bypassUnsavedChanges) return false
     return currentLocation.pathname !== nextLocation.pathname
   }, [isDirty])
   const blocker = useBlocker(shouldBlock)

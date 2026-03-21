@@ -39,6 +39,36 @@ function ProctoringTab({
   startEditAccom,
 }) {
   const flaggedRows = attemptRows.filter((row) => row.highAlerts > 0 || row.mediumAlerts > 0)
+  const renderVideoUploadCell = (row) => {
+    const uploadPercent = Math.max(0, Math.min(100, Number(row.uploadPercent || 0)))
+    const remainingPercent = Math.max(0, 100 - uploadPercent)
+    const sourceBreakdown = Array.isArray(row.uploadSources) && row.uploadSources.length > 0
+      ? row.uploadSources.map((source) => `${source.label || source.source}: ${Math.max(0, Math.min(100, Number(source.progressPercent || 0)))}%`).join(' | ')
+      : ''
+    const fillClass = row.uploadStatus === 'error'
+      ? styles.videoUploadBarError
+      : uploadPercent >= 100
+        ? styles.videoUploadBarComplete
+        : row.uploading || uploadPercent > 0
+          ? styles.videoUploadBarActive
+          : styles.videoUploadBarIdle
+
+    return (
+      <div className={styles.videoUploadCell}>
+        <div className={styles.videoUploadHeader}>
+          <span>{uploadPercent}% uploaded</span>
+          <span>{remainingPercent}% left</span>
+        </div>
+        <div className={styles.videoUploadBar}>
+          <span className={`${styles.videoUploadBarFill} ${fillClass}`} style={{ width: `${uploadPercent}%` }} />
+        </div>
+        <div className={styles.videoUploadMeta}>
+          {row.uploadStatusLabel || (uploadPercent > 0 ? 'Uploading in background' : 'Not started')}
+          {sourceBreakdown ? ` | ${sourceBreakdown}` : ''}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <section className={styles.full}>
@@ -110,7 +140,7 @@ function ProctoringTab({
           ) : (
             <table className={styles.table}>
               <thead>
-                <tr><th>Actions</th><th>Attempt ID</th><th>Username</th><th>Testing session</th><th>Status</th><th>Started</th><th>Access</th><th>Comment</th><th>Proctor rate</th></tr>
+                <tr><th>Actions</th><th>Attempt ID</th><th>Username</th><th>Testing session</th><th>Status</th><th>Started</th><th>Access</th><th>Comment</th><th>Video upload</th><th>Proctor rate</th></tr>
                 {showFilters && (
                   <tr>
                     <th></th>
@@ -122,6 +152,7 @@ function ProctoringTab({
                     <th><input placeholder="Search" value={search.group} onChange={(e) => setSearch((p) => ({ ...p, group: e.target.value }))} /></th>
                     <th><input placeholder="Search" value={search.comment} onChange={(e) => setSearch((p) => ({ ...p, comment: e.target.value }))} /></th>
                     <th></th>
+                    <th></th>
                   </tr>
                 )}
               </thead>
@@ -131,10 +162,17 @@ function ProctoringTab({
                     <td className={styles.actionsCell}>
                       <button type="button" onClick={() => handlePauseResume(row)} disabled={rowBusy[row.id]}>{row.paused ? 'Resume' : 'Pause'}</button>
                       <button type="button" onClick={() => handleOpenReport(row)} disabled={rowBusy[row.id]}>{rowBusy[row.id] ? 'Opening...' : 'Report'}</button>
-                      <button type="button" onClick={() => handleOpenVideo(row)} disabled={rowBusy[row.id]} className={row.hasVideo ? styles.videoBtnGreen : styles.videoBtnRed}>Video</button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenVideo(row)}
+                        disabled={rowBusy[row.id]}
+                        className={row.hasVideo ? styles.videoBtnGreen : (row.uploadPercent > 0 ? styles.videoBtnAmber : styles.videoBtnRed)}
+                      >
+                        Video
+                      </button>
                     </td>
                     <td>{row.attemptId}</td><td>{row.username}</td><td>{row.sessionName}</td><td>{row.paused ? 'PAUSED' : row.status}</td>
-                    <td>{row.startedAt ? new Date(row.startedAt).toLocaleString() : '-'}</td><td>{row.userGroup}</td><td>{row.comment || '-'}</td><td>{row.proctorRate}</td>
+                    <td>{row.startedAt ? new Date(row.startedAt).toLocaleString() : '-'}</td><td>{row.userGroup}</td><td>{row.comment || '-'}</td><td>{renderVideoUploadCell(row)}</td><td>{row.proctorRate}</td>
                   </tr>
                 ))}
               </tbody>

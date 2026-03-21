@@ -16,16 +16,16 @@ function resolveApiUrl(path) {
 const DEV_USERS = {
   admin: {
     email: 'admin@example.com',
-    password: 'Password123!',
+    password: 'Admin1234!',
     name: 'Local Dev Admin',
     user_id: 'ADM001',
     role: 'ADMIN',
   },
   learner: {
-    email: 'learner1@example.com',
-    password: 'Password123!',
-    name: 'Local Dev Learner',
-    user_id: 'LRN001',
+    email: 'sandbox.learner@example.com',
+    password: 'Sandbox1234!',
+    name: 'Sandbox Learner',
+    user_id: 'SBX001',
     role: 'LEARNER',
   },
 }

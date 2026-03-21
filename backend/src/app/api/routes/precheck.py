@@ -347,6 +347,43 @@ async def precheck(
     if requirements["fullscreen_required"] and not fs_ok:
         failure_reasons.append("FULLSCREEN_REQUIRED")
 
+    if ALLOW_TEST_BYPASS and requirements["identity_required"]:
+        if requirements["lighting_required"] and not lighting_ok:
+            failure_reasons.append("LOW_LIGHTING")
+        logger.warning("Precheck bypassed for attempt %s via local dev bypass", attempt_id)
+        all_pass = len(failure_reasons) == 0
+        attempt.id_text = _build_id_text_payload(
+            ocr_text=None,
+            ocr_candidates=[],
+            manual_token=manual_token,
+            manual_valid=manual_valid,
+            method="test_bypass",
+            ocr_available=False,
+            requirements=requirements,
+        )
+        attempt.id_verified = all_pass
+        attempt.lighting_score = lighting_score
+        attempt.precheck_passed_at = datetime.now(timezone.utc) if all_pass else None
+        attempt.identity_verified = all_pass
+        db.add(attempt)
+        db.commit()
+        return {
+            "status": "ok",
+            "requirements": requirements,
+            "face_match_score": 0.0,
+            "lighting_ok": lighting_ok,
+            "id_verified": all_pass,
+            "all_pass": all_pass,
+            "failure_reasons": failure_reasons,
+            "ocr_available": False,
+            "ocr_candidates": [],
+            "manual_id_valid": manual_valid,
+            "id_selfie_similarity": 0.0,
+            "id_face_ratio": 0.0,
+            "id_document_outline": True,
+            "signature_mode": {"selfie": "bypass", "id": "bypass"},
+        }
+
     if requirements["identity_required"]:
         selfie_b64 = _payload_value("selfie_b64")
         id_b64 = _payload_value("id_b64")

@@ -1663,6 +1663,65 @@
   box-shadow: 0 0 10px color-mix(in srgb, var(--color-danger) 60%, transparent) !important;
 }
 
+.videoBtnAmber {
+  border-color: color-mix(in srgb, var(--color-warning) 90%, transparent) !important;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--color-warning) 45%, transparent) !important;
+}
+
+.videoUploadCell {
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.videoUploadHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.videoUploadBar {
+  width: 100%;
+  height: 0.48rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-border) 42%, transparent);
+}
+
+.videoUploadBarFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.videoUploadBarIdle {
+  background: color-mix(in srgb, var(--color-muted) 30%, transparent);
+}
+
+.videoUploadBarActive {
+  background: linear-gradient(90deg, var(--color-warning), color-mix(in srgb, var(--color-primary) 55%, var(--color-warning)));
+}
+
+.videoUploadBarComplete {
+  background: linear-gradient(90deg, var(--color-success), color-mix(in srgb, var(--color-success) 70%, var(--color-primary)));
+}
+
+.videoUploadBarError {
+  background: linear-gradient(90deg, var(--color-danger), color-mix(in srgb, var(--color-danger) 70%, var(--color-warning)));
+}
+
+.videoUploadMeta {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+
 /* ---- Type Hint ---- */
 .typeHint {
   background: var(--color-info-bg);

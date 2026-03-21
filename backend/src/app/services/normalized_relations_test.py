@@ -110,6 +110,26 @@ class ExamProctoringSerializationTest(unittest.TestCase):
         self.assertEqual(serialized["camera_cover_hard_consecutive_frames"], DEFAULT_PROCTORING["camera_cover_hard_consecutive_frames"])
         self.assertEqual(serialized["camera_cover_soft_consecutive_frames"], DEFAULT_PROCTORING["camera_cover_soft_consecutive_frames"])
 
+    def test_exam_proctoring_preserves_raw_stub_config_without_injecting_defaults(self):
+        exam = SimpleNamespace(
+            proctoring_config={
+                "fullscreen_required": True,
+                "camera_required": False,
+                "mic_required": False,
+                "identity_required": False,
+            },
+            proctoring_config_rel=None,
+        )
+
+        serialized = exam_proctoring(exam)
+
+        self.assertTrue(serialized["fullscreen_required"])
+        self.assertFalse(serialized["camera_required"])
+        self.assertFalse(serialized["mic_required"])
+        self.assertFalse(serialized["identity_required"])
+        self.assertEqual(serialized["alert_rules"], [])
+        self.assertNotIn("screen_capture", serialized)
+
 
 class ExamRuntimeAttemptPolicyTest(unittest.TestCase):
     def test_multi_attempt_payload_defaults_retakes_on(self):

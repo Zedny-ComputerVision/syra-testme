@@ -431,6 +431,13 @@
   color: var(--color-text);
 }
 
+.submitStatus {
+  margin-top: 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
 .submitConfirmActions {
   display: flex;
   justify-content: flex-end;

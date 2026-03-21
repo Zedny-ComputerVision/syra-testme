@@ -8,6 +8,7 @@ import Login from './Login'
 
 const loginMock = vi.fn()
 const setupMock = vi.fn()
+const signupStatusMock = vi.fn()
 const authLoginMock = vi.fn()
 const navigateMock = vi.fn()
 
@@ -26,6 +27,7 @@ vi.mock('jwt-decode', () => ({
 vi.mock('../../services/auth.service', () => ({
   login: (...args) => loginMock(...args),
   setup: (...args) => setupMock(...args),
+  signupStatus: (...args) => signupStatusMock(...args),
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -65,14 +67,14 @@ describe('Login page', () => {
     expect(screen.getByRole('link', { name: 'Create account' }).getAttribute('href')).toBe('/signup')
   })
 
-  it('repairs the localhost dev learner account before retrying login', async () => {
+  it('repairs the localhost sandbox learner account before logging in', async () => {
     const adminTokens = { access_token: 'admin-token', refresh_token: 'admin-refresh' }
     const learnerTokens = { access_token: 'learner-token', refresh_token: 'learner-refresh' }
 
     loginMock
-      .mockRejectedValueOnce({ response: { status: 401, data: { detail: 'Invalid credentials' } } })
       .mockResolvedValueOnce({ data: adminTokens })
       .mockResolvedValueOnce({ data: learnerTokens })
+    signupStatusMock.mockResolvedValue({ data: { allowed: false } })
 
     axios.post.mockImplementation((url) => {
       if (url.endsWith('/api/users/')) {
@@ -88,8 +90,8 @@ describe('Login page', () => {
         items: [
           {
             id: 'learner-id',
-            email: 'learner1@example.com',
-            user_id: 'LRN001',
+            email: 'sandbox.learner@example.com',
+            user_id: 'SBX001',
             role: 'ADMIN',
             is_active: false,
           },
@@ -106,15 +108,16 @@ describe('Login page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Learner' }))
 
-    await waitFor(() => expect(loginMock).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(loginMock).toHaveBeenCalledTimes(2))
 
     expect(setupMock).not.toHaveBeenCalled()
+    expect(signupStatusMock).toHaveBeenCalledTimes(1)
     expect(axios.get).toHaveBeenCalledTimes(1)
     expect(axios.patch).toHaveBeenCalledWith(
       'http://localhost:3000/api/users/learner-id',
       expect.objectContaining({
-        email: 'learner1@example.com',
-        user_id: 'LRN001',
+        email: 'sandbox.learner@example.com',
+        user_id: 'SBX001',
         role: 'LEARNER',
         is_active: true,
       }),
@@ -126,7 +129,7 @@ describe('Login page', () => {
     )
     expect(axios.post).toHaveBeenCalledWith(
       'http://localhost:3000/api/users/learner-id/reset-password',
-      { new_password: 'Password123!' },
+      { new_password: 'Sandbox1234!' },
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer admin-token',

@@ -1,6 +1,4 @@
 from functools import lru_cache
-import os
-import sys
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,7 +64,7 @@ class Settings(BaseSettings):
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
     MAX_VIDEO_UPLOAD_MB: int = Field(default=512, ge=16, le=4096)
     MEDIA_STORAGE_PROVIDER: str = Field(default="local")
-    PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="local")
+    PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_MEDIA_WATERMARK_UID: str | None = None
@@ -125,8 +123,8 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_video_storage_provider(cls, value: str) -> str:
         normalized = str(value or "cloudflare").strip().lower()
-        if normalized not in {"local", "cloudflare", "supabase"}:
-            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'local', 'cloudflare', or 'supabase'")
+        if normalized not in {"cloudflare", "supabase"}:
+            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'cloudflare' or 'supabase'")
         return normalized
 
     @field_validator("CLOUDFLARE_MEDIA_API_BASE_URL", mode="before")
@@ -181,14 +179,7 @@ class Settings(BaseSettings):
 
     @property
     def precheck_test_bypass_enabled(self) -> bool:
-        return bool(
-            self.PRECHECK_ALLOW_TEST_BYPASS
-            and (
-                self.E2E_SEED_ENABLED
-                or "pytest" in sys.modules
-                or "PYTEST_CURRENT_TEST" in os.environ
-            )
-        )
+        return bool(self.PRECHECK_ALLOW_TEST_BYPASS)
 
     @property
     def db_disable_pooling(self) -> bool:

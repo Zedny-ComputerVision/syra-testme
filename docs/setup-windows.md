@@ -30,7 +30,7 @@ Update `.env` before starting the backend:
 - Set `DATABASE_URL` to your PostgreSQL or Supabase connection string
 - Set `JWT_SECRET` to a real secret with at least 32 characters
 - Leave `AUTO_APPLY_MIGRATIONS=false` if you want to run Alembic manually
-- Set `CLOUDFLARE_MEDIA_API_BASE_URL` only if you are using hosted proctoring video uploads
+- Set `CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint (required for proctoring video storage)
 
 For local frontend development, `frontend\.env` can stay at:
 
@@ -136,6 +136,8 @@ npm run test -- --run
 npm run test:e2e
 ```
 
+Note: CI runs the same mirrored backend suite path shown above and uses PostgreSQL, not SQLite.
+
 If Playwright browsers are missing:
 
 ```powershell
@@ -155,6 +157,7 @@ This project's `docker-compose.yml` expects an external PostgreSQL database such
    - `JWT_SECRET`
    - `FRONTEND_BASE_URL`
    - `BACKEND_BASE_URL`
+   - `CLOUDFLARE_MEDIA_API_BASE_URL`
 3. Start the stack:
 
 ```powershell
@@ -166,5 +169,5 @@ docker compose up --build -d
 - `JWT_SECRET` validation error: use a secret with at least 32 characters.
 - Database connection failures: verify `DATABASE_URL`, SSL requirements, and network access to your Postgres host.
 - Backend starts but frontend cannot log in: confirm `frontend\.env` points to `http://127.0.0.1:8000/api`.
-- Proctoring uploads fail: verify `CLOUDFLARE_MEDIA_API_BASE_URL` or switch `PROCTORING_VIDEO_STORAGE_PROVIDER=local`.
+- Proctoring uploads fail: verify `CLOUDFLARE_MEDIA_API_BASE_URL` is correctly configured.
 - Local file artifacts are written under `backend\storage`.

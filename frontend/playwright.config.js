@@ -1,9 +1,15 @@
 // @ts-check
 import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5173'
-const apiBaseURL = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
+const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT || '8000'
+const frontendPort = process.env.PLAYWRIGHT_FRONTEND_PORT || '5173'
+const backendBaseURL = process.env.BACKEND_BASE_URL || `http://127.0.0.1:${backendPort}`
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || process.env.FRONTEND_BASE_URL || `http://127.0.0.1:${frontendPort}`
+const apiBaseURL = process.env.API_BASE_URL || `${backendBaseURL}/api/`
 const testDir = process.env.PLAYWRIGHT_TEST_DIR || '.generated-tests/e2e'
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER
+  ? process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === 'true'
+  : true
 
 export default defineConfig({
   testDir,
@@ -28,16 +34,18 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'python -m uvicorn src.app.main:app --host 127.0.0.1 --port 8000',
+      command: `python -m uvicorn src.app.main:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: '../backend',
-      url: 'http://127.0.0.1:8000/api/health',
-      reuseExistingServer: true,
+      url: `${backendBaseURL}/api/health`,
+      reuseExistingServer,
       timeout: 180_000,
       env: {
         ...process.env,
+        JWT_SECRET: process.env.JWT_SECRET || process.env.SECRET_KEY || 'test-secret-key-with-at-least-32-chars',
+        DATABASE_URL: process.env.DATABASE_URL || 'postgresql+psycopg://postgres:password@localhost:5432/syra_lms',
         AUTO_APPLY_MIGRATIONS: process.env.AUTO_APPLY_MIGRATIONS || 'true',
-        BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || 'http://127.0.0.1:8000',
-        FRONTEND_BASE_URL: process.env.FRONTEND_BASE_URL || 'http://127.0.0.1:5173',
+        BACKEND_BASE_URL: backendBaseURL,
+        FRONTEND_BASE_URL: process.env.FRONTEND_BASE_URL || `http://127.0.0.1:${frontendPort}`,
         E2E_SEED_ENABLED: process.env.E2E_SEED_ENABLED || 'true',
         PRECHECK_ALLOW_TEST_BYPASS: process.env.PRECHECK_ALLOW_TEST_BYPASS || 'true',
         MEDIA_STORAGE_PROVIDER: process.env.MEDIA_STORAGE_PROVIDER || 'local',
@@ -45,10 +53,10 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+      command: `npm run dev -- --host 127.0.0.1 --port ${frontendPort}`,
       cwd: '.',
       url: baseURL,
-      reuseExistingServer: true,
+      reuseExistingServer,
       timeout: 180_000,
       env: {
         ...process.env,

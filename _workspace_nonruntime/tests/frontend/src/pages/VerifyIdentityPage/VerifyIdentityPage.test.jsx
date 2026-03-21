@@ -97,7 +97,7 @@ describe('VerifyIdentityPage', () => {
     expect(screen.getByRole('button', { name: 'Confirm & Continue' }).disabled).toBe(true)
   })
 
-  it('prompts the learner to return to fullscreen after the upload picker exits fullscreen', async () => {
+  it('defers fullscreen recovery prompts until the live attempt when screen recording is required', async () => {
     fullscreenElement = document.documentElement
     getTestMock.mockResolvedValueOnce({
       data: {
@@ -119,11 +119,8 @@ describe('VerifyIdentityPage', () => {
     fullscreenElement = null
     document.dispatchEvent(new Event('fullscreenchange'))
 
-    await waitFor(() => expect(screen.getByText(/opening the browser file picker can exit fullscreen/i)).toBeTruthy())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Return to fullscreen' }))
-
-    await waitFor(() => expect(requestFullscreenMock).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByText(/opening the browser file picker can exit fullscreen/i)).toBeNull())
+    expect(screen.queryByRole('button', { name: 'Return to fullscreen' })).toBeNull()
+    expect(requestFullscreenMock).not.toHaveBeenCalled()
   })
 })

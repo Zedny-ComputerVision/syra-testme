@@ -40,7 +40,7 @@ DEFAULT_PROCTORING = {
     "face_verify": True,
     "fullscreen_enforce": True,
     "tab_switch_detect": True,
-    "screen_capture": False,
+    "screen_capture": True,
     "copy_paste_block": True,
     "alert_rules": [],
     "eye_deviation_deg": 12,

@@ -54,7 +54,7 @@ async def list_tests(
     order: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
-    current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN)),
+    current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: TestService = Depends(_service_from_db),
 ):
     del current
@@ -107,7 +107,7 @@ async def create_test(
 @router.get("/{test_id}", response_model=TestResponseDTO)
 async def get_test(
     test_id: str,
-    current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN)),
+    current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: TestService = Depends(_service_from_db),
 ):
     del current

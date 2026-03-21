@@ -1,4 +1,5 @@
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import useUnsavedChanges from '../../../hooks/useUnsavedChanges'
@@ -60,7 +61,7 @@ const DEFAULT_PROCTORING_CONFIG = normalizeProctoringConfig({
   face_verify: true,
   fullscreen_enforce: true,
   tab_switch_detect: true,
-  screen_capture: false,
+  screen_capture: true,
   copy_paste_block: true,
   alert_rules: [],
   eye_deviation_deg: 12,
@@ -1096,8 +1097,10 @@ export default function AdminNewTestWizard() {
       if (targetPublishStatus === 'OPEN') {
         await adminApi.publishTest(id)
       }
-      setExitingWizard(true)
-      navigate('/admin/tests', { replace: true })
+      flushSync(() => {
+        setExitingWizard(true)
+      })
+      navigate('/admin/tests', { replace: true, state: { bypassUnsavedChanges: true } })
     } catch (e) { setPanelError(formatApiErrorMessage(e, 'Could not save. Please add questions and try again.')) } finally { setSaving(false) }
   }
 

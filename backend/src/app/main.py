@@ -389,13 +389,8 @@ def _prewarm_detection_models() -> None:
 
 def _run_startup_initialization(*, is_test_env: bool) -> None:
     _assert_required_api_routes()
-    if settings.PRECHECK_ALLOW_TEST_BYPASS:
-        if settings.precheck_test_bypass_enabled:
-            logger.critical("PRECHECK_ALLOW_TEST_BYPASS is enabled - identity verification is disabled!")
-        else:
-            logger.critical(
-                "PRECHECK_ALLOW_TEST_BYPASS is enabled, but bypass remains inactive because E2E_SEED_ENABLED is false"
-            )
+    if settings.precheck_test_bypass_enabled:
+        logger.critical("PRECHECK_ALLOW_TEST_BYPASS is enabled - identity verification accepts the local test bypass flag.")
     if is_test_env:
         logger.info("Skipping automatic Alembic migrations in test environment")
         return

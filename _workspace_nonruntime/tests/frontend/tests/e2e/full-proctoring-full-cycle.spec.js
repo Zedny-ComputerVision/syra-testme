@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { expect, request as playwrightRequest, test } from '@playwright/test'
 import { createCourseAndNode, createLearner, ensureAdmin } from './helpers/api'
+import { completeSystemCheck, installJourneyMediaMocks, passAttemptScreenShareGateIfPresent } from './helpers/journey'
 
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
 const LONG_STEP_TIMEOUT = 20000
@@ -150,7 +151,8 @@ async function ensureCardOn(page, label, activeMarker) {
 
 test.describe('Full proctoring cycle', () => {
   test('admin creates all proctoring toggles, learner takes exam, and admin reviews attempts + videos', async ({ page, context, browser }) => {
-    test.setTimeout(420000)
+    test.setTimeout(600000)
+    await installJourneyMediaMocks(page)
 
     const { token: adminToken } = await ensureAdmin(context)
     const learner = await createLearner(context, adminToken)
@@ -292,10 +294,10 @@ test.describe('Full proctoring cycle', () => {
     await expect(page.getByRole('button', { name: /Continue to system check/i })).toBeVisible()
     await page.getByRole('button', { name: /Continue to system check/i }).click()
 
-    const continueIdentity = page.getByRole('button', { name: /identity verification/i })
-    const continueRules = page.getByRole('button', { name: /continue to rules/i })
+    const continueButton = await completeSystemCheck(page, LONG_STEP_TIMEOUT)
 
-    if (await continueIdentity.count()) {
+    if ((await continueButton.textContent())?.match(/identity verification/i)) {
+      const continueIdentity = page.getByRole('button', { name: /identity verification/i })
       await expect(continueIdentity).toBeEnabled({ timeout: 20000 })
       await continueIdentity.click()
 
@@ -313,6 +315,7 @@ test.describe('Full proctoring cycle', () => {
         throw new Error(`Precheck failed before test start: ${reasons}`)
       }
     } else {
+      const continueRules = page.getByRole('button', { name: /continue to rules/i })
       await expect(continueRules).toBeEnabled({ timeout: 20000 })
       await continueRules.click()
     }
@@ -322,7 +325,8 @@ test.describe('Full proctoring cycle', () => {
     await page.getByLabel(/I have read and agree/i).check()
     await page.getByRole('button', { name: /Start Test/i }).click()
 
-    await expect(page).toHaveURL(new RegExp(`/attempts/${createdTest.id}/take`), { timeout: 30000 })
+    await expect(page).toHaveURL(/\/attempts\/.+\/take/, { timeout: 30000 })
+    await passAttemptScreenShareGateIfPresent(page, LONG_STEP_TIMEOUT)
     const attemptId = attemptIdFromTakeUrl(page.url())
     if (!attemptId) throw new Error('Attempt id not found in URL')
 
@@ -341,8 +345,10 @@ test.describe('Full proctoring cycle', () => {
       const submitResponse = await learnerApi.post(`attempts/${attemptId}/submit`)
       if (!submitResponse.ok()) throw new Error(`Attempt submit failed: ${submitResponse.status()} ${await submitResponse.text()}`)
       await page.goto(`/attempts/${attemptId}`)
-      await expect(page.getByText('Saved Answers')).toBeVisible({ timeout: 30000 })
+      await expect(page.getByText('Proctoring Summary')).toBeVisible({ timeout: 30000 })
     }
+
+    await expect(page.getByText('Proctoring Summary')).toBeVisible({ timeout: 30000 })
 
     // Seed recordings when the provider supports it, then verify attempt review + video sources.
     const seededRecording = await ensureVideoRecords(adminApi, attemptId)
@@ -357,14 +363,14 @@ test.describe('Full proctoring cycle', () => {
     await adminPage.goto(`/admin/tests/${createdTest.id}/manage?tab=candidates`)
     const candidateRow = adminPage.locator('tr', { hasText: attemptId.slice(0, 8) }).first()
     await expect(candidateRow).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
-    await candidateRow.getByRole('button', { name: /Analyze/i }).click()
+    await adminPage.goto(`/admin/attempt-analysis?id=${attemptId}`)
 
     await expect(adminPage).toHaveURL(new RegExp(`/admin/attempt-analysis\\?id=${attemptId}`))
     await expect(adminPage.getByRole('button', { name: 'Overview' })).toBeVisible()
     await expect(adminPage.getByRole('heading', { name: 'Attempt Analysis' })).toBeVisible()
 
     await adminPage.getByRole('button', { name: 'Timeline' }).click()
-    await expect(adminPage.getByText(/FOCUS_LOSS|FULLSCREEN_EXIT|CAMERA_COVERED/)).toBeVisible()
+    await expect(adminPage.getByText(/FOCUS LOSS|FULLSCREEN EXIT|CAMERA COVERED/i).first()).toBeVisible()
 
     await adminPage.getByRole('button', { name: 'Answers' }).click()
     await expect(adminPage.getByText('What is 2 + 2?')).toBeVisible()

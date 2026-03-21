@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import json
 import logging
+
 import tempfile
 import time
 from collections.abc import Mapping
@@ -38,7 +39,6 @@ from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 router = APIRouter()
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
-VIDEO_DIR = BASE_STORAGE_DIR / "videos"
 HEARTBEAT_INTERVAL_SECONDS = 15
 INACTIVITY_TIMEOUT_SECONDS = 120
 ADMIN_PROCTORING_NOTIFICATION_WINDOW = timedelta(minutes=5)
@@ -77,22 +77,35 @@ def _video_filename(attempt_id: str, session_id: str, source: str, extension: st
 
 def _video_storage_provider() -> str:
     provider = get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER
-    if provider == "cloudflare" and cloudflare_video_storage_enabled():
+    if provider == "cloudflare":
+        if not cloudflare_video_storage_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail="Cloudflare video storage is not properly configured. "
+                       "Please set CLOUDFLARE_MEDIA_API_BASE_URL.",
+            )
         return "cloudflare"
     if provider == "supabase":
         from ...services.supabase_storage import supabase_video_storage_enabled
-        if supabase_video_storage_enabled():
-            return "supabase"
-    return "local"
+        if not supabase_video_storage_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail="Supabase video storage is not properly configured.",
+            )
+        return "supabase"
+    raise HTTPException(
+        status_code=503,
+        detail=f"Unsupported video storage provider: {provider}",
+    )
 
 
-def _remote_video_storage_enabled() -> bool:
-    return _video_storage_provider() in ("cloudflare", "supabase")
 
-
-def _remote_video_storage_error_detail() -> str:
-    provider = get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER
-    return f"{provider.title()} video storage is not configured"
+def _require_cloudflare_video_storage() -> None:
+    provider = str(get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER or "").strip().lower()
+    if provider != "cloudflare":
+        raise HTTPException(status_code=503, detail="Cloudflare video storage must be enabled for proctoring recordings")
+    if not cloudflare_video_storage_enabled():
+        raise HTTPException(status_code=503, detail="Cloudflare video storage is not configured")
 
 
 def _is_absolute_http_url(value: object) -> bool:
@@ -131,14 +144,12 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     name = str(meta.get("name") or "").strip()
     provider = str(meta.get("provider") or "").strip().lower()
     if not provider:
-        provider = "supabase" if path.startswith("videos/") else ("local" if path else "cloudflare")
-    if provider not in {"cloudflare", "supabase", "local"}:
+        provider = "supabase" if path.startswith("videos/") else "cloudflare"
+    if provider not in {"cloudflare", "supabase"}:
         return None
     if provider == "cloudflare" and not _is_absolute_http_url(url):
         return None
     if provider == "supabase" and not (path or _is_absolute_http_url(url)):
-        return None
-    if provider == "local" and not (name or path):
         return None
 
     created_at = meta.get("created_at")
@@ -158,12 +169,6 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     if _is_absolute_http_url(url):
         item["url"] = url
         item["playback_url"] = str(meta.get("playback_url") or url).strip()
-    elif provider == "local":
-        local_url = f"/api/media/videos/{resolved_name}"
-        item["url"] = local_url
-        item["playback_url"] = local_url
-        item.setdefault("playback_type", "direct")
-        item.setdefault("status", "ready")
         item["ready_to_stream"] = True
 
     for key in ("uid", "status", "thumbnail", "duration", "session_id", "playback_type", "recording_started_at", "recording_stopped_at", "bucket"):
@@ -189,6 +194,173 @@ def _saved_video_events(db: Session, attempt_id: str) -> list[ProctoringEvent]:
     )
 
 
+def _coerce_non_negative_int(value: object) -> int:
+    try:
+        numeric = int(float(value))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, numeric)
+
+
+def _clamp_progress_percent(value: object, *, default: int = 0) -> int:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        numeric = float(default)
+    return max(0, min(100, int(round(numeric))))
+
+
+def _normalize_video_upload_status(value: object) -> str:
+    normalized = str(value or "uploading").strip().lower()
+    if normalized in {"not_started", "queued", "uploading", "processing", "complete", "error"}:
+        return normalized
+    return "uploading"
+
+
+def _normalize_video_upload_progress_meta(meta: object, occurred_at: datetime | None = None) -> dict[str, object] | None:
+    if not isinstance(meta, dict):
+        return None
+
+    session_id = str(meta.get("session_id") or "").strip()
+    source = _normalize_video_source(meta.get("source"))
+    uploaded_bytes = _coerce_non_negative_int(meta.get("uploaded_bytes"))
+    total_bytes = _coerce_non_negative_int(meta.get("total_bytes"))
+    if total_bytes > 0 and uploaded_bytes > total_bytes:
+        uploaded_bytes = total_bytes
+
+    progress_percent = meta.get("progress_percent")
+    if progress_percent in (None, "") and total_bytes > 0:
+        progress_percent = (uploaded_bytes / total_bytes) * 100
+    normalized_status = _normalize_video_upload_status(meta.get("status"))
+    normalized_percent = _clamp_progress_percent(progress_percent, default=0)
+
+    if normalized_status == "complete":
+        normalized_percent = 100
+    elif normalized_status in {"uploading", "processing"}:
+        normalized_percent = min(99, normalized_percent)
+
+    created_at = meta.get("created_at")
+    if not created_at and occurred_at:
+        created_at = occurred_at.isoformat()
+
+    return {
+        "session_id": session_id,
+        "source": source,
+        "uploaded_bytes": uploaded_bytes,
+        "total_bytes": total_bytes,
+        "progress_percent": normalized_percent,
+        "status": normalized_status,
+        "created_at": created_at,
+    }
+
+
+def _expected_video_sources(attempt: Attempt) -> list[str]:
+    if not attempt.exam:
+        return []
+
+    requirements = get_proctoring_requirements(exam_proctoring(attempt.exam))
+    sources: list[str] = []
+    if requirements.get("camera_required"):
+        sources.append("camera")
+    if requirements.get("screen_required"):
+        sources.append("screen")
+    return sources
+
+
+def _build_attempt_video_upload_summary(
+    attempt: Attempt,
+    *,
+    saved_by_source: Mapping[str, dict[str, object]] | None = None,
+    progress_by_source: Mapping[str, dict[str, object]] | None = None,
+) -> dict[str, object]:
+    saved_items = dict(saved_by_source or {})
+    progress_items = dict(progress_by_source or {})
+    required_sources = _expected_video_sources(attempt)
+    available_sources = set(required_sources) | set(saved_items.keys()) | set(progress_items.keys())
+    ordered_sources = [source for source in ("camera", "screen") if source in available_sources]
+    ordered_sources.extend(sorted(source for source in available_sources if source not in {"camera", "screen"}))
+
+    source_summaries: list[dict[str, object]] = []
+    for source in ordered_sources:
+        saved_item = saved_items.get(source)
+        progress_item = progress_items.get(source)
+        if saved_item:
+            size = _coerce_non_negative_int(saved_item.get("size"))
+            source_summaries.append({
+                "source": source,
+                "label": source.title(),
+                "session_id": str(saved_item.get("session_id") or ""),
+                "progress_percent": 100,
+                "remaining_percent": 0,
+                "status": "complete",
+                "uploaded_bytes": size,
+                "total_bytes": size,
+                "has_saved_video": True,
+            })
+            continue
+
+        progress_percent = _clamp_progress_percent(progress_item.get("progress_percent") if progress_item else 0, default=0)
+        status = _normalize_video_upload_status(progress_item.get("status") if progress_item else "not_started")
+        if status in {"uploading", "processing"}:
+            progress_percent = min(99, progress_percent)
+        if status == "complete":
+            progress_percent = 100
+
+        source_summaries.append({
+            "source": source,
+            "label": source.title(),
+            "session_id": str(progress_item.get("session_id") or "") if progress_item else "",
+            "progress_percent": progress_percent,
+            "remaining_percent": max(0, 100 - progress_percent),
+            "status": status,
+            "uploaded_bytes": _coerce_non_negative_int(progress_item.get("uploaded_bytes")) if progress_item else 0,
+            "total_bytes": _coerce_non_negative_int(progress_item.get("total_bytes")) if progress_item else 0,
+            "has_saved_video": False,
+        })
+
+    upload_percent = (
+        int(round(sum(int(item["progress_percent"]) for item in source_summaries) / len(source_summaries)))
+        if source_summaries else 0
+    )
+    remaining_percent = max(0, 100 - upload_percent)
+    failed = any(item["status"] == "error" for item in source_summaries)
+    uploading = any(item["status"] in {"queued", "uploading", "processing"} for item in source_summaries)
+    has_video = bool(saved_items)
+    completed_sources = [item["source"] for item in source_summaries if int(item["progress_percent"]) >= 100]
+    all_required_uploaded = bool(required_sources) and all(source in saved_items for source in required_sources)
+
+    if source_summaries and len(completed_sources) == len(source_summaries):
+        summary_status = "complete"
+        status_label = "Upload complete"
+    elif failed:
+        summary_status = "error"
+        status_label = "Upload failed"
+    elif uploading or upload_percent > 0:
+        summary_status = "uploading"
+        status_label = "Uploading in background"
+    elif attempt.status in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
+        summary_status = "waiting"
+        status_label = "Waiting to upload"
+    else:
+        summary_status = "not_started"
+        status_label = "Not started"
+
+    return {
+        "attempt_id": str(attempt.id),
+        "has_video": has_video,
+        "saved_video_count": len(saved_items),
+        "required_sources": required_sources,
+        "completed_sources": completed_sources,
+        "upload_percent": upload_percent,
+        "remaining_percent": remaining_percent,
+        "uploading": uploading and not all_required_uploaded,
+        "all_required_uploaded": all_required_uploaded,
+        "status": summary_status,
+        "status_label": status_label,
+        "sources": source_summaries,
+    }
+
+
 def _find_saved_video_file_info(db: Session, attempt_id: str, session_id: str, source: str) -> dict[str, object] | None:
     normalized_source = _normalize_video_source(source)
     for event in _saved_video_events(db, attempt_id):
@@ -210,7 +382,7 @@ def _build_registered_video_info(
     raw = dict(payload or {})
     remote = raw.get("remote")
     remote = remote if isinstance(remote, dict) else {}
-    provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider() or "local").strip().lower()
+    provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider()).strip().lower()
     if provider and provider != "cloudflare":
         raise HTTPException(status_code=400, detail="provider must be cloudflare")
 
@@ -275,14 +447,14 @@ def _build_registered_video_info(
     return file_info
 
 
-def _build_local_video_info(
+async def _build_supabase_video_info(
     attempt_id: str,
     *,
     session_id: str,
     source: str,
     filename: str,
-    content: bytes | None = None,
-    upload_path: Path | None = None,
+    content: bytes,
+    content_type: str,
     recording_started_at: str | None,
     recording_stopped_at: str | None,
 ) -> dict[str, object]:
@@ -290,31 +462,38 @@ def _build_local_video_info(
     if not safe_filename:
         raise HTTPException(status_code=400, detail="A valid video filename is required")
 
-    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = VIDEO_DIR / safe_filename
-    if upload_path is not None:
-        upload_path.replace(file_path)
-        file_size = file_path.stat().st_size
-    else:
-        payload = bytes(content or b"")
-        file_path.write_bytes(payload)
-        file_size = len(payload)
+    try:
+        uploaded = await upload_bytes_to_supabase(
+            "videos",
+            safe_filename,
+            bytes(content or b""),
+            content_type=content_type or "application/octet-stream",
+        )
+    except Exception as exc:
+        logger.exception("Supabase video upload failed for attempt %s", attempt_id)
+        raise HTTPException(status_code=502, detail="Supabase video upload failed") from exc
+
+    playback_url = str(uploaded.get("url") or "").strip()
+    object_path = str(uploaded.get("path") or "").strip()
+    if not playback_url and not object_path:
+        raise HTTPException(status_code=502, detail="Supabase video upload returned no file reference")
 
     return {
-        "provider": "local",
-        "name": safe_filename,
-        "path": safe_filename,
-        "url": f"/api/media/videos/{safe_filename}",
-        "playback_url": f"/api/media/videos/{safe_filename}",
+        "provider": "supabase",
+        "name": str(uploaded.get("name") or safe_filename),
+        "path": object_path,
+        "url": playback_url,
+        "playback_url": playback_url,
         "playback_type": "direct",
-        "size": file_size,
+        "size": int(uploaded.get("size") or len(content or b"")),
         "source": _normalize_video_source(source),
         "session_id": session_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": str(uploaded.get("created_at") or datetime.now(timezone.utc).isoformat()),
         "ready_to_stream": True,
         "status": "ready",
         "recording_started_at": recording_started_at,
         "recording_stopped_at": recording_stopped_at,
+        "bucket": uploaded.get("bucket"),
     }
 
 
@@ -891,62 +1070,56 @@ async def upload_video_capture(
 
     file_info: dict[str, object]
     response_detail = "video uploaded"
+    provider = _video_storage_provider()
     try:
-        if _remote_video_storage_enabled():
+        if provider == "cloudflare":
             try:
                 remote = await upload_video_to_cloudflare(
                     temp_path,
                     filename=safe_filename,
                     source=normalized_source,
                 )
-                file_info = _build_registered_video_info(
-                    attempt_id,
-                    {
-                        "provider": "cloudflare",
-                        "session_id": session_id,
-                        "source": normalized_source,
-                        "extension": extension,
-                        "name": remote.get("name") or safe_filename,
-                        "url": remote.get("url") or remote.get("playback_url"),
-                        "playback_url": remote.get("playback_url") or remote.get("url"),
-                        "playback_type": remote.get("playback_type"),
-                        "thumbnail": remote.get("thumbnail"),
-                        "uid": remote.get("uid"),
-                        "status": remote.get("status"),
-                        "ready_to_stream": remote.get("ready_to_stream"),
-                        "duration": remote.get("duration"),
-                        "size": remote.get("size") or upload_size,
-                        "created_at": remote.get("created_at"),
-                        "recording_started_at": normalized_recording_started_at,
-                        "recording_stopped_at": normalized_recording_stopped_at,
-                        "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
-                    },
-                    session_id=session_id,
-                    source=normalized_source,
-                )
             except Exception as exc:
-                logger.warning("Cloudflare video upload failed for attempt %s; falling back to local storage: %s", attempt_id, exc)
-                file_info = _build_local_video_info(
-                    attempt_id,
-                    session_id=session_id,
-                    source=normalized_source,
-                    filename=safe_filename,
-                    upload_path=temp_path,
-                    recording_started_at=normalized_recording_started_at,
-                    recording_stopped_at=normalized_recording_stopped_at,
-                )
-                response_detail = "video saved locally"
-        else:
-            file_info = _build_local_video_info(
+                logger.exception("Cloudflare video upload failed for attempt %s", attempt_id)
+                raise HTTPException(status_code=502, detail="Cloudflare video upload failed") from exc
+            file_info = _build_registered_video_info(
+                attempt_id,
+                {
+                    "provider": "cloudflare",
+                    "session_id": session_id,
+                    "source": normalized_source,
+                    "extension": extension,
+                    "name": remote.get("name") or safe_filename,
+                    "url": remote.get("url") or remote.get("playback_url"),
+                    "playback_url": remote.get("playback_url") or remote.get("url"),
+                    "playback_type": remote.get("playback_type"),
+                    "thumbnail": remote.get("thumbnail"),
+                    "uid": remote.get("uid"),
+                    "status": remote.get("status"),
+                    "ready_to_stream": remote.get("ready_to_stream"),
+                    "duration": remote.get("duration"),
+                    "size": remote.get("size") or upload_size,
+                    "created_at": remote.get("created_at"),
+                    "recording_started_at": normalized_recording_started_at,
+                    "recording_stopped_at": normalized_recording_stopped_at,
+                    "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
+                },
+                session_id=session_id,
+                source=normalized_source,
+            )
+        elif provider == "supabase":
+            file_info = await _build_supabase_video_info(
                 attempt_id,
                 session_id=session_id,
                 source=normalized_source,
                 filename=safe_filename,
-                upload_path=temp_path,
+                content=temp_path.read_bytes(),
+                content_type=content_type,
                 recording_started_at=normalized_recording_started_at,
                 recording_stopped_at=normalized_recording_stopped_at,
             )
-            response_detail = "video saved locally"
+        else:
+            raise HTTPException(status_code=503, detail=f"Unsupported video storage provider: {provider}")
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -971,8 +1144,7 @@ async def register_video_capture(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
-    if not _remote_video_storage_enabled():
-        raise HTTPException(status_code=503, detail=_remote_video_storage_error_detail())
+    _require_cloudflare_video_storage()
 
     session_id = str(payload.get("session_id") or "").strip()
     if not session_id:
@@ -995,6 +1167,61 @@ async def register_video_capture(
     db.add(event)
     db.commit()
     return {"detail": "video registered", "file": await _hydrate_video_file_info(file_info)}
+
+
+@router.post("/{attempt_id}/video/upload-progress", response_model=Message)
+async def report_video_upload_progress(
+    attempt_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+
+    session_id = str(payload.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    source = _normalize_video_source(payload.get("source"))
+    if _find_saved_video_file_info(db, attempt_id, session_id, source):
+        return Message(detail="Video already saved")
+
+    uploaded_bytes = _coerce_non_negative_int(payload.get("uploaded_bytes"))
+    total_bytes = _coerce_non_negative_int(payload.get("total_bytes"))
+    if total_bytes > 0 and uploaded_bytes > total_bytes:
+        uploaded_bytes = total_bytes
+
+    status = _normalize_video_upload_status(payload.get("status"))
+    progress_percent = payload.get("progress_percent")
+    if progress_percent in (None, "") and total_bytes > 0:
+        progress_percent = (uploaded_bytes / total_bytes) * 100
+    normalized_percent = _clamp_progress_percent(progress_percent, default=0)
+
+    if status == "complete":
+        normalized_percent = 100
+    elif status in {"uploading", "processing"}:
+        normalized_percent = min(99, normalized_percent)
+
+    occurred_at = datetime.now(timezone.utc)
+    event = ProctoringEvent(
+        attempt_id=attempt_id,
+        event_type="VIDEO_UPLOAD_PROGRESS",
+        severity=SeverityEnum.LOW,
+        detail=f"Proctoring {source} video upload {status}",
+        meta={
+            "session_id": session_id,
+            "source": source,
+            "uploaded_bytes": uploaded_bytes,
+            "total_bytes": total_bytes,
+            "progress_percent": normalized_percent,
+            "status": status,
+            "created_at": occurred_at.isoformat(),
+        },
+        occurred_at=occurred_at,
+    )
+    db.add(event)
+    db.commit()
+    return Message(detail="Video upload progress recorded")
 
 
 @router.post("/{attempt_id}/pause", response_model=Message)
@@ -1067,6 +1294,63 @@ async def list_videos(
         result.append(await _hydrate_video_file_info(item))
     result.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
     return result
+
+
+@router.get("/exam/{exam_id}/video-upload-status")
+async def list_exam_video_upload_status(
+    exam_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
+    exam_pk = parse_uuid_param(exam_id, detail="Exam not found")
+    attempts = list(
+        db.scalars(
+            select(Attempt)
+            .where(Attempt.exam_id == exam_pk)
+            .order_by(Attempt.created_at.desc())
+        )
+    )
+    if not attempts:
+        return []
+
+    attempt_ids = [attempt.id for attempt in attempts]
+    relevant_events = list(
+        db.scalars(
+            select(ProctoringEvent)
+            .where(
+                ProctoringEvent.attempt_id.in_(attempt_ids),
+                ProctoringEvent.event_type.in_(("VIDEO_SAVED", "VIDEO_UPLOAD_PROGRESS")),
+            )
+            .order_by(ProctoringEvent.occurred_at.desc())
+        )
+    )
+
+    saved_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
+    progress_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
+    for event in relevant_events:
+        attempt_key = str(event.attempt_id)
+        if event.event_type == "VIDEO_SAVED":
+            item = _normalize_saved_video_meta(event.meta, event.occurred_at)
+            if not item:
+                continue
+            source = _normalize_video_source(item.get("source"))
+            saved_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
+            continue
+        if event.event_type == "VIDEO_UPLOAD_PROGRESS":
+            item = _normalize_video_upload_progress_meta(event.meta, event.occurred_at)
+            if not item:
+                continue
+            source = _normalize_video_source(item.get("source"))
+            progress_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
+
+    return [
+        _build_attempt_video_upload_summary(
+            attempt,
+            saved_by_source=saved_by_attempt.get(str(attempt.id)),
+            progress_by_source=progress_by_attempt.get(str(attempt.id)),
+        )
+        for attempt in attempts
+    ]
 
 
 @router.websocket("/{attempt_id}/ws")

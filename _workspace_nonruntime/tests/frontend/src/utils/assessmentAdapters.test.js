@@ -87,8 +87,9 @@ describe('assessment adapters', () => {
     expect(normalized.question_count).toBe(0)
     expect(normalized.time_limit_minutes).toBeNull()
     expect(normalized.exam_type).toBeNull()
-    expect(normalized.proctoring_config.camera_required).toBe(false)
+    expect(normalized.proctoring_config.camera_required).toBe(true)
     expect(normalized.proctoring_config.mic_required).toBe(true)
+    expect(normalized.proctoring_config.screen_required).toBe(true)
     expect(normalized.type).toBeNull()
   })
 

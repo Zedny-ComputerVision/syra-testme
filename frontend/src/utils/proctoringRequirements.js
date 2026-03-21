@@ -2,6 +2,34 @@ const TRUTHY = new Set(['1', 'true', 'yes', 'y', 'on', 'enabled', 'required'])
 const FALSY = new Set(['0', 'false', 'no', 'n', 'off', 'disabled'])
 const ALERT_RULE_ACTIONS = new Set(['FLAG_REVIEW', 'WARN', 'AUTO_SUBMIT'])
 const ALERT_RULE_SEVERITIES = new Set(['LOW', 'MEDIUM', 'HIGH'])
+const RECORDED_VIDEO_KEYS = [
+  'camera_required',
+  'require_camera',
+  'camera_enforce',
+  'mic_required',
+  'microphone_required',
+  'require_microphone',
+  'lighting_required',
+  'require_lighting_check',
+  'identity_required',
+  'id_verification_required',
+  'require_identity_verification',
+  'require_id_verification',
+  'face_verify',
+  'face_verify_enabled',
+  'require_id_document',
+  'id_document_required',
+  'face_detection',
+  'multi_face',
+  'eye_tracking',
+  'head_pose_detection',
+  'audio_detection',
+  'object_detection',
+  'mouth_detection',
+  'screen_capture',
+  'screen_required',
+  'require_screen_share',
+]
 
 function asBool(value, fallback = false) {
   if (typeof value === 'boolean') return value
@@ -58,11 +86,19 @@ function normalizeAlertRules(rawRules) {
     .filter(Boolean)
 }
 
+function hasRecordedVideoJourney(config) {
+  if (!config || typeof config !== 'object') return false
+  if (Array.isArray(config.alert_rules) && config.alert_rules.length > 0) return true
+  return RECORDED_VIDEO_KEYS.some((key) => (
+    Object.prototype.hasOwnProperty.call(config, key) && asBool(config[key], false)
+  ))
+}
+
 export function getJourneyRequirements(rawConfig) {
   const cfg = rawConfig && typeof rawConfig === 'object' ? rawConfig : {}
   const faceDetection = readOptionalFlag(cfg, ['face_detection', 'multi_face'])
   const audioDetection = readOptionalFlag(cfg, ['audio_detection'])
-  const screenRequired = readOptionalFlag(cfg, ['screen_capture', 'screen_required', 'require_screen_share'])
+  let screenRequired = readOptionalFlag(cfg, ['screen_capture', 'screen_required', 'require_screen_share'])
 
   let cameraRequired = readOptionalFlag(cfg, ['camera_required', 'require_camera', 'camera_enforce'])
   let micRequired = readOptionalFlag(cfg, ['mic_required', 'microphone_required', 'require_microphone'])
@@ -84,6 +120,11 @@ export function getJourneyRequirements(rawConfig) {
   if (fullscreenRequired === null) fullscreenRequired = false
   if (lightingRequired === null) lightingRequired = false
   if (identityRequired === null) identityRequired = Boolean(faceDetection)
+
+  if (hasRecordedVideoJourney(cfg)) {
+    cameraRequired = true
+    screenRequired = true
+  }
 
   const systemCheckRequired = Boolean(cameraRequired || micRequired || fullscreenRequired || lightingRequired || screenRequired)
   return {
