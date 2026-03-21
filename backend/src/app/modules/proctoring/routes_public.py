@@ -39,8 +39,8 @@ from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 router = APIRouter()
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
-HEARTBEAT_INTERVAL_SECONDS = 15
-INACTIVITY_TIMEOUT_SECONDS = 120
+HEARTBEAT_INTERVAL_SECONDS = 10
+INACTIVITY_TIMEOUT_SECONDS = 60
 ADMIN_PROCTORING_NOTIFICATION_WINDOW = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
 
@@ -1482,15 +1482,16 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     # Fire-and-forget: send detection status without blocking the message loop
     asyncio.create_task(_send_detection_status())
 
-    # Cache event history to avoid querying the DB on every frame/audio message
+    # Append-through event cache: new events appended immediately after commit,
+    # full DB refresh only every 60s to catch any events created outside this WS.
     _cached_events: list[ProctoringEvent] = []
     _cache_ts: float = 0.0
-    _EVENT_CACHE_TTL_S = 10
+    _EVENT_CACHE_FULL_REFRESH_S = 60
 
     def _get_cached_events() -> list[ProctoringEvent]:
         nonlocal _cached_events, _cache_ts
         now = time.monotonic()
-        if now - _cache_ts >= _EVENT_CACHE_TTL_S:
+        if now - _cache_ts >= _EVENT_CACHE_FULL_REFRESH_S:
             try:
                 _cached_events = _load_attempt_events(db, attempt.id)
                 _cache_ts = now
@@ -1501,6 +1502,10 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                 except Exception:
                     pass
         return list(_cached_events)
+
+    def _append_cached_event(event: ProctoringEvent) -> None:
+        """Append a newly created event to the cache without a full DB refresh."""
+        _cached_events.append(event)
 
     _frame_proc_end = 0.0  # monotonic timestamp of last frame processing completion
 
@@ -1627,6 +1632,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             occurred_at=event_time,
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         history_events.append(event)
                         rule_result = _apply_alert_rules(
                             db,
@@ -1713,7 +1719,10 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     audio_bytes = base64.b64decode(b64)
                     _sr = data.get("sample_rate")
                     logger.info("WS audio chunk for attempt %s (bytes=%d, sr=%s)", attempt_id, len(audio_bytes), _sr)
-                    alerts = orchestrator.process_audio(audio_bytes, sample_rate=int(_sr) if _sr else None)
+                    _audio_loop = asyncio.get_running_loop()
+                    alerts = await _audio_loop.run_in_executor(
+                        None, lambda: orchestrator.process_audio(audio_bytes, sample_rate=int(_sr) if _sr else None)
+                    )
                     if alerts:
                         logger.debug("Audio alerts: %s", [a.get("event_type") for a in alerts])
                     history_events = _get_cached_events()
@@ -1733,6 +1742,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             occurred_at=event_time,
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         history_events.append(event)
                         rule_result = _apply_alert_rules(
                             db,
@@ -1827,6 +1837,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 occurred_at=event_time,
                             )
                             db.add(event)
+                            _append_cached_event(event)
                             try:
                                 await _async_db_commit()
                             except Exception as commit_err:
@@ -1881,6 +1892,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             meta={"question_id": q_id, "elapsed_ms": elapsed_ms},
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         try:
                             await _async_db_commit()
                         except Exception as commit_err:
@@ -1930,6 +1942,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             meta={"avg_interval_ms": avg_ms, "sample_size": samples},
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         try:
                             await _async_db_commit()
                         except Exception as commit_err:
@@ -1976,6 +1989,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         occurred_at=event_time,
                     )
                     db.add(event)
+                    _append_cached_event(event)
                     history_events = _get_cached_events()
                     history_events.append(event)
                     rule_result = _apply_alert_rules(

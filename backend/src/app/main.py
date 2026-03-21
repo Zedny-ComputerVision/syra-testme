@@ -372,17 +372,8 @@ def _prewarm_detection_models() -> None:
         logger.warning("Failed to pre-warm YOLO object model: %s", exc)
 
     try:
-        import mediapipe as mp
-        if hasattr(mp, "solutions"):
-            _mesh = mp.solutions.face_mesh.FaceMesh(
-                static_image_mode=False, refine_landmarks=True, max_num_faces=1
-            )
-            # Run a dummy frame to trigger internal model loading
-            import numpy as np
-            dummy = np.zeros((120, 160, 3), dtype=np.uint8)
-            _mesh.process(dummy)
-            _mesh.close()
-            logger.info("MediaPipe FaceMesh pre-warmed successfully")
+        from .detection.orchestrator import prewarm_shared_mesh
+        prewarm_shared_mesh()
     except Exception as exc:
         logger.warning("Failed to pre-warm MediaPipe FaceMesh: %s", exc)
 

@@ -527,13 +527,13 @@ export default function ProctorOverlay({
           }, currentInterval)
         }
         scheduleNextFrame()
-        // WS keepalive: if no message received in 90s, close and reconnect
-        // Server heartbeat is every 15s, so 90s = 6 missed heartbeats before we give up
+        // WS keepalive: if no message received in 45s, close and reconnect
+        // Server heartbeat is every 10s, so 45s = ~4 missed heartbeats before we give up
         const keepaliveInterval = setInterval(() => {
-          if (Date.now() - keepaliveLastMessageRef.current > 90000 && ws.readyState === WebSocket.OPEN) {
+          if (Date.now() - keepaliveLastMessageRef.current > 45000 && ws.readyState === WebSocket.OPEN) {
             ws.close(4000, 'keepalive timeout')
           }
-        }, 15000)
+        }, 10000)
         // Store cleanup handle in intervalRef
         intervalRef.current = {
           frameTimerRef,

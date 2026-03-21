@@ -46,6 +46,33 @@ from .emotion_detection import EmotionMonitor
 
 logger = logging.getLogger(__name__)
 
+# Module-level cached FaceMesh instance — shared across all orchestrator instances
+# to avoid re-loading the model for each new proctoring session.
+_SHARED_FACE_MESH = None
+
+
+def prewarm_shared_mesh() -> None:
+    """Pre-load FaceMesh model at startup so first frame has no cold-start lag."""
+    global _SHARED_FACE_MESH
+    if not _MP_AVAILABLE or _SHARED_FACE_MESH is not None:
+        return
+    try:
+        _SHARED_FACE_MESH = _mp.solutions.face_mesh.FaceMesh(
+            static_image_mode=False,
+            refine_landmarks=True,
+            max_num_faces=1,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+        # Run a dummy frame to trigger internal model loading
+        dummy = np.zeros((120, 160, 3), dtype=np.uint8)
+        _SHARED_FACE_MESH.process(dummy)
+        logger.info("Shared FaceMesh pre-warmed and cached at module level")
+    except Exception as exc:
+        logger.warning("Failed to prewarm shared FaceMesh: %s", exc)
+        _SHARED_FACE_MESH = None
+
+
 DEFAULT_ORCHESTRATOR_CONFIG = {
     "face_detection": True,
     "multi_face": True,
@@ -344,12 +371,10 @@ class ProctoringOrchestrator:
             enabled=self.enable_emotion,
         )
 
-        # ── Shared FaceMesh — single instance for ALL MediaPipe detectors ────
-        # Uses refine_landmarks=True so iris landmarks (468-477) are available
-        # for eye tracking.  Running FaceMesh ONCE per frame instead of 6-7
-        # times saves 120-500 ms per frame.
-        self._shared_mesh = None
-        if _MP_AVAILABLE:
+        # ── Shared FaceMesh — reuse module-level cached instance if available,
+        # otherwise create a per-orchestrator instance as fallback.
+        self._shared_mesh = _SHARED_FACE_MESH
+        if self._shared_mesh is None and _MP_AVAILABLE:
             try:
                 self._shared_mesh = _mp.solutions.face_mesh.FaceMesh(
                     static_image_mode=False,
@@ -366,7 +391,7 @@ class ProctoringOrchestrator:
         self.score_weights = cfg.get("violation_weights") or {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
         # Thread pool for running object detection in parallel with face pipeline
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="obj_detect")
+        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="obj_detect")
 
     def process_frame(self, frame_bytes: bytes) -> list[dict]:
         """Run all visual detectors on a single frame.
