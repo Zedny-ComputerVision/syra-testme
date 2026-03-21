@@ -18,6 +18,7 @@ Optimisations:
 """
 import math
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, Future
 
 import cv2
@@ -49,6 +50,7 @@ logger = logging.getLogger(__name__)
 # Module-level cached FaceMesh instance — shared across all orchestrator instances
 # to avoid re-loading the model for each new proctoring session.
 _SHARED_FACE_MESH = None
+_SHARED_FACE_MESH_LOCK = threading.Lock()  # MediaPipe FaceMesh is NOT thread-safe
 
 
 def prewarm_shared_mesh() -> None:
@@ -56,21 +58,25 @@ def prewarm_shared_mesh() -> None:
     global _SHARED_FACE_MESH
     if not _MP_AVAILABLE or _SHARED_FACE_MESH is not None:
         return
-    try:
-        _SHARED_FACE_MESH = _mp.solutions.face_mesh.FaceMesh(
-            static_image_mode=False,
-            refine_landmarks=True,
-            max_num_faces=1,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
-        # Run a dummy frame to trigger internal model loading
-        dummy = np.zeros((120, 160, 3), dtype=np.uint8)
-        _SHARED_FACE_MESH.process(dummy)
-        logger.info("Shared FaceMesh pre-warmed and cached at module level")
-    except Exception as exc:
-        logger.warning("Failed to prewarm shared FaceMesh: %s", exc)
-        _SHARED_FACE_MESH = None
+    with _SHARED_FACE_MESH_LOCK:
+        if _SHARED_FACE_MESH is not None:
+            return  # double-check after acquiring lock
+        try:
+            mesh = _mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=False,
+                refine_landmarks=True,
+                max_num_faces=1,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            # Run a dummy frame to trigger internal model loading
+            dummy = np.zeros((120, 160, 3), dtype=np.uint8)
+            mesh.process(dummy)
+            _SHARED_FACE_MESH = mesh
+            logger.info("Shared FaceMesh pre-warmed and cached at module level")
+        except Exception as exc:
+            logger.warning("Failed to prewarm shared FaceMesh: %s", exc)
+            _SHARED_FACE_MESH = None
 
 
 DEFAULT_ORCHESTRATOR_CONFIG = {
@@ -475,7 +481,9 @@ class ProctoringOrchestrator:
             if self._shared_mesh is not None:
                 if self._cached_rgb is None:
                     self._cached_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                mesh_result = self._shared_mesh.process(self._cached_rgb)
+                # MediaPipe FaceMesh is NOT thread-safe — serialise access
+                with _SHARED_FACE_MESH_LOCK:
+                    mesh_result = self._shared_mesh.process(self._cached_rgb)
                 if mesh_result.multi_face_landmarks:
                     shared_lm = mesh_result.multi_face_landmarks[0].landmark
 

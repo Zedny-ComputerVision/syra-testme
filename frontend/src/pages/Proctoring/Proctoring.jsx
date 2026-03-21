@@ -860,18 +860,18 @@ export default function Proctoring() {
         flush(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Save timed out')), 8000)),
       ]).catch(() => { /* best-effort flush — proceed with submission */ })
-      if (requiredRecordingSources.length > 0) {
-        setSubmitPhase('Saving proctoring recordings before final submission...')
-        await Promise.race([
-          uploadRecordingSources(requiredRecordingSources),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Recording upload timed out after 60 seconds')), 60000)),
-        ])
-      }
+      // Submit the attempt first so the learner isn't blocked
       setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch((error) => {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
+        })
+      }
+      // Upload recordings in the background — don't block navigation
+      if (requiredRecordingSources.length > 0) {
+        uploadRecordingSources(requiredRecordingSources).catch((error) => {
+          console.warn('Background recording upload failed:', error)
         })
       }
       navigate(`/attempts/${attemptId}`)

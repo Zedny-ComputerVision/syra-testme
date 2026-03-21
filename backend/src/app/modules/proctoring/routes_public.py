@@ -691,6 +691,15 @@ def _auto_submit_attempt(
     if attempt.status != AttemptStatus.SUBMITTED:
         attempt.status = AttemptStatus.SUBMITTED
         attempt.submitted_at = timestamp
+        # Auto-score so the learner sees results immediately
+        try:
+            from ..attempts.routes_public import _auto_score_attempt
+            score_result = _auto_score_attempt(attempt, db)
+            if score_result.get("score") is not None:
+                attempt.score = score_result["score"]
+                attempt.grade = score_result.get("grade")
+        except Exception as score_err:
+            logger.warning("Auto-score failed during forced submit for attempt %s: %s", attempt.id, score_err)
         db.add(attempt)
         db.commit()
     exam_title = attempt.exam.title if attempt.exam else "Exam"
@@ -935,11 +944,14 @@ async def proctoring_ping(
     created_events: list[ProctoringEvent] = []
     forced_submit = False
     submit_reason = None
+    # Per-type dedup windows: noisy events get longer cooldowns
+    _PING_DEDUP_SECONDS = {"FOCUS_LOSS": 30, "FULLSCREEN_EXIT": 8, "CAMERA_COVERED": 8}
     for etype, sev in events:
         recent_same = _latest_event_of_type(history_events, etype)
         if recent_same and recent_same.occurred_at:
             try:
-                if (now - recent_same.occurred_at).total_seconds() < 8:
+                dedup_s = _PING_DEDUP_SECONDS.get(etype, 8)
+                if (now - recent_same.occurred_at).total_seconds() < dedup_s:
                     continue
             except (AttributeError, TypeError):
                 pass

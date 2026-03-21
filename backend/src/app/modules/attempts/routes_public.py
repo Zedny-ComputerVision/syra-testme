@@ -1074,6 +1074,15 @@ async def submit_attempt(
         raise HTTPException(status_code=404, detail="Attempt not found")
     _ensure_attempt_access(db, attempt, current)
     if attempt.status in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
+        # Score if it was submitted without scoring (e.g. forced submit from WS)
+        if attempt.score is None:
+            score_result = _auto_score_attempt(attempt, db)
+            if score_result["score"] is not None:
+                attempt.score = score_result["score"]
+                attempt.grade = score_result.get("grade")
+                db.add(attempt)
+                db.commit()
+                db.refresh(attempt)
         return _build_attempt_read(attempt, db=db)
     if attempt.status != AttemptStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Attempt cannot be submitted in its current state")

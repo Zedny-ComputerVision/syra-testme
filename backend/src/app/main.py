@@ -400,8 +400,9 @@ def _run_startup_initialization(*, is_test_env: bool) -> None:
         return
     _run_alembic_upgrade()
     logger.info("Alembic migrations applied successfully")
-    # Pre-warm detection models after migrations are applied
-    _prewarm_detection_models()
+    # Pre-warm detection models in a background thread so the app can start serving immediately
+    import threading
+    threading.Thread(target=_prewarm_detection_models, daemon=True, name="model-prewarm").start()
 
 
 async def _schedule_loop():
