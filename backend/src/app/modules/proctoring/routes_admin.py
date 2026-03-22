@@ -5,9 +5,12 @@ Provides endpoints for admins to:
   - Get a proctoring summary for an attempt
   - Export proctoring events as CSV
   - Get aggregate stats across attempts for a test
+  - Live monitoring: watch active proctoring sessions in real time
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import csv
 import io
 import logging
@@ -15,9 +18,10 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, case, and_
+from starlette.websockets import WebSocketState
 from sqlalchemy.orm import Session, joinedload
 
 from ...api.deps import get_current_user, get_db_dep, require_permission
@@ -369,3 +373,89 @@ async def get_proctoring_config_history(
             for log in logs
         ],
     }
+
+
+# ── Live Monitoring ───────────────────────────────────────────────────────────
+
+@router.get("/admin/live")
+async def list_active_sessions(
+    current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
+):
+    """List all currently active proctoring sessions (learners with an open WS)."""
+    from .routes_public import _live_session_info, _live_viewers
+
+    sessions = []
+    for attempt_id, info in _live_session_info.items():
+        viewers_count = len(_live_viewers.get(attempt_id, set()))
+        sessions.append({
+            **info,
+            "viewers": viewers_count,
+        })
+    return {"active_sessions": sessions}
+
+
+@router.websocket("/admin/live/{attempt_id}/ws")
+async def live_monitor_ws(websocket: WebSocket, attempt_id: str, token: str):
+    """Admin WebSocket: watch a learner's proctoring session in real time.
+
+    Receives:
+      - Binary messages: frame thumbnails (type byte + JPEG data)
+      - JSON messages: alerts, summaries, session_ended
+    """
+    from ...core.security import verify_token
+    from .routes_public import _live_viewers, _live_session_info, _live_latest_thumb
+
+    # Authenticate admin
+    try:
+        payload = verify_token(token, expected_type="access")
+    except Exception:
+        await websocket.close(code=4401)
+        return
+    if payload.get("role") not in {"ADMIN", "INSTRUCTOR"}:
+        await websocket.close(code=4403)
+        return
+
+    await websocket.accept()
+
+    # Check if session is active
+    session_info = _live_session_info.get(attempt_id)
+    if not session_info:
+        await websocket.send_json({"type": "error", "detail": "Session not active or not found"})
+        await websocket.close(code=4404)
+        return
+
+    # Register this viewer
+    if attempt_id not in _live_viewers:
+        _live_viewers[attempt_id] = set()
+    _live_viewers[attempt_id].add(websocket)
+
+    await websocket.send_json({"type": "connected", **session_info})
+
+    # Send last known thumbnail if available
+    thumb = _live_latest_thumb.get(attempt_id)
+    if thumb:
+        try:
+            await websocket.send_bytes(b'\x01' + thumb)
+        except Exception:
+            pass
+
+    try:
+        # Keep alive — just consume any messages from admin (e.g., keepalives)
+        while True:
+            try:
+                data = await websocket.receive_json()
+                # Admin can send commands in the future (e.g., send warning to student)
+                msg_type = data.get("type", "")
+                if msg_type == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except WebSocketDisconnect:
+                break
+            except Exception:
+                break
+    finally:
+        viewers = _live_viewers.get(attempt_id)
+        if viewers:
+            viewers.discard(websocket)
+        if websocket.application_state == WebSocketState.CONNECTED:
+            with contextlib.suppress(Exception):
+                await websocket.close(code=1000)

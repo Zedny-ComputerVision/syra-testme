@@ -161,7 +161,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
     '/admin/courses',
     '/admin/surveys',
   ].some(isActive)
-  const testingCenterActive = ['/admin/sessions', '/admin/candidates', '/admin/attempt-analysis'].some(isActive)
+  const testingCenterActive = ['/admin/sessions', '/admin/candidates', '/admin/attempt-analysis', '/admin/live-monitor'].some(isActive)
   const usersActive = ['/admin/users', '/admin/roles', '/admin/user-groups'].some(isActive)
   const reportingActive = [
     '/admin/report-builder',
@@ -249,6 +249,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
               {canAssignSchedules && <NavLink to="/admin/sessions" icon="sessions" label="Testing Sessions" active={isActive('/admin/sessions')} onNavigate={handleNavigate} />}
               {canViewAttemptAnalysis && <NavLink to="/admin/candidates" icon="candidates" label="Candidates" active={isActive('/admin/candidates')} onNavigate={handleNavigate} />}
               {canViewAttemptAnalysis && <NavLink to="/admin/attempt-analysis" icon="analysis" label="Attempt Analysis" active={isActive('/admin/attempt-analysis')} onNavigate={handleNavigate} />}
+              {canViewAttemptAnalysis && <NavLink to="/admin/live-monitor" icon="sessions" label="Live Monitor" active={isActive('/admin/live-monitor')} onNavigate={handleNavigate} />}
             </Section>
           )}
 

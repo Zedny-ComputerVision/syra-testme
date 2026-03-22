@@ -52,6 +52,52 @@ SEVERITY_MAP = {
 }
 settings = get_settings()
 
+# ── Live monitoring registry ──────────────────────────────────────────────────
+# Maps attempt_id → set of admin WebSocket connections watching that session.
+# Also stores the latest frame thumbnail + session metadata for new viewers.
+_live_viewers: dict[str, set[WebSocket]] = {}
+_live_session_info: dict[str, dict] = {}  # attempt_id → {user_name, exam_title, started_at, ...}
+_live_latest_thumb: dict[str, bytes] = {}  # attempt_id → last JPEG thumbnail (small)
+
+
+async def _broadcast_to_viewers(attempt_id: str, message: dict) -> None:
+    """Send a JSON message to all admin viewers watching this attempt."""
+    viewers = _live_viewers.get(attempt_id)
+    if not viewers:
+        return
+    dead: list[WebSocket] = []
+    for ws in viewers:
+        try:
+            if ws.application_state == WebSocketState.CONNECTED:
+                await ws.send_json(message)
+            else:
+                dead.append(ws)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        viewers.discard(ws)
+
+
+async def _broadcast_bytes_to_viewers(attempt_id: str, data: bytes, msg_type: str = "frame") -> None:
+    """Send binary data (frame thumbnail) to admin viewers."""
+    viewers = _live_viewers.get(attempt_id)
+    if not viewers:
+        return
+    # Prepend a type byte: 0x01 = frame, 0x02 = screen
+    type_byte = b'\x01' if msg_type == "frame" else b'\x02'
+    payload = type_byte + data
+    dead: list[WebSocket] = []
+    for ws in viewers:
+        try:
+            if ws.application_state == WebSocketState.CONNECTED:
+                await ws.send_bytes(payload)
+            else:
+                dead.append(ws)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        viewers.discard(ws)
+
 
 def _check_object_model_available() -> bool:
     """Check if the general YOLOv8 object detection model can be loaded."""
@@ -1486,6 +1532,18 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
     orchestrator = ProctoringOrchestrator(exam_cfg)
 
+    # ── Register live monitoring session ──────────────────────────────────────
+    _live_session_info[attempt_id] = {
+        "attempt_id": attempt_id,
+        "user_name": attempt.user.name if attempt.user else None,
+        "user_id": str(attempt.user_id),
+        "exam_title": attempt.exam.name if attempt.exam else None,
+        "exam_id": str(attempt.exam_id),
+        "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
+    }
+    if attempt_id not in _live_viewers:
+        _live_viewers[attempt_id] = set()
+
     # ── Model availability checks — run in background after orchestrator init ──
     # These are deferred so the WS connect handshake isn't blocked by model loading.
     async def _send_detection_status():
@@ -1735,6 +1793,42 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             _frame_forced_submit = True
                             await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
                             break
+
+                    # Broadcast frame thumbnail + alerts to live admin viewers
+                    if _live_viewers.get(attempt_id):
+                        # Send a small thumbnail (max 320px wide) to save bandwidth
+                        try:
+                            import cv2 as _live_cv2
+                            import numpy as _live_np
+                            _np_arr = _live_np.frombuffer(frame_bytes, _live_np.uint8)
+                            _frame_img = _live_cv2.imdecode(_np_arr, _live_cv2.IMREAD_COLOR)
+                            if _frame_img is not None:
+                                _h, _w = _frame_img.shape[:2]
+                                if _w > 320:
+                                    _scale = 320 / _w
+                                    _frame_img = _live_cv2.resize(_frame_img, (320, int(_h * _scale)))
+                                _, _thumb_buf = _live_cv2.imencode('.jpg', _frame_img, [_live_cv2.IMWRITE_JPEG_QUALITY, 50])
+                                _thumb_bytes = _thumb_buf.tobytes()
+                                _live_latest_thumb[attempt_id] = _thumb_bytes
+                                await _broadcast_bytes_to_viewers(attempt_id, _thumb_bytes, "frame")
+                        except Exception:
+                            pass
+                        for alert in alerts:
+                            await _broadcast_to_viewers(attempt_id, {
+                                "type": "alert",
+                                "attempt_id": attempt_id,
+                                "event_type": alert["event_type"],
+                                "severity": alert["severity"],
+                                "detail": alert.get("detail", ""),
+                                "confidence": alert.get("confidence", 0),
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            })
+                        if alerts or orchestrator.face_checks % 10 == 0:
+                            await _broadcast_to_viewers(attempt_id, {
+                                "type": "live_summary",
+                                "attempt_id": attempt_id,
+                                **orchestrator.get_summary(),
+                            })
 
                     # Single commit for all events from this frame
                     if alerts:
@@ -2134,6 +2228,12 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         except Exception:
             with contextlib.suppress(Exception):
                 db.rollback()
+        # Clean up live monitoring session
+        _live_session_info.pop(attempt_id, None)
+        _live_latest_thumb.pop(attempt_id, None)
+        # Notify admin viewers that session ended, then close their connections
+        await _broadcast_to_viewers(attempt_id, {"type": "session_ended", "attempt_id": attempt_id})
+        _live_viewers.pop(attempt_id, None)
         # Notify client of graceful close
         if websocket.application_state == WebSocketState.CONNECTED:
             with contextlib.suppress(Exception):
