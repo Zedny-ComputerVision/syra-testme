@@ -5,6 +5,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+import threading
+
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Body
@@ -39,6 +41,7 @@ ALLOW_TEST_BYPASS = settings.precheck_test_bypass_enabled
 _ID_TOKEN_RE = re.compile(r"[A-Z0-9]{6,24}")
 _HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _TESSERACT_CONFIGURED = False
+_TESSERACT_LOCK = threading.Lock()  # pytesseract is not thread-safe
 _EASYOCR_READER = None
 _EASYOCR_INIT_ATTEMPTED = False
 
@@ -102,8 +105,9 @@ def _tesseract_text(img_bgr: np.ndarray) -> dict:
         _ = pytesseract.get_tesseract_version()
         # Run OCR on both raw and preprocessed image, merge results
         preprocessed = _preprocess_id_image(img_bgr)
-        raw_txt = pytesseract.image_to_string(img_bgr)
-        pre_txt = pytesseract.image_to_string(preprocessed, config="--psm 6")
+        with _TESSERACT_LOCK:
+            raw_txt = pytesseract.image_to_string(img_bgr)
+            pre_txt = pytesseract.image_to_string(preprocessed, config="--psm 6")
         combined = raw_txt + "\n" + pre_txt
         lines = list(dict.fromkeys(l.strip() for l in combined.splitlines() if l.strip()))
         return {"raw": combined, "lines": lines[:30], "available": True, "error": None, "engine": "tesseract"}

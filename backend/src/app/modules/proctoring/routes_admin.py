@@ -331,3 +331,41 @@ async def get_exam_proctoring_stats(
         "event_type_totals": event_type_totals,
         "severity_totals": severity_totals,
     }
+
+
+@router.get("/admin/config-history/{exam_id}")
+async def get_proctoring_config_history(
+    exam_id: str,
+    current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
+    db: Session = Depends(get_db_dep),
+):
+    """Get the audit trail of proctoring config changes for a test."""
+    from ...api.deps import parse_uuid_param
+    from ...models import AuditLog
+    pk = parse_uuid_param(exam_id)
+
+    logs = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.resource_type == "test",
+            AuditLog.resource_id == str(pk),
+            AuditLog.action == "PROCTORING_CONFIG_UPDATED",
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    return {
+        "exam_id": exam_id,
+        "changes": [
+            {
+                "id": str(log.id),
+                "changed_by": str(log.user_id) if log.user_id else None,
+                "detail": log.detail,
+                "ip_address": log.ip_address,
+                "changed_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+    }
