@@ -1382,6 +1382,8 @@ async def import_attempts(
             score = float(row.get("score", 0))
         except (TypeError, ValueError):
             continue
+        if score < 0 or score > 100:
+            continue
         user = db.scalar(
             select(User).where((User.user_id == uid) | (User.email == uid))
         )
