@@ -104,7 +104,11 @@ class UserService:
             updated_at=now,
         )
         self.repository.add(user)
-        self.repository.commit()
+        try:
+            self.repository.commit()
+        except Exception:
+            self.repository.db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or User ID already exists")
         self.repository.refresh(user)
         return user
 

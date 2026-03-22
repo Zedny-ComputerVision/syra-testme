@@ -109,7 +109,7 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     except Exception:
         db.rollback()
         logger.exception("Failed to create schedule for user %s and test %s", body.user_id, exam_id)
-        raise
+        raise HTTPException(status_code=409, detail="Schedule already exists")
     db.refresh(schedule)
     write_audit_log(
         db,
