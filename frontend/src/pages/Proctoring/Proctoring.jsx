@@ -225,6 +225,7 @@ export default function Proctoring() {
   const wsWarnedRef = useRef(false)
   const lastToastBlursRef = useRef(0)
   const timerExpiredRef = useRef(false)
+  const submittedRef = useRef(false)
   const proctorNoticeCooldownRef = useRef(new Map())
   const lastTabSwitchEventRef = useRef(0)
   const preparedRecordingUploadsRef = useRef({})
@@ -603,9 +604,12 @@ export default function Proctoring() {
         recording.chunks.push(event.data)
         recording.bytesRecorded += event.data.size
       }
-      recorder.onerror = () => {
+      recorder.onerror = (e) => {
         setRecordingStatusForSource(source, 'failed')
-        emitProctoringNotice(`recorder_error_${source}`, `Browser ${source} recording encountered an error.`, 'LOW')
+        const msg = `Recording interrupted (${source}) — your exam continues but video may be incomplete.`
+        console.error(`MediaRecorder error (${source}):`, e?.error || e)
+        setToast({ severity: 'MEDIUM', event_type: 'RECORDING_ERROR', detail: msg })
+        emitProctoringNotice(`recorder_error_${source}`, msg, 'LOW', 'RECORDING_ERROR', 60000)
       }
       recorder.start(2000)
       recording.recorder = recorder
@@ -881,6 +885,7 @@ export default function Proctoring() {
       // Submit the attempt first so the learner isn't blocked
       setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)
+      submittedRef.current = true
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch((error) => {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
@@ -1106,19 +1111,9 @@ export default function Proctoring() {
   useEffect(() => {
     const max = proctorCfg.max_tab_blurs
     if (max && tabBlurs > max) {
-      // When screen capture is active, fullscreen exits cause spurious blur events.
-      // Warn the user but do NOT auto-submit — the screen recording already proves
-      // what the learner was doing.
-      if (proctorCfg.screen_capture) {
-        if (tabBlurs !== lastToastBlursRef.current) {
-          lastToastBlursRef.current = tabBlurs
-          setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: `Tab switches: ${tabBlurs}` })
-        }
-      } else {
-        setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: 'Too many tab switches' })
-        lastToastBlursRef.current = tabBlurs
-        void handleSubmit()
-      }
+      setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: 'Too many tab switches — exam will be submitted' })
+      lastToastBlursRef.current = tabBlurs
+      void handleSubmit()
     } else if (tabBlurs > 0 && tabBlurs !== lastToastBlursRef.current && proctorCfg.tab_switch_detect) {
       lastToastBlursRef.current = tabBlurs
       setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: `Tab switches: ${tabBlurs}` })
@@ -1379,16 +1374,38 @@ export default function Proctoring() {
       } catch (error) {
         console.error('Failed to stop proctoring recorder during page unload.', error)
       }
-      if (submitting) {
+      // Best-effort flush of unsaved answers
+      try {
+        flush().catch(() => {})
+      } catch {
+        // ignore — page is closing
+      }
+      // Always warn during an active exam (not just when submitting)
+      if (!submittedRef.current) {
         event.preventDefault()
-        event.returnValue = ''
+        event.returnValue = 'You have an exam in progress. Are you sure you want to leave?'
       }
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
-  }, [submitting])
+  }, [flush])
+
+  // ── Prevent browser back button during exam ─────────────────────────────────
+  useEffect(() => {
+    if (submittedRef.current) return
+    // Push a dummy state so pressing back pops it instead of leaving the page
+    window.history.pushState({ examGuard: true }, '')
+    const onPopState = () => {
+      if (submittedRef.current) return
+      // Re-push to keep the guard in place
+      window.history.pushState({ examGuard: true }, '')
+      setToast({ severity: 'MEDIUM', event_type: 'NAV_BLOCKED', detail: 'Please submit your exam before leaving.' })
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   if (loading) {
     return (

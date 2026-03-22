@@ -19,6 +19,7 @@ Optimisations:
 import math
 import logging
 import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, Future
 
 import cv2
@@ -288,7 +289,7 @@ class ProctoringOrchestrator:
         self._frames_eye_away: int = 0        # frames with a gaze-away alert
 
         # Gaze heatmap: list of (x, y) normalised positions sampled every N frames
-        self._gaze_samples: list[tuple[float, float]] = []
+        self._gaze_samples: deque[tuple[float, float]] = deque(maxlen=5000)
         self._gaze_sample_interval: int = 10  # overridden from config below
 
         cfg = _validate_config(config)
@@ -519,8 +520,6 @@ class ProctoringOrchestrator:
                     and self.eye_tracker.last_gaze_normalized is not None
                 ):
                     self._gaze_samples.append(self.eye_tracker.last_gaze_normalized)
-                    if len(self._gaze_samples) > 5000:
-                        self._gaze_samples = self._gaze_samples[-5000:]
 
             if not eye_away_this_frame:
                 self._frames_attentive += 1

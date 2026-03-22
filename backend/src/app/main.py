@@ -421,6 +421,78 @@ async def _schedule_loop():
             logger.error("Report scheduler error: %s", exc)
 
 
+def _auto_submit_stale_attempts() -> None:
+    """Find IN_PROGRESS attempts past their time limit and auto-submit them."""
+    from datetime import timedelta
+    from .models import Attempt, AttemptStatus, Exam, ProctoringEvent, SeverityEnum
+    from .modules.attempts.routes_public import _auto_score_attempt
+
+    now = datetime.now(timezone.utc)
+    submitted = 0
+    try:
+        with SessionLocal() as db:
+            # Find all IN_PROGRESS attempts
+            stale = db.query(Attempt).filter(
+                Attempt.status == AttemptStatus.IN_PROGRESS,
+                Attempt.started_at.isnot(None),
+            ).all()
+
+            for attempt in stale:
+                # Determine the deadline: time_limit + 30min grace, or 24h fallback
+                exam = attempt.exam
+                time_limit_min = getattr(exam, "time_limit", None) if exam else None
+                if time_limit_min:
+                    deadline = attempt.started_at + timedelta(minutes=int(time_limit_min) + 30)
+                else:
+                    deadline = attempt.started_at + timedelta(hours=24)
+
+                if now < deadline:
+                    continue
+
+                # Auto-submit this stale attempt
+                try:
+                    score_result = _auto_score_attempt(attempt, db)
+                    attempt.status = AttemptStatus.SUBMITTED
+                    attempt.submitted_at = now
+                    if score_result["score"] is not None:
+                        attempt.score = score_result["score"]
+                        attempt.grade = score_result.get("grade")
+
+                    # Record a proctoring event for audit trail
+                    event = ProctoringEvent(
+                        attempt_id=attempt.id,
+                        event_type="AUTO_SUBMITTED_TIMEOUT",
+                        severity=SeverityEnum.MEDIUM,
+                        detail=f"Attempt auto-submitted after timeout ({time_limit_min or 'no'} min limit + grace period)",
+                        occurred_at=now,
+                    )
+                    db.add(event)
+                    db.add(attempt)
+                    db.commit()
+                    submitted += 1
+                except Exception as sub_err:
+                    logger.warning("Failed to auto-submit stale attempt %s: %s", attempt.id, sub_err)
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        logger.error("Stale attempt cleanup error: %s", exc)
+
+    if submitted:
+        logger.info("Auto-submitted %d stale IN_PROGRESS attempt(s)", submitted)
+
+
+async def _stale_attempt_cleanup_loop():
+    """Run stale attempt cleanup every 30 minutes."""
+    while True:
+        await asyncio.sleep(30 * 60)
+        try:
+            _auto_submit_stale_attempts()
+        except Exception as exc:
+            logger.error("Stale attempt cleanup loop error: %s", exc)
+
+
 async def _retention_cleanup_loop():
     while True:
         try:
@@ -472,6 +544,7 @@ async def lifespan(_: FastAPI):
         background_tasks = [
             asyncio.create_task(_schedule_loop()),
             asyncio.create_task(_retention_cleanup_loop()),
+            asyncio.create_task(_stale_attempt_cleanup_loop()),
         ]
     elif not is_test_env:
         logger.info("This worker defers background tasks to the leader (PID %s)", os.getpid())

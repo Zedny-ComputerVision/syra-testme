@@ -75,6 +75,7 @@ class AudioMonitor:
         self.speech_min_rms = speech_min_rms
         self.speech_baseline_multiplier = speech_baseline_multiplier
         self.sample_rate = sample_rate
+        self._sample_rate_locked = False  # Lock after first audio chunk
 
         # WebRTC VAD instance
         self._vad = None
@@ -134,14 +135,17 @@ class AudioMonitor:
         if not audio_bytes or len(audio_bytes) < 4:
             return None
 
-        # Validate and apply client-reported sample rate
+        # Accept client-reported sample rate only on the first chunk, then lock it
         if sample_rate is not None:
             sr = int(sample_rate)
-            # Reject obviously invalid rates (must be between 8 kHz and 96 kHz)
-            if 8000 <= sr <= 96000:
-                self.sample_rate = sr
-            else:
-                logger.warning("Rejected invalid sample rate %d Hz — keeping %d Hz", sr, self.sample_rate)
+            if not self._sample_rate_locked:
+                if 8000 <= sr <= 96000:
+                    self.sample_rate = sr
+                else:
+                    logger.warning("Rejected invalid initial sample rate %d Hz — keeping %d Hz", sr, self.sample_rate)
+                self._sample_rate_locked = True
+            elif sr != self.sample_rate:
+                logger.warning("Ignoring sample rate change %d→%d Hz mid-session (locked at first value)", sr, self.sample_rate)
 
         try:
             pcm_int16 = np.frombuffer(audio_bytes, dtype=np.int16)

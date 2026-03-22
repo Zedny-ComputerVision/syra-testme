@@ -1629,6 +1629,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         _cached_events.append(event)
 
     _frame_proc_end = 0.0  # monotonic timestamp of last frame processing completion
+    _last_thumb_broadcast = 0.0  # monotonic timestamp of last thumbnail broadcast to admin viewers
 
     async def _async_db_commit():
         """Run db.commit() in executor to avoid blocking the event loop."""
@@ -1796,7 +1797,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
                     # Broadcast frame thumbnail + alerts to live admin viewers
                     if _live_viewers.get(attempt_id):
-                        # Send a small thumbnail (max 320px wide) to save bandwidth
+                        # Send a small thumbnail (max 320px wide) — rate-limited to 1fps
+                        _thumb_now = time.monotonic()
+                        _should_broadcast_thumb = (_thumb_now - _last_thumb_broadcast) >= 1.0
                         try:
                             import cv2 as _live_cv2
                             import numpy as _live_np
@@ -1810,7 +1813,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 _, _thumb_buf = _live_cv2.imencode('.jpg', _frame_img, [_live_cv2.IMWRITE_JPEG_QUALITY, 50])
                                 _thumb_bytes = _thumb_buf.tobytes()
                                 _live_latest_thumb[attempt_id] = _thumb_bytes
-                                await _broadcast_bytes_to_viewers(attempt_id, _thumb_bytes, "frame")
+                                if _should_broadcast_thumb:
+                                    await _broadcast_bytes_to_viewers(attempt_id, _thumb_bytes, "frame")
+                                    _last_thumb_broadcast = _thumb_now
                         except Exception:
                             pass
                         for alert in alerts:
@@ -2018,6 +2023,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 screen_history,
                                 occurred_at=event_time,
                                 request_ip=get_websocket_ip(websocket),
+                                violation_score=orchestrator.violation_score,
                             )
                             if reason:
                                 await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2073,6 +2079,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             history_events,
                             occurred_at=event.occurred_at,
                             request_ip=get_websocket_ip(websocket),
+                            violation_score=orchestrator.violation_score,
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2123,6 +2130,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             history_events,
                             occurred_at=event.occurred_at,
                             request_ip=get_websocket_ip(websocket),
+                            violation_score=orchestrator.violation_score,
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2191,6 +2199,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         history_events,
                         occurred_at=event_time,
                         request_ip=get_websocket_ip(websocket),
+                        violation_score=orchestrator.violation_score,
                     )
                     if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})
