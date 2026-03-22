@@ -115,6 +115,7 @@ function hasAnswerValue(value) {
 function useAutoSave(attemptId, delay = 2000) {
   const pending = useRef({})
   const timer = useRef(null)
+  const saveGeneration = useRef(0)
   const [saveState, setSaveState] = useState('idle')
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [saveError, setSaveError] = useState('')
@@ -125,6 +126,7 @@ function useAutoSave(attemptId, delay = 2000) {
     setSaveError('')
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
+      const gen = ++saveGeneration.current
       const entries = { ...pending.current }
       pending.current = {}
       const failedEntries = {}
@@ -138,6 +140,8 @@ function useAutoSave(attemptId, delay = 2000) {
           hadFailure = true
         }
       }
+      // If flush() ran while we were saving, discard our stale results
+      if (gen !== saveGeneration.current) return
       if (hadFailure) {
         pending.current = { ...failedEntries, ...pending.current }
         setSaveState('error')
@@ -151,6 +155,7 @@ function useAutoSave(attemptId, delay = 2000) {
 
   const flush = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current)
+    ++saveGeneration.current  // invalidate any in-flight save() callback
     const entries = { ...pending.current }
     pending.current = {}
     if (Object.keys(entries).length === 0) return
@@ -886,6 +891,7 @@ export default function Proctoring() {
       setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)
       submittedRef.current = true
+      setSubmitting(false)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch((error) => {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
