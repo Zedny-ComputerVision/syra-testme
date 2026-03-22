@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ..api.deps import ensure_permission, normalize_utc_datetime, parse_uuid_param
-from ..models import Attempt, AttemptStatus, Exam, RoleEnum, Schedule
+from ..models import Attempt, AttemptStatus, Exam, ExamStatus, RoleEnum, Schedule
 from ..schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
 from .audit import write_audit_log
 from .normalized_relations import exam_certificate, exam_proctoring, exam_runtime_settings
@@ -93,8 +93,11 @@ def serialize_schedulable_test(exam: Exam) -> ExamRead:
 
 def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     exam_id = body.exam_id or body.test_id
-    if exam_id and not db.get(Exam, exam_id):
+    exam = db.get(Exam, exam_id) if exam_id else None
+    if exam_id and not exam:
         raise HTTPException(status_code=404, detail="Test not found")
+    if exam and exam.status != ExamStatus.OPEN:
+        raise HTTPException(status_code=400, detail="Cannot schedule a test that is not published")
     existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.exam_id == exam_id))
     if existing:
         raise HTTPException(status_code=409, detail="Schedule already exists")
