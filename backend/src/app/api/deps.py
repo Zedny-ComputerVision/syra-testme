@@ -36,6 +36,7 @@ DEFAULT_PERMISSION_ROWS = [
     {"feature": "View Audit Log", "admin": True, "instructor": False, "learner": False},
     {"feature": "Manage Roles", "admin": True, "instructor": False, "learner": False},
     {"feature": "System Settings", "admin": True, "instructor": False, "learner": False},
+    {"feature": "proctoring.admin", "admin": True, "instructor": False, "learner": False},
 ]
 
 

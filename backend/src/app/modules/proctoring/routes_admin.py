@@ -60,7 +60,8 @@ async def list_proctoring_sessions(
     db: Session = Depends(get_db_dep),
 ):
     """List proctoring sessions with event summaries, filterable by exam/user/severity."""
-    offset, limit = normalize_pagination(page=page, page_size=page_size)
+    pag = normalize_pagination(page=page, page_size=page_size)
+    offset, limit = pag.offset, pag.limit
 
     # Base query: attempts that have at least one proctoring event
     q = db.query(Attempt).options(
