@@ -1537,7 +1537,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         "attempt_id": attempt_id,
         "user_name": attempt.user.name if attempt.user else None,
         "user_id": str(attempt.user_id),
-        "exam_title": attempt.exam.name if attempt.exam else None,
+        "exam_title": attempt.exam.title if attempt.exam else None,
         "exam_id": str(attempt.exam_id),
         "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
     }

@@ -161,10 +161,11 @@ export default function AdminLiveMonitor() {
   }, [])
 
   useEffect(() => {
+    if (watchingAttemptId) return
     fetchSessions()
     pollRef.current = setInterval(fetchSessions, 5000)
     return () => clearInterval(pollRef.current)
-  }, [fetchSessions])
+  }, [fetchSessions, watchingAttemptId])
 
   if (watchingAttemptId) {
     return (

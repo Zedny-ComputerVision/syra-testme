@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, case, and_
 from starlette.websockets import WebSocketState
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, subqueryload
 
 from ...api.deps import get_current_user, get_db_dep, require_permission
 from ...models import (
@@ -64,8 +64,8 @@ async def list_proctoring_sessions(
 
     # Base query: attempts that have at least one proctoring event
     q = db.query(Attempt).options(
-        joinedload(Attempt.user),
-        joinedload(Attempt.exam),
+        subqueryload(Attempt.user),
+        subqueryload(Attempt.exam),
     )
 
     if exam_id:
@@ -103,6 +103,15 @@ async def list_proctoring_sessions(
         elif sev_upper == "MEDIUM":
             q = q.filter((event_counts_sq.c.high_count > 0) | (event_counts_sq.c.medium_count > 0))
 
+    # Filter by minimum risk score in SQL so pagination is accurate
+    if min_risk is not None:
+        risk_expr = (
+            func.coalesce(event_counts_sq.c.high_count, 0) * 3
+            + func.coalesce(event_counts_sq.c.medium_count, 0) * 2
+            + func.coalesce(event_counts_sq.c.low_count, 0)
+        )
+        q = q.filter(risk_expr >= min_risk)
+
     total = q.count()
 
     # Sorting
@@ -127,12 +136,10 @@ async def list_proctoring_sessions(
     items = []
     for attempt, total_events, high, medium, low in rows:
         risk_score = (high or 0) * 3 + (medium or 0) * 2 + (low or 0)
-        if min_risk is not None and risk_score < min_risk:
-            continue
         items.append({
             "attempt_id": str(attempt.id),
             "exam_id": str(attempt.exam_id),
-            "exam_title": attempt.exam.name if attempt.exam else None,
+            "exam_title": attempt.exam.title if attempt.exam else None,
             "user_id": str(attempt.user_id),
             "user_name": attempt.user.name if attempt.user else None,
             "student_id": attempt.user.user_id if attempt.user else None,
