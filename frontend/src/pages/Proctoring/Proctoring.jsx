@@ -263,7 +263,9 @@ export default function Proctoring() {
       return
     }
     setScreenStream(storedStream)
-    screenShareEstablishedRef.current = true
+    // Don't set screenShareEstablishedRef here — it races with the loss-detection
+    // useEffect (which runs in the same render cycle while screenStream is still null).
+    // The loss-detection useEffect sets it when screenStream becomes non-null.
     setScreenShareGranted(true)
     setScreenShareGateError('')
   }, [proctorCfg.screen_capture, screenShareGranted, screenStream])
@@ -843,6 +845,19 @@ export default function Proctoring() {
 
   useEffect(() => {
     if (!attemptId || !proctorCfg.screen_capture || !screenStream || !window.MediaRecorder) return
+    // If the previous screen recorder died (stream was lost and re-established),
+    // reset the recording state so a fresh session can start.
+    const rec = screenRecordingRef.current
+    if (rec.recorder && rec.recorder.state === 'inactive') {
+      rec.recorder = null
+      rec.sessionId = null
+      rec.startedAt = null
+      rec.stoppedAt = null
+      rec.finalized = false
+      rec.finalizing = false
+      rec.chunks = []
+      rec.bytesRecorded = 0
+    }
     void startRecordingSession(screenStream, 'screen')
   }, [attemptId, proctorCfg.screen_capture, screenStream, startRecordingSession])
 
