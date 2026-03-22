@@ -70,6 +70,21 @@ def _extract_face_crop(img_bgr: np.ndarray) -> np.ndarray | None:
     return face_crop
 
 
+def _preprocess_id_image(img_bgr: np.ndarray) -> np.ndarray:
+    """Preprocess an ID card photo for OCR: grayscale, denoise, adaptive threshold."""
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    # Bilateral filter preserves edges while removing noise
+    gray = cv2.bilateralFilter(gray, 11, 17, 17)
+    # CLAHE for contrast normalisation under uneven lighting
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    # Adaptive threshold handles glare / shadow gradients
+    binary = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 10,
+    )
+    return binary
+
+
 def _tesseract_text(img_bgr: np.ndarray) -> dict:
     if pytesseract is None:
         return _easyocr_text(img_bgr, "pytesseract_not_installed")
@@ -85,9 +100,13 @@ def _tesseract_text(img_bgr: np.ndarray) -> dict:
                     pytesseract.pytesseract.tesseract_cmd = str(default_win_path)
             _TESSERACT_CONFIGURED = True
         _ = pytesseract.get_tesseract_version()
-        txt = pytesseract.image_to_string(img_bgr)
-        lines = [l.strip() for l in txt.splitlines() if l.strip()]
-        return {"raw": txt, "lines": lines[:20], "available": True, "error": None, "engine": "tesseract"}
+        # Run OCR on both raw and preprocessed image, merge results
+        preprocessed = _preprocess_id_image(img_bgr)
+        raw_txt = pytesseract.image_to_string(img_bgr)
+        pre_txt = pytesseract.image_to_string(preprocessed, config="--psm 6")
+        combined = raw_txt + "\n" + pre_txt
+        lines = list(dict.fromkeys(l.strip() for l in combined.splitlines() if l.strip()))
+        return {"raw": combined, "lines": lines[:30], "available": True, "error": None, "engine": "tesseract"}
     except Exception as exc:
         return _easyocr_text(img_bgr, str(exc))
 
