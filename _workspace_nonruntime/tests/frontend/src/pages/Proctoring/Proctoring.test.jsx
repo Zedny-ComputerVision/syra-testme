@@ -175,7 +175,8 @@ describe('Proctoring page', () => {
     expect(screen.getByText('Autosave: Pending changes')).toBeTruthy()
   })
 
-  it('blocks final submission when a required recording is not ready yet', async () => {
+  it('submits first and uploads recordings in the background', async () => {
+    submitAttemptMock.mockResolvedValue({ data: { status: 'SUBMITTED' } })
     getTestMock.mockResolvedValueOnce({
       data: {
         id: 'exam-1',
@@ -198,7 +199,6 @@ describe('Proctoring page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm Submit' }))
 
-    await waitFor(() => expect(screen.getByText('Required camera recording is not ready yet.')).toBeTruthy())
-    expect(submitAttemptMock).not.toHaveBeenCalled()
+    await waitFor(() => expect(submitAttemptMock).toHaveBeenCalledWith('attempt-1'))
   })
 })
