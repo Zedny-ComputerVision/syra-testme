@@ -1001,8 +1001,14 @@ async def submit_answer(
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     _ensure_attempt_access(db, attempt, current)
+    if attempt.status != AttemptStatus.IN_PROGRESS:
+        raise HTTPException(status_code=409, detail="Cannot modify answers on a submitted attempt")
     if _attempt_is_paused(db, attempt_pk):
         raise HTTPException(status_code=409, detail="Attempt is paused")
+    # Verify the question belongs to this attempt's exam
+    question = db.get(Question, body.question_id)
+    if not question or question.exam_id != attempt.exam_id:
+        raise HTTPException(status_code=400, detail="Question does not belong to this exam")
     persisted_answer = _persistable_answer(body.answer)
     ans = db.scalar(
         select(AttemptAnswer).where(
