@@ -807,6 +807,18 @@ def _build_rule_detail(rule: Mapping[str, object], event_type: str, actual_count
     message = rule.get("message")
     if isinstance(message, str) and message.strip():
         return message.strip()
+    conditions = rule.get("conditions")
+    if isinstance(conditions, list) and len(conditions) > 0:
+        cond_labels = [
+            f"{_event_label(str(c.get('event_type', '?')))} >= {c.get('threshold', 1)}"
+            for c in conditions if isinstance(c, Mapping)
+        ]
+        window = rule.get("window_seconds")
+        window_str = f" within {int(window)}s" if window else ""
+        return (
+            f"Compound rule triggered: {' AND '.join(cond_labels)}{window_str}. "
+            f"Action: {_action_label(str(rule.get('action') or 'WARN'))}."
+        )
     return (
         f"{_event_label(event_type)} reached {actual_count} occurrence(s). "
         f"Action: {_action_label(str(rule.get('action') or 'WARN'))}."
@@ -837,16 +849,54 @@ def _apply_alert_rules(
     for rule in rules:
         if not isinstance(rule, Mapping):
             continue
-        if str(rule.get("event_type") or "").upper() != source_event.event_type:
-            continue
-        threshold = max(1, int(rule.get("threshold") or 1))
-        rule_id = str(rule.get("id") or f"{source_event.event_type}-{threshold}")
-        if matching_count < threshold or _rule_already_triggered(history_events, rule_id):
-            continue
+
+        # ── AND-logic rules: require multiple conditions to ALL be met ──
+        conditions = rule.get("conditions")
+        if isinstance(conditions, list) and len(conditions) > 0:
+            rule_id = str(rule.get("id") or "compound-" + "-".join(
+                str(c.get("event_type", "?")) for c in conditions if isinstance(c, Mapping)
+            ))
+            if _rule_already_triggered(history_events, rule_id):
+                continue
+            window_sec = float(rule.get("window_seconds", 0))
+            all_met = True
+            for cond in conditions:
+                if not isinstance(cond, Mapping):
+                    all_met = False
+                    break
+                cond_type = str(cond.get("event_type") or "").upper()
+                cond_threshold = max(1, int(cond.get("threshold") or 1))
+                if window_sec > 0:
+                    cutoff = occurred_at - timedelta(seconds=window_sec)
+                    cond_count = sum(
+                        1 for e in history_events
+                        if e.event_type == cond_type
+                        and e.occurred_at is not None
+                        and e.occurred_at >= cutoff
+                    )
+                else:
+                    cond_count = sum(1 for e in history_events if e.event_type == cond_type)
+                if cond_count < cond_threshold:
+                    all_met = False
+                    break
+            if not all_met:
+                continue
+            # All conditions met — fall through to action handling below
+            matching_count = sum(1 for e in history_events if e.event_type == source_event.event_type)
+        else:
+            # ── Single event_type rule (original logic) ──
+            if str(rule.get("event_type") or "").upper() != source_event.event_type:
+                continue
+            threshold = max(1, int(rule.get("threshold") or 1))
+            rule_id = str(rule.get("id") or f"{source_event.event_type}-{threshold}")
+            if matching_count < threshold or _rule_already_triggered(history_events, rule_id):
+                continue
 
         action = str(rule.get("action") or "WARN").upper()
         severity_name = str(rule.get("severity") or "MEDIUM").upper()
         severity = SeverityEnum(severity_name if severity_name in {"LOW", "MEDIUM", "HIGH"} else "MEDIUM")
+        is_compound = isinstance(rule.get("conditions"), list)
+        threshold_val = int(rule.get("threshold") or 1) if not is_compound else 0
         detail = _build_rule_detail(rule, source_event.event_type, matching_count)
         escalation_event = ProctoringEvent(
             attempt_id=attempt.id,
@@ -858,8 +908,9 @@ def _apply_alert_rules(
                 "rule_id": rule_id,
                 "rule_action": action,
                 "trigger_event_type": source_event.event_type,
-                "threshold": threshold,
+                "threshold": threshold_val,
                 "actual_count": matching_count,
+                **({"conditions": conditions} if is_compound else {}),
             },
             occurred_at=occurred_at,
         )
@@ -874,7 +925,7 @@ def _apply_alert_rules(
                 "detail": detail,
                 "action": action,
                 "rule_id": rule_id,
-                "threshold": threshold,
+                "threshold": threshold_val,
                 "actual_count": matching_count,
             })
 

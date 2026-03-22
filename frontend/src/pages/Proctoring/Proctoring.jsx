@@ -273,6 +273,8 @@ export default function Proctoring() {
   // If the screen stream dies mid-exam (user clicked "Stop sharing"), re-gate
   useEffect(() => {
     if (screenShareGranted && !screenStream && proctorCfg.screen_capture) {
+      // During setup the stream can briefly go null — don't re-gate during grace period
+      if (screenShareGraceRef.current || screenSharePickerOpenRef.current) return
       setScreenShareGranted(false)
       setScreenShareGateError('Screen sharing was stopped. You must share your screen again to continue.')
     }
@@ -404,6 +406,7 @@ export default function Proctoring() {
     setScreenShareGateError('')
     setScreenShareGateLoading(true)
     screenSharePickerOpenRef.current = true
+    screenShareGraceRef.current = true
 
     const MAX_SCREEN_SHARE_ATTEMPTS = 2
 
@@ -1009,6 +1012,9 @@ export default function Proctoring() {
     }
     if (loading || submitting) return
     if (!screenShareEstablishedRef.current || screenShareLossHandledRef.current) return
+    // During the initial screen-share + fullscreen setup the stream can briefly
+    // become null before stabilising. Skip loss detection while the grace period is active.
+    if (screenShareGraceRef.current) return
     screenShareLossHandledRef.current = true
 
     // Screen share lost — warn the learner and give them a chance to re-share.

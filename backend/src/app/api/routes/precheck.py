@@ -244,6 +244,68 @@ def _extract_id_candidates(ocr_text: dict) -> list[str]:
     return out
 
 
+def _normalize_for_matching(text: str) -> str:
+    """Lowercase, strip accents/diacritics, collapse whitespace."""
+    import unicodedata
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", text.lower().strip())
+
+
+def _match_user_id_in_ocr(user_id: str, ocr_candidates: list[str], ocr_raw: str) -> dict:
+    """Check if the user's student ID appears in OCR output.
+
+    Returns {"matched": bool, "method": str, "matched_token": str|None}.
+    """
+    if not user_id:
+        return {"matched": False, "method": "no_user_id", "matched_token": None}
+    clean_uid = re.sub(r"[^A-Z0-9]", "", user_id.upper())
+    if not clean_uid:
+        return {"matched": False, "method": "no_user_id", "matched_token": None}
+    # Exact match in OCR candidates
+    for candidate in ocr_candidates:
+        clean_candidate = re.sub(r"[^A-Z0-9]", "", candidate.upper())
+        if clean_uid == clean_candidate:
+            return {"matched": True, "method": "exact", "matched_token": candidate}
+    # Substring match in raw OCR text (handles spaces/dashes in printed IDs)
+    raw_upper = re.sub(r"[^A-Z0-9]", "", ocr_raw.upper())
+    if clean_uid in raw_upper:
+        return {"matched": True, "method": "substring", "matched_token": clean_uid}
+    # Fuzzy: allow up to 1 char difference (OCR misread)
+    if len(clean_uid) >= 6:
+        for candidate in ocr_candidates:
+            clean_candidate = re.sub(r"[^A-Z0-9]", "", candidate.upper())
+            if len(clean_candidate) == len(clean_uid):
+                diffs = sum(1 for a, b in zip(clean_uid, clean_candidate) if a != b)
+                if diffs <= 1:
+                    return {"matched": True, "method": "fuzzy_1", "matched_token": candidate}
+    return {"matched": False, "method": "not_found", "matched_token": None}
+
+
+def _match_user_name_in_ocr(user_name: str, ocr_raw: str) -> dict:
+    """Check if the user's name appears in OCR output.
+
+    Splits name into parts and checks how many appear in the OCR text.
+    Returns {"matched": bool, "parts_found": int, "parts_total": int, "method": str}.
+    """
+    if not user_name or not ocr_raw:
+        return {"matched": False, "parts_found": 0, "parts_total": 0, "method": "no_data"}
+    norm_raw = _normalize_for_matching(ocr_raw)
+    name_parts = [p for p in _normalize_for_matching(user_name).split() if len(p) >= 2]
+    if not name_parts:
+        return {"matched": False, "parts_found": 0, "parts_total": 0, "method": "no_name_parts"}
+    found = sum(1 for part in name_parts if part in norm_raw)
+    # Require at least half the name parts (handles middle names, OCR noise)
+    threshold = max(1, len(name_parts) // 2)
+    matched = found >= threshold
+    return {
+        "matched": matched,
+        "parts_found": found,
+        "parts_total": len(name_parts),
+        "method": "name_parts",
+    }
+
+
 def _image_similarity_score(img_a: np.ndarray, img_b: np.ndarray) -> float:
     gray_a = cv2.cvtColor(img_a, cv2.COLOR_BGR2GRAY)
     gray_b = cv2.cvtColor(img_b, cv2.COLOR_BGR2GRAY)
@@ -438,6 +500,16 @@ async def precheck(
         ocr_available = bool(ocr_text.get("available"))
         id_evidence_ok = manual_valid or len(ocr_candidates) > 0
 
+        # Smart identity matching: compare OCR output against user's student ID and name
+        user = current
+        ocr_raw = (ocr_text or {}).get("raw", "")
+        id_match = _match_user_id_in_ocr(user.user_id, ocr_candidates, ocr_raw)
+        name_match = _match_user_name_in_ocr(user.name, ocr_raw)
+        identity_verified = id_match["matched"] or name_match["matched"]
+        # If smart matching found the student, count that as valid ID evidence
+        if identity_verified:
+            id_evidence_ok = True
+
         image_similarity = _image_similarity_score(selfie_img, id_img)
         similarity_threshold = float((proctoring_payload or {}).get("id_selfie_similarity_threshold", 0.94))
         id_too_similar = image_similarity >= similarity_threshold
@@ -467,6 +539,10 @@ async def precheck(
             failure_reasons.append("ID_CAPTURE_LOOKS_LIKE_SELFIE")
         if strict_doc_checks and not id_has_document_outline:
             failure_reasons.append("ID_DOCUMENT_NOT_DETECTED")
+        # Strict mode: require OCR text to match the user's registered identity
+        require_identity_match = bool((proctoring_payload or {}).get("require_identity_match", False))
+        if require_identity_match and not identity_verified:
+            failure_reasons.append("IDENTITY_NOT_MATCHED")
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         selfie_filename = f"{attempt_id}_selfie_{ts}.bin"
@@ -515,6 +591,18 @@ async def precheck(
     db.add(attempt)
     db.commit()
 
+    # Build identity match results (only populated when identity check ran)
+    identity_match_result = {}
+    if requirements["identity_required"] and not (ALLOW_TEST_BYPASS):
+        try:
+            identity_match_result = {
+                "id_number_match": id_match,
+                "name_match": name_match,
+                "identity_verified_by_ocr": identity_verified,
+            }
+        except NameError:
+            pass
+
     return {
         "status": "ok",
         "requirements": requirements,
@@ -530,4 +618,5 @@ async def precheck(
         "id_face_ratio": id_face_ratio,
         "id_document_outline": id_has_document_outline,
         "signature_mode": {"selfie": selfie_sig_mode, "id": id_sig_mode},
+        **identity_match_result,
     }

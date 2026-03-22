@@ -74,6 +74,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/attempts/attempt-1/take']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/attempts/:attemptId/take" element={<Proctoring />} />
+        <Route path="/attempts/:attemptId" element={<div>Attempt Result</div>} />
       </Routes>
     </MemoryRouter>,
   )

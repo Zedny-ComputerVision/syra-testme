@@ -369,8 +369,7 @@ test.describe('Core test cycle', () => {
     await expect(page.getByText('Autosave: Pending changes')).toBeVisible()
     await page.getByRole('button', { name: '2' }).click()
     await page.getByPlaceholder('Type your answer here...').fill('Because adding 2 and 2 gives a total of 4.')
-    await page.waitForTimeout(4500)
-    await expect(page.getByText(/Autosave: Saved/i)).toBeVisible()
+    await expect(page.getByText(/Autosave: Saved/i)).toBeVisible({ timeout: 15000 })
     await expect(page.getByText(/0 unanswered/i)).toBeVisible()
 
     // Inject real warning events so the admin timeline has actual data.

@@ -366,8 +366,8 @@ test.describe('Full proctoring cycle', () => {
     await adminPage.goto(`/admin/attempt-analysis?id=${attemptId}`)
 
     await expect(adminPage).toHaveURL(new RegExp(`/admin/attempt-analysis\\?id=${attemptId}`))
-    await expect(adminPage.getByRole('button', { name: 'Overview' })).toBeVisible()
-    await expect(adminPage.getByRole('heading', { name: 'Attempt Analysis' })).toBeVisible()
+    await expect(adminPage.getByRole('heading', { name: 'Attempt Analysis' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
+    await expect(adminPage.getByRole('button', { name: 'Overview' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
 
     await adminPage.getByRole('button', { name: 'Timeline' }).click()
     await expect(adminPage.getByText(/FOCUS LOSS|FULLSCREEN EXIT|CAMERA COVERED/i).first()).toBeVisible()
