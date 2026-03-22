@@ -514,10 +514,11 @@ class ProctoringOrchestrator:
                     eye_away_this_frame = True
                     self._frames_eye_away += 1
 
-                # Accumulate gaze heatmap sample every N frames
+                # Accumulate gaze heatmap sample every N frames (only when attentive)
                 if (
                     self._frame_count % self._gaze_sample_interval == 0
                     and self.eye_tracker.last_gaze_normalized is not None
+                    and not eye_away_this_frame
                 ):
                     self._gaze_samples.append(self.eye_tracker.last_gaze_normalized)
 

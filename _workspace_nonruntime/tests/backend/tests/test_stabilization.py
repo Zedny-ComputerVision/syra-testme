@@ -1143,7 +1143,9 @@ def test_submit_answer_upserts_same_attempt_question_pair():
     user_id = uuid.uuid4()
     question_id = uuid.uuid4()
 
-    attempt = Attempt(id=attempt_id, user_id=user_id)
+    exam_id = uuid.uuid4()
+    attempt = Attempt(id=attempt_id, user_id=user_id, exam_id=exam_id, status=attempts_routes.AttemptStatus.IN_PROGRESS)
+    question = Question(id=question_id, exam_id=exam_id)
     current_user = SimpleNamespace(id=user_id, role=RoleEnum.LEARNER)
 
     class DummySession:
@@ -1154,6 +1156,8 @@ def test_submit_answer_upserts_same_attempt_question_pair():
         def get(self, model, key):
             if model is Attempt:
                 return attempt
+            if model is Question:
+                return question
             return None
 
         def scalar(self, _query):
@@ -1201,8 +1205,10 @@ def test_submit_answer_accepts_multi_payload_and_serializes():
     attempt_id = uuid.uuid4()
     user_id = uuid.uuid4()
     question_id = uuid.uuid4()
+    exam_id = uuid.uuid4()
 
-    attempt = Attempt(id=attempt_id, user_id=user_id)
+    attempt = Attempt(id=attempt_id, user_id=user_id, exam_id=exam_id, status=attempts_routes.AttemptStatus.IN_PROGRESS)
+    question = Question(id=question_id, exam_id=exam_id)
     current_user = SimpleNamespace(id=user_id, role=RoleEnum.LEARNER)
 
     class DummySession:
@@ -1212,6 +1218,8 @@ def test_submit_answer_accepts_multi_payload_and_serializes():
         def get(self, model, key):
             if model is Attempt:
                 return attempt
+            if model is Question:
+                return question
             return None
 
         def scalar(self, _query):

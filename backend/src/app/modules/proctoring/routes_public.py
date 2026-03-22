@@ -1631,6 +1631,30 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     _frame_proc_end = 0.0  # monotonic timestamp of last frame processing completion
     _last_thumb_broadcast = 0.0  # monotonic timestamp of last thumbnail broadcast to admin viewers
 
+    # ── Pause state tracking ─────────────────────────────────────────
+    _is_paused = False
+    _last_pause_check = 0.0
+    _PAUSE_CHECK_INTERVAL = 5.0  # seconds between DB checks for pause state
+
+    def _check_pause_state() -> bool:
+        """Check if this attempt is currently paused by querying the latest pause/resume event."""
+        nonlocal _is_paused, _last_pause_check
+        now_mono = time.monotonic()
+        if now_mono - _last_pause_check < _PAUSE_CHECK_INTERVAL:
+            return _is_paused
+        _last_pause_check = now_mono
+        latest = db.scalar(
+            select(ProctoringEvent.event_type)
+            .where(
+                ProctoringEvent.attempt_id == attempt_id,
+                ProctoringEvent.event_type.in_(["ATTEMPT_PAUSED", "ATTEMPT_RESUMED"]),
+            )
+            .order_by(ProctoringEvent.occurred_at.desc())
+            .limit(1)
+        )
+        _is_paused = latest == "ATTEMPT_PAUSED"
+        return _is_paused
+
     async def _async_db_commit():
         """Run db.commit() in executor to avoid blocking the event loop."""
         _loop = asyncio.get_running_loop()
@@ -1692,6 +1716,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     await websocket.send_json({"type": "error", "detail": "Rate limit exceeded"})
                     continue
 
+                # Skip AI processing while attempt is paused by admin
+                if msg_type in ("frame", "audio", "screen") and _check_pause_state():
+                    await websocket.send_json({"type": "paused", "detail": "Attempt is paused by administrator"})
+                    continue
+
                 if msg_type == "frame":
                     b64 = data.get("data")
                     if not b64:
@@ -1701,7 +1730,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     if _recv_mono - _frame_proc_end < 0.03:
                         logger.debug("Dropping buffered frame for attempt %s (%.0fms after last)", attempt_id, (_recv_mono - _frame_proc_end) * 1000)
                         continue
-                    frame_bytes = base64.b64decode(b64)
+                    try:
+                        frame_bytes = base64.b64decode(b64)
+                    except Exception:
+                        logger.warning("Invalid base64 in frame data for attempt %s", attempt_id)
+                        continue
                     # Run CPU-heavy detection in thread pool to avoid blocking event loop
                     loop = asyncio.get_event_loop()
                     _proc_start = time.monotonic()
@@ -1878,7 +1911,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     b64 = data.get("data")
                     if not b64:
                         continue
-                    audio_bytes = base64.b64decode(b64)
+                    try:
+                        audio_bytes = base64.b64decode(b64)
+                    except Exception:
+                        logger.warning("Invalid base64 in audio data for attempt %s", attempt_id)
+                        continue
                     _sr = data.get("sample_rate")
                     logger.info("WS audio chunk for attempt %s (bytes=%d, sr=%s)", attempt_id, len(audio_bytes), _sr)
                     _audio_loop = asyncio.get_running_loop()
@@ -1975,7 +2012,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     b64 = data.get("data")
                     if not b64:
                         continue
-                    frame_bytes = base64.b64decode(b64)
+                    try:
+                        frame_bytes = base64.b64decode(b64)
+                    except Exception:
+                        logger.warning("Invalid base64 in screen data for attempt %s", attempt_id)
+                        continue
                     try:
                         await _save_evidence(attempt_id, frame_bytes, "SCREEN")
                     except Exception as ev_err:
@@ -2140,8 +2181,19 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                 if msg_type == "client_event":
                     # Browser-level violation sent directly by the frontend
                     # (copy/paste, keyboard shortcuts, tab switch, fullscreen exit, etc.)
+                    _ALLOWED_CLIENT_EVENT_TYPES = {
+                        "TAB_SWITCH", "FULLSCREEN_EXIT", "COPY_PASTE", "RIGHT_CLICK",
+                        "KEYBOARD_SHORTCUT", "BROWSER_EVENT", "SCREEN_SHARE_LOST",
+                        "DEVTOOLS_OPEN", "WINDOW_BLUR", "WINDOW_FOCUS",
+                        "CLIPBOARD_ACCESS", "PRINT_ATTEMPT", "CONTEXT_MENU",
+                    }
+                    _ALLOWED_CLIENT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
                     ce_type = str(data.get("event_type") or "BROWSER_EVENT").upper()[:64]
+                    if ce_type not in _ALLOWED_CLIENT_EVENT_TYPES:
+                        ce_type = "BROWSER_EVENT"
                     ce_sev_str = str(data.get("severity") or "MEDIUM").upper()
+                    if ce_sev_str not in _ALLOWED_CLIENT_SEVERITIES:
+                        ce_sev_str = "MEDIUM"
                     ce_detail = str(data.get("detail") or "Browser-level proctoring event")[:500]
                     ce_severity = SEVERITY_MAP.get(ce_sev_str, SeverityEnum.MEDIUM)
                     event_time = datetime.now(timezone.utc)
