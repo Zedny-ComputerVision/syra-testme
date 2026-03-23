@@ -152,6 +152,9 @@ def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, acto
     if not schedule:
         raise HTTPException(status_code=404, detail="Not found")
     payload = body.model_dump(exclude_unset=True)
+    new_exam_id = payload.get("exam_id") or payload.get("test_id")
+    if new_exam_id and not db.get(Exam, new_exam_id):
+        raise HTTPException(status_code=404, detail="Test not found")
     previous_scheduled_at = schedule.scheduled_at
     for field, value in payload.items():
         if value is None and field == "scheduled_at":

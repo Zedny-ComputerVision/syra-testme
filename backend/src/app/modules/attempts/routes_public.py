@@ -468,7 +468,8 @@ def _question_requires_manual_review(question: Question, submitted_answer) -> bo
     if not _answer_has_content(submitted_answer):
         return False
     if question.type == ExamType.TEXT:
-        return True
+        # TEXT questions with a correct_answer can be auto-graded via exact match
+        return not bool(_normalized_text(question.correct_answer))
     return not bool(_normalized_text(question.correct_answer))
 
 
@@ -521,7 +522,9 @@ def _ensure_attempt_access(db: Session, attempt: Attempt, current: User):
 
 def _evaluate_answer(question: Question, submitted_answer):
     if not question.correct_answer:
-        return None, None
+        # No correct answer configured — treat as 0 points (not None) to avoid
+        # blocking the manual review queue for non-TEXT questions
+        return None, 0.0
 
     q_type = question.type
     options = question.options or []

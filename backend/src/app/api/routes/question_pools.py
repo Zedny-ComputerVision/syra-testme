@@ -28,9 +28,9 @@ def _looks_like_pool_library_exam(exam: Exam, pool_id) -> bool:
 
 
 def _ensure_pool_library_exam(db: Session, current, pool: QuestionPool) -> Exam:
-    for exam in db.scalars(select(Exam).order_by(Exam.created_at)).all():
-        if _is_pool_library_exam(exam, pool.id):
-            return exam
+    existing = db.scalars(select(Exam).where(Exam.library_pool_id == pool.id).limit(1)).first()
+    if existing:
+        return existing
 
     now = datetime.now(timezone.utc)
     course = db.scalars(
@@ -88,17 +88,15 @@ def _ensure_pool_library_exam(db: Session, current, pool: QuestionPool) -> Exam:
 
 
 def _find_pool_library_exam(db: Session, pool_id) -> Exam | None:
-    for exam in db.scalars(select(Exam).order_by(Exam.created_at)).all():
-        if _is_pool_library_exam(exam, pool_id):
-            return exam
-    return None
+    return db.scalars(select(Exam).where(Exam.library_pool_id == pool_id).limit(1)).first()
 
 
 def _find_corrupted_pool_library_exam(db: Session, pool_id) -> Exam | None:
-    for exam in db.scalars(select(Exam).order_by(Exam.created_at)).all():
-        if _looks_like_pool_library_exam(exam, pool_id) and not _is_pool_library_exam(exam, pool_id):
-            return exam
-    return None
+    prefix = f"Pool Library {str(pool_id)[:8]}"
+    candidates = db.scalars(
+        select(Exam).where(Exam.title.startswith(prefix), Exam.library_pool_id != pool_id).limit(1)
+    ).first()
+    return candidates
 
 
 def _load_pool_questions(db: Session, pool_id):
@@ -334,6 +332,8 @@ async def seed_exam_from_pool(
         raise HTTPException(status_code=404, detail="Test not found")
     if current.role == RoleEnum.INSTRUCTOR and exam.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
+    if exam.status == ExamStatus.OPEN:
+        raise HTTPException(status_code=409, detail="Cannot seed questions into a published test")
     pool_questions = _load_pool_questions(db, pool_pk)
     if not pool_questions:
         raise HTTPException(status_code=400, detail="Pool has no questions. Add questions to the pool before seeding this test.")

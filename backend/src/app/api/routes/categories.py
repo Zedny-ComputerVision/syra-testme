@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import Category, RoleEnum
+from ...models import Category, Exam, RoleEnum
 from ...schemas import CategoryBase, CategoryRead, Message
 from ...services.audit import write_audit_log
 from ..deps import get_db_dep, parse_uuid_param, require_permission
@@ -119,6 +119,9 @@ async def delete_category(
     cat = db.get(Category, category_pk)
     if not cat:
         raise HTTPException(status_code=404, detail="Not found")
+    usage = db.scalar(select(func.count(Exam.id)).where(Exam.category_id == cat.id)) or 0
+    if usage:
+        raise HTTPException(status_code=409, detail="Cannot delete a category assigned to existing tests")
     category_name = cat.name
     category_pk_str = str(cat.id)
     db.delete(cat)

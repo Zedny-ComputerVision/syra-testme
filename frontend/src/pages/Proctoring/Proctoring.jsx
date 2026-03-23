@@ -237,6 +237,7 @@ export default function Proctoring() {
   const lastToastBlursRef = useRef(0)
   const timerExpiredRef = useRef(false)
   const submittedRef = useRef(false)
+  const submittingRef = useRef(false)
   const proctorNoticeCooldownRef = useRef(new Map())
   const lastTabSwitchEventRef = useRef(0)
   const preparedRecordingUploadsRef = useRef({})
@@ -890,7 +891,8 @@ export default function Proctoring() {
   }
 
   const handleSubmit = useCallback(async () => {
-    if (submitting) return
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     setSubmitPhase('Saving your latest answers...')
     setSubmitError('')
@@ -920,8 +922,9 @@ export default function Proctoring() {
       setSubmitError(e.response?.data?.detail || e.message || 'Submission failed. Please try again.')
       setSubmitPhase('')
       setSubmitting(false)
+      submittingRef.current = false
     }
-  }, [attemptId, emitProctoringNotice, flush, navigate, requiredRecordingSources, submitting, uploadRecordingSources])
+  }, [attemptId, emitProctoringNotice, flush, navigate, requiredRecordingSources, uploadRecordingSources])
 
   const handleForcedSubmit = useCallback((detail = 'Test auto-submitted due to violations.') => {
     const event = normalizeProctoringAlert({
@@ -1020,7 +1023,7 @@ export default function Proctoring() {
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.fullscreen_enforce, sendBrowserViolation, tabBlurs])
+  }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.fullscreen_enforce, proctorCfg.screen_capture, sendBrowserViolation, tabBlurs])
 
   useEffect(() => {
     if (!proctorCfg.screen_capture) {
@@ -1094,30 +1097,29 @@ export default function Proctoring() {
   // Tab blur / visibility tracking
   useEffect(() => {
     if (!proctorCfg.tab_switch_detect) return
-    const reportTabSwitch = (count, detail, visibility) => {
+    const tabBlurCountRef = { current: 0 }
+    const onVisibility = () => {
+      if (!document.hidden) return
       // Suppress tab switch violations while screen share picker is open or grace period
-      if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return count
+      if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return
       const now = Date.now()
-      if (now - lastTabSwitchEventRef.current < 750) return count
+      if (now - lastTabSwitchEventRef.current < 750) return
       lastTabSwitchEventRef.current = now
-      const next = count + 1
+      tabBlurCountRef.current += 1
+      const next = tabBlurCountRef.current
+      setTabBlurs(next)
+      const detail = `Tab hidden / switched (switch #${next})`
       sendBrowserViolation('TAB_SWITCH', 'MEDIUM', detail)
       if (attemptId) {
         proctoringPing(attemptId, {
           focus: false,
-          visibility,
+          visibility: 'hidden',
           blurs: next,
           fullscreen: !!document.fullscreenElement,
           camera_dark: cameraDark,
         }).then(applyPingResponse).catch(() => {
           emitProctoringNotice('tab_switch_ping', 'Unable to sync the tab-switch event with the server.', 'LOW')
         })
-      }
-      return next
-    }
-    const onVisibility = () => {
-      if (document.hidden) {
-        setTabBlurs((count) => reportTabSwitch(count, `Tab hidden / switched (switch #${count + 1})`, 'hidden'))
       }
     }
     document.addEventListener('visibilitychange', onVisibility)

@@ -1047,7 +1047,10 @@ async def proctoring_ping(
         if recent_same and recent_same.occurred_at:
             try:
                 dedup_s = _PING_DEDUP_SECONDS.get(etype, 8)
-                if (now - recent_same.occurred_at).total_seconds() < dedup_s:
+                occ = recent_same.occurred_at
+                if occ and occ.tzinfo is None:
+                    occ = occ.replace(tzinfo=timezone.utc)
+                if (now - occ).total_seconds() < dedup_s:
                     continue
             except (AttributeError, TypeError):
                 pass
@@ -1173,7 +1176,7 @@ async def upload_video_capture(
     extension = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else (
         "mp4" if "mp4" in content_type else "webm"
     )
-    safe_filename = filename or _video_filename(attempt_id, session_id, normalized_source, extension)
+    safe_filename = Path(filename).name if filename else _video_filename(attempt_id, session_id, normalized_source, extension)
     normalized_recording_started_at = _normalize_iso_datetime(recording_started_at)
     normalized_recording_stopped_at = _normalize_iso_datetime(recording_stopped_at)
     temp_path, upload_size = await _write_video_upload_to_temp_file(request, suffix=f".{extension}")
@@ -1670,7 +1673,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     # ── WebSocket rate limiting ──────────────────────────────────────
     _RATE_WINDOW_S = 5.0
     _RATE_GLOBAL_MAX = 30  # max messages per window across all types
-    _RATE_TYPE_MAX = {"frame": 20, "audio": 10, "screen": 5, "client_event": 25}
+    _RATE_TYPE_MAX = {"frame": 20, "audio": 10, "screen": 5, "client_event": 25, "answer_timing": 5, "keystroke_anomaly": 5}
     _rate_global_ts: list[float] = []
     _rate_type_ts: dict[str, list[float]] = {}
 
@@ -2216,7 +2219,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     db.add(event)
                     _append_cached_event(event)
                     history_events = _get_cached_events()
-                    history_events.append(event)
                     rule_result = _apply_alert_rules(
                         db, attempt, exam_cfg, event, history_events,
                         event_time, request_ip=get_websocket_ip(websocket),
