@@ -19,8 +19,8 @@ def _service_from_db(db=Depends(get_db_dep)) -> AuthService:
     return AuthService(AuthRepository(db))
 
 
-def _bg_send_admin_setup_email(user: User):
-    asyncio.run(send_admin_setup_email(user))
+async def _bg_send_admin_setup_email(user: User):
+    await send_admin_setup_email(user)
 
 
 @router.post("/setup", response_model=UserRead)

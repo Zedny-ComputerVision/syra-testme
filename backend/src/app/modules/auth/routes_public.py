@@ -43,20 +43,16 @@ def _request_ip(request: Request | None) -> str | None:
     return get_request_ip(request)
 
 
-def _run_email_background_task(email_task, *args):
-    asyncio.run(email_task(*args))
+async def _bg_send_welcome_email(user: User):
+    await send_welcome_email(user)
 
 
-def _bg_send_welcome_email(user: User):
-    _run_email_background_task(send_welcome_email, user)
+async def _bg_send_password_changed_email(user: User):
+    await send_password_changed_email(user)
 
 
-def _bg_send_password_changed_email(user: User):
-    _run_email_background_task(send_password_changed_email, user)
-
-
-def _bg_send_password_reset_email(user: User, token: str):
-    _run_email_background_task(send_password_reset_email, user, token)
+async def _bg_send_password_reset_email(user: User, token: str):
+    await send_password_reset_email(user, token)
 
 
 @router.get("/signup-status")
@@ -88,11 +84,14 @@ async def login(
     return service.login(body, request_ip=_request_ip(request))
 
 
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
 @router.post("/refresh", response_model=TokenRefresh)
 async def refresh(
+    request: Request,
     body: RefreshRequest,
     service: AuthService = Depends(_service_from_db),
 ):
+    del request
     return service.refresh_access_token(body)
 
 
@@ -143,11 +142,14 @@ async def forgot_password(
     return Message(detail="If the email exists, a reset link was sent")
 
 
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
 @router.post("/reset-password", response_model=Message)
 async def reset_password(
+    request: Request,
     body: ResetPasswordRequest,
     service: AuthService = Depends(_service_from_db),
 ):
+    del request
     return service.reset_password(body)
 
 

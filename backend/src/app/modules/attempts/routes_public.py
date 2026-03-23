@@ -1005,6 +1005,11 @@ async def submit_answer(
         raise HTTPException(status_code=409, detail="Cannot modify answers on a submitted attempt")
     if _attempt_is_paused(db, attempt_pk):
         raise HTTPException(status_code=409, detail="Attempt is paused")
+    # Server-side time limit enforcement
+    if attempt.exam and attempt.exam.time_limit and attempt.started_at:
+        deadline = attempt.started_at + timedelta(minutes=attempt.exam.time_limit)
+        if datetime.now(timezone.utc) > deadline + timedelta(seconds=30):
+            raise HTTPException(status_code=409, detail="Time limit exceeded")
     # Verify the question belongs to this attempt's exam
     question = db.get(Question, body.question_id)
     if not question or question.exam_id != attempt.exam_id:
@@ -1303,7 +1308,7 @@ async def verify_identity(
 
     saved_photo = _save_identity_photo(str(attempt_pk), photo_base64)
     if inspect.isawaitable(saved_photo):
-        await saved_photo
+        saved_photo = await saved_photo
 
     attempt.identity_verified = True
     attempt.id_verified = True

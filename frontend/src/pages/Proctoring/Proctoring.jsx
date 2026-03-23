@@ -180,6 +180,12 @@ function useAutoSave(attemptId, delay = 2000) {
     setLastSavedAt(new Date())
   }, [attemptId])
 
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [])
+
   return { save, flush, saveState, lastSavedAt, saveError }
 }
 
@@ -461,8 +467,11 @@ export default function Proctoring() {
     }
 
     screenSharePickerOpenRef.current = false
-    screenShareGraceRef.current = true
-    window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
+    // Only set grace period if screen share was successfully granted
+    if (screenShareEstablishedRef.current) {
+      screenShareGraceRef.current = true
+      window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
+    }
     setScreenShareGateLoading(false)
   }, [proctorCfg.fullscreen_enforce])
 
@@ -615,6 +624,9 @@ export default function Proctoring() {
         console.error(`MediaRecorder error (${source}):`, e?.error || e)
         setToast({ severity: 'MEDIUM', event_type: 'RECORDING_ERROR', detail: msg })
         emitProctoringNotice(`recorder_error_${source}`, msg, 'LOW', 'RECORDING_ERROR', 60000)
+        // Clear stale recorder so startRecordingSession can retry
+        recording.recorder = null
+        recording.sessionId = null
       }
       recorder.start(2000)
       recording.recorder = recorder

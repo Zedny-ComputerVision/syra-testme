@@ -626,7 +626,6 @@ async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> 
                 )
             temp_file.write(chunk)
     except Exception:
-        temp_file.close()
         temp_path.unlink(missing_ok=True)
         raise
     finally:
@@ -1532,6 +1531,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
     orchestrator = ProctoringOrchestrator(exam_cfg)
 
+    # Restore violation score from previous events so reconnects don't reset it
+    _prev_events = db.scalars(
+        select(ProctoringEvent).where(ProctoringEvent.attempt_id == attempt_id)
+    ).all()
+    for _prev in _prev_events:
+        sev_name = _prev.severity.value if hasattr(_prev.severity, "value") else str(_prev.severity or "LOW")
+        orchestrator.violation_score += orchestrator.score_weights.get(sev_name.upper(), 1)
+
     # ── Register live monitoring session ──────────────────────────────────────
     _live_session_info[attempt_id] = {
         "attempt_id": attempt_id,
@@ -1736,7 +1743,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         logger.warning("Invalid base64 in frame data for attempt %s", attempt_id)
                         continue
                     # Run CPU-heavy detection in thread pool to avoid blocking event loop
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     _proc_start = time.monotonic()
                     alerts = await loop.run_in_executor(None, orchestrator.process_frame, frame_bytes)
                     _frame_proc_end = time.monotonic()
@@ -2024,7 +2031,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     # OCR analysis for forbidden content (runs in executor to avoid blocking)
                     try:
                         import asyncio as _asyncio
-                        screen_alert = await _asyncio.get_event_loop().run_in_executor(
+                        screen_alert = await _asyncio.get_running_loop().run_in_executor(
                             None, analyze_screen_bytes, frame_bytes
                         )
                         if screen_alert:
@@ -2187,11 +2194,12 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         "DEVTOOLS_OPEN", "WINDOW_BLUR", "WINDOW_FOCUS",
                         "CLIPBOARD_ACCESS", "PRINT_ATTEMPT", "CONTEXT_MENU",
                     }
-                    _ALLOWED_CLIENT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+                    _ALLOWED_CLIENT_SEVERITIES = {"LOW", "MEDIUM"}
                     ce_type = str(data.get("event_type") or "BROWSER_EVENT").upper()[:64]
                     if ce_type not in _ALLOWED_CLIENT_EVENT_TYPES:
                         ce_type = "BROWSER_EVENT"
                     ce_sev_str = str(data.get("severity") or "MEDIUM").upper()
+                    # Cap client-reported severity to MEDIUM — only server-side AI can set HIGH/CRITICAL
                     if ce_sev_str not in _ALLOWED_CLIENT_SEVERITIES:
                         ce_sev_str = "MEDIUM"
                     ce_detail = str(data.get("detail") or "Browser-level proctoring event")[:500]

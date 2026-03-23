@@ -623,6 +623,11 @@ export default function ProctorOverlay({
         }
         // Code 1000 = normal closure (server-initiated graceful close)
         if (blockingCloseRef.current || ev.code === 4401 || ev.code === 4403 || ev.code === 4404) {
+          intentionalCloseRef.current = true
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current)
+            reconnectTimerRef.current = null
+          }
           setStatus('closed')
         } else if (intentionalCloseRef.current || ev.code === 1000) {
           setStatus('closed')
@@ -632,7 +637,8 @@ export default function ProctorOverlay({
       }
       ws.onerror = () => {
         console.debug('[ProctorOverlay] WebSocket error, will reconnect')
-        scheduleReconnect()
+        // Don't schedule reconnect here — onclose will fire next and handle it
+        // Scheduling here too causes double-reconnect or infinite loops on auth rejection
       }
     }
 
