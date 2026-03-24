@@ -403,10 +403,10 @@ fi
 
 if [[ -n "${SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS:-}" ]]; then
   CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS="${SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS}"
-else
-  # Signed URL token generation is not yet implemented for playback,
-  # so default to false to avoid 401 errors on Cloudflare Stream videos.
+elif [[ "$RUN_LOCAL_DB" == "1" ]]; then
   CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS="false"
+else
+  CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS="true"
 fi
 
 if [[ -z "$PROCTORING_VIDEO_STORAGE_PROVIDER" ]]; then

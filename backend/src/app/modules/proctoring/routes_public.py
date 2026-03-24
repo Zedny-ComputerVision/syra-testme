@@ -33,6 +33,7 @@ from ...services.notifications import notify_proctoring_event, notify_user
 from ...services.cloudflare_media import (
     cloudflare_video_storage_enabled,
     infer_cloudflare_ready_to_stream,
+    sign_cloudflare_playback_url,
     upload_video_to_cloudflare,
 )
 from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
@@ -168,6 +169,15 @@ def _is_absolute_http_url(value: object) -> bool:
 async def _hydrate_video_file_info(item: dict[str, object]) -> dict[str, object]:
     hydrated = dict(item or {})
     provider = str(hydrated.get("provider") or "").strip().lower()
+
+    if provider == "cloudflare":
+        # Sign Cloudflare Stream URLs so videos with require_signed_urls work
+        for key in ("url", "playback_url"):
+            raw_url = str(hydrated.get(key) or "").strip()
+            if raw_url:
+                hydrated[key] = sign_cloudflare_playback_url(raw_url)
+        return hydrated
+
     if provider != "supabase":
         return hydrated
 

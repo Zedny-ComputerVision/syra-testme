@@ -1,5 +1,7 @@
 import logging
 import mimetypes
+import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +13,63 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _CLOUDFLARE_NOT_READY_STATUSES = {"queued", "pending", "uploading", "processing", "inprogress", "error", "failed"}
+_CF_STREAM_URL_RE = re.compile(
+    r"(https://[^/]+\.cloudflarestream\.com/)([a-f0-9]{32})(/.*)",
+)
+
+
+def _signing_available() -> bool:
+    return bool(settings.CLOUDFLARE_STREAM_SIGNING_KEY and settings.CLOUDFLARE_STREAM_KEY_ID)
+
+
+def generate_signed_token(video_uid: str, *, expires_in: int = 3600) -> str | None:
+    """Generate a Cloudflare Stream signed JWT for a video UID.
+
+    Requires CLOUDFLARE_STREAM_SIGNING_KEY (PEM RSA private key, base64 or raw)
+    and CLOUDFLARE_STREAM_KEY_ID to be configured.
+    Returns None if signing is not configured.
+    """
+    if not _signing_available():
+        return None
+    try:
+        from jose import jwt as jose_jwt
+        import base64
+
+        key_raw = settings.CLOUDFLARE_STREAM_SIGNING_KEY
+        # The signing key from Cloudflare is base64-encoded PEM
+        if not key_raw.startswith("-----"):
+            key_raw = base64.b64decode(key_raw).decode("utf-8")
+
+        token = jose_jwt.encode(
+            {
+                "sub": video_uid,
+                "kid": settings.CLOUDFLARE_STREAM_KEY_ID,
+                "exp": int(time.time()) + expires_in,
+            },
+            key_raw,
+            algorithm="RS256",
+            headers={"kid": settings.CLOUDFLARE_STREAM_KEY_ID},
+        )
+        return token
+    except Exception as exc:
+        logger.warning("Failed to generate Cloudflare signed token: %s", exc)
+        return None
+
+
+def sign_cloudflare_playback_url(url: str) -> str:
+    """Replace the video UID in a Cloudflare Stream URL with a signed JWT token.
+
+    Input:  https://customer-xxx.cloudflarestream.com/<video-uid>/manifest/video.m3u8
+    Output: https://customer-xxx.cloudflarestream.com/<signed-token>/manifest/video.m3u8
+    """
+    match = _CF_STREAM_URL_RE.match(url or "")
+    if not match:
+        return url
+    video_uid = match.group(2)
+    token = generate_signed_token(video_uid)
+    if not token:
+        return url
+    return f"{match.group(1)}{token}{match.group(3)}"
 
 
 def cloudflare_video_storage_enabled() -> bool:
