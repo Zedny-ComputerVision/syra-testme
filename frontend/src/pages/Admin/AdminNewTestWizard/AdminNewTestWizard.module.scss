@@ -1413,6 +1413,9 @@
   flex-direction: column;
   gap: 0.45rem;
   margin-top: 0.85rem;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 .sessionIntro {
