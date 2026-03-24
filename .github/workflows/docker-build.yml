@@ -30,19 +30,14 @@ jobs:
             echo ">>> Stopping existing services..."
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
 
-            echo ">>> Configuring git credentials..."
-            git config credential.helper store
-            echo "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com" > ~/.git-credentials
-
             echo ">>> Pulling latest code from main..."
+            git remote set-url origin "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
             git fetch origin main
             git reset --hard origin/main
+            git remote set-url origin "https://github.com/Zedny-ComputerVision/syra-testme.git"
 
-            echo ">>> Running setup script..."
+            echo ">>> Running deploy script..."
             export SYRA_SEED_DEMO_DATA=0
             bash scripts/deploy-linux.sh
-
-            echo ">>> Cleaning up git credentials..."
-            rm -f ~/.git-credentials
 
             echo ">>> Deployment complete!"
