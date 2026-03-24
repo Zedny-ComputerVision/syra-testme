@@ -17,18 +17,17 @@ FORBIDDEN_LABELS = {
     "cell phone",
     "book",
     "laptop",
-    "remote",          # Remote controls (confusable with phones)
-    "keyboard",        # External keyboards (cheating aid)
-    "mouse",           # Computer mouse
     "tablet",          # YOLO often classifies tablets as laptops, but include for coverage
     "headphones",      # Earphones / headphones
     "earphones",
 }
+# "remote" removed — YOLO's TV-remote class fires constantly on dark shapes
+# (chair arms, shadows, clothing) producing too many false positives.
+# "keyboard" and "mouse" removed — users take exams on computers.
 LABEL_CONFIDENCE_OVERRIDES = {
     # Phones are small in webcam frames, so allow a lower confidence floor.
-    "cell phone": 0.25,
-    "remote": 0.3,
-    "tablet": 0.3,
+    "cell phone": 0.30,
+    "tablet": 0.40,
 }
 _model = None
 _model_load_failed = False
