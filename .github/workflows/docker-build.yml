@@ -31,14 +31,18 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
 
             echo ">>> Pulling latest code from main..."
-            # The config file on the VM is corrupted and git commands fail when trying 
-            # to read the remote URL. We will bypass the `origin` remote entirely.
+            # The existing repo at /opt/syra-testme is corrupted by a bad URL.
+            # We will clone fresh to a temp directory to guarantee it works.
+            cd /opt
+            rm -rf syra-testme-temp
+            git clone "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git" syra-testme-temp
             
-            # Clean up working tree
-            git reset --hard HEAD
+            echo ">>> Replacing old code..."
+            # Make sure we don't delete the storage/ volumes inside the old directory
+            rsync -a --exclude 'backend/storage' syra-testme-temp/ syra-testme/
+            rm -rf syra-testme-temp
             
-            # Pull directly from the URL, bypassing any saved remotes
-            git pull "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git" main
+            cd /opt/syra-testme
             
             echo ">>> Running deploy script..."
             export SYRA_SEED_DEMO_DATA=0
