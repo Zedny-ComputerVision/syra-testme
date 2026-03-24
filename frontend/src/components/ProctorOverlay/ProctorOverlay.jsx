@@ -8,6 +8,17 @@ const MAX_VISIBLE_ALERTS = 5
 const ALERT_DEDUP_WINDOW_MS = 4000
 const VISUAL_FRAME_INTERVAL_FLOOR_MS = 500
 const VISUAL_FRAME_INTERVAL_DEFAULT_MS = 750
+const STANDARD_CAPTURE_RESOLUTION = { width: 640, height: 480 }
+const HIGH_DETAIL_CAPTURE_RESOLUTION = { width: 960, height: 720 }
+const DETECTOR_STATUS_LABELS = {
+  face_detection: 'Face',
+  multi_face: 'Multiple faces',
+  object_detection: 'Forbidden objects',
+  eye_tracking: 'Eye tracking',
+  head_pose_detection: 'Head pose',
+  audio_detection: 'Audio',
+  mouth_detection: 'Mouth movement',
+}
 
 function readNumber(value, fallback) {
   const numeric = Number(value)
@@ -48,6 +59,10 @@ function needsRealtimeMonitoring(config) {
   )
 }
 
+function getCaptureResolution(config) {
+  return config?.object_detection ? HIGH_DETAIL_CAPTURE_RESOLUTION : STANDARD_CAPTURE_RESOLUTION
+}
+
 function normalizeIncomingAlert(rawAlert) {
   if (!rawAlert || typeof rawAlert !== 'object') return null
   const eventType = String(rawAlert.event_type || rawAlert.type || 'PROCTORING_ALERT').trim().toUpperCase()
@@ -83,6 +98,8 @@ export default function ProctorOverlay({
   const [status, setStatus] = useState('disconnected')
   const [alerts, setAlerts] = useState([])
   const [cameraError, setCameraError] = useState('')
+  const [detectorStatus, setDetectorStatus] = useState({})
+  const [detectorStatusReady, setDetectorStatusReady] = useState(false)
   const wsRef = useRef(null)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -128,6 +145,8 @@ export default function ProctorOverlay({
   const audioChunkInterval = useMemo(() => Math.max(250, readNumber(config.audio_chunk_ms, 500)), [config])
   const screenshotIntervalMs = useMemo(() => Math.max(1000, readNumber(config.screenshot_interval_sec, 60) * 1000), [config])
   const screenCaptureEnabled = useMemo(() => Boolean(config.screen_capture), [config.screen_capture])
+  const captureResolution = useMemo(() => getCaptureResolution(config), [config])
+  const captureJpegQuality = useMemo(() => (config?.object_detection ? 0.82 : 0.75), [config?.object_detection])
   const cameraBlockedLumaHard = useMemo(() => readNumber(config.camera_cover_hard_luma, 20), [config.camera_cover_hard_luma])
   const cameraBlockedLumaSoft = useMemo(() => readNumber(config.camera_cover_soft_luma, 40), [config.camera_cover_soft_luma])
   const cameraBlockedStddevMax = useMemo(() => readNumber(config.camera_cover_stddev_max, 16), [config.camera_cover_stddev_max])
@@ -143,6 +162,33 @@ export default function ProctorOverlay({
   useEffect(() => {
     onStatusChange?.(status)
   }, [status, onStatusChange])
+
+  useEffect(() => {
+    setDetectorStatus({})
+    setDetectorStatusReady(false)
+  }, [attemptId])
+
+  const detectorHealth = useMemo(() => (
+    Object.entries(DETECTOR_STATUS_LABELS)
+      .filter(([key]) => Boolean(config?.[key]))
+      .map(([key, label]) => {
+        let state = 'pending'
+        if (detectorStatusReady) {
+          state = detectorStatus[key] === false ? 'degraded' : 'active'
+        }
+        return { key, label, state }
+      })
+  ), [config, detectorStatus, detectorStatusReady])
+  const detectorIssues = useMemo(
+    () => detectorHealth.filter((entry) => entry.state === 'degraded'),
+    [detectorHealth],
+  )
+  const detectorSummary = useMemo(() => {
+    if (detectorHealth.length === 0) return ''
+    if (!detectorStatusReady) return 'Checking detector availability...'
+    if (detectorIssues.length === 0) return 'All enabled detectors are active.'
+    return `${detectorIssues.length} detector${detectorIssues.length === 1 ? '' : 's'} unavailable: ${detectorIssues.map((entry) => entry.label).join(', ')}.`
+  }, [detectorHealth, detectorIssues, detectorStatusReady])
 
   const pushAlert = useCallback((rawAlert) => {
     const event = normalizeIncomingAlert(rawAlert)
@@ -226,15 +272,17 @@ export default function ProctorOverlay({
 
   const analyzeLocalFrame = useCallback(() => {
     if (!videoRef.current) return null
+    const { width, height } = captureResolution
     const canvas = canvasRef.current || document.createElement('canvas')
     canvasRef.current = canvas
-    canvas.width = 640
-    canvas.height = 480
+    canvas.width = width
+    canvas.height = height
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    ctx.drawImage(videoRef.current, 0, 0, 640, 480)
+    // Preserve more detail for small-object detection, especially phones.
+    ctx.drawImage(videoRef.current, 0, 0, width, height)
 
     try {
-      const image = ctx.getImageData(0, 0, 640, 480).data
+      const image = ctx.getImageData(0, 0, width, height).data
       let total = 0
       let totalSq = 0
       let samples = 0
@@ -266,9 +314,8 @@ export default function ProctorOverlay({
     } catch (error) {
       emitRateLimitedSystemError('camera_frame_read', error?.message || 'Unable to inspect the current camera frame for proctoring.', 10000)
     }
-    // 0.75 quality: balances transmission speed with detection accuracy
-    return canvas.toDataURL('image/jpeg', 0.75).split(',')[1]
-  }, [cameraBlockedHardConsecutiveFrames, cameraBlockedLumaHard, cameraBlockedLumaSoft, cameraBlockedSoftConsecutiveFrames, cameraBlockedStddevMax, emitLocalCameraCoveredAlert, emitRateLimitedSystemError, onCameraStateChange])
+    return canvas.toDataURL('image/jpeg', captureJpegQuality).split(',')[1]
+  }, [cameraBlockedHardConsecutiveFrames, cameraBlockedLumaHard, cameraBlockedLumaSoft, cameraBlockedSoftConsecutiveFrames, cameraBlockedStddevMax, captureJpegQuality, captureResolution, emitLocalCameraCoveredAlert, emitRateLimitedSystemError, onCameraStateChange])
 
   // Start camera
   useEffect(() => {
@@ -563,8 +610,19 @@ export default function ProctorOverlay({
               intentionalCloseRef.current = true
             }
           } else if (msg.type === 'error') {
+            if (typeof msg.detail === 'string') {
+              if (msg.detail.includes('Object detection model unavailable')) {
+                setDetectorStatus((prev) => ({ ...prev, object_detection: false }))
+                setDetectorStatusReady(true)
+              } else if (msg.detail.includes('Face detection model unavailable')) {
+                setDetectorStatus((prev) => ({ ...prev, face_detection: false, multi_face: false }))
+                setDetectorStatusReady(true)
+              }
+            }
             emitSystemError(msg.detail)
           } else if (msg.type === 'detection_status') {
+            setDetectorStatus(msg)
+            setDetectorStatusReady(true)
             // Server reports which detection modules are actually active
             const disabled = Object.entries(msg)
               .filter(([k, v]) => k !== 'type' && v === false)
@@ -687,6 +745,30 @@ export default function ProctorOverlay({
 
       {cameraError && (
         <div className={styles.cameraError}>{cameraError}</div>
+      )}
+
+      {detectorHealth.length > 0 && (
+        <div className={styles.detectorPanel}>
+          <div className={styles.detectorHeader}>
+            <span className={styles.detectorTitle}>Detector Health</span>
+            <span className={`${styles.detectorSummary} ${detectorIssues.length > 0 ? styles.detectorSummaryWarn : ''}`}>
+              {detectorSummary}
+            </span>
+          </div>
+          <div className={styles.detectorGrid}>
+            {detectorHealth.map((entry) => (
+              <div
+                key={entry.key}
+                className={`${styles.detectorChip} ${styles[`detectorChip${entry.state.charAt(0).toUpperCase()}${entry.state.slice(1)}`]}`}
+              >
+                <span className={styles.detectorChipLabel}>{entry.label}</span>
+                <span className={styles.detectorChipState}>
+                  {entry.state === 'active' ? 'Active' : entry.state === 'degraded' ? 'Unavailable' : 'Checking'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {alerts.length > 0 && (

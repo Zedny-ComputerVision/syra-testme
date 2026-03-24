@@ -25,7 +25,7 @@ const DEFAULT_PROCTORING = {
   mouth_detection: false,
   copy_paste_block: false,
   screen_capture: false,
-  object_confidence_threshold: 0.5,
+  object_confidence_threshold: 0.35,
   multi_face_min_area_ratio: 0.008,
   max_face_absence_sec: 1.5,
   frame_interval_ms: 500,

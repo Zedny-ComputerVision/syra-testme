@@ -61,7 +61,7 @@ DEFAULT_PROCTORING = {
     "cheating_consecutive_frames": 5,
     "head_pose_consecutive": 5,
     "eye_consecutive": 5,
-    "object_confidence_threshold": 0.5,
+    "object_confidence_threshold": 0.35,
     "audio_consecutive_chunks": 2,
     "audio_speech_consecutive_chunks": 2,
     "audio_speech_min_rms": 0.03,

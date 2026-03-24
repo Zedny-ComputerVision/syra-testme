@@ -68,6 +68,56 @@ def test_publish_requires_question_before_publishing(client, admin_headers):
     assert response.json()["error"]["message"] == "Test must have at least one question before publishing"
 
 
+def test_create_schedule_allows_draft_admin_test(client, admin_headers, learner_user):
+    test_body = _create_admin_test(client, admin_headers, name="Draft Schedule Test")
+
+    response = client.post(
+        "/api/schedules/",
+        headers=admin_headers,
+        json={
+            "exam_id": test_body["id"],
+            "user_id": str(learner_user.id),
+            "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "access_mode": "OPEN",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exam_id"] == test_body["id"]
+    assert body["user_id"] == str(learner_user.id)
+    assert body["access_mode"] == "OPEN"
+
+
+def test_create_schedule_rejects_archived_admin_test(client, admin_headers, learner_user):
+    test_body = _create_admin_test(client, admin_headers, name="Archived Schedule Test")
+    _add_question_to_test(client, admin_headers, test_body["id"])
+    publish_response = client.post(
+        f"/api/admin/tests/{test_body['id']}/publish",
+        headers=admin_headers,
+    )
+    assert publish_response.status_code == 200
+    archive_response = client.post(
+        f"/api/admin/tests/{test_body['id']}/archive",
+        headers=admin_headers,
+    )
+    assert archive_response.status_code == 200
+
+    response = client.post(
+        "/api/schedules/",
+        headers=admin_headers,
+        json={
+            "exam_id": test_body["id"],
+            "user_id": str(learner_user.id),
+            "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "access_mode": "OPEN",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Cannot schedule an archived test"
+
+
 def test_publish_test_returns_published_status_and_code(client, admin_headers):
     test_body = _create_admin_test(client, admin_headers, name="Published Test")
     _add_question_to_test(client, admin_headers, test_body["id"])

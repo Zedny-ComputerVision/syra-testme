@@ -88,6 +88,84 @@
   text-align: center;
 }
 
+.detectorPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+}
+
+.detectorHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.detectorTitle {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detectorSummary {
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
+.detectorSummaryWarn {
+  color: var(--color-warning-text);
+}
+
+.detectorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.45rem;
+}
+
+.detectorChip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+}
+
+.detectorChipActive {
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+}
+
+.detectorChipPending {
+  border-color: color-mix(in srgb, var(--color-info) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-info) 8%, var(--color-surface));
+}
+
+.detectorChipDegraded {
+  border-color: color-mix(in srgb, var(--color-warning) 40%, var(--color-border));
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+}
+
+.detectorChipLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.detectorChipState {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 /* ---- Alerts ---- */
 .alerts {
   display: flex;
