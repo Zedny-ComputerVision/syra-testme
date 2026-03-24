@@ -530,7 +530,7 @@ async def precheck(
         face_match = False
         # ID-vs-selfie comparison needs a more lenient threshold than live
         # verification: the ID photo may differ in age, lighting, and angle.
-        base_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.45))
+        base_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.55))
         if selfie_sig_mode == id_sig_mode == "mediapipe":
             threshold = min(base_threshold, 0.25)
         elif selfie_sig_mode == id_sig_mode == "haar":
