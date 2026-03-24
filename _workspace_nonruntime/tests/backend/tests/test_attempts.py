@@ -82,6 +82,22 @@ def test_submit_correct_attempt_returns_full_score(client, admin_headers, learne
     assert body["grade"] is None
 
 
+def test_learner_can_fetch_questions_without_correct_answers(client, admin_headers, learner_headers):
+    exam, _question = _create_open_exam(client, admin_headers)
+
+    response = client.get(
+        "/api/questions/",
+        headers=learner_headers,
+        params={"exam_id": exam["id"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["question_type"] == "MCQ"
+    assert body[0]["correct_answer"] is None
+
+
 def test_submit_incorrect_attempt_returns_zero_score(client, admin_headers, learner_headers):
     exam, question = _create_open_exam(client, admin_headers)
     _, _, submit_response = _start_attempt(

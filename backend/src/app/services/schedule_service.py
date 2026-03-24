@@ -8,13 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ..api.deps import ensure_permission, normalize_utc_datetime, parse_uuid_param
-from ..models import Attempt, AttemptStatus, Exam, ExamStatus, RoleEnum, Schedule
+from ..models import Attempt, AttemptStatus, Exam, RoleEnum, Schedule
 from ..schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
 from .audit import write_audit_log
-from .normalized_relations import exam_certificate, exam_proctoring, exam_runtime_settings
+from .normalized_relations import exam_archived_at, exam_certificate, exam_proctoring, exam_runtime_settings
 from .notifications import notify_user
 
 logger = logging.getLogger(__name__)
+
+
+def ensure_exam_schedulable(exam: Exam | None) -> None:
+    if exam and exam_archived_at(exam):
+        raise HTTPException(status_code=400, detail="Cannot schedule an archived test")
 
 
 def validate_schedule_time(
@@ -96,8 +101,7 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     exam = db.get(Exam, exam_id) if exam_id else None
     if exam_id and not exam:
         raise HTTPException(status_code=404, detail="Test not found")
-    if exam and exam.status != ExamStatus.OPEN:
-        raise HTTPException(status_code=400, detail="Cannot schedule a test that is not published")
+    ensure_exam_schedulable(exam)
     existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.exam_id == exam_id))
     if existing:
         raise HTTPException(status_code=409, detail="Schedule already exists")
@@ -153,8 +157,11 @@ def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, acto
         raise HTTPException(status_code=404, detail="Not found")
     payload = body.model_dump(exclude_unset=True)
     new_exam_id = payload.get("exam_id") or payload.get("test_id")
-    if new_exam_id and not db.get(Exam, new_exam_id):
+    target_exam_id = new_exam_id or schedule.exam_id
+    target_exam = db.get(Exam, target_exam_id) if target_exam_id else None
+    if new_exam_id and not target_exam:
         raise HTTPException(status_code=404, detail="Test not found")
+    ensure_exam_schedulable(target_exam)
     previous_scheduled_at = schedule.scheduled_at
     for field, value in payload.items():
         if value is None and field == "scheduled_at":

@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,13 @@ def _parse_uuid(value: str, detail: str) -> str:
         return str(UUID(value))
     except (TypeError, ValueError):
         raise HTTPException(status_code=404, detail=detail)
+
+
+def _learner_question_response(question: Question) -> dict:
+    masked = QuestionRead.model_validate(question, from_attributes=True).model_copy(
+        update={"correct_answer": None}
+    )
+    return jsonable_encoder(masked, by_alias=True)
 
 
 @router.post("/", response_model=QuestionRead)
@@ -57,10 +66,7 @@ async def list_questions(exam_id: str | None = None, db: Session = Depends(get_d
         query = query.where(Question.exam_id == parsed_exam_id)
     questions = db.scalars(query.order_by(Question.order.asc(), Question.created_at.asc())).all()
     if current.role == RoleEnum.LEARNER:
-        return [
-            QuestionRead.model_validate(q, from_attributes=True).model_copy(update={"correct_answer": None})
-            for q in questions
-        ]
+        return JSONResponse(content=[_learner_question_response(q) for q in questions])
     return questions
 
 
@@ -77,7 +83,7 @@ async def get_question(
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
     if current.role == RoleEnum.LEARNER:
-        return QuestionRead.model_validate(q, from_attributes=True).model_copy(update={"correct_answer": None})
+        return JSONResponse(content=_learner_question_response(q))
     return q
 
 

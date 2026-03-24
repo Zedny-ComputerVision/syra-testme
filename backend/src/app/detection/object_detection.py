@@ -3,6 +3,7 @@
 import logging
 import os
 import threading
+
 import cv2
 import numpy as np
 
@@ -23,6 +24,12 @@ FORBIDDEN_LABELS = {
     "headphones",      # Earphones / headphones
     "earphones",
 }
+LABEL_CONFIDENCE_OVERRIDES = {
+    # Phones are small in webcam frames, so allow a lower confidence floor.
+    "cell phone": 0.25,
+    "remote": 0.3,
+    "tablet": 0.3,
+}
 _model = None
 _model_load_failed = False
 _lock = threading.Lock()
@@ -31,10 +38,22 @@ logger = logging.getLogger(__name__)
 
 
 class ObjectDetector:
-    def __init__(self, forbidden_labels: set[str] = None, confidence_threshold: float = 0.65):
+    def __init__(self, forbidden_labels: set[str] = None, confidence_threshold: float = 0.35):
         self.forbidden_labels = forbidden_labels or FORBIDDEN_LABELS
         self.confidence_threshold = confidence_threshold
         self._warned_unavailable = False
+
+    def _normalize_label(self, label: str) -> str:
+        return str(label or "").strip().lower()
+
+    def _label_threshold(self, label: str) -> float:
+        normalized = self._normalize_label(label)
+        return min(self.confidence_threshold, LABEL_CONFIDENCE_OVERRIDES.get(normalized, self.confidence_threshold))
+
+    def _prediction_threshold(self) -> float:
+        if not LABEL_CONFIDENCE_OVERRIDES:
+            return self.confidence_threshold
+        return min(self.confidence_threshold, min(LABEL_CONFIDENCE_OVERRIDES.values()))
 
     def _get_model(self):
         global _model, _model_load_failed
@@ -66,19 +85,30 @@ class ObjectDetector:
                 self._warned_unavailable = True
             return []
 
-        results = model.predict(frame, verbose=False, conf=self.confidence_threshold, imgsz=640)
+        results = model.predict(
+            frame,
+            verbose=False,
+            conf=self._prediction_threshold(),
+            imgsz=960,
+        )
         alerts = []
         seen: set[str] = set()
         for r in results:
             for cls_id, conf in zip(r.boxes.cls, r.boxes.conf):
                 label = r.names[int(cls_id)]
-                if label in self.forbidden_labels and label not in seen:
-                    seen.add(label)
+                normalized_label = self._normalize_label(label)
+                confidence = float(conf)
+                if (
+                    normalized_label in self.forbidden_labels
+                    and normalized_label not in seen
+                    and confidence >= self._label_threshold(normalized_label)
+                ):
+                    seen.add(normalized_label)
                     alerts.append({
                         "event_type": "FORBIDDEN_OBJECT",
                         "severity": "HIGH",
                         "detail": f"Forbidden object detected: {label}",
-                        "confidence": float(conf),
+                        "confidence": confidence,
                     })
         return alerts
 

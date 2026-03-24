@@ -11,6 +11,7 @@ from ..core.config import get_settings
 from ..core.security import hash_password
 from ..db.base import Base
 from ..models import Course, CourseStatus, Exam, ExamStatus, ExamType, Node, Question, QuestionPool, RoleEnum, User
+from .normalized_relations import set_exam_library_pool
 
 
 settings = get_settings()
@@ -87,6 +88,44 @@ def reset_seed(db: Session):
     db.add(pool)
     db.flush()
 
+    library_course = Course(
+        title="Question Pool Library",
+        description="Hidden library course for question pool storage",
+        status=CourseStatus.DRAFT,
+        created_by_id=admin.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(library_course)
+    db.flush()
+
+    library_node = Node(
+        course_id=library_course.id,
+        title="Shared Pool Questions",
+        order=0,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(library_node)
+    db.flush()
+
+    library_exam = Exam(
+        node_id=library_node.id,
+        title=f"Pool Library {str(pool.id)[:8]}",
+        description=f"Hidden storage exam for pool {pool.name}",
+        type=ExamType.MCQ,
+        status=ExamStatus.CLOSED,
+        time_limit=60,
+        max_attempts=1,
+        created_by_id=admin.id,
+        library_pool_id=pool.id,
+        created_at=now,
+        updated_at=now,
+    )
+    set_exam_library_pool(library_exam, pool.id)
+    db.add(library_exam)
+    db.flush()
+
     test = Exam(
         node_id=node.id,
         title="Seed Test",
@@ -128,6 +167,20 @@ def reset_seed(db: Session):
     )
     db.add(test)
     db.flush()
+
+    pool_question = Question(
+        exam_id=library_exam.id,
+        text="CPU stands for?",
+        type=ExamType.MCQ,
+        options=["Central Processing Unit", "Computer Program Utility", "Central Program Unit", "Core Processing Utility"],
+        correct_answer="Central Processing Unit",
+        points=1,
+        order=1,
+        pool_id=pool.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(pool_question)
 
     question = Question(
         exam_id=test.id,

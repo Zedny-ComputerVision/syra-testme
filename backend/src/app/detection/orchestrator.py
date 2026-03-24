@@ -105,8 +105,9 @@ DEFAULT_ORCHESTRATOR_CONFIG = {
     "eye_yaw_max_rad": None,
     "eye_change_threshold_rad": 0.2,
     "mouth_open_threshold": 0.35,
-    # Object detection: 0.45 balances sensitivity and false-positive rate at 640x480 input
-    "object_confidence_threshold": 0.45,
+    # Object detection: 0.35 improves phone sensitivity while per-label overrides
+    # keep phones/remotes more permissive than larger forbidden objects.
+    "object_confidence_threshold": 0.35,
     "audio_rms_threshold": 0.08,
     "audio_consecutive_chunks": 2,
     "audio_speech_consecutive_chunks": 2,
@@ -342,7 +343,7 @@ class ProctoringOrchestrator:
 
         self.mouth_monitor = MouthMonitor(open_threshold=cfg.get("mouth_open_threshold", 0.35))
         self.object_detector = ObjectDetector(
-            confidence_threshold=cfg.get("object_confidence_threshold", 0.5),
+            confidence_threshold=cfg.get("object_confidence_threshold", 0.35),
         )
         self.audio_monitor = AudioMonitor(
             noise_threshold=cfg.get("audio_rms_threshold", 0.08),
