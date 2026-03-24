@@ -637,7 +637,11 @@ export default function AdminAttemptVideos() {
   return (
     <div className={styles.page}>
       <div className={styles.head}>
-        <button type="button" className={styles.backBtn} onClick={() => window.opener ? window.close() : navigate(-1)}>
+        <button type="button" className={styles.backBtn} onClick={() => {
+          if (window.opener) { window.close(); return }
+          if (window.history.length > 1) { navigate(-1); return }
+          navigate('/admin/attempt-analysis')
+        }}>
           {window.opener ? 'Close tab' : 'Back'}
         </button>
         <div className={styles.headContent}>
