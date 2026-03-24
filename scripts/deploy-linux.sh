@@ -119,7 +119,9 @@ wait_for_service_health() {
         return 0
         ;;
       unhealthy|exited|dead)
-        docker logs --tail 120 "$container_id" >&2 || true
+        log "!!! HEALTHCHECK FAILED for $service !!!"
+        log ">>> Container logs:"
+        docker logs --tail 200 "$container_id" >&2 || true
         die "Service '$service' became $status."
         ;;
     esac
@@ -127,7 +129,9 @@ wait_for_service_health() {
     elapsed=$((elapsed + interval_seconds))
   done
 
-  docker logs --tail 120 "$container_id" >&2 || true
+  log "!!! TIMEOUT WAITING FOR $service !!!"
+  log ">>> Container logs:"
+  docker logs --tail 200 "$container_id" >&2 || true
   die "Timed out waiting for service '$service' to become healthy."
 }
 
