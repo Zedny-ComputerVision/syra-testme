@@ -163,15 +163,32 @@ fi
 
 ensure_backend_env_sane
 
+SEED_LOGIN_USERS="${SYRA_SEED_LOGIN_USERS:-0}"
+RESET_LOGIN_PASSWORDS="${SYRA_RESET_LOGIN_PASSWORDS:-1}"
+ADMIN_PASSWORD="${SYRA_ADMIN_PASSWORD:-Admin1234!}"
+INSTRUCTOR_PASSWORD="${SYRA_INSTRUCTOR_PASSWORD:-Instructor1234!}"
+STUDENT_PASSWORD="${SYRA_STUDENT_PASSWORD:-Student1234!}"
+
+frontend_url="$(read_env_value "$BACKEND_ENV" "FRONTEND_BASE_URL")"
+backend_url="$(read_env_value "$BACKEND_ENV" "BACKEND_BASE_URL")"
+
+[[ -n "$frontend_url" ]] || frontend_url="http://localhost"
+[[ -n "$backend_url" ]] || backend_url="${frontend_url%/}/api"
+
+api_health_url="${backend_url%/}/health"
+db_health_url="${backend_url%/}/health/db"
+login_url="${frontend_url%/}/login"
+
+log "Building images (first run may take several minutes)..."
+(
+  cd "$REPO_ROOT"
+  compose build
+)
+
 # ── Pre-flight database connectivity check ───────────────────
 db_url="$(read_env_value "$BACKEND_ENV" "DATABASE_URL")"
 if [[ -n "$db_url" ]]; then
   log "Testing database connectivity..."
-  # Build the backend image first (if not cached) so we can use it for the check
-  (
-    cd "$REPO_ROOT"
-    compose build backend >/dev/null 2>&1 || true
-  )
   db_check_output="$(
     cd "$REPO_ROOT"
     compose run --rm --no-deps -T \
@@ -206,26 +223,10 @@ except Exception as e:
   fi
 fi
 
-SEED_LOGIN_USERS="${SYRA_SEED_LOGIN_USERS:-0}"
-RESET_LOGIN_PASSWORDS="${SYRA_RESET_LOGIN_PASSWORDS:-1}"
-ADMIN_PASSWORD="${SYRA_ADMIN_PASSWORD:-Admin1234!}"
-INSTRUCTOR_PASSWORD="${SYRA_INSTRUCTOR_PASSWORD:-Instructor1234!}"
-STUDENT_PASSWORD="${SYRA_STUDENT_PASSWORD:-Student1234!}"
-
-frontend_url="$(read_env_value "$BACKEND_ENV" "FRONTEND_BASE_URL")"
-backend_url="$(read_env_value "$BACKEND_ENV" "BACKEND_BASE_URL")"
-
-[[ -n "$frontend_url" ]] || frontend_url="http://localhost"
-[[ -n "$backend_url" ]] || backend_url="${frontend_url%/}/api"
-
-api_health_url="${backend_url%/}/health"
-db_health_url="${backend_url%/}/health/db"
-login_url="${frontend_url%/}/login"
-
-log "Deploying production stack with Docker Compose."
+log "Starting services..."
 (
   cd "$REPO_ROOT"
-  if ! compose up --build -d --remove-orphans 2>&1; then
+  if ! compose up -d --remove-orphans 2>&1; then
     log "ERROR: 'docker compose up' failed. Fetching backend logs for diagnostics..."
     compose logs --tail 200 backend >&2 || true
     die "docker compose up failed — see backend logs above."
@@ -237,7 +238,7 @@ sleep 3
 
 # If the backend container already exited, show logs immediately instead of
 # waiting through the full health-check timeout.
-_backend_cid="$(compose ps -q backend 2>/dev/null || true)"
+_backend_cid="$(compose ps -a -q backend 2>/dev/null || true)"
 if [[ -n "$_backend_cid" ]]; then
   _backend_state="$(docker inspect --format '{{.State.Status}}' "$_backend_cid" 2>/dev/null || true)"
   if [[ "$_backend_state" == "exited" || "$_backend_state" == "dead" ]]; then
