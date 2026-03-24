@@ -214,6 +214,13 @@ export default function SystemCheckPage() {
   const loadConfig = useCallback(async () => {
     setConfigLoading(true)
     setConfigError('')
+    if (!testId) {
+      setConfigError('Invalid test link. Return to the available tests list and try again.')
+      setProctorCfg({})
+      setRequirements(getJourneyRequirements({}))
+      setConfigLoading(false)
+      return
+    }
     try {
       const { data } = await getTest(testId)
       const normalized = normalizeTest(data)

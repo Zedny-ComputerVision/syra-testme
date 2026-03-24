@@ -6,7 +6,7 @@ import ViolationToast from '../../components/ViolationToast/ViolationToast'
 import useAuth from '../../hooks/useAuth'
 import { getAttempt, getAttemptAnswers, submitAnswer, submitAttempt } from '../../services/attempt.service'
 import { getTestQuestions, getTest } from '../../services/test.service'
-import { proctoringPing, uploadProctoringVideo } from '../../services/proctoring.service'
+import { proctoringPing, reportProctoringVideoUploadProgress, uploadProctoringVideo } from '../../services/proctoring.service'
 import { normalizeQuestion, normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements, normalizeProctoringConfig } from '../../utils/proctoringRequirements'
 import { requestEntireScreenShare, ENTIRE_SCREEN_REQUIRED } from '../../utils/screenCapture'
@@ -42,6 +42,15 @@ const DEFAULT_PROCTORING = {
   camera_cover_soft_consecutive_frames: 2,
   screenshot_interval_sec: 60,
   max_tab_blurs: 0,
+}
+
+const VIDEO_UPLOAD_PROGRESS_STEP = 5
+const VIDEO_UPLOAD_PROGRESS_INTERVAL_MS = 1000
+
+function clampUploadPercent(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.min(100, Math.max(0, Math.round(numeric)))
 }
 
 function normalizeProctoringAlert(rawAlert) {
@@ -106,6 +115,7 @@ function hasAnswerValue(value) {
 function useAutoSave(attemptId, delay = 2000) {
   const pending = useRef({})
   const timer = useRef(null)
+  const saveGeneration = useRef(0)
   const [saveState, setSaveState] = useState('idle')
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [saveError, setSaveError] = useState('')
@@ -116,6 +126,7 @@ function useAutoSave(attemptId, delay = 2000) {
     setSaveError('')
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
+      const gen = ++saveGeneration.current
       const entries = { ...pending.current }
       pending.current = {}
       const failedEntries = {}
@@ -129,6 +140,8 @@ function useAutoSave(attemptId, delay = 2000) {
           hadFailure = true
         }
       }
+      // If flush() ran while we were saving, discard our stale results
+      if (gen !== saveGeneration.current) return
       if (hadFailure) {
         pending.current = { ...failedEntries, ...pending.current }
         setSaveState('error')
@@ -142,6 +155,7 @@ function useAutoSave(attemptId, delay = 2000) {
 
   const flush = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current)
+    ++saveGeneration.current  // invalidate any in-flight save() callback
     const entries = { ...pending.current }
     pending.current = {}
     if (Object.keys(entries).length === 0) return
@@ -166,6 +180,12 @@ function useAutoSave(attemptId, delay = 2000) {
     setLastSavedAt(new Date())
   }, [attemptId])
 
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [])
+
   return { save, flush, saveState, lastSavedAt, saveError }
 }
 
@@ -182,6 +202,7 @@ export default function Proctoring() {
   const [violations, setViolations] = useState({ HIGH: 0, MEDIUM: 0 })
   const [toast, setToast] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [submitPhase, setSubmitPhase] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [restoreWarning, setRestoreWarning] = useState('')
@@ -207,6 +228,7 @@ export default function Proctoring() {
   const [screenShareGateError, setScreenShareGateError] = useState('')
   const [screenShareGateLoading, setScreenShareGateLoading] = useState(false)
   const screenStreamCleanupRef = useRef(null)
+  const isMountedRef = useRef(true)
 
   const { save, flush, saveState, lastSavedAt, saveError } = useAutoSave(attemptId)
   const cameraRecordingRef = useRef(createRecordingController('camera'))
@@ -214,8 +236,11 @@ export default function Proctoring() {
   const wsWarnedRef = useRef(false)
   const lastToastBlursRef = useRef(0)
   const timerExpiredRef = useRef(false)
+  const submittedRef = useRef(false)
+  const submittingRef = useRef(false)
   const proctorNoticeCooldownRef = useRef(new Map())
   const lastTabSwitchEventRef = useRef(0)
+  const preparedRecordingUploadsRef = useRef({})
   const [reloadKey, setReloadKey] = useState(0)
   const sendClientEventRef = useRef(null)
   // Raw WS send (any JSON payload); registered by ProctorOverlay
@@ -251,7 +276,9 @@ export default function Proctoring() {
       return
     }
     setScreenStream(storedStream)
-    screenShareEstablishedRef.current = true
+    // Don't set screenShareEstablishedRef here — it races with the loss-detection
+    // useEffect (which runs in the same render cycle while screenStream is still null).
+    // The loss-detection useEffect sets it when screenStream becomes non-null.
     setScreenShareGranted(true)
     setScreenShareGateError('')
   }, [proctorCfg.screen_capture, screenShareGranted, screenStream])
@@ -259,6 +286,8 @@ export default function Proctoring() {
   // If the screen stream dies mid-exam (user clicked "Stop sharing"), re-gate
   useEffect(() => {
     if (screenShareGranted && !screenStream && proctorCfg.screen_capture) {
+      // During setup the stream can briefly go null — don't re-gate during grace period
+      if (screenShareGraceRef.current || screenSharePickerOpenRef.current) return
       setScreenShareGranted(false)
       setScreenShareGateError('Screen sharing was stopped. You must share your screen again to continue.')
     }
@@ -276,6 +305,14 @@ export default function Proctoring() {
       setLoading(true)
       setLoadError('')
       setRestoreWarning('')
+      if (!attemptId) {
+        setExam(null)
+        setQuestions([])
+        setAnswers({})
+        setLoadError('Invalid attempt link. Return to your attempts list and try again.')
+        setLoading(false)
+        return
+      }
       try {
         const attemptRes = await getAttempt(attemptId)
         const att = attemptRes.data
@@ -364,40 +401,79 @@ export default function Proctoring() {
   )
 
   const screenShareRequired = Boolean(proctorCfg.screen_capture) && !screenShareGranted
+  const requiredRecordingSources = React.useMemo(() => {
+    const sources = []
+    if (journeyRequirements.cameraRequired) sources.push('camera')
+    if (journeyRequirements.screenRequired) sources.push('screen')
+    return sources
+  }, [journeyRequirements.cameraRequired, journeyRequirements.screenRequired])
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   const handleScreenShareGate = useCallback(async () => {
     setScreenShareGateError('')
     setScreenShareGateLoading(true)
     screenSharePickerOpenRef.current = true
-    try {
-      const stream = await requestEntireScreenShare()
-      setScreenStream(stream)
-      screenShareEstablishedRef.current = true
-      setScreenShareGranted(true)
-      // Enter fullscreen after a short delay — calling requestFullscreen()
-      // immediately after getDisplayMedia() can kill the screen share track
-      // in some browsers. The delay lets the track stabilize first.
-      if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        // Verify the track is still alive before entering fullscreen
-        if (stream.getVideoTracks().some((t) => t.readyState === 'live')) {
-          try { await document.documentElement.requestFullscreen() } catch { /* non-blocking */ }
+    screenShareGraceRef.current = true
+
+    const MAX_SCREEN_SHARE_ATTEMPTS = 2
+
+    for (let attempt = 0; attempt < MAX_SCREEN_SHARE_ATTEMPTS; attempt++) {
+      try {
+        const stream = await requestEntireScreenShare()
+        setScreenStream(stream)
+        screenShareEstablishedRef.current = true
+        setScreenShareGranted(true)
+
+        // Enter fullscreen after delay — calling requestFullscreen()
+        // immediately after getDisplayMedia() can kill the screen share track
+        // in some browsers. The delay lets the track stabilize first.
+        if (proctorCfg.fullscreen_enforce && !document.fullscreenElement) {
+          await new Promise((resolve) => setTimeout(resolve, 800))
+          if (stream.getVideoTracks().some((t) => t.readyState === 'live')) {
+            try { await document.documentElement.requestFullscreen() } catch { /* non-blocking */ }
+          }
+          // Verify screen share survived fullscreen transition
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          if (!stream.getVideoTracks().some((t) => t.readyState === 'live')) {
+            // Screen share died after fullscreen — exit and retry
+            if (document.fullscreenElement) {
+              try { await document.exitFullscreen() } catch { /* ignore */ }
+            }
+            stream.getTracks().forEach((t) => t.stop())
+            if (attempt < MAX_SCREEN_SHARE_ATTEMPTS - 1) continue
+            setScreenShareGateError('Screen sharing stopped after entering fullscreen. Please try again.')
+            setScreenShareGranted(false)
+            screenShareEstablishedRef.current = false
+            break
+          }
         }
+        // Success — exit retry loop
+        break
+      } catch (err) {
+        if (err.code === ENTIRE_SCREEN_REQUIRED) {
+          setScreenShareGateError('You must share your entire screen (not a window or tab). Please try again and select "Entire screen".')
+        } else if (err.name === 'NotAllowedError') {
+          setScreenShareGateError('Screen sharing was denied. You must share your screen to continue with this test.')
+        } else {
+          setScreenShareGateError(err.message || 'Failed to start screen sharing. Please try again.')
+        }
+        break
       }
-    } catch (err) {
-      if (err.code === ENTIRE_SCREEN_REQUIRED) {
-        setScreenShareGateError('You must share your entire screen (not a window or tab). Please try again and select "Entire screen".')
-      } else if (err.name === 'NotAllowedError') {
-        setScreenShareGateError('Screen sharing was denied. You must share your screen to continue with this test.')
-      } else {
-        setScreenShareGateError(err.message || 'Failed to start screen sharing. Please try again.')
-      }
-    } finally {
-      screenSharePickerOpenRef.current = false
+    }
+
+    screenSharePickerOpenRef.current = false
+    // Only set grace period if screen share was successfully granted
+    if (screenShareEstablishedRef.current) {
       screenShareGraceRef.current = true
       window.setTimeout(() => { screenShareGraceRef.current = false }, 5000)
-      setScreenShareGateLoading(false)
     }
+    setScreenShareGateLoading(false)
   }, [proctorCfg.fullscreen_enforce])
 
   const registerSendClientEvent = useCallback((fn) => {
@@ -463,6 +539,7 @@ export default function Proctoring() {
   }
 
   const setRecordingStatusForSource = useCallback((source, value) => {
+    if (!isMountedRef.current) return
     if (source === 'screen') {
       setScreenRecordingStatus(value)
       return
@@ -542,9 +619,15 @@ export default function Proctoring() {
         recording.chunks.push(event.data)
         recording.bytesRecorded += event.data.size
       }
-      recorder.onerror = () => {
+      recorder.onerror = (e) => {
         setRecordingStatusForSource(source, 'failed')
-        emitProctoringNotice(`recorder_error_${source}`, `Browser ${source} recording encountered an error.`, 'LOW')
+        const msg = `Recording interrupted (${source}) — your exam continues but video may be incomplete.`
+        console.error(`MediaRecorder error (${source}):`, e?.error || e)
+        setToast({ severity: 'MEDIUM', event_type: 'RECORDING_ERROR', detail: msg })
+        emitProctoringNotice(`recorder_error_${source}`, msg, 'LOW', 'RECORDING_ERROR', 60000)
+        // Clear stale recorder so startRecordingSession can retry
+        recording.recorder = null
+        recording.sessionId = null
       }
       recorder.start(2000)
       recording.recorder = recorder
@@ -555,25 +638,37 @@ export default function Proctoring() {
     }
   }, [attemptId, emitProctoringNotice, setRecordingStatusForSource])
 
-  const stopAndFinalizeSingleRecording = useCallback(async (source) => {
+  const prepareSingleRecordingUpload = useCallback(async (source, { required = false } = {}) => {
+    const existingPayload = preparedRecordingUploadsRef.current[source]
+    if (existingPayload) {
+      return existingPayload
+    }
     const recording = source === 'screen' ? screenRecordingRef.current : cameraRecordingRef.current
     const recorder = recording.recorder
     const sessionId = recording.sessionId
-    if (!recorder && !sessionId) return
+    if (!recorder && !sessionId) {
+      if (required) {
+        throw new Error(`Required ${source} recording is not ready yet.`)
+      }
+      return
+    }
     if (recording.finalizing || recording.finalized) return
     recording.finalizing = true
     setRecordingStatusForSource(source, 'saving')
     if (recorder && recorder.state !== 'inactive') {
+      // Request final data chunk before stopping to avoid losing the tail end
+      try { recorder.requestData?.() } catch (error) {
+        console.error(`Failed to request final ${source} recorder data before stopping.`, error)
+      }
+      // Brief wait for the final dataavailable event to fire
+      await new Promise((resolve) => setTimeout(resolve, 250))
       await new Promise((resolve) => {
-        const timeout = setTimeout(resolve, 3000)
+        const timeout = setTimeout(resolve, 5000)
         recorder.addEventListener('stop', () => {
           recording.stoppedAt = recording.stoppedAt || new Date().toISOString()
           clearTimeout(timeout)
           resolve()
         }, { once: true })
-        try { recorder.requestData?.() } catch (error) {
-          console.error(`Failed to request final ${source} recorder data before stopping.`, error)
-        }
         recorder.stop()
       })
     }
@@ -581,6 +676,9 @@ export default function Proctoring() {
     if (!recording.chunks.length || !sessionId) {
       setRecordingStatusForSource(source, 'failed')
       recording.finalizing = false
+      if (required) {
+        throw new Error(`Required ${source} recording did not capture any video data.`)
+      }
       return
     }
 
@@ -588,29 +686,26 @@ export default function Proctoring() {
     const filename = `${attemptId}_${source}_${sessionId}.${extension}`
     const blob = new Blob(recording.chunks, { type: recording.mimeType || `video/${extension}` })
     try {
-      let lastError = null
-      for (let i = 0; i < 3; i += 1) {
-        try {
-          await uploadProctoringVideo(attemptId, sessionId, source, filename, blob, {
-            recording_started_at: recording.startedAt,
-            recording_stopped_at: recording.stoppedAt,
-          })
-          lastError = null
-          break
-        } catch (e) {
-          lastError = e
-          await new Promise((resolve) => setTimeout(resolve, 300))
-        }
-      }
-      if (lastError) throw lastError
-      setRecordingStatusForSource(source, 'saved')
       recording.finalized = true
+      const payload = {
+        attemptId,
+        sessionId,
+        source,
+        filename,
+        blob,
+        metadata: {
+          recording_started_at: recording.startedAt,
+          recording_stopped_at: recording.stoppedAt,
+        },
+      }
+      preparedRecordingUploadsRef.current[source] = payload
       recording.sessionId = null
       recording.recorder = null
       recording.startedAt = null
       recording.stoppedAt = null
       recording.chunks = []
       recording.bytesRecorded = 0
+      return payload
     } catch (error) {
       setRecordingStatusForSource(source, 'failed')
       emitProctoringNotice(
@@ -618,19 +713,142 @@ export default function Proctoring() {
         error?.response?.data?.detail || error?.message || `Unable to save the ${source} recording.`,
         'LOW',
       )
+      if (required) {
+        throw error
+      }
     } finally {
       recording.finalizing = false
     }
   }, [attemptId, emitProctoringNotice, setRecordingStatusForSource])
 
-  const stopAndFinalizeRecordings = useCallback(async () => {
-    // Run camera and screen finalization in parallel to avoid sequential delay
-    const tasks = [stopAndFinalizeSingleRecording('camera')]
-    if (proctorCfg.screen_capture) {
-      tasks.push(stopAndFinalizeSingleRecording('screen'))
+  const prepareRecordingUploads = useCallback(async (sources = []) => {
+    const normalizedSources = Array.from(new Set((sources || []).filter(Boolean)))
+    if (normalizedSources.length === 0) return []
+    const payloads = await Promise.all(
+      normalizedSources.map((source) => prepareSingleRecordingUpload(source, { required: true })),
+    )
+    return payloads.filter(Boolean)
+  }, [prepareSingleRecordingUpload])
+
+  const uploadPreparedRecording = useCallback(async (payload) => {
+    const { attemptId: uploadAttemptId, sessionId, source, filename, blob, metadata } = payload
+    const progressState = {
+      lastReportedPercent: null,
+      lastReportedAt: 0,
+      lastStatus: '',
     }
-    await Promise.allSettled(tasks)
-  }, [proctorCfg.screen_capture, stopAndFinalizeSingleRecording])
+    const totalBytes = Number(blob?.size) > 0 ? Number(blob.size) : 0
+
+    const sendUploadProgress = async ({ uploadedBytes = 0, progressPercent, status = 'uploading' }) => {
+      let normalizedPercent = progressPercent == null
+        ? (totalBytes > 0 ? clampUploadPercent((Number(uploadedBytes || 0) / totalBytes) * 100) : 0)
+        : clampUploadPercent(progressPercent)
+
+      if (status === 'complete') {
+        normalizedPercent = 100
+      } else if (status !== 'error' && progressState.lastReportedPercent != null) {
+        normalizedPercent = Math.max(normalizedPercent, progressState.lastReportedPercent)
+      }
+
+      if (status === 'uploading' || status === 'processing') {
+        normalizedPercent = Math.min(99, normalizedPercent)
+      }
+
+      const now = Date.now()
+      const statusChanged = progressState.lastStatus !== status
+      const percentAdvanced = progressState.lastReportedPercent == null
+        || normalizedPercent >= progressState.lastReportedPercent + VIDEO_UPLOAD_PROGRESS_STEP
+      const heartbeatElapsed = (
+        progressState.lastReportedPercent != null
+        && normalizedPercent !== progressState.lastReportedPercent
+        && (now - progressState.lastReportedAt) >= VIDEO_UPLOAD_PROGRESS_INTERVAL_MS
+      )
+
+      if (!statusChanged && !percentAdvanced && !heartbeatElapsed) return
+
+      progressState.lastReportedPercent = normalizedPercent
+      progressState.lastReportedAt = now
+      progressState.lastStatus = status
+
+      try {
+        await reportProctoringVideoUploadProgress(uploadAttemptId, {
+          session_id: sessionId,
+          source,
+          uploaded_bytes: Math.max(0, Math.round(Number(uploadedBytes || 0))),
+          total_bytes: totalBytes,
+          progress_percent: normalizedPercent,
+          status,
+        })
+      } catch (error) {
+        console.warn(`Failed to report ${source} video upload progress.`, error)
+      }
+    }
+
+    await sendUploadProgress({ uploadedBytes: 0, progressPercent: 0, status: 'uploading' })
+
+    let lastError = null
+    for (let i = 0; i < 3; i += 1) {
+      try {
+        await uploadProctoringVideo(uploadAttemptId, sessionId, source, filename, blob, metadata, {
+          onUploadProgress: (event) => {
+            const uploadedBytes = Number(event?.loaded || 0)
+            const eventTotal = Number(event?.total || 0)
+            const effectiveTotal = eventTotal > 0 ? eventTotal : totalBytes
+            const progressPercent = effectiveTotal > 0
+              ? (uploadedBytes / effectiveTotal) * 100
+              : (uploadedBytes > 0 ? 100 : 0)
+            void sendUploadProgress({
+              uploadedBytes,
+              progressPercent,
+              status: progressPercent >= 100 ? 'processing' : 'uploading',
+            })
+          },
+        })
+        await sendUploadProgress({
+          uploadedBytes: totalBytes || Number(blob?.size || 0),
+          progressPercent: 100,
+          status: 'complete',
+        })
+        delete preparedRecordingUploadsRef.current[source]
+        lastError = null
+        break
+      } catch (error) {
+        lastError = error
+        const backoffMs = 1000 * Math.pow(2, i) + Math.random() * 1000
+        await new Promise((resolve) => setTimeout(resolve, backoffMs))
+      }
+    }
+    if (lastError) {
+      await sendUploadProgress({
+        uploadedBytes: 0,
+        progressPercent: progressState.lastReportedPercent ?? 0,
+        status: 'error',
+      })
+      throw lastError
+    }
+    setRecordingStatusForSource(source, 'saved')
+  }, [setRecordingStatusForSource])
+
+  const uploadRecordingSources = useCallback(async (sources = []) => {
+    const payloads = await prepareRecordingUploads(sources)
+    await Promise.all(payloads.map(async (payload) => {
+      try {
+        await uploadPreparedRecording(payload)
+      } catch (error) {
+        setRecordingStatusForSource(payload.source, 'failed')
+        if (isMountedRef.current) {
+          emitProctoringNotice(
+            `recording_finalize_${payload.source}`,
+            error?.response?.data?.detail || error?.message || `Unable to save the ${payload.source} recording.`,
+            'LOW',
+          )
+        } else {
+          console.error(`Recording upload failed for ${payload.source}.`, error)
+        }
+        throw error
+      }
+    }))
+  }, [emitProctoringNotice, prepareRecordingUploads, setRecordingStatusForSource, uploadPreparedRecording])
 
   useEffect(() => {
     if (!proctorCfg.screen_capture) {
@@ -652,6 +870,19 @@ export default function Proctoring() {
 
   useEffect(() => {
     if (!attemptId || !proctorCfg.screen_capture || !screenStream || !window.MediaRecorder) return
+    // If the previous screen recorder died (stream was lost and re-established),
+    // reset the recording state so a fresh session can start.
+    const rec = screenRecordingRef.current
+    if (rec.recorder && rec.recorder.state === 'inactive') {
+      rec.recorder = null
+      rec.sessionId = null
+      rec.startedAt = null
+      rec.stoppedAt = null
+      rec.finalized = false
+      rec.finalizing = false
+      rec.chunks = []
+      rec.bytesRecorded = 0
+    }
     void startRecordingSession(screenStream, 'screen')
   }, [attemptId, proctorCfg.screen_capture, screenStream, startRecordingSession])
 
@@ -660,34 +891,40 @@ export default function Proctoring() {
   }
 
   const handleSubmit = useCallback(async () => {
-    setShowSubmitConfirm(false)
-    if (submitting) return
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
+    setSubmitPhase('Saving your latest answers...')
     setSubmitError('')
     try {
       await Promise.race([
         flush(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Save timed out')), 8000)),
       ]).catch(() => { /* best-effort flush — proceed with submission */ })
-      // Submit the attempt first (fast) — don't block on video uploads
+      // Submit the attempt first so the learner isn't blocked
+      setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)
+      submittedRef.current = true
+      setSubmitting(false)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch((error) => {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
         })
       }
-      // Finalize recordings before navigating — but cap the wait to 15s so
-      // submission doesn't hang on slow/large uploads.
-      await Promise.race([
-        stopAndFinalizeRecordings(),
-        new Promise((resolve) => setTimeout(resolve, 15000)),
-      ]).catch(() => { /* best-effort */ })
+      // Upload recordings in the background — don't block navigation
+      if (requiredRecordingSources.length > 0) {
+        uploadRecordingSources(requiredRecordingSources).catch((error) => {
+          console.warn('Background recording upload failed:', error)
+        })
+      }
       navigate(`/attempts/${attemptId}`)
     } catch (e) {
-      setSubmitError(e.response?.data?.detail || 'Submission failed. Please try again.')
+      setSubmitError(e.response?.data?.detail || e.message || 'Submission failed. Please try again.')
+      setSubmitPhase('')
       setSubmitting(false)
+      submittingRef.current = false
     }
-  }, [attemptId, emitProctoringNotice, flush, navigate, stopAndFinalizeRecordings, submitting])
+  }, [attemptId, emitProctoringNotice, flush, navigate, requiredRecordingSources, uploadRecordingSources])
 
   const handleForcedSubmit = useCallback((detail = 'Test auto-submitted due to violations.') => {
     const event = normalizeProctoringAlert({
@@ -786,7 +1023,7 @@ export default function Proctoring() {
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.fullscreen_enforce, sendBrowserViolation, tabBlurs])
+  }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.fullscreen_enforce, proctorCfg.screen_capture, sendBrowserViolation, tabBlurs])
 
   useEffect(() => {
     if (!proctorCfg.screen_capture) {
@@ -801,13 +1038,16 @@ export default function Proctoring() {
     }
     if (loading || submitting) return
     if (!screenShareEstablishedRef.current || screenShareLossHandledRef.current) return
+    // During the initial screen-share + fullscreen setup the stream can briefly
+    // become null before stabilising. Skip loss detection while the grace period is active.
+    if (screenShareGraceRef.current) return
     screenShareLossHandledRef.current = true
 
     // Screen share lost — warn the learner and give them a chance to re-share.
     // Never auto-submit on screen share loss; just log a violation and retry.
-    sendBrowserViolation('SCREEN_SHARE_LOST', 'MEDIUM', 'Screen sharing was interrupted. Please re-share your entire screen.')
+    sendBrowserViolation('SCREEN_SHARE_LOST', 'HIGH', 'Screen sharing was interrupted. Please re-share your entire screen.')
     setToast({
-      severity: 'MEDIUM',
+      severity: 'HIGH',
       event_type: 'SCREEN_SHARE_LOST',
       detail: 'Screen sharing stopped. Please re-share your entire screen to continue.',
     })
@@ -857,30 +1097,29 @@ export default function Proctoring() {
   // Tab blur / visibility tracking
   useEffect(() => {
     if (!proctorCfg.tab_switch_detect) return
-    const reportTabSwitch = (count, detail, visibility) => {
+    const tabBlurCountRef = { current: 0 }
+    const onVisibility = () => {
+      if (!document.hidden) return
       // Suppress tab switch violations while screen share picker is open or grace period
-      if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return count
+      if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return
       const now = Date.now()
-      if (now - lastTabSwitchEventRef.current < 750) return count
+      if (now - lastTabSwitchEventRef.current < 750) return
       lastTabSwitchEventRef.current = now
-      const next = count + 1
+      tabBlurCountRef.current += 1
+      const next = tabBlurCountRef.current
+      setTabBlurs(next)
+      const detail = `Tab hidden / switched (switch #${next})`
       sendBrowserViolation('TAB_SWITCH', 'MEDIUM', detail)
       if (attemptId) {
         proctoringPing(attemptId, {
           focus: false,
-          visibility,
+          visibility: 'hidden',
           blurs: next,
           fullscreen: !!document.fullscreenElement,
           camera_dark: cameraDark,
         }).then(applyPingResponse).catch(() => {
           emitProctoringNotice('tab_switch_ping', 'Unable to sync the tab-switch event with the server.', 'LOW')
         })
-      }
-      return next
-    }
-    const onVisibility = () => {
-      if (document.hidden) {
-        setTabBlurs((count) => reportTabSwitch(count, `Tab hidden / switched (switch #${count + 1})`, 'hidden'))
       }
     }
     document.addEventListener('visibilitychange', onVisibility)
@@ -892,19 +1131,9 @@ export default function Proctoring() {
   useEffect(() => {
     const max = proctorCfg.max_tab_blurs
     if (max && tabBlurs > max) {
-      // When screen capture is active, fullscreen exits cause spurious blur events.
-      // Warn the user but do NOT auto-submit — the screen recording already proves
-      // what the learner was doing.
-      if (proctorCfg.screen_capture) {
-        if (tabBlurs !== lastToastBlursRef.current) {
-          lastToastBlursRef.current = tabBlurs
-          setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: `Tab switches: ${tabBlurs}` })
-        }
-      } else {
-        setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: 'Too many tab switches' })
-        lastToastBlursRef.current = tabBlurs
-        void handleSubmit()
-      }
+      setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: 'Too many tab switches — exam will be submitted' })
+      lastToastBlursRef.current = tabBlurs
+      void handleSubmit()
     } else if (tabBlurs > 0 && tabBlurs !== lastToastBlursRef.current && proctorCfg.tab_switch_detect) {
       lastToastBlursRef.current = tabBlurs
       setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: `Tab switches: ${tabBlurs}` })
@@ -1154,7 +1383,7 @@ export default function Proctoring() {
   }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctoringEnabled, tabBlurs])
 
   useEffect(() => {
-    const onBeforeUnload = () => {
+    const onBeforeUnload = (event) => {
       try {
         const recorders = [cameraRecordingRef.current, screenRecordingRef.current]
         for (const recording of recorders) {
@@ -1165,15 +1394,38 @@ export default function Proctoring() {
       } catch (error) {
         console.error('Failed to stop proctoring recorder during page unload.', error)
       }
+      // Best-effort flush of unsaved answers
+      try {
+        flush().catch(() => {})
+      } catch {
+        // ignore — page is closing
+      }
+      // Always warn during an active exam (not just when submitting)
+      if (!submittedRef.current) {
+        event.preventDefault()
+        event.returnValue = 'You have an exam in progress. Are you sure you want to leave?'
+      }
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload)
-      void stopAndFinalizeRecordings().catch((error) => {
-        console.error('Failed to finalize proctoring recordings during unmount.', error)
-      })
     }
-  }, [stopAndFinalizeRecordings])
+  }, [flush])
+
+  // ── Prevent browser back button during exam ─────────────────────────────────
+  useEffect(() => {
+    if (submittedRef.current) return
+    // Push a dummy state so pressing back pops it instead of leaving the page
+    window.history.pushState({ examGuard: true }, '')
+    const onPopState = () => {
+      if (submittedRef.current) return
+      // Re-push to keep the guard in place
+      window.history.pushState({ examGuard: true }, '')
+      setToast({ severity: 'MEDIUM', event_type: 'NAV_BLOCKED', detail: 'Please submit your exam before leaving.' })
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   if (loading) {
     return (
@@ -1487,12 +1739,17 @@ export default function Proctoring() {
                   {' '}
                   Once submitted, this attempt will be locked and sent for review.
                 </div>
+                {submitting && submitPhase && (
+                  <div className={styles.submitStatus}>
+                    {submitPhase}
+                  </div>
+                )}
                 <div className={styles.submitConfirmActions}>
                   <button type="button" className={styles.btnNav} onClick={() => setShowSubmitConfirm(false)} disabled={submitting}>
                     Keep Reviewing
                   </button>
                   <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? 'Submitting...' : 'Confirm Submit'}
+                    {submitting ? (submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
                   </button>
                 </div>
               </div>

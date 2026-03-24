@@ -505,9 +505,18 @@ export default function ProctorOverlay({
           // Stop scheduling if WS is no longer open or closing
           if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) return
           const sinceLast = Date.now() - lastViolationTimeRef.current
-          const currentInterval = sinceLast >= ADAPTIVE_CALM_WINDOW
+          let currentInterval = sinceLast >= ADAPTIVE_CALM_WINDOW
             ? Math.min(ADAPTIVE_SLOW_MS, visualFrameInterval * 1.5)
             : Math.max(VISUAL_FRAME_INTERVAL_FLOOR_MS, visualFrameInterval)
+          // Respect server slow_mode signal if active
+          if (adaptiveIntervalRef.current != null) {
+            currentInterval = Math.max(currentInterval, adaptiveIntervalRef.current)
+            // Decay: gradually return to normal after 10 frames
+            adaptiveIntervalRef.current = adaptiveIntervalRef.current * 0.9
+            if (adaptiveIntervalRef.current <= currentInterval * 0.5) {
+              adaptiveIntervalRef.current = null
+            }
+          }
           frameTimerRef.id = setTimeout(() => {
             if (frameTimerRef.stopped) return
             if (ws.readyState === WebSocket.OPEN && videoRef.current) {
@@ -518,13 +527,13 @@ export default function ProctorOverlay({
           }, currentInterval)
         }
         scheduleNextFrame()
-        // WS keepalive: if no message received in 90s, close and reconnect
-        // Server heartbeat is every 15s, so 90s = 6 missed heartbeats before we give up
+        // WS keepalive: if no message received in 45s, close and reconnect
+        // Server heartbeat is every 10s, so 45s = ~4 missed heartbeats before we give up
         const keepaliveInterval = setInterval(() => {
-          if (Date.now() - keepaliveLastMessageRef.current > 90000 && ws.readyState === WebSocket.OPEN) {
+          if (Date.now() - keepaliveLastMessageRef.current > 45000 && ws.readyState === WebSocket.OPEN) {
             ws.close(4000, 'keepalive timeout')
           }
-        }, 15000)
+        }, 10000)
         // Store cleanup handle in intervalRef
         intervalRef.current = {
           frameTimerRef,
@@ -571,6 +580,15 @@ export default function ProctorOverlay({
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'pong' }))
             }
+          } else if (msg.type === 'slow_mode') {
+            // Server is overloaded — temporarily increase frame interval
+            const serverInterval = Number(msg.interval_ms)
+            if (Number.isFinite(serverInterval) && serverInterval > 0) {
+              adaptiveIntervalRef.current = Math.max(serverInterval, VISUAL_FRAME_INTERVAL_FLOOR_MS)
+            }
+          } else if (msg.type === 'server_shutdown') {
+            // Server is shutting down gracefully — will auto-reconnect via onclose
+            intentionalCloseRef.current = false
           } else if (msg.type === 'forced_submit') {
             triggerForcedSubmit(msg.detail || 'Test auto-submitted due to violations.')
           }
@@ -605,6 +623,11 @@ export default function ProctorOverlay({
         }
         // Code 1000 = normal closure (server-initiated graceful close)
         if (blockingCloseRef.current || ev.code === 4401 || ev.code === 4403 || ev.code === 4404) {
+          intentionalCloseRef.current = true
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current)
+            reconnectTimerRef.current = null
+          }
           setStatus('closed')
         } else if (intentionalCloseRef.current || ev.code === 1000) {
           setStatus('closed')
@@ -614,7 +637,8 @@ export default function ProctorOverlay({
       }
       ws.onerror = () => {
         console.debug('[ProctorOverlay] WebSocket error, will reconnect')
-        scheduleReconnect()
+        // Don't schedule reconnect here — onclose will fire next and handle it
+        // Scheduling here too causes double-reconnect or infinite loops on auth rejection
       }
     }
 

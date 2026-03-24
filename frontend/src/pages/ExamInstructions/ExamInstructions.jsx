@@ -17,6 +17,11 @@ export default function ExamInstructions() {
   const loadTest = () => {
     setLoading(true)
     setError('')
+    if (!testId) {
+      setError('Invalid test link. Return to the available tests list and try again.')
+      setLoading(false)
+      return
+    }
     getTest(testId)
       .then(({ data }) => {
         try {

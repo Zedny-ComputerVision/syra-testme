@@ -73,6 +73,7 @@ const AdminMaintenance = lazyPage(() => import('../pages/Admin/AdminMaintenance/
 const AdminSubscribers = lazyPage(() => import('../pages/Admin/AdminSubscribers/AdminSubscribers'), { label: 'Loading subscribers...' })
 const AdminCustomReports = lazyPage(() => import('../pages/Admin/AdminCustomReports/AdminCustomReports'), { label: 'Loading custom reports...' })
 const AdminAuditLog = lazyPage(() => import('../pages/Admin/AdminAuditLog/AdminAuditLog'), { label: 'Loading audit log...' })
+const AdminLiveMonitor = lazyPage(() => import('../pages/Admin/AdminLiveMonitor/AdminLiveMonitor'), { label: 'Loading live monitor...' })
 const Maintenance = lazyPage(() => import('../pages/Maintenance/Maintenance'), { fullPage: true, label: 'Loading maintenance notice...' })
 
 function ProtectedRoute({ children, roles, permission }) {
@@ -341,6 +342,7 @@ const router = createBrowserRouter(
     { path: '/admin/schedules', element: <Navigate to="/admin/sessions" replace /> },
     { path: '/admin/candidates', element: withAuth(<AdminCandidates />, ANALYSIS_ROLES, 'View Attempt Analysis') },
     { path: '/admin/attempt-analysis', element: withAuth(<AdminAttemptAnalysis />, ANALYSIS_ROLES, 'View Attempt Analysis') },
+    { path: '/admin/live-monitor', element: withAuth(<AdminLiveMonitor />, ANALYSIS_ROLES, 'View Attempt Analysis') },
 
     { path: '/admin/users', element: withAuth(<AdminUsers />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Users') },
     { path: '/admin/roles', element: withAuth(<AdminRolesPermissions />, SUPER_ADMIN, 'Manage Roles') },

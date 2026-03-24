@@ -75,6 +75,7 @@ class AudioMonitor:
         self.speech_min_rms = speech_min_rms
         self.speech_baseline_multiplier = speech_baseline_multiplier
         self.sample_rate = sample_rate
+        self._sample_rate_locked = False  # Lock after first audio chunk
 
         # WebRTC VAD instance
         self._vad = None
@@ -134,12 +135,30 @@ class AudioMonitor:
         if not audio_bytes or len(audio_bytes) < 4:
             return None
 
-        # Update sample rate if client provides it
+        # Accept client-reported sample rate only on the first chunk, then lock it
         if sample_rate is not None:
-            self.sample_rate = int(sample_rate)
+            sr = int(sample_rate)
+            if not self._sample_rate_locked:
+                if 8000 <= sr <= 96000:
+                    self.sample_rate = sr
+                else:
+                    logger.warning("Rejected invalid initial sample rate %d Hz — keeping %d Hz", sr, self.sample_rate)
+                self._sample_rate_locked = True
+            elif sr != self.sample_rate:
+                logger.warning("Ignoring sample rate change %d→%d Hz mid-session (locked at first value)", sr, self.sample_rate)
 
         try:
-            pcm = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+            pcm_int16 = np.frombuffer(audio_bytes, dtype=np.int16)
+            # Resample to 16 kHz if needed (WebRTC VAD requires exactly 16 kHz)
+            if self.sample_rate != _VAD_SAMPLE_RATE and self.sample_rate > 0:
+                ratio = _VAD_SAMPLE_RATE / self.sample_rate
+                new_len = max(1, int(len(pcm_int16) * ratio))
+                indices = np.linspace(0, len(pcm_int16) - 1, new_len).astype(int)
+                pcm_int16 = pcm_int16[indices]
+                # Rebuild raw bytes at 16 kHz for WebRTC VAD
+                audio_bytes = pcm_int16.tobytes()
+                self.sample_rate = _VAD_SAMPLE_RATE
+            pcm = pcm_int16.astype(np.float32) / 32768.0
         except Exception:
             return None
         if pcm.size == 0:

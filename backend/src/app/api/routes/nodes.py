@@ -59,7 +59,7 @@ async def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db
     node = db.get(Node, node_pk)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
-    if current.role == RoleEnum.INSTRUCTOR and node.course.created_by_id != current.id:
+    if current.role == RoleEnum.INSTRUCTOR and (not node.course or node.course.created_by_id != current.id):
         raise HTTPException(status_code=403, detail="Not allowed")
     node.title = body.title
     node.order = body.order
@@ -76,7 +76,7 @@ async def delete_node(node_id: str, db: Session = Depends(get_db_dep), current=D
     node = db.get(Node, node_pk)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
-    if current.role == RoleEnum.INSTRUCTOR and node.course.created_by_id != current.id:
+    if current.role == RoleEnum.INSTRUCTOR and (not node.course or node.course.created_by_id != current.id):
         raise HTTPException(status_code=403, detail="Not allowed")
     attempt_count = int(
         db.scalar(

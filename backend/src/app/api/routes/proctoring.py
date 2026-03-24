@@ -1,1 +1,8 @@
-from ...modules.proctoring.routes_public import router
+from fastapi import APIRouter
+
+from ...modules.proctoring.routes_admin import router as admin_router
+from ...modules.proctoring.routes_public import router as public_router
+
+router = APIRouter()
+router.include_router(admin_router)
+router.include_router(public_router)

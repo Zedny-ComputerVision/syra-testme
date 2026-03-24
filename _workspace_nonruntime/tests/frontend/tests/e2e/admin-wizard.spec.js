@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { test, expect, request as playwrightRequest } from '@playwright/test'
 import { ensureAdmin, createLearner, createCourseAndNode } from './helpers/api'
+import { installJourneyMediaMocks, passAttemptScreenShareGateIfPresent, primeScreenShareBeforeNavigation } from './helpers/journey'
 
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
 
@@ -61,6 +62,7 @@ async function waitForNextButtonReady(page) {
 test.describe('Admin New Test Wizard end-to-end', () => {
   test('admin can create exam with question and learner can take it', async ({ page, context }) => {
     test.setTimeout(180000)
+    await installJourneyMediaMocks(page)
     const { token: adminToken } = await ensureAdmin(context)
     const learner = await createLearner(context, adminToken)
     const { node } = await createCourseAndNode(adminToken)
@@ -176,7 +178,9 @@ test.describe('Admin New Test Wizard end-to-end', () => {
       if (!precheckRes.ok()) throw new Error(`Precheck failed: ${precheckRes.status()} ${await precheckRes.text()}`)
     }
 
+    await primeScreenShareBeforeNavigation(page)
     await page.goto(`/attempts/${attempt.id}/take`)
+    await passAttemptScreenShareGateIfPresent(page)
     await expect(page.getByRole('heading', { name: examTitle })).toBeVisible({ timeout: 15000 })
     await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0)
     await expect(page.getByPlaceholder('Search tests, attempts, users...')).toHaveCount(0)

@@ -105,7 +105,7 @@ describe('SystemCheckPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue to rules' }).disabled).toBe(false))
   })
 
-  it('attaches the camera stream after the preview video mounts', async () => {
+  it('attaches the camera stream after the preview video mounts even while screen sharing is still required', async () => {
     const stream = {
       getTracks: vi.fn(() => []),
     }
@@ -131,7 +131,8 @@ describe('SystemCheckPage', () => {
       return element
     })
     await waitFor(() => expect(video.srcObject).toBe(stream))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue to rules' }).disabled).toBe(false))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Share entire screen' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Waiting for checks...' }).disabled).toBe(true))
   })
 
   it('requires entire-screen sharing before continue is enabled', async () => {

@@ -104,7 +104,11 @@ class UserService:
             updated_at=now,
         )
         self.repository.add(user)
-        self.repository.commit()
+        try:
+            self.repository.commit()
+        except Exception:
+            self.repository.db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or User ID already exists")
         self.repository.refresh(user)
         return user
 
@@ -229,6 +233,7 @@ class UserService:
     def _ensure_unique_email(self, email: str | None, existing_user_id=None) -> None:
         if not email:
             return
+        email = email.strip().lower()
         existing = self.repository.get_user_by_email(email)
         if existing and existing.id != existing_user_id:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email exists")

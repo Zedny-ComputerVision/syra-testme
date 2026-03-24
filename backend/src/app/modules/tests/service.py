@@ -215,11 +215,29 @@ class TestService:
         elif "attempts_allowed" in payload and next_max_attempts > 1:
             current_runtime = exam_runtime_settings(exam)
             if current_runtime.get("allow_retake") is False:
-                set_exam_runtime_settings(exam, { **current_runtime, "allow_retake": True })
+                set_exam_runtime_settings(exam, {**current_runtime, "allow_retake": True})
         if "proctoring_config" in payload:
-            from ...services.normalized_relations import set_exam_proctoring
+            from ...services.normalized_relations import set_exam_proctoring, exam_proctoring
 
-            set_exam_proctoring(exam, normalize_proctoring_config(payload["proctoring_config"] or {}))
+            old_config = exam_proctoring(exam) or {}
+            new_config = normalize_proctoring_config(payload["proctoring_config"] or {})
+            set_exam_proctoring(exam, new_config)
+            # Write a dedicated audit entry with the config diff
+            changed_keys = [
+                k for k in set(list(old_config.keys()) + list(new_config.keys()))
+                if old_config.get(k) != new_config.get(k)
+            ]
+            if changed_keys:
+                diff_parts = []
+                for k in sorted(changed_keys)[:20]:
+                    diff_parts.append(f"{k}: {old_config.get(k)!r} → {new_config.get(k)!r}")
+                self._write_audit_log(
+                    actor=actor,
+                    action="PROCTORING_CONFIG_UPDATED",
+                    resource_id=str(exam.id),
+                    detail=f"Proctoring config changed on '{exam.title}': {'; '.join(diff_parts)}",
+                    request_ip=request_ip,
+                )
         if "certificate" in payload:
             from ...services.normalized_relations import set_exam_certificate
 

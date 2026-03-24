@@ -15,6 +15,7 @@ Latency: ~150–400 ms on a modern CPU (Tesseract 5 LSTM).
 from __future__ import annotations
 
 import logging
+import threading
 
 import cv2
 import numpy as np
@@ -45,6 +46,7 @@ _CODE_EDITOR_KEYWORDS = [
 
 # ── Tesseract availability ─────────────────────────────────────────────────────
 _tesseract_available = False
+_tesseract_lock = threading.Lock()  # pytesseract is not thread-safe
 try:
     import pytesseract as _tess
     # Quick smoke test
@@ -74,7 +76,9 @@ def analyze_screen(frame_bgr: np.ndarray) -> Optional[dict]:
             )
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         # PSM 11 = sparse text; OEM 3 = LSTM neural net
-        text: str = _tess.image_to_string(gray, config="--psm 11 --oem 3").lower()
+        # Lock: pytesseract is not thread-safe when called from concurrent WS sessions
+        with _tesseract_lock:
+            text: str = _tess.image_to_string(gray, config="--psm 11 --oem 3").lower()
 
         for kw in _REMOTE_DESKTOP_KEYWORDS:
             if kw in text:

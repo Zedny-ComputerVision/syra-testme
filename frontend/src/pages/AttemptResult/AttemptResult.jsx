@@ -78,6 +78,16 @@ export default function AttemptResult() {
     setLoading(true)
     setLoadError('')
     setDetailWarning('')
+    if (!id) {
+      setAttempt(null)
+      setQuestions([])
+      setAnswers([])
+      setEvents([])
+      setExam(null)
+      setLoadError('Invalid attempt link. Return to your attempts list and try again.')
+      setLoading(false)
+      return
+    }
     try {
       const attRes = await getAttempt(id)
       const att = normalizeAttempt(attRes.data)

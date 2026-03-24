@@ -1,11 +1,5 @@
 import api from './api'
 
-const listTestRuntime = (params) => api.get('exams/', { params })
-const getTestRuntime = (id) => api.get(`exams/${id}`)
-const createTestRuntime = (data) => api.post('exams/', data)
-const updateTestRuntime = (id, data) => api.put(`exams/${id}`, data)
-const deleteTestRuntime = (id) => api.delete(`exams/${id}`)
-
 export const adminApi = {
   // Canonical admin tests
   tests: (params, opts) => api.get('admin/tests', { params, ...opts }),
@@ -25,18 +19,6 @@ export const adminApi = {
   duplicateTest: (id) => api.post(`admin/tests/${id}/duplicate`),
   deleteTest: (id) => api.delete(`admin/tests/${id}`),
   downloadTestReport: (id) => api.get(`admin/tests/${id}/report`, { responseType: 'text' }),
-
-  // Canonical runtime-test compatibility endpoints
-  listTestRuntime,
-  getTestRuntime,
-  createTestRuntime,
-  updateTestRuntime,
-  deleteTestRuntime,
-  exams: listTestRuntime,
-  getExam: getTestRuntime,
-  createExam: createTestRuntime,
-  updateExam: updateTestRuntime,
-  deleteExam: deleteTestRuntime,
 
   // Categories
   categories: () => api.get('categories/'),
@@ -112,6 +94,7 @@ export const adminApi = {
   pauseAttempt: (attemptId) => api.post(`proctoring/${attemptId}/pause`),
   resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
   listAttemptVideos: (attemptId) => api.get(`proctoring/${attemptId}/videos`),
+  listExamVideoUploadStatus: (examId) => api.get(`proctoring/exam/${examId}/video-upload-status`),
   getAttemptAnswers: (attemptId) => api.get(`attempts/${attemptId}/answers`),
   reviewAttemptCertificate: (attemptId, decision) => api.post(`attempts/${attemptId}/certificate-review`, { decision }),
   testReportCsv: (testId) => api.get(`reports/test/${testId}`, { responseType: 'blob' }),

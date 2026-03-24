@@ -17,14 +17,14 @@ const DEV_USERS = {
   admin: {
     email: 'admin@example.com',
     password: 'Password123!',
-    name: 'Local Dev Admin',
+    name: 'Admin',
     user_id: 'ADM001',
     role: 'ADMIN',
   },
   learner: {
     email: 'learner1@example.com',
     password: 'Password123!',
-    name: 'Local Dev Learner',
+    name: 'Learner 1',
     user_id: 'LRN001',
     role: 'LEARNER',
   },
@@ -62,8 +62,10 @@ function getErrorMessage(err, fallback) {
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [devUsers, setDevUsers] = useState(DEV_USERS)
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -83,6 +85,41 @@ export default function Login() {
   const requestLogin = async (nextEmail, nextPassword) => {
     const { data } = await loginApi(nextEmail, nextPassword)
     return data
+  }
+
+  const normalizeSeedUsers = (data) => {
+    const admin = data?.admin?.email && data?.admin?.password
+      ? {
+        ...DEV_USERS.admin,
+        email: data.admin.email,
+        password: data.admin.password,
+      }
+      : DEV_USERS.admin
+    const learner = data?.learners?.[0]?.email && data?.learners?.[0]?.password
+      ? {
+        ...DEV_USERS.learner,
+        email: data.learners[0].email,
+        password: data.learners[0].password,
+        user_id: data.learners[0].user_id || DEV_USERS.learner.user_id,
+      }
+      : DEV_USERS.learner
+
+    return { admin, learner }
+  }
+
+  const resetLocalSeed = async () => {
+    if (!showDevTools) {
+      return null
+    }
+
+    try {
+      const { data } = await axios.post(resolveApiUrl('testing/reset-seed'))
+      const nextUsers = normalizeSeedUsers(data)
+      setDevUsers(nextUsers)
+      return nextUsers
+    } catch {
+      return null
+    }
   }
 
   const adminAlreadySetupError = () => {
@@ -126,10 +163,10 @@ export default function Login() {
     return Array.isArray(data?.items) ? data.items : []
   }
 
-  const findDevLearnerAsAdmin = async (adminAccessToken) => {
-    const exactEmail = normalizeComparable(DEV_USERS.learner.email)
-    const exactUserId = normalizeComparable(DEV_USERS.learner.user_id)
-    for (const search of [DEV_USERS.learner.email, DEV_USERS.learner.user_id]) {
+  const findDevLearnerAsAdmin = async (adminAccessToken, learnerUser) => {
+    const exactEmail = normalizeComparable(learnerUser.email)
+    const exactUserId = normalizeComparable(learnerUser.user_id)
+    for (const search of [learnerUser.email, learnerUser.user_id]) {
       const items = await listUsersAsAdmin(adminAccessToken, search)
       const match = items.find((item) =>
         normalizeComparable(item?.email) === exactEmail
@@ -160,9 +197,9 @@ export default function Login() {
     })
   }
 
-  const repairDevLearnerAsAdmin = async (adminAccessToken) => {
+  const repairDevLearnerAsAdmin = async (adminAccessToken, learnerUser) => {
     try {
-      await createUserAsAdmin(adminAccessToken, DEV_USERS.learner)
+      await createUserAsAdmin(adminAccessToken, learnerUser)
       return
     } catch (err) {
       if (err.response?.status !== 409) {
@@ -170,31 +207,31 @@ export default function Login() {
       }
     }
 
-    const existingUser = await findDevLearnerAsAdmin(adminAccessToken)
+    const existingUser = await findDevLearnerAsAdmin(adminAccessToken, learnerUser)
     if (!existingUser?.id) {
       throw new Error('Existing dev learner account could not be repaired automatically.')
     }
 
     await patchUserAsAdmin(adminAccessToken, existingUser.id, {
-      email: DEV_USERS.learner.email,
-      name: DEV_USERS.learner.name,
-      user_id: DEV_USERS.learner.user_id,
-      role: DEV_USERS.learner.role,
+      email: learnerUser.email,
+      name: learnerUser.name,
+      user_id: learnerUser.user_id,
+      role: learnerUser.role,
       is_active: true,
     })
-    await resetUserPasswordAsAdmin(adminAccessToken, existingUser.id, DEV_USERS.learner.password)
+    await resetUserPasswordAsAdmin(adminAccessToken, existingUser.id, learnerUser.password)
   }
 
-  const ensureAdminTokens = async () => {
+  const ensureAdminTokens = async (adminUser) => {
     const { data } = await signupStatusApi()
     const setupAllowed = Boolean(data?.allowed)
 
     if (setupAllowed) {
-      await setupAdminApi(DEV_USERS.admin)
+      await setupAdminApi(adminUser)
     }
 
     try {
-      return await requestLogin(DEV_USERS.admin.email, DEV_USERS.admin.password)
+      return await requestLogin(adminUser.email, adminUser.password)
     } catch (err) {
       if (!setupAllowed && err.response?.status === 401) {
         throw adminAlreadySetupError()
@@ -229,20 +266,33 @@ export default function Login() {
 
   const handleAdminLogin = async () => {
     setError('')
-    setEmail(DEV_USERS.admin.email)
-    setPassword(DEV_USERS.admin.password)
+    const adminUser = devUsers.admin
+    setEmail(adminUser.email)
+    setPassword(adminUser.password)
     setLoading(true)
     clearStoredSession()
 
     try {
-      const adminTokens = await ensureAdminTokens()
+      const adminTokens = await ensureAdminTokens(adminUser)
       finalizeLogin(adminTokens)
     } catch (err) {
-      const detail = err?.response?.data?.detail
-      if (detail === 'Admin already set up') {
-        setError('Dev admin could not be created because this database already has users.')
-      } else {
-        setError(getErrorMessage(err, 'Admin login failed'))
+      try {
+        const seededUsers = await resetLocalSeed()
+        if (!seededUsers?.admin) {
+          throw err
+        }
+
+        setEmail(seededUsers.admin.email)
+        setPassword(seededUsers.admin.password)
+        const adminTokens = await ensureAdminTokens(seededUsers.admin)
+        finalizeLogin(adminTokens)
+      } catch (fallbackError) {
+        const detail = fallbackError?.response?.data?.detail
+        if (detail === 'Admin already set up') {
+          setError('Dev admin could not be created because this database already has users.')
+        } else {
+          setError(getErrorMessage(fallbackError, 'Admin login failed'))
+        }
       }
     } finally {
       setLoading(false)
@@ -251,21 +301,38 @@ export default function Login() {
 
   const handleLearnerLogin = async () => {
     setError('')
-    setEmail(DEV_USERS.learner.email)
-    setPassword(DEV_USERS.learner.password)
+    const learnerUser = devUsers.learner
+    setEmail(learnerUser.email)
+    setPassword(learnerUser.password)
     setLoading(true)
     clearStoredSession()
 
     try {
-      const adminTokens = await ensureAdminTokens()
-      await repairDevLearnerAsAdmin(adminTokens.access_token)
-      await completeLogin(DEV_USERS.learner.email, DEV_USERS.learner.password)
+      await completeLogin(learnerUser.email, learnerUser.password)
     } catch (err) {
-      const detail = err?.response?.data?.detail
-      if (detail === 'Admin already set up') {
-        setError('Learner bootstrap failed because this database uses a different admin account.')
-      } else {
-        setError(getErrorMessage(err, 'Learner login failed'))
+      try {
+        const seededUsers = await resetLocalSeed()
+        if (seededUsers?.learner) {
+          setEmail(seededUsers.learner.email)
+          setPassword(seededUsers.learner.password)
+          await completeLogin(seededUsers.learner.email, seededUsers.learner.password)
+          return
+        }
+        throw err
+      } catch (fallbackError) {
+        try {
+          const adminUser = devUsers.admin
+          const adminTokens = await ensureAdminTokens(adminUser)
+          await repairDevLearnerAsAdmin(adminTokens.access_token, learnerUser)
+          await completeLogin(learnerUser.email, learnerUser.password)
+        } catch (repairError) {
+          const detail = repairError?.response?.data?.detail
+          if (detail === 'Admin already set up') {
+            setError('Learner bootstrap failed because this database uses a different admin account.')
+          } else {
+            setError(getErrorMessage(repairError, 'Learner login failed'))
+          }
+        }
       }
     } finally {
       setLoading(false)
@@ -297,8 +364,27 @@ export default function Login() {
 
         <div className={styles.field}>
           <label htmlFor="password">Password</label>
-          <input id="password" type="password" placeholder="Enter password" value={password}
-            onChange={(e) => setPassword(e.target.value)} disabled={loading} required />
+          <div className={styles.passwordInputWrap}>
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Enter password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              required
+            />
+            <button
+              type="button"
+              className={styles.passwordToggle}
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
+              disabled={loading}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
 
         <button type="submit" className={styles.btn} disabled={loading}>
@@ -315,7 +401,10 @@ export default function Login() {
               Quick role login for local development.
             </p>
             <p className={styles.devHint}>
-              Admin: <strong>{DEV_USERS.admin.email}</strong> / <strong>{DEV_USERS.admin.password}</strong>
+              Admin: <strong>{devUsers.admin.email}</strong> / <strong>{devUsers.admin.password}</strong>
+            </p>
+            <p className={styles.devHint}>
+              Learner: <strong>{devUsers.learner.email}</strong> / <strong>{devUsers.learner.password}</strong>
             </p>
             <div className={styles.devButtonRow}>
               <button type="button" className={styles.devBtn} disabled={loading} onClick={handleAdminLogin}>

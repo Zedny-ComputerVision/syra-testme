@@ -36,6 +36,7 @@ DEFAULT_PERMISSION_ROWS = [
     {"feature": "View Audit Log", "admin": True, "instructor": False, "learner": False},
     {"feature": "Manage Roles", "admin": True, "instructor": False, "learner": False},
     {"feature": "System Settings", "admin": True, "instructor": False, "learner": False},
+    {"feature": "proctoring.admin", "admin": True, "instructor": False, "learner": False},
 ]
 
 
@@ -145,7 +146,7 @@ def load_permission_rows(db: Session):
 
 def permission_allowed(rows, role: RoleEnum | str | None, feature: str | None) -> bool:
     if not feature:
-        return True
+        return False
     current_role = role_key(role)
     requested_feature = normalize_feature(feature)
     source = canonicalize_permission_rows(rows)

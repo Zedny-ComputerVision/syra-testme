@@ -82,6 +82,45 @@
   }
 }
 
+.passwordInputWrap {
+  position: relative;
+
+  input {
+    padding-right: 4.6rem;
+    width: 100%;
+  }
+}
+
+.passwordToggle {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.25rem 0.35rem;
+  border-radius: 6px;
+  line-height: 1;
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 60%, white);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
 .error {
   background: var(--color-danger-bg);
   border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);

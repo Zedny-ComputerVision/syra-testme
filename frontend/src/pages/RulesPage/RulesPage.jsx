@@ -106,6 +106,13 @@ export default function RulesPage() {
     setConfigLoading(true)
     setConfigError('')
     setError('')
+    if (!testId) {
+      setRules(FALLBACK_RULES)
+      setRequirements(getJourneyRequirements({}))
+      setConfigError('Invalid test link. Return to the available tests list and try again.')
+      setConfigLoading(false)
+      return
+    }
     try {
       const { data } = await getTest(testId)
       const configRules = data?.settings?.rules
@@ -178,9 +185,10 @@ export default function RulesPage() {
 
       // System check requests the initial screen share. The exam page re-prompts
       // only if that share is missing or gets interrupted.
-      // Enter fullscreen (skip when screen capture is required — getDisplayMedia
-      // and requestFullscreen conflict in browsers, and the exam page handles it).
-      if (requirements.fullscreenRequired && !requirements.screenRequired) {
+      // Enter fullscreen here from the learner's click before navigation. This
+      // keeps the screen-share journey stable while still giving browsers the
+      // user activation they need for requestFullscreen().
+      if (requirements.fullscreenRequired && !document.fullscreenElement) {
         try {
           await document.documentElement.requestFullscreen()
         } catch {

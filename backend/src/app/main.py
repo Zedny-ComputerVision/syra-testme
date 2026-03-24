@@ -68,6 +68,7 @@ def _origin_is_allowed(origin: str | None) -> bool:
         return True
     return False
 
+
 app = FastAPI(title="SYRA LMS", redirect_slashes=False)
 
 TRAILING_RESOURCES = {
@@ -253,6 +254,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Safety net: ensure CORS header exists on all responses for allowed origins
 class EnsureCORSHeaders(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -263,6 +265,7 @@ class EnsureCORSHeaders(BaseHTTPMiddleware):
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
+
 
 app.add_middleware(EnsureCORSHeaders)
 
@@ -299,7 +302,7 @@ def _run_alembic_upgrade() -> None:
             alembic_config.set_main_option("script_location", str(alembic_dir))
             alembic_config.set_main_option("prepend_sys_path", str(BASE_DIR))
             # Alembic uses configparser interpolation, so '%' in passwords must be escaped.
-            alembic_config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+            alembic_config.set_main_option("sqlalchemy.url", settings.database_migration_url.replace("%", "%%"))
             inspector = inspect(engine)
             table_names = set(inspector.get_table_names())
             if "alembic_version" not in table_names and {"users", "exams", "attempts", "schedules"}.issubset(table_names):
@@ -372,30 +375,26 @@ def _prewarm_detection_models() -> None:
         logger.warning("Failed to pre-warm YOLO object model: %s", exc)
 
     try:
-        import mediapipe as mp
-        if hasattr(mp, "solutions"):
-            _mesh = mp.solutions.face_mesh.FaceMesh(
-                static_image_mode=False, refine_landmarks=True, max_num_faces=1
-            )
-            # Run a dummy frame to trigger internal model loading
-            import numpy as np
-            dummy = np.zeros((120, 160, 3), dtype=np.uint8)
-            _mesh.process(dummy)
-            _mesh.close()
-            logger.info("MediaPipe FaceMesh pre-warmed successfully")
+        from .detection.orchestrator import prewarm_shared_mesh
+        prewarm_shared_mesh()
     except Exception as exc:
         logger.warning("Failed to pre-warm MediaPipe FaceMesh: %s", exc)
 
 
 def _run_startup_initialization(*, is_test_env: bool) -> None:
     _assert_required_api_routes()
-    if settings.PRECHECK_ALLOW_TEST_BYPASS:
-        if settings.precheck_test_bypass_enabled:
-            logger.critical("PRECHECK_ALLOW_TEST_BYPASS is enabled - identity verification is disabled!")
-        else:
-            logger.critical(
-                "PRECHECK_ALLOW_TEST_BYPASS is enabled, but bypass remains inactive because E2E_SEED_ENABLED is false"
+    if settings.precheck_test_bypass_enabled:
+        if settings.AUTO_APPLY_MIGRATIONS and not getattr(settings, "E2E_SEED_ENABLED", False):
+            raise RuntimeError(
+                "PRECHECK_ALLOW_TEST_BYPASS=true is not allowed when AUTO_APPLY_MIGRATIONS=true (production mode). "
+                "Either disable the bypass or set E2E_SEED_ENABLED=true to confirm this is a test environment."
             )
+        logger.critical("PRECHECK_ALLOW_TEST_BYPASS is enabled - identity verification accepts the local test bypass flag.")
+    if str(settings.CLOUDFLARE_MEDIA_API_BASE_URL or "").strip() and not settings.CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS:
+        logger.critical(
+            "SECURITY: Cloudflare video storage is configured but CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS is false. "
+            "Proctoring videos will be publicly accessible. Set CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS=true for production."
+        )
     if is_test_env:
         logger.info("Skipping automatic Alembic migrations in test environment")
         return
@@ -404,8 +403,9 @@ def _run_startup_initialization(*, is_test_env: bool) -> None:
         return
     _run_alembic_upgrade()
     logger.info("Alembic migrations applied successfully")
-    # Pre-warm detection models after migrations are applied
-    _prewarm_detection_models()
+    # Pre-warm detection models in a background thread so the app can start serving immediately
+    import threading
+    threading.Thread(target=_prewarm_detection_models, daemon=True, name="model-prewarm").start()
 
 
 async def _schedule_loop():
@@ -422,6 +422,78 @@ async def _schedule_loop():
                         await run_report_schedule(db, sched)
         except Exception as exc:
             logger.error("Report scheduler error: %s", exc)
+
+
+def _auto_submit_stale_attempts() -> None:
+    """Find IN_PROGRESS attempts past their time limit and auto-submit them."""
+    from datetime import timedelta
+    from .models import Attempt, AttemptStatus, Exam, ProctoringEvent, SeverityEnum
+    from .modules.attempts.routes_public import _auto_score_attempt
+
+    now = datetime.now(timezone.utc)
+    submitted = 0
+    try:
+        with SessionLocal() as db:
+            # Find all IN_PROGRESS attempts
+            stale = db.query(Attempt).filter(
+                Attempt.status == AttemptStatus.IN_PROGRESS,
+                Attempt.started_at.isnot(None),
+            ).all()
+
+            for attempt in stale:
+                # Determine the deadline: time_limit + 30min grace, or 24h fallback
+                exam = attempt.exam
+                time_limit_min = getattr(exam, "time_limit", None) if exam else None
+                if time_limit_min:
+                    deadline = attempt.started_at + timedelta(minutes=int(time_limit_min) + 30)
+                else:
+                    deadline = attempt.started_at + timedelta(hours=24)
+
+                if now < deadline:
+                    continue
+
+                # Auto-submit this stale attempt
+                try:
+                    score_result = _auto_score_attempt(attempt, db)
+                    attempt.status = AttemptStatus.SUBMITTED
+                    attempt.submitted_at = now
+                    if score_result["score"] is not None:
+                        attempt.score = score_result["score"]
+                        attempt.grade = score_result.get("grade")
+
+                    # Record a proctoring event for audit trail
+                    event = ProctoringEvent(
+                        attempt_id=attempt.id,
+                        event_type="AUTO_SUBMITTED_TIMEOUT",
+                        severity=SeverityEnum.MEDIUM,
+                        detail=f"Attempt auto-submitted after timeout ({time_limit_min or 'no'} min limit + grace period)",
+                        occurred_at=now,
+                    )
+                    db.add(event)
+                    db.add(attempt)
+                    db.commit()
+                    submitted += 1
+                except Exception as sub_err:
+                    logger.warning("Failed to auto-submit stale attempt %s: %s", attempt.id, sub_err)
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        logger.error("Stale attempt cleanup error: %s", exc)
+
+    if submitted:
+        logger.info("Auto-submitted %d stale IN_PROGRESS attempt(s)", submitted)
+
+
+async def _stale_attempt_cleanup_loop():
+    """Run stale attempt cleanup every 30 minutes."""
+    while True:
+        await asyncio.sleep(30 * 60)
+        try:
+            _auto_submit_stale_attempts()
+        except Exception as exc:
+            logger.error("Stale attempt cleanup loop error: %s", exc)
 
 
 async def _retention_cleanup_loop():
@@ -475,6 +547,7 @@ async def lifespan(_: FastAPI):
         background_tasks = [
             asyncio.create_task(_schedule_loop()),
             asyncio.create_task(_retention_cleanup_loop()),
+            asyncio.create_task(_stale_attempt_cleanup_loop()),
         ]
     elif not is_test_env:
         logger.info("This worker defers background tasks to the leader (PID %s)", os.getpid())

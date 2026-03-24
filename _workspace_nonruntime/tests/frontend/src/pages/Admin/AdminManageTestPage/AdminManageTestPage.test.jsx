@@ -5,7 +5,6 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 
 import AdminManageTestPage from './AdminManageTestPage'
 
-const getTestRuntimeMock = vi.fn()
 const getTestMock = vi.fn()
 const allTestsMock = vi.fn()
 const attemptsMock = vi.fn()
@@ -16,6 +15,7 @@ const categoriesMock = vi.fn()
 const createCategoryMock = vi.fn()
 const getAttemptEventsMock = vi.fn()
 const listAttemptVideosMock = vi.fn()
+const listExamVideoUploadStatusMock = vi.fn()
 const pauseAttemptMock = vi.fn()
 const resumeAttemptMock = vi.fn()
 const gradeAttemptMock = vi.fn()
@@ -42,7 +42,6 @@ vi.mock('../../../hooks/useUnsavedChanges', () => ({
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
     allTests: (...args) => allTestsMock(...args),
-    getTestRuntime: (...args) => getTestRuntimeMock(...args),
     getTest: (...args) => getTestMock(...args),
     attempts: (...args) => attemptsMock(...args),
     schedules: (...args) => schedulesMock(...args),
@@ -52,6 +51,7 @@ vi.mock('../../../services/admin.service', () => ({
     createCategory: (...args) => createCategoryMock(...args),
     getAttemptEvents: (...args) => getAttemptEventsMock(...args),
     listAttemptVideos: (...args) => listAttemptVideosMock(...args),
+    listExamVideoUploadStatus: (...args) => listExamVideoUploadStatusMock(...args),
     pauseAttempt: (...args) => pauseAttemptMock(...args),
     resumeAttempt: (...args) => resumeAttemptMock(...args),
     gradeAttempt: (...args) => gradeAttemptMock(...args),
@@ -72,15 +72,6 @@ vi.mock('../../../services/admin.service', () => ({
     generateTestReportPdf: (...args) => generateTestReportPdfMock(...args),
   },
 }))
-
-const runtimeExam = {
-  id: 'test-1',
-  title: 'Midterm',
-  status: 'CLOSED',
-  max_attempts: 1,
-  time_limit: 60,
-  question_count: 0,
-}
 
 const adminTest = {
   id: 'test-1',
@@ -124,7 +115,6 @@ describe('AdminManageTestPage', () => {
   beforeEach(() => {
     vi.resetAllMocks()
 
-    getTestRuntimeMock.mockResolvedValue({ data: runtimeExam })
     getTestMock.mockResolvedValue({ data: adminTest })
     allTestsMock.mockResolvedValue({ data: { items: [] } })
     attemptsMock.mockResolvedValue({ data: [] })
@@ -137,6 +127,7 @@ describe('AdminManageTestPage', () => {
     createCategoryMock.mockResolvedValue({ data: { id: 'cat-2', name: 'Security', type: 'TEST', description: '' } })
     getAttemptEventsMock.mockResolvedValue({ data: [] })
     listAttemptVideosMock.mockResolvedValue({ data: [] })
+    listExamVideoUploadStatusMock.mockResolvedValue({ data: [] })
     pauseAttemptMock.mockResolvedValue({ data: {} })
     resumeAttemptMock.mockResolvedValue({ data: {} })
     gradeAttemptMock.mockResolvedValue({ data: {} })
@@ -158,9 +149,9 @@ describe('AdminManageTestPage', () => {
   })
 
   it('shows a retry path when the initial bootstrap fails', async () => {
-    getTestRuntimeMock
+    getTestMock
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValue({ data: runtimeExam })
+      .mockResolvedValue({ data: adminTest })
 
     renderPage()
 
@@ -168,7 +159,7 @@ describe('AdminManageTestPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
-    await waitFor(() => expect(getTestRuntimeMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(getTestMock).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.getByDisplayValue('Midterm')).toBeTruthy())
   })
 
@@ -290,7 +281,6 @@ describe('AdminManageTestPage', () => {
 
   it('locks report review toggles when a test is already published', async () => {
     getTestMock.mockResolvedValueOnce({ data: { ...adminTest, status: 'PUBLISHED' } })
-    getTestRuntimeMock.mockResolvedValueOnce({ data: { ...runtimeExam, status: 'OPEN' } })
 
     renderPage()
 
@@ -504,18 +494,13 @@ describe('AdminManageTestPage', () => {
   })
 
   it('renders lifecycle summary cards from persisted test, session, and alert data', async () => {
-    getTestRuntimeMock.mockResolvedValueOnce({
-      data: {
-        ...runtimeExam,
-        status: 'OPEN',
-        certificate: { signer: 'Dr. Review' },
-        proctoring_config: { fullscreen_enforce: true, face_detection: true, tab_switch_detect: true },
-      },
-    })
     getTestMock.mockResolvedValueOnce({
       data: {
         ...adminTest,
         status: 'PUBLISHED',
+        runtime_status: 'OPEN',
+        certificate: { signer: 'Dr. Review' },
+        proctoring_config: { fullscreen_enforce: true, face_detection: true, tab_switch_detect: true },
         runtime_settings: {
           show_score_report: true,
           show_answer_review: true,
@@ -634,7 +619,7 @@ describe('AdminManageTestPage', () => {
     )
 
     await waitFor(() => expect(screen.queryByText('All tests')).toBeNull())
-    expect(getTestRuntimeMock).not.toHaveBeenCalled()
+    expect(getTestMock).not.toHaveBeenCalled()
   })
 
   it('shows scheduled learners in candidates even before they start and disables attempt-only actions', async () => {

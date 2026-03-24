@@ -31,7 +31,7 @@ async def mark_read(notification_id: str, db: Session = Depends(get_db_dep), cur
 async def mark_all_read(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     db.execute(
         update(Notification)
-        .where(Notification.user_id == current.id, Notification.is_read == False)
+        .where(Notification.user_id == current.id, Notification.is_read.is_(False))
         .values(is_read=True)
     )
     db.commit()
@@ -41,6 +41,6 @@ async def mark_all_read(db: Session = Depends(get_db_dep), current=Depends(get_c
 @router.get("/unread-count")
 async def unread_count(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     count = db.scalar(
-        select(func.count(Notification.id)).where(Notification.user_id == current.id, Notification.is_read == False)
+        select(func.count(Notification.id)).where(Notification.user_id == current.id, Notification.is_read.is_(False))
     ) or 0
     return {"count": count}

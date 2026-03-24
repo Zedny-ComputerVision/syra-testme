@@ -18,6 +18,8 @@ Optimisations:
 """
 import math
 import logging
+import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, Future
 
 import cv2
@@ -45,6 +47,38 @@ from .liveness import LivenessDetector
 from .emotion_detection import EmotionMonitor
 
 logger = logging.getLogger(__name__)
+
+# Module-level cached FaceMesh instance — shared across all orchestrator instances
+# to avoid re-loading the model for each new proctoring session.
+_SHARED_FACE_MESH = None
+_SHARED_FACE_MESH_LOCK = threading.Lock()  # MediaPipe FaceMesh is NOT thread-safe
+
+
+def prewarm_shared_mesh() -> None:
+    """Pre-load FaceMesh model at startup so first frame has no cold-start lag."""
+    global _SHARED_FACE_MESH
+    if not _MP_AVAILABLE or _SHARED_FACE_MESH is not None:
+        return
+    with _SHARED_FACE_MESH_LOCK:
+        if _SHARED_FACE_MESH is not None:
+            return  # double-check after acquiring lock
+        try:
+            mesh = _mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=False,
+                refine_landmarks=True,
+                max_num_faces=1,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            # Run a dummy frame to trigger internal model loading
+            dummy = np.zeros((120, 160, 3), dtype=np.uint8)
+            mesh.process(dummy)
+            _SHARED_FACE_MESH = mesh
+            logger.info("Shared FaceMesh pre-warmed and cached at module level")
+        except Exception as exc:
+            logger.warning("Failed to prewarm shared FaceMesh: %s", exc)
+            _SHARED_FACE_MESH = None
+
 
 DEFAULT_ORCHESTRATOR_CONFIG = {
     "face_detection": True,
@@ -102,8 +136,8 @@ DEFAULT_ORCHESTRATOR_CONFIG = {
     "pose_change_threshold_rad": 0.1,
     # Liveness detection (EAR blink + anti-replay)
     "liveness_detection": True,
-    "no_blink_threshold_sec": 15.0,   # alert if no blink for 15 s
-    "eyes_closed_threshold_sec": 3.0, # alert if eyes closed for 3 s
+    "no_blink_threshold_sec": 15.0,  # alert if no blink for 15 s
+    "eyes_closed_threshold_sec": 3.0,  # alert if eyes closed for 3 s
     # Emotion / stress detection
     "emotion_detection": True,
     "stress_threshold_sec": 8.0,      # sustained stress cue before alerting
@@ -255,7 +289,7 @@ class ProctoringOrchestrator:
         self._frames_eye_away: int = 0        # frames with a gaze-away alert
 
         # Gaze heatmap: list of (x, y) normalised positions sampled every N frames
-        self._gaze_samples: list[tuple[float, float]] = []
+        self._gaze_samples: deque[tuple[float, float]] = deque(maxlen=5000)
         self._gaze_sample_interval: int = 10  # overridden from config below
 
         cfg = _validate_config(config)
@@ -344,12 +378,10 @@ class ProctoringOrchestrator:
             enabled=self.enable_emotion,
         )
 
-        # ── Shared FaceMesh — single instance for ALL MediaPipe detectors ────
-        # Uses refine_landmarks=True so iris landmarks (468-477) are available
-        # for eye tracking.  Running FaceMesh ONCE per frame instead of 6-7
-        # times saves 120-500 ms per frame.
-        self._shared_mesh = None
-        if _MP_AVAILABLE:
+        # ── Shared FaceMesh — reuse module-level cached instance if available,
+        # otherwise create a per-orchestrator instance as fallback.
+        self._shared_mesh = _SHARED_FACE_MESH
+        if self._shared_mesh is None and _MP_AVAILABLE:
             try:
                 self._shared_mesh = _mp.solutions.face_mesh.FaceMesh(
                     static_image_mode=False,
@@ -366,7 +398,11 @@ class ProctoringOrchestrator:
         self.score_weights = cfg.get("violation_weights") or {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
         # Thread pool for running object detection in parallel with face pipeline
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="obj_detect")
+        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="obj_detect")
+
+    def close(self) -> None:
+        """Shut down the thread pool executor."""
+        self._executor.shutdown(wait=False)
 
     def process_frame(self, frame_bytes: bytes) -> list[dict]:
         """Run all visual detectors on a single frame.
@@ -450,7 +486,9 @@ class ProctoringOrchestrator:
             if self._shared_mesh is not None:
                 if self._cached_rgb is None:
                     self._cached_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                mesh_result = self._shared_mesh.process(self._cached_rgb)
+                # MediaPipe FaceMesh is NOT thread-safe — serialise access
+                with _SHARED_FACE_MESH_LOCK:
+                    mesh_result = self._shared_mesh.process(self._cached_rgb)
                 if mesh_result.multi_face_landmarks:
                     shared_lm = mesh_result.multi_face_landmarks[0].landmark
 
@@ -480,14 +518,13 @@ class ProctoringOrchestrator:
                     eye_away_this_frame = True
                     self._frames_eye_away += 1
 
-                # Accumulate gaze heatmap sample every N frames
+                # Accumulate gaze heatmap sample every N frames (only when attentive)
                 if (
                     self._frame_count % self._gaze_sample_interval == 0
                     and self.eye_tracker.last_gaze_normalized is not None
+                    and not eye_away_this_frame
                 ):
                     self._gaze_samples.append(self.eye_tracker.last_gaze_normalized)
-                    if len(self._gaze_samples) > 5000:
-                        self._gaze_samples = self._gaze_samples[-5000:]
 
             if not eye_away_this_frame:
                 self._frames_attentive += 1

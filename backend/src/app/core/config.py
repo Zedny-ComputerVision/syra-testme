@@ -1,6 +1,5 @@
 from functools import lru_cache
-import os
-import sys
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +23,7 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str = Field(default="postgresql+psycopg://postgres:password@localhost:5432/syra_lms")
+    DATABASE_MIGRATION_URL: str | None = None
     DB_POOL_SIZE: int = Field(default=3, ge=1)
     DB_MAX_OVERFLOW: int = Field(default=0, ge=0)
     DB_POOL_TIMEOUT_SECONDS: int = Field(default=15, ge=1)
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     FRONTEND_BASE_URL: str | None = None
     BACKEND_BASE_URL: str = Field(default="http://127.0.0.1:8000")
 
-    CORS_ORIGINS: str = Field(default="*")
+    CORS_ORIGINS: str = Field(default="")
     RATE_LIMIT_LOGIN: str = Field(default="10/minute")
     RATE_LIMIT_FORGOT: str = Field(default="5/minute")
     E2E_SEED_ENABLED: bool = False
@@ -66,9 +66,9 @@ class Settings(BaseSettings):
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)
     MAX_VIDEO_UPLOAD_MB: int = Field(default=512, ge=16, le=4096)
     MEDIA_STORAGE_PROVIDER: str = Field(default="local")
-    PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="local")
+    PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
-    CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
+    CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = True
     CLOUDFLARE_MEDIA_WATERMARK_UID: str | None = None
     SUPABASE_URL: str | None = None
     SUPABASE_PUBLISHABLE_KEY: str | None = None
@@ -79,16 +79,47 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL")
     @classmethod
     def validate_database_url(cls, value: str) -> str:
+        normalized = cls._normalize_database_url_value(value, required=True)
+        assert normalized is not None
+        return normalized
+
+    @field_validator("DATABASE_MIGRATION_URL", mode="before")
+    @classmethod
+    def validate_database_migration_url(cls, value: str | None) -> str | None:
+        return cls._normalize_database_url_value(value, required=False)
+
+    @classmethod
+    def _normalize_database_url_value(cls, value: str | None, *, required: bool) -> str | None:
         normalized = str(value or "").strip()
         if not normalized:
-            raise ValueError("DATABASE_URL is required")
+            if required:
+                raise ValueError("DATABASE_URL is required")
+            return None
         if normalized.startswith("postgres://"):
             normalized = f"postgresql+psycopg://{normalized[len('postgres://'):]}"
         elif normalized.startswith("postgresql://"):
             normalized = f"postgresql+psycopg://{normalized[len('postgresql://'):]}"
         if not normalized.startswith("postgresql+psycopg://"):
             raise ValueError("DATABASE_URL must use a PostgreSQL connection string")
-        return normalized
+        return cls._ensure_supabase_sslmode(normalized)
+
+    @staticmethod
+    def _ensure_supabase_sslmode(value: str) -> str:
+        try:
+            parts = urlsplit(value)
+        except Exception:
+            return value
+
+        hostname = str(parts.hostname or "").lower()
+        if "supabase" not in hostname:
+            return value
+
+        query_pairs = parse_qsl(parts.query, keep_blank_values=True)
+        if any(str(key).lower() == "sslmode" for key, _ in query_pairs):
+            return value
+
+        query_pairs.append(("sslmode", "require"))
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_pairs), parts.fragment))
 
     @field_validator("JWT_SECRET")
     @classmethod
@@ -125,8 +156,8 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_video_storage_provider(cls, value: str) -> str:
         normalized = str(value or "cloudflare").strip().lower()
-        if normalized not in {"local", "cloudflare", "supabase"}:
-            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'local', 'cloudflare', or 'supabase'")
+        if normalized not in {"cloudflare", "supabase"}:
+            raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'cloudflare' or 'supabase'")
         return normalized
 
     @field_validator("CLOUDFLARE_MEDIA_API_BASE_URL", mode="before")
@@ -181,20 +212,18 @@ class Settings(BaseSettings):
 
     @property
     def precheck_test_bypass_enabled(self) -> bool:
-        return bool(
-            self.PRECHECK_ALLOW_TEST_BYPASS
-            and (
-                self.E2E_SEED_ENABLED
-                or "pytest" in sys.modules
-                or "PYTEST_CURRENT_TEST" in os.environ
-            )
-        )
+        return bool(self.PRECHECK_ALLOW_TEST_BYPASS)
 
     @property
     def db_disable_pooling(self) -> bool:
         if self.DB_DISABLE_POOLING is not None:
             return bool(self.DB_DISABLE_POOLING)
         return ".pooler.supabase.com" in self.DATABASE_URL
+
+    @property
+    def database_migration_url(self) -> str:
+        return self.DATABASE_MIGRATION_URL or self.DATABASE_URL
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -129,4 +129,3 @@ class FaceDetector:
                 "confidence": 0.9,
             }
         return None
-

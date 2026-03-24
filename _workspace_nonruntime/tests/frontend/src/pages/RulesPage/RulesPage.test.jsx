@@ -54,7 +54,7 @@ describe('RulesPage', () => {
       .mockResolvedValueOnce({
         data: {
           settings: { rules: ['Keep your camera on.'] },
-          proctoring_config: { identity_required: true },
+          proctoring_config: {},
         },
       })
 

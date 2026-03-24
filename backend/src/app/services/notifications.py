@@ -6,6 +6,7 @@ from ..models import Notification
 
 logger = logging.getLogger(__name__)
 
+
 def notify_user(db: Session, user_id, title: str, message: str, link: str = None):
     try:
         notif = Notification(user_id=user_id, title=title, message=message, link=link)

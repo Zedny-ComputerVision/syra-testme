@@ -17,7 +17,7 @@ target_metadata = Base.metadata
 settings = get_settings()
 # Alembic uses configparser interpolation, so literal '%' characters in
 # passwords must be escaped before setting the URL.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", settings.database_migration_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:

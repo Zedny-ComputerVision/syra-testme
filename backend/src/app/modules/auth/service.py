@@ -44,7 +44,11 @@ class AuthService:
             role=RoleEnum.ADMIN,
         )
         self.repository.add(user)
-        self.repository.commit()
+        try:
+            self.repository.commit()
+        except Exception:
+            self.repository.db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Admin already set up")
         self.repository.refresh(user)
         return user
 
@@ -65,7 +69,11 @@ class AuthService:
             role=RoleEnum.LEARNER,
         )
         self.repository.add(user)
-        self.repository.commit()
+        try:
+            self.repository.commit()
+        except Exception:
+            self.repository.db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
         self.repository.refresh(user)
         return user
 

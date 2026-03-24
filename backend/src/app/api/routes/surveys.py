@@ -113,7 +113,7 @@ async def create_survey(body: SurveyCreate, db: Session = Depends(get_db_dep), c
 async def list_surveys(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Survey)
     if current.role == RoleEnum.LEARNER:
-        query = query.where(Survey.is_active == True)
+        query = query.where(Survey.is_active.is_(True))
     else:
         ensure_permission(db, current, "Edit Tests")
     surveys = db.scalars(query.order_by(Survey.created_at.desc())).all()

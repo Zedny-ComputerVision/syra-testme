@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import json
 import logging
+
 import tempfile
 import time
 from collections.abc import Mapping
@@ -38,9 +39,8 @@ from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 router = APIRouter()
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
-VIDEO_DIR = BASE_STORAGE_DIR / "videos"
-HEARTBEAT_INTERVAL_SECONDS = 15
-INACTIVITY_TIMEOUT_SECONDS = 120
+HEARTBEAT_INTERVAL_SECONDS = 10
+INACTIVITY_TIMEOUT_SECONDS = 60
 ADMIN_PROCTORING_NOTIFICATION_WINDOW = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,52 @@ SEVERITY_MAP = {
     "LOW": SeverityEnum.LOW,
 }
 settings = get_settings()
+
+# ── Live monitoring registry ──────────────────────────────────────────────────
+# Maps attempt_id → set of admin WebSocket connections watching that session.
+# Also stores the latest frame thumbnail + session metadata for new viewers.
+_live_viewers: dict[str, set[WebSocket]] = {}
+_live_session_info: dict[str, dict] = {}  # attempt_id → {user_name, exam_title, started_at, ...}
+_live_latest_thumb: dict[str, bytes] = {}  # attempt_id → last JPEG thumbnail (small)
+
+
+async def _broadcast_to_viewers(attempt_id: str, message: dict) -> None:
+    """Send a JSON message to all admin viewers watching this attempt."""
+    viewers = _live_viewers.get(attempt_id)
+    if not viewers:
+        return
+    dead: list[WebSocket] = []
+    for ws in viewers:
+        try:
+            if ws.application_state == WebSocketState.CONNECTED:
+                await ws.send_json(message)
+            else:
+                dead.append(ws)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        viewers.discard(ws)
+
+
+async def _broadcast_bytes_to_viewers(attempt_id: str, data: bytes, msg_type: str = "frame") -> None:
+    """Send binary data (frame thumbnail) to admin viewers."""
+    viewers = _live_viewers.get(attempt_id)
+    if not viewers:
+        return
+    # Prepend a type byte: 0x01 = frame, 0x02 = screen
+    type_byte = b'\x01' if msg_type == "frame" else b'\x02'
+    payload = type_byte + data
+    dead: list[WebSocket] = []
+    for ws in viewers:
+        try:
+            if ws.application_state == WebSocketState.CONNECTED:
+                await ws.send_bytes(payload)
+            else:
+                dead.append(ws)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        viewers.discard(ws)
 
 
 def _check_object_model_available() -> bool:
@@ -77,22 +123,34 @@ def _video_filename(attempt_id: str, session_id: str, source: str, extension: st
 
 def _video_storage_provider() -> str:
     provider = get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER
-    if provider == "cloudflare" and cloudflare_video_storage_enabled():
+    if provider == "cloudflare":
+        if not cloudflare_video_storage_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail="Cloudflare video storage is not properly configured. "
+                       "Please set CLOUDFLARE_MEDIA_API_BASE_URL.",
+            )
         return "cloudflare"
     if provider == "supabase":
         from ...services.supabase_storage import supabase_video_storage_enabled
-        if supabase_video_storage_enabled():
-            return "supabase"
-    return "local"
+        if not supabase_video_storage_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail="Supabase video storage is not properly configured.",
+            )
+        return "supabase"
+    raise HTTPException(
+        status_code=503,
+        detail=f"Unsupported video storage provider: {provider}",
+    )
 
 
-def _remote_video_storage_enabled() -> bool:
-    return _video_storage_provider() in ("cloudflare", "supabase")
-
-
-def _remote_video_storage_error_detail() -> str:
-    provider = get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER
-    return f"{provider.title()} video storage is not configured"
+def _require_cloudflare_video_storage() -> None:
+    provider = str(get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER or "").strip().lower()
+    if provider != "cloudflare":
+        raise HTTPException(status_code=503, detail="Cloudflare video storage must be enabled for proctoring recordings")
+    if not cloudflare_video_storage_enabled():
+        raise HTTPException(status_code=503, detail="Cloudflare video storage is not configured")
 
 
 def _is_absolute_http_url(value: object) -> bool:
@@ -131,14 +189,12 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     name = str(meta.get("name") or "").strip()
     provider = str(meta.get("provider") or "").strip().lower()
     if not provider:
-        provider = "supabase" if path.startswith("videos/") else ("local" if path else "cloudflare")
-    if provider not in {"cloudflare", "supabase", "local"}:
+        provider = "supabase" if path.startswith("videos/") else "cloudflare"
+    if provider not in {"cloudflare", "supabase"}:
         return None
     if provider == "cloudflare" and not _is_absolute_http_url(url):
         return None
     if provider == "supabase" and not (path or _is_absolute_http_url(url)):
-        return None
-    if provider == "local" and not (name or path):
         return None
 
     created_at = meta.get("created_at")
@@ -158,12 +214,6 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     if _is_absolute_http_url(url):
         item["url"] = url
         item["playback_url"] = str(meta.get("playback_url") or url).strip()
-    elif provider == "local":
-        local_url = f"/api/media/videos/{resolved_name}"
-        item["url"] = local_url
-        item["playback_url"] = local_url
-        item.setdefault("playback_type", "direct")
-        item.setdefault("status", "ready")
         item["ready_to_stream"] = True
 
     for key in ("uid", "status", "thumbnail", "duration", "session_id", "playback_type", "recording_started_at", "recording_stopped_at", "bucket"):
@@ -189,6 +239,173 @@ def _saved_video_events(db: Session, attempt_id: str) -> list[ProctoringEvent]:
     )
 
 
+def _coerce_non_negative_int(value: object) -> int:
+    try:
+        numeric = int(float(value))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, numeric)
+
+
+def _clamp_progress_percent(value: object, *, default: int = 0) -> int:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        numeric = float(default)
+    return max(0, min(100, int(round(numeric))))
+
+
+def _normalize_video_upload_status(value: object) -> str:
+    normalized = str(value or "uploading").strip().lower()
+    if normalized in {"not_started", "queued", "uploading", "processing", "complete", "error"}:
+        return normalized
+    return "uploading"
+
+
+def _normalize_video_upload_progress_meta(meta: object, occurred_at: datetime | None = None) -> dict[str, object] | None:
+    if not isinstance(meta, dict):
+        return None
+
+    session_id = str(meta.get("session_id") or "").strip()
+    source = _normalize_video_source(meta.get("source"))
+    uploaded_bytes = _coerce_non_negative_int(meta.get("uploaded_bytes"))
+    total_bytes = _coerce_non_negative_int(meta.get("total_bytes"))
+    if total_bytes > 0 and uploaded_bytes > total_bytes:
+        uploaded_bytes = total_bytes
+
+    progress_percent = meta.get("progress_percent")
+    if progress_percent in (None, "") and total_bytes > 0:
+        progress_percent = (uploaded_bytes / total_bytes) * 100
+    normalized_status = _normalize_video_upload_status(meta.get("status"))
+    normalized_percent = _clamp_progress_percent(progress_percent, default=0)
+
+    if normalized_status == "complete":
+        normalized_percent = 100
+    elif normalized_status in {"uploading", "processing"}:
+        normalized_percent = min(99, normalized_percent)
+
+    created_at = meta.get("created_at")
+    if not created_at and occurred_at:
+        created_at = occurred_at.isoformat()
+
+    return {
+        "session_id": session_id,
+        "source": source,
+        "uploaded_bytes": uploaded_bytes,
+        "total_bytes": total_bytes,
+        "progress_percent": normalized_percent,
+        "status": normalized_status,
+        "created_at": created_at,
+    }
+
+
+def _expected_video_sources(attempt: Attempt) -> list[str]:
+    if not attempt.exam:
+        return []
+
+    requirements = get_proctoring_requirements(exam_proctoring(attempt.exam))
+    sources: list[str] = []
+    if requirements.get("camera_required"):
+        sources.append("camera")
+    if requirements.get("screen_required"):
+        sources.append("screen")
+    return sources
+
+
+def _build_attempt_video_upload_summary(
+    attempt: Attempt,
+    *,
+    saved_by_source: Mapping[str, dict[str, object]] | None = None,
+    progress_by_source: Mapping[str, dict[str, object]] | None = None,
+) -> dict[str, object]:
+    saved_items = dict(saved_by_source or {})
+    progress_items = dict(progress_by_source or {})
+    required_sources = _expected_video_sources(attempt)
+    available_sources = set(required_sources) | set(saved_items.keys()) | set(progress_items.keys())
+    ordered_sources = [source for source in ("camera", "screen") if source in available_sources]
+    ordered_sources.extend(sorted(source for source in available_sources if source not in {"camera", "screen"}))
+
+    source_summaries: list[dict[str, object]] = []
+    for source in ordered_sources:
+        saved_item = saved_items.get(source)
+        progress_item = progress_items.get(source)
+        if saved_item:
+            size = _coerce_non_negative_int(saved_item.get("size"))
+            source_summaries.append({
+                "source": source,
+                "label": source.title(),
+                "session_id": str(saved_item.get("session_id") or ""),
+                "progress_percent": 100,
+                "remaining_percent": 0,
+                "status": "complete",
+                "uploaded_bytes": size,
+                "total_bytes": size,
+                "has_saved_video": True,
+            })
+            continue
+
+        progress_percent = _clamp_progress_percent(progress_item.get("progress_percent") if progress_item else 0, default=0)
+        status = _normalize_video_upload_status(progress_item.get("status") if progress_item else "not_started")
+        if status in {"uploading", "processing"}:
+            progress_percent = min(99, progress_percent)
+        if status == "complete":
+            progress_percent = 100
+
+        source_summaries.append({
+            "source": source,
+            "label": source.title(),
+            "session_id": str(progress_item.get("session_id") or "") if progress_item else "",
+            "progress_percent": progress_percent,
+            "remaining_percent": max(0, 100 - progress_percent),
+            "status": status,
+            "uploaded_bytes": _coerce_non_negative_int(progress_item.get("uploaded_bytes")) if progress_item else 0,
+            "total_bytes": _coerce_non_negative_int(progress_item.get("total_bytes")) if progress_item else 0,
+            "has_saved_video": False,
+        })
+
+    upload_percent = (
+        int(round(sum(int(item["progress_percent"]) for item in source_summaries) / len(source_summaries)))
+        if source_summaries else 0
+    )
+    remaining_percent = max(0, 100 - upload_percent)
+    failed = any(item["status"] == "error" for item in source_summaries)
+    uploading = any(item["status"] in {"queued", "uploading", "processing"} for item in source_summaries)
+    has_video = bool(saved_items)
+    completed_sources = [item["source"] for item in source_summaries if int(item["progress_percent"]) >= 100]
+    all_required_uploaded = bool(required_sources) and all(source in saved_items for source in required_sources)
+
+    if source_summaries and len(completed_sources) == len(source_summaries):
+        summary_status = "complete"
+        status_label = "Upload complete"
+    elif failed:
+        summary_status = "error"
+        status_label = "Upload failed"
+    elif uploading or upload_percent > 0:
+        summary_status = "uploading"
+        status_label = "Uploading in background"
+    elif attempt.status in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
+        summary_status = "waiting"
+        status_label = "Waiting to upload"
+    else:
+        summary_status = "not_started"
+        status_label = "Not started"
+
+    return {
+        "attempt_id": str(attempt.id),
+        "has_video": has_video,
+        "saved_video_count": len(saved_items),
+        "required_sources": required_sources,
+        "completed_sources": completed_sources,
+        "upload_percent": upload_percent,
+        "remaining_percent": remaining_percent,
+        "uploading": uploading and not all_required_uploaded,
+        "all_required_uploaded": all_required_uploaded,
+        "status": summary_status,
+        "status_label": status_label,
+        "sources": source_summaries,
+    }
+
+
 def _find_saved_video_file_info(db: Session, attempt_id: str, session_id: str, source: str) -> dict[str, object] | None:
     normalized_source = _normalize_video_source(source)
     for event in _saved_video_events(db, attempt_id):
@@ -210,7 +427,7 @@ def _build_registered_video_info(
     raw = dict(payload or {})
     remote = raw.get("remote")
     remote = remote if isinstance(remote, dict) else {}
-    provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider() or "local").strip().lower()
+    provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider()).strip().lower()
     if provider and provider != "cloudflare":
         raise HTTPException(status_code=400, detail="provider must be cloudflare")
 
@@ -275,14 +492,14 @@ def _build_registered_video_info(
     return file_info
 
 
-def _build_local_video_info(
+async def _build_supabase_video_info(
     attempt_id: str,
     *,
     session_id: str,
     source: str,
     filename: str,
-    content: bytes | None = None,
-    upload_path: Path | None = None,
+    content: bytes,
+    content_type: str,
     recording_started_at: str | None,
     recording_stopped_at: str | None,
 ) -> dict[str, object]:
@@ -290,31 +507,38 @@ def _build_local_video_info(
     if not safe_filename:
         raise HTTPException(status_code=400, detail="A valid video filename is required")
 
-    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = VIDEO_DIR / safe_filename
-    if upload_path is not None:
-        upload_path.replace(file_path)
-        file_size = file_path.stat().st_size
-    else:
-        payload = bytes(content or b"")
-        file_path.write_bytes(payload)
-        file_size = len(payload)
+    try:
+        uploaded = await upload_bytes_to_supabase(
+            "videos",
+            safe_filename,
+            bytes(content or b""),
+            content_type=content_type or "application/octet-stream",
+        )
+    except Exception as exc:
+        logger.exception("Supabase video upload failed for attempt %s", attempt_id)
+        raise HTTPException(status_code=502, detail="Supabase video upload failed") from exc
+
+    playback_url = str(uploaded.get("url") or "").strip()
+    object_path = str(uploaded.get("path") or "").strip()
+    if not playback_url and not object_path:
+        raise HTTPException(status_code=502, detail="Supabase video upload returned no file reference")
 
     return {
-        "provider": "local",
-        "name": safe_filename,
-        "path": safe_filename,
-        "url": f"/api/media/videos/{safe_filename}",
-        "playback_url": f"/api/media/videos/{safe_filename}",
+        "provider": "supabase",
+        "name": str(uploaded.get("name") or safe_filename),
+        "path": object_path,
+        "url": playback_url,
+        "playback_url": playback_url,
         "playback_type": "direct",
-        "size": file_size,
+        "size": int(uploaded.get("size") or len(content or b"")),
         "source": _normalize_video_source(source),
         "session_id": session_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": str(uploaded.get("created_at") or datetime.now(timezone.utc).isoformat()),
         "ready_to_stream": True,
         "status": "ready",
         "recording_started_at": recording_started_at,
         "recording_stopped_at": recording_stopped_at,
+        "bucket": uploaded.get("bucket"),
     }
 
 
@@ -344,8 +568,10 @@ def _load_integrations_config(db: Session) -> dict:
 
 async def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -> str | None:
     """Save screenshot evidence for proctoring events."""
+    import secrets
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    filename = f"{attempt_id}_{event_type}_{ts}.jpg"
+    token = secrets.token_hex(8)
+    filename = f"{attempt_id}_{event_type}_{ts}_{token}.jpg"
     if settings.MEDIA_STORAGE_PROVIDER == "supabase":
         await upload_bytes_to_supabase("evidence", filename, frame_bytes, content_type="image/jpeg")
         return f"/api/media/evidence/{filename}"
@@ -399,7 +625,6 @@ async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> 
                 )
             temp_file.write(chunk)
     except Exception:
-        temp_file.close()
         temp_path.unlink(missing_ok=True)
         raise
     finally:
@@ -510,6 +735,15 @@ def _auto_submit_attempt(
     if attempt.status != AttemptStatus.SUBMITTED:
         attempt.status = AttemptStatus.SUBMITTED
         attempt.submitted_at = timestamp
+        # Auto-score so the learner sees results immediately
+        try:
+            from ..attempts.routes_public import _auto_score_attempt
+            score_result = _auto_score_attempt(attempt, db)
+            if score_result.get("score") is not None:
+                attempt.score = score_result["score"]
+                attempt.grade = score_result.get("grade")
+        except Exception as score_err:
+            logger.warning("Auto-score failed during forced submit for attempt %s: %s", attempt.id, score_err)
         db.add(attempt)
         db.commit()
     exam_title = attempt.exam.title if attempt.exam else "Exam"
@@ -617,6 +851,18 @@ def _build_rule_detail(rule: Mapping[str, object], event_type: str, actual_count
     message = rule.get("message")
     if isinstance(message, str) and message.strip():
         return message.strip()
+    conditions = rule.get("conditions")
+    if isinstance(conditions, list) and len(conditions) > 0:
+        cond_labels = [
+            f"{_event_label(str(c.get('event_type', '?')))} >= {c.get('threshold', 1)}"
+            for c in conditions if isinstance(c, Mapping)
+        ]
+        window = rule.get("window_seconds")
+        window_str = f" within {int(window)}s" if window else ""
+        return (
+            f"Compound rule triggered: {' AND '.join(cond_labels)}{window_str}. "
+            f"Action: {_action_label(str(rule.get('action') or 'WARN'))}."
+        )
     return (
         f"{_event_label(event_type)} reached {actual_count} occurrence(s). "
         f"Action: {_action_label(str(rule.get('action') or 'WARN'))}."
@@ -647,16 +893,54 @@ def _apply_alert_rules(
     for rule in rules:
         if not isinstance(rule, Mapping):
             continue
-        if str(rule.get("event_type") or "").upper() != source_event.event_type:
-            continue
-        threshold = max(1, int(rule.get("threshold") or 1))
-        rule_id = str(rule.get("id") or f"{source_event.event_type}-{threshold}")
-        if matching_count < threshold or _rule_already_triggered(history_events, rule_id):
-            continue
+
+        # ── AND-logic rules: require multiple conditions to ALL be met ──
+        conditions = rule.get("conditions")
+        if isinstance(conditions, list) and len(conditions) > 0:
+            rule_id = str(rule.get("id") or "compound-" + "-".join(
+                str(c.get("event_type", "?")) for c in conditions if isinstance(c, Mapping)
+            ))
+            if _rule_already_triggered(history_events, rule_id):
+                continue
+            window_sec = float(rule.get("window_seconds", 0))
+            all_met = True
+            for cond in conditions:
+                if not isinstance(cond, Mapping):
+                    all_met = False
+                    break
+                cond_type = str(cond.get("event_type") or "").upper()
+                cond_threshold = max(1, int(cond.get("threshold") or 1))
+                if window_sec > 0:
+                    cutoff = occurred_at - timedelta(seconds=window_sec)
+                    cond_count = sum(
+                        1 for e in history_events
+                        if e.event_type == cond_type
+                        and e.occurred_at is not None
+                        and e.occurred_at >= cutoff
+                    )
+                else:
+                    cond_count = sum(1 for e in history_events if e.event_type == cond_type)
+                if cond_count < cond_threshold:
+                    all_met = False
+                    break
+            if not all_met:
+                continue
+            # All conditions met — fall through to action handling below
+            matching_count = sum(1 for e in history_events if e.event_type == source_event.event_type)
+        else:
+            # ── Single event_type rule (original logic) ──
+            if str(rule.get("event_type") or "").upper() != source_event.event_type:
+                continue
+            threshold = max(1, int(rule.get("threshold") or 1))
+            rule_id = str(rule.get("id") or f"{source_event.event_type}-{threshold}")
+            if matching_count < threshold or _rule_already_triggered(history_events, rule_id):
+                continue
 
         action = str(rule.get("action") or "WARN").upper()
         severity_name = str(rule.get("severity") or "MEDIUM").upper()
         severity = SeverityEnum(severity_name if severity_name in {"LOW", "MEDIUM", "HIGH"} else "MEDIUM")
+        is_compound = isinstance(rule.get("conditions"), list)
+        threshold_val = int(rule.get("threshold") or 1) if not is_compound else 0
         detail = _build_rule_detail(rule, source_event.event_type, matching_count)
         escalation_event = ProctoringEvent(
             attempt_id=attempt.id,
@@ -668,8 +952,9 @@ def _apply_alert_rules(
                 "rule_id": rule_id,
                 "rule_action": action,
                 "trigger_event_type": source_event.event_type,
-                "threshold": threshold,
+                "threshold": threshold_val,
                 "actual_count": matching_count,
+                **({"conditions": conditions} if is_compound else {}),
             },
             occurred_at=occurred_at,
         )
@@ -684,7 +969,7 @@ def _apply_alert_rules(
                 "detail": detail,
                 "action": action,
                 "rule_id": rule_id,
-                "threshold": threshold,
+                "threshold": threshold_val,
                 "actual_count": matching_count,
             })
 
@@ -754,11 +1039,17 @@ async def proctoring_ping(
     created_events: list[ProctoringEvent] = []
     forced_submit = False
     submit_reason = None
+    # Per-type dedup windows: noisy events get longer cooldowns
+    _PING_DEDUP_SECONDS = {"FOCUS_LOSS": 30, "FULLSCREEN_EXIT": 8, "CAMERA_COVERED": 8}
     for etype, sev in events:
         recent_same = _latest_event_of_type(history_events, etype)
         if recent_same and recent_same.occurred_at:
             try:
-                if (now - recent_same.occurred_at).total_seconds() < 8:
+                dedup_s = _PING_DEDUP_SECONDS.get(etype, 8)
+                occ = recent_same.occurred_at
+                if occ and occ.tzinfo is None:
+                    occ = occ.replace(tzinfo=timezone.utc)
+                if (now - occ).total_seconds() < dedup_s:
                     continue
             except (AttributeError, TypeError):
                 pass
@@ -884,72 +1175,67 @@ async def upload_video_capture(
     extension = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else (
         "mp4" if "mp4" in content_type else "webm"
     )
-    safe_filename = filename or _video_filename(attempt_id, session_id, normalized_source, extension)
+    safe_filename = Path(filename).name if filename else _video_filename(attempt_id, session_id, normalized_source, extension)
     normalized_recording_started_at = _normalize_iso_datetime(recording_started_at)
     normalized_recording_stopped_at = _normalize_iso_datetime(recording_stopped_at)
     temp_path, upload_size = await _write_video_upload_to_temp_file(request, suffix=f".{extension}")
 
     file_info: dict[str, object]
     response_detail = "video uploaded"
+    provider = _video_storage_provider()
     try:
-        if _remote_video_storage_enabled():
+        if provider == "cloudflare":
             try:
                 remote = await upload_video_to_cloudflare(
                     temp_path,
                     filename=safe_filename,
                     source=normalized_source,
                 )
-                file_info = _build_registered_video_info(
-                    attempt_id,
-                    {
-                        "provider": "cloudflare",
-                        "session_id": session_id,
-                        "source": normalized_source,
-                        "extension": extension,
-                        "name": remote.get("name") or safe_filename,
-                        "url": remote.get("url") or remote.get("playback_url"),
-                        "playback_url": remote.get("playback_url") or remote.get("url"),
-                        "playback_type": remote.get("playback_type"),
-                        "thumbnail": remote.get("thumbnail"),
-                        "uid": remote.get("uid"),
-                        "status": remote.get("status"),
-                        "ready_to_stream": remote.get("ready_to_stream"),
-                        "duration": remote.get("duration"),
-                        "size": remote.get("size") or upload_size,
-                        "created_at": remote.get("created_at"),
-                        "recording_started_at": normalized_recording_started_at,
-                        "recording_stopped_at": normalized_recording_stopped_at,
-                        "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
-                    },
-                    session_id=session_id,
-                    source=normalized_source,
-                )
             except Exception as exc:
-                logger.warning("Cloudflare video upload failed for attempt %s; falling back to local storage: %s", attempt_id, exc)
-                file_info = _build_local_video_info(
-                    attempt_id,
-                    session_id=session_id,
-                    source=normalized_source,
-                    filename=safe_filename,
-                    upload_path=temp_path,
-                    recording_started_at=normalized_recording_started_at,
-                    recording_stopped_at=normalized_recording_stopped_at,
-                )
-                response_detail = "video saved locally"
-        else:
-            file_info = _build_local_video_info(
+                logger.exception("Cloudflare video upload failed for attempt %s", attempt_id)
+                raise HTTPException(status_code=502, detail="Cloudflare video upload failed") from exc
+            file_info = _build_registered_video_info(
+                attempt_id,
+                {
+                    "provider": "cloudflare",
+                    "session_id": session_id,
+                    "source": normalized_source,
+                    "extension": extension,
+                    "name": remote.get("name") or safe_filename,
+                    "url": remote.get("url") or remote.get("playback_url"),
+                    "playback_url": remote.get("playback_url") or remote.get("url"),
+                    "playback_type": remote.get("playback_type"),
+                    "thumbnail": remote.get("thumbnail"),
+                    "uid": remote.get("uid"),
+                    "status": remote.get("status"),
+                    "ready_to_stream": remote.get("ready_to_stream"),
+                    "duration": remote.get("duration"),
+                    "size": remote.get("size") or upload_size,
+                    "created_at": remote.get("created_at"),
+                    "recording_started_at": normalized_recording_started_at,
+                    "recording_stopped_at": normalized_recording_stopped_at,
+                    "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else remote,
+                },
+                session_id=session_id,
+                source=normalized_source,
+            )
+        elif provider == "supabase":
+            file_info = await _build_supabase_video_info(
                 attempt_id,
                 session_id=session_id,
                 source=normalized_source,
                 filename=safe_filename,
-                upload_path=temp_path,
+                content=temp_path.read_bytes(),
+                content_type=content_type,
                 recording_started_at=normalized_recording_started_at,
                 recording_stopped_at=normalized_recording_stopped_at,
             )
-            response_detail = "video saved locally"
+        else:
+            raise HTTPException(status_code=503, detail=f"Unsupported video storage provider: {provider}")
     finally:
         temp_path.unlink(missing_ok=True)
 
+    file_info["upload_ip"] = get_request_ip(request)
     event = ProctoringEvent(
         attempt_id=attempt_id,
         event_type="VIDEO_SAVED",
@@ -971,8 +1257,7 @@ async def register_video_capture(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
-    if not _remote_video_storage_enabled():
-        raise HTTPException(status_code=503, detail=_remote_video_storage_error_detail())
+    _require_cloudflare_video_storage()
 
     session_id = str(payload.get("session_id") or "").strip()
     if not session_id:
@@ -995,6 +1280,61 @@ async def register_video_capture(
     db.add(event)
     db.commit()
     return {"detail": "video registered", "file": await _hydrate_video_file_info(file_info)}
+
+
+@router.post("/{attempt_id}/video/upload-progress", response_model=Message)
+async def report_video_upload_progress(
+    attempt_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+
+    session_id = str(payload.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    source = _normalize_video_source(payload.get("source"))
+    if _find_saved_video_file_info(db, attempt_id, session_id, source):
+        return Message(detail="Video already saved")
+
+    uploaded_bytes = _coerce_non_negative_int(payload.get("uploaded_bytes"))
+    total_bytes = _coerce_non_negative_int(payload.get("total_bytes"))
+    if total_bytes > 0 and uploaded_bytes > total_bytes:
+        uploaded_bytes = total_bytes
+
+    status = _normalize_video_upload_status(payload.get("status"))
+    progress_percent = payload.get("progress_percent")
+    if progress_percent in (None, "") and total_bytes > 0:
+        progress_percent = (uploaded_bytes / total_bytes) * 100
+    normalized_percent = _clamp_progress_percent(progress_percent, default=0)
+
+    if status == "complete":
+        normalized_percent = 100
+    elif status in {"uploading", "processing"}:
+        normalized_percent = min(99, normalized_percent)
+
+    occurred_at = datetime.now(timezone.utc)
+    event = ProctoringEvent(
+        attempt_id=attempt_id,
+        event_type="VIDEO_UPLOAD_PROGRESS",
+        severity=SeverityEnum.LOW,
+        detail=f"Proctoring {source} video upload {status}",
+        meta={
+            "session_id": session_id,
+            "source": source,
+            "uploaded_bytes": uploaded_bytes,
+            "total_bytes": total_bytes,
+            "progress_percent": normalized_percent,
+            "status": status,
+            "created_at": occurred_at.isoformat(),
+        },
+        occurred_at=occurred_at,
+    )
+    db.add(event)
+    db.commit()
+    return Message(detail="Video upload progress recorded")
 
 
 @router.post("/{attempt_id}/pause", response_model=Message)
@@ -1069,6 +1409,63 @@ async def list_videos(
     return result
 
 
+@router.get("/exam/{exam_id}/video-upload-status")
+async def list_exam_video_upload_status(
+    exam_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+):
+    exam_pk = parse_uuid_param(exam_id, detail="Exam not found")
+    attempts = list(
+        db.scalars(
+            select(Attempt)
+            .where(Attempt.exam_id == exam_pk)
+            .order_by(Attempt.created_at.desc())
+        )
+    )
+    if not attempts:
+        return []
+
+    attempt_ids = [attempt.id for attempt in attempts]
+    relevant_events = list(
+        db.scalars(
+            select(ProctoringEvent)
+            .where(
+                ProctoringEvent.attempt_id.in_(attempt_ids),
+                ProctoringEvent.event_type.in_(("VIDEO_SAVED", "VIDEO_UPLOAD_PROGRESS")),
+            )
+            .order_by(ProctoringEvent.occurred_at.desc())
+        )
+    )
+
+    saved_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
+    progress_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
+    for event in relevant_events:
+        attempt_key = str(event.attempt_id)
+        if event.event_type == "VIDEO_SAVED":
+            item = _normalize_saved_video_meta(event.meta, event.occurred_at)
+            if not item:
+                continue
+            source = _normalize_video_source(item.get("source"))
+            saved_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
+            continue
+        if event.event_type == "VIDEO_UPLOAD_PROGRESS":
+            item = _normalize_video_upload_progress_meta(event.meta, event.occurred_at)
+            if not item:
+                continue
+            source = _normalize_video_source(item.get("source"))
+            progress_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
+
+    return [
+        _build_attempt_video_upload_summary(
+            attempt,
+            saved_by_source=saved_by_attempt.get(str(attempt.id)),
+            progress_by_source=progress_by_attempt.get(str(attempt.id)),
+        )
+        for attempt in attempts
+    ]
+
+
 @router.websocket("/{attempt_id}/ws")
 async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     try:
@@ -1124,7 +1521,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     if (
         proctoring_requirements["identity_required"]
         and not attempt.precheck_passed_at
-        and not settings.precheck_test_bypass_enabled
     ):
         await websocket.send_json({"type": "alert", "event_type": "PRECHECK_BYPASS_DENIED", "severity": "HIGH", "detail": "Pre-exam checks not completed"})
         await websocket.close(code=4403)
@@ -1135,6 +1531,26 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         exam_cfg["face_signature"] = attempt.face_signature
 
     orchestrator = ProctoringOrchestrator(exam_cfg)
+
+    # Restore violation score from previous events so reconnects don't reset it
+    _prev_events = db.scalars(
+        select(ProctoringEvent).where(ProctoringEvent.attempt_id == attempt_id)
+    ).all()
+    for _prev in _prev_events:
+        sev_name = _prev.severity.value if hasattr(_prev.severity, "value") else str(_prev.severity or "LOW")
+        orchestrator.violation_score += orchestrator.score_weights.get(sev_name.upper(), 1)
+
+    # ── Register live monitoring session ──────────────────────────────────────
+    _live_session_info[attempt_id] = {
+        "attempt_id": attempt_id,
+        "user_name": attempt.user.name if attempt.user else None,
+        "user_id": str(attempt.user_id),
+        "exam_title": attempt.exam.title if attempt.exam else None,
+        "exam_id": str(attempt.exam_id),
+        "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
+    }
+    if attempt_id not in _live_viewers:
+        _live_viewers[attempt_id] = set()
 
     # ── Model availability checks — run in background after orchestrator init ──
     # These are deferred so the WS connect handshake isn't blocked by model loading.
@@ -1195,15 +1611,16 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     # Fire-and-forget: send detection status without blocking the message loop
     asyncio.create_task(_send_detection_status())
 
-    # Cache event history to avoid querying the DB on every frame/audio message
+    # Append-through event cache: new events appended immediately after commit,
+    # full DB refresh only every 60s to catch any events created outside this WS.
     _cached_events: list[ProctoringEvent] = []
     _cache_ts: float = 0.0
-    _EVENT_CACHE_TTL_S = 10
+    _EVENT_CACHE_FULL_REFRESH_S = 60
 
     def _get_cached_events() -> list[ProctoringEvent]:
         nonlocal _cached_events, _cache_ts
         now = time.monotonic()
-        if now - _cache_ts >= _EVENT_CACHE_TTL_S:
+        if now - _cache_ts >= _EVENT_CACHE_FULL_REFRESH_S:
             try:
                 _cached_events = _load_attempt_events(db, attempt.id)
                 _cache_ts = now
@@ -1215,7 +1632,66 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     pass
         return list(_cached_events)
 
+    def _append_cached_event(event: ProctoringEvent) -> None:
+        """Append a newly created event to the cache without a full DB refresh."""
+        _cached_events.append(event)
+
     _frame_proc_end = 0.0  # monotonic timestamp of last frame processing completion
+    _last_thumb_broadcast = 0.0  # monotonic timestamp of last thumbnail broadcast to admin viewers
+
+    # ── Pause state tracking ─────────────────────────────────────────
+    _is_paused = False
+    _last_pause_check = 0.0
+    _PAUSE_CHECK_INTERVAL = 5.0  # seconds between DB checks for pause state
+
+    def _check_pause_state() -> bool:
+        """Check if this attempt is currently paused by querying the latest pause/resume event."""
+        nonlocal _is_paused, _last_pause_check
+        now_mono = time.monotonic()
+        if now_mono - _last_pause_check < _PAUSE_CHECK_INTERVAL:
+            return _is_paused
+        _last_pause_check = now_mono
+        latest = db.scalar(
+            select(ProctoringEvent.event_type)
+            .where(
+                ProctoringEvent.attempt_id == attempt_id,
+                ProctoringEvent.event_type.in_(["ATTEMPT_PAUSED", "ATTEMPT_RESUMED"]),
+            )
+            .order_by(ProctoringEvent.occurred_at.desc())
+            .limit(1)
+        )
+        _is_paused = latest == "ATTEMPT_PAUSED"
+        return _is_paused
+
+    async def _async_db_commit():
+        """Run db.commit() in executor to avoid blocking the event loop."""
+        _loop = asyncio.get_running_loop()
+        await _loop.run_in_executor(None, db.commit)
+
+    # ── WebSocket rate limiting ──────────────────────────────────────
+    _RATE_WINDOW_S = 5.0
+    _RATE_GLOBAL_MAX = 30  # max messages per window across all types
+    _RATE_TYPE_MAX = {"frame": 20, "audio": 10, "screen": 5, "client_event": 25, "answer_timing": 5, "keystroke_anomaly": 5}
+    _rate_global_ts: list[float] = []
+    _rate_type_ts: dict[str, list[float]] = {}
+
+    def _rate_limit_ok(msg_type: str) -> bool:
+        now_mono = time.monotonic()
+        cutoff = now_mono - _RATE_WINDOW_S
+        # Global check
+        _rate_global_ts[:] = [t for t in _rate_global_ts if t > cutoff]
+        if len(_rate_global_ts) >= _RATE_GLOBAL_MAX:
+            return False
+        # Per-type check
+        type_max = _RATE_TYPE_MAX.get(msg_type)
+        if type_max is not None:
+            bucket = _rate_type_ts.setdefault(msg_type, [])
+            bucket[:] = [t for t in bucket if t > cutoff]
+            if len(bucket) >= type_max:
+                return False
+            bucket.append(now_mono)
+        _rate_global_ts.append(now_mono)
+        return True
 
     try:
         while True:
@@ -1243,6 +1719,16 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                 if msg_type == "pong":
                     continue
 
+                if not _rate_limit_ok(msg_type or ""):
+                    logger.warning("Rate limit exceeded for attempt %s, msg_type=%s", attempt_id, msg_type)
+                    await websocket.send_json({"type": "error", "detail": "Rate limit exceeded"})
+                    continue
+
+                # Skip AI processing while attempt is paused by admin
+                if msg_type in ("frame", "audio", "screen") and _check_pause_state():
+                    await websocket.send_json({"type": "paused", "detail": "Attempt is paused by administrator"})
+                    continue
+
                 if msg_type == "frame":
                     b64 = data.get("data")
                     if not b64:
@@ -1252,15 +1738,27 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     if _recv_mono - _frame_proc_end < 0.03:
                         logger.debug("Dropping buffered frame for attempt %s (%.0fms after last)", attempt_id, (_recv_mono - _frame_proc_end) * 1000)
                         continue
-                    frame_bytes = base64.b64decode(b64)
+                    try:
+                        frame_bytes = base64.b64decode(b64)
+                    except Exception:
+                        logger.warning("Invalid base64 in frame data for attempt %s", attempt_id)
+                        continue
                     # Run CPU-heavy detection in thread pool to avoid blocking event loop
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     _proc_start = time.monotonic()
                     alerts = await loop.run_in_executor(None, orchestrator.process_frame, frame_bytes)
                     _frame_proc_end = time.monotonic()
                     _proc_ms = (_frame_proc_end - _proc_start) * 1000
                     if _proc_ms > 500:
                         logger.warning("Slow frame processing for attempt %s: %.0fms, %d alerts", attempt_id, _proc_ms, len(alerts))
+                        # Tell client to slow down frame capture to avoid queue buildup
+                        try:
+                            await websocket.send_json({
+                                "type": "slow_mode",
+                                "interval_ms": min(int(_proc_ms * 1.5), 5000),
+                            })
+                        except Exception:
+                            pass
                     else:
                         logger.debug("Frame processed for attempt %s: %.0fms, %d alerts, score=%d", attempt_id, _proc_ms, len(alerts), orchestrator.violation_score)
                     if alerts:
@@ -1271,7 +1769,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     # Collect serious events for post-commit notification
                     _serious_batch: list[ProctoringEvent] = []
                     _integration_batch: list[ProctoringEvent] = []
-                    _frame_forced_submit = False
 
                     for alert in alerts:
                         severity = SEVERITY_MAP.get(alert.get("severity", "LOW"), SeverityEnum.LOW)
@@ -1297,6 +1794,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             occurred_at=event_time,
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         history_events.append(event)
                         rule_result = _apply_alert_rules(
                             db,
@@ -1333,14 +1831,53 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 "rule_id": rule_alert["rule_id"],
                             })
                         if rule_result["forced_submit"]:
-                            _frame_forced_submit = True
                             await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
                             break
+
+                    # Broadcast frame thumbnail + alerts to live admin viewers
+                    if _live_viewers.get(attempt_id):
+                        # Send a small thumbnail (max 320px wide) — rate-limited to 1fps
+                        _thumb_now = time.monotonic()
+                        _should_broadcast_thumb = (_thumb_now - _last_thumb_broadcast) >= 1.0
+                        try:
+                            import cv2 as _live_cv2
+                            import numpy as _live_np
+                            _np_arr = _live_np.frombuffer(frame_bytes, _live_np.uint8)
+                            _frame_img = _live_cv2.imdecode(_np_arr, _live_cv2.IMREAD_COLOR)
+                            if _frame_img is not None:
+                                _h, _w = _frame_img.shape[:2]
+                                if _w > 320:
+                                    _scale = 320 / _w
+                                    _frame_img = _live_cv2.resize(_frame_img, (320, int(_h * _scale)))
+                                _, _thumb_buf = _live_cv2.imencode('.jpg', _frame_img, [_live_cv2.IMWRITE_JPEG_QUALITY, 50])
+                                _thumb_bytes = _thumb_buf.tobytes()
+                                _live_latest_thumb[attempt_id] = _thumb_bytes
+                                if _should_broadcast_thumb:
+                                    await _broadcast_bytes_to_viewers(attempt_id, _thumb_bytes, "frame")
+                                    _last_thumb_broadcast = _thumb_now
+                        except Exception:
+                            pass
+                        for alert in alerts:
+                            await _broadcast_to_viewers(attempt_id, {
+                                "type": "alert",
+                                "attempt_id": attempt_id,
+                                "event_type": alert["event_type"],
+                                "severity": alert["severity"],
+                                "detail": alert.get("detail", ""),
+                                "confidence": alert.get("confidence", 0),
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            })
+                        if alerts or orchestrator.face_checks % 10 == 0:
+                            await _broadcast_to_viewers(attempt_id, {
+                                "type": "live_summary",
+                                "attempt_id": attempt_id,
+                                **orchestrator.get_summary(),
+                            })
 
                     # Single commit for all events from this frame
                     if alerts:
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for frame alerts (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1380,10 +1917,17 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     b64 = data.get("data")
                     if not b64:
                         continue
-                    audio_bytes = base64.b64decode(b64)
+                    try:
+                        audio_bytes = base64.b64decode(b64)
+                    except Exception:
+                        logger.warning("Invalid base64 in audio data for attempt %s", attempt_id)
+                        continue
                     _sr = data.get("sample_rate")
                     logger.info("WS audio chunk for attempt %s (bytes=%d, sr=%s)", attempt_id, len(audio_bytes), _sr)
-                    alerts = orchestrator.process_audio(audio_bytes, sample_rate=int(_sr) if _sr else None)
+                    _audio_loop = asyncio.get_running_loop()
+                    alerts = await _audio_loop.run_in_executor(
+                        None, lambda: orchestrator.process_audio(audio_bytes, sample_rate=int(_sr) if _sr else None)
+                    )
                     if alerts:
                         logger.debug("Audio alerts: %s", [a.get("event_type") for a in alerts])
                     history_events = _get_cached_events()
@@ -1403,6 +1947,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             occurred_at=event_time,
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         history_events.append(event)
                         rule_result = _apply_alert_rules(
                             db,
@@ -1441,7 +1986,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
                     if alerts:
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for audio alerts (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1473,7 +2018,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     b64 = data.get("data")
                     if not b64:
                         continue
-                    frame_bytes = base64.b64decode(b64)
+                    try:
+                        frame_bytes = base64.b64decode(b64)
+                    except Exception:
+                        logger.warning("Invalid base64 in screen data for attempt %s", attempt_id)
+                        continue
                     try:
                         await _save_evidence(attempt_id, frame_bytes, "SCREEN")
                     except Exception as ev_err:
@@ -1481,7 +2030,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     # OCR analysis for forbidden content (runs in executor to avoid blocking)
                     try:
                         import asyncio as _asyncio
-                        screen_alert = await _asyncio.get_event_loop().run_in_executor(
+                        screen_alert = await _asyncio.get_running_loop().run_in_executor(
                             None, analyze_screen_bytes, frame_bytes
                         )
                         if screen_alert:
@@ -1497,8 +2046,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 occurred_at=event_time,
                             )
                             db.add(event)
+                            _append_cached_event(event)
                             try:
-                                db.commit()
+                                await _async_db_commit()
                             except Exception as commit_err:
                                 logger.warning("DB commit failed for screen alert (attempt %s): %s", attempt_id, commit_err)
                                 try:
@@ -1520,6 +2070,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 screen_history,
                                 occurred_at=event_time,
                                 request_ip=get_websocket_ip(websocket),
+                                violation_score=orchestrator.violation_score,
                             )
                             if reason:
                                 await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1551,8 +2102,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             meta={"question_id": q_id, "elapsed_ms": elapsed_ms},
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for FAST_ANSWER (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1574,6 +2126,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             history_events,
                             occurred_at=event.occurred_at,
                             request_ip=get_websocket_ip(websocket),
+                            violation_score=orchestrator.violation_score,
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1600,8 +2153,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             meta={"avg_interval_ms": avg_ms, "sample_size": samples},
                         )
                         db.add(event)
+                        _append_cached_event(event)
                         try:
-                            db.commit()
+                            await _async_db_commit()
                         except Exception as commit_err:
                             logger.warning("DB commit failed for KEYSTROKE_ANOMALY (attempt %s): %s", attempt_id, commit_err)
                             try:
@@ -1623,6 +2177,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             history_events,
                             occurred_at=event.occurred_at,
                             request_ip=get_websocket_ip(websocket),
+                            violation_score=orchestrator.violation_score,
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1632,8 +2187,20 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                 if msg_type == "client_event":
                     # Browser-level violation sent directly by the frontend
                     # (copy/paste, keyboard shortcuts, tab switch, fullscreen exit, etc.)
+                    _ALLOWED_CLIENT_EVENT_TYPES = {
+                        "TAB_SWITCH", "FULLSCREEN_EXIT", "COPY_PASTE", "RIGHT_CLICK",
+                        "KEYBOARD_SHORTCUT", "BROWSER_EVENT", "SCREEN_SHARE_LOST",
+                        "DEVTOOLS_OPEN", "WINDOW_BLUR", "WINDOW_FOCUS",
+                        "CLIPBOARD_ACCESS", "PRINT_ATTEMPT", "CONTEXT_MENU",
+                    }
+                    _ALLOWED_CLIENT_SEVERITIES = {"LOW", "MEDIUM"}
                     ce_type = str(data.get("event_type") or "BROWSER_EVENT").upper()[:64]
+                    if ce_type not in _ALLOWED_CLIENT_EVENT_TYPES:
+                        ce_type = "BROWSER_EVENT"
                     ce_sev_str = str(data.get("severity") or "MEDIUM").upper()
+                    # Cap client-reported severity to MEDIUM — only server-side AI can set HIGH/CRITICAL
+                    if ce_sev_str not in _ALLOWED_CLIENT_SEVERITIES:
+                        ce_sev_str = "MEDIUM"
                     ce_detail = str(data.get("detail") or "Browser-level proctoring event")[:500]
                     ce_severity = SEVERITY_MAP.get(ce_sev_str, SeverityEnum.MEDIUM)
                     event_time = datetime.now(timezone.utc)
@@ -1646,14 +2213,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         occurred_at=event_time,
                     )
                     db.add(event)
+                    _append_cached_event(event)
                     history_events = _get_cached_events()
-                    history_events.append(event)
                     rule_result = _apply_alert_rules(
                         db, attempt, exam_cfg, event, history_events,
                         event_time, request_ip=get_websocket_ip(websocket),
                     )
                     try:
-                        db.commit()
+                        await _async_db_commit()
                     except Exception as commit_err:
                         logger.warning("DB commit failed for client_event (attempt %s): %s", attempt_id, commit_err)
                         try:
@@ -1690,6 +2257,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         history_events,
                         occurred_at=event_time,
                         request_ip=get_websocket_ip(websocket),
+                        violation_score=orchestrator.violation_score,
                     )
                     if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1721,6 +2289,26 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         heartbeat_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await heartbeat_task
+        # Flush any uncommitted events before closing
+        try:
+            db.commit()
+        except Exception:
+            with contextlib.suppress(Exception):
+                db.rollback()
+        # Clean up live monitoring session
+        _live_session_info.pop(attempt_id, None)
+        _live_latest_thumb.pop(attempt_id, None)
+        # Notify admin viewers that session ended, then close their connections
+        await _broadcast_to_viewers(attempt_id, {"type": "session_ended", "attempt_id": attempt_id})
+        _live_viewers.pop(attempt_id, None)
+        # Notify client of graceful close
+        if websocket.application_state == WebSocketState.CONNECTED:
+            with contextlib.suppress(Exception):
+                await websocket.send_json({"type": "server_shutdown"})
+                await websocket.close(code=1001)
+        # Shut down the orchestrator's thread pool to avoid leaked threads
+        with contextlib.suppress(Exception):
+            orchestrator.close()
         db.close()
 
 

@@ -30,8 +30,10 @@ describe('proctoringRequirements', () => {
       screen_capture: true,
     })
 
+    expect(requirements.cameraRequired).toBe(true)
     expect(requirements.screenRequired).toBe(true)
     expect(requirements.systemCheckRequired).toBe(true)
+    expect(normalized.camera_required).toBe(true)
     expect(normalized.screen_required).toBe(true)
   })
 
@@ -46,6 +48,7 @@ describe('proctoringRequirements', () => {
     expect(requirements.cameraRequired).toBe(true)
     expect(requirements.micRequired).toBe(true)
     expect(requirements.lightingRequired).toBe(false)
+    expect(requirements.screenRequired).toBe(true)
     expect(requirements.systemCheckRequired).toBe(true)
   })
 
@@ -128,7 +131,7 @@ describe('proctoringRequirements', () => {
 
     expect(normalized.fullscreen_enforce).toBe(false)
     expect(normalized.fullscreen_required).toBe(false)
-    expect(normalized.screen_capture).toBe(false)
+    expect(normalized.screen_capture).toBe(true)
   })
 
   it('maps legacy fullscreen settings and screen capture through normalization', () => {

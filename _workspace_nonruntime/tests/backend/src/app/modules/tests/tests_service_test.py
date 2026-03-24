@@ -14,7 +14,7 @@ from src.app.modules.tests.proctoring_requirements import (
     get_proctoring_requirements,
     normalize_proctoring_config,
 )
-from src.app.models import ExamType, Question, RoleEnum
+from src.app.models import ExamType, Question, RoleEnum, SystemSettings
 from tests.postgres_test_utils import create_test_engine, drop_postgres_database
 
 
@@ -148,6 +148,29 @@ def test_list_filters_and_pagination(client):
         assert item["status"] == TestStatus.PUBLISHED.value
 
 
+def test_instructor_with_edit_tests_permission_can_list_admin_tests(client):
+    created = _create_test(client, "Instructor Visible")
+
+    db = client.app.state.testing_session_local()
+    try:
+        db.add(
+            SystemSettings(
+                key="permissions_config",
+                value='[{"feature":"Edit Tests","admin":true,"instructor":true,"learner":false}]',
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    client.app.dependency_overrides[get_current_user] = lambda: DummyUser(RoleEnum.INSTRUCTOR)
+
+    resp = client.get("/api/admin/tests")
+    assert resp.status_code == 200
+    ids = [item["id"] for item in resp.json()["items"]]
+    assert created["id"] in ids
+
+
 def test_delete_non_draft_returns_409_forbidden_error(client):
     created = _create_test(client, "Delete Guard")
     test_id = created["id"]
@@ -244,6 +267,7 @@ def test_proctoring_requirements_treat_screen_capture_as_required_gate():
         }
     )
 
+    assert requirements["camera_required"] is True
     assert requirements["screen_required"] is True
     assert requirements["system_check_required"] is True
 
@@ -253,4 +277,26 @@ def test_proctoring_requirements_treat_screen_capture_as_required_gate():
         }
     )
 
+    assert normalized["camera_required"] is True
     assert normalized["screen_required"] is True
+
+
+def test_monitored_proctoring_forces_screen_recording_requirement():
+    requirements = get_proctoring_requirements(
+        {
+            "face_detection": True,
+        }
+    )
+
+    assert requirements["camera_required"] is True
+    assert requirements["screen_required"] is True
+    assert requirements["identity_required"] is True
+
+    normalized = normalize_proctoring_config(
+        {
+            "face_detection": True,
+        }
+    )
+
+    assert normalized["screen_required"] is True
+    assert normalized["screen_capture"] is True

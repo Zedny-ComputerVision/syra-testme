@@ -11,6 +11,7 @@ const submitAnswerMock = vi.fn()
 const submitAttemptMock = vi.fn()
 const getTestQuestionsMock = vi.fn()
 const getTestMock = vi.fn()
+const consumeScreenStreamMock = vi.fn()
 
 function MotionDiv({ children, initial, animate, exit, transition, whileHover, whileTap, ...props }) {
   return <div {...props}>{children}</div>
@@ -64,11 +65,16 @@ vi.mock('../../services/proctoring.service', () => ({
   proctoringPing: vi.fn(),
 }))
 
+vi.mock('../../utils/screenShareState', () => ({
+  consumeScreenStream: () => consumeScreenStreamMock(),
+}))
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/attempts/attempt-1/take']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/attempts/:attemptId/take" element={<Proctoring />} />
+        <Route path="/attempts/:attemptId" element={<div>Attempt Result</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -77,6 +83,7 @@ function renderPage() {
 describe('Proctoring page', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    consumeScreenStreamMock.mockReturnValue(null)
     getAttemptMock.mockResolvedValue({
       data: {
         id: 'attempt-1',
@@ -167,5 +174,32 @@ describe('Proctoring page', () => {
     fireEvent.change(screen.getByPlaceholderText('Type your answer here...'), { target: { value: 'Momentum is conserved.' } })
 
     expect(screen.getByText('Autosave: Pending changes')).toBeTruthy()
+  })
+
+  it('submits first and uploads recordings in the background', async () => {
+    submitAttemptMock.mockResolvedValue({ data: { status: 'SUBMITTED' } })
+    getTestMock.mockResolvedValueOnce({
+      data: {
+        id: 'exam-1',
+        title: 'Physics Final',
+        proctoring_config: {
+          face_detection: true,
+        },
+      },
+    })
+    consumeScreenStreamMock.mockReturnValue({
+      getVideoTracks: () => [{ readyState: 'live' }],
+      getTracks: () => [],
+    })
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('Physics Final')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Review and submit test' }))
+    await waitFor(() => expect(screen.getByText('Ready to submit?')).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Submit' }))
+
+    await waitFor(() => expect(submitAttemptMock).toHaveBeenCalledWith('attempt-1'))
   })
 })

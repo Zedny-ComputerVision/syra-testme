@@ -34,6 +34,7 @@ bash scripts/setup-linux.sh
 ```
 
 That one command prepares Docker env files, starts a local PostgreSQL container, builds the images, seeds a large demo dataset, and brings up the full stack at `http://localhost`.
+Proctoring recordings are stored on Cloudflare Stream. Set `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint.
 
 Default seeded credentials:
 
@@ -54,9 +55,10 @@ cp frontend/.env.example frontend/.env
 Update `.env` before starting the backend:
 
 - Set `DATABASE_URL` to your PostgreSQL or Supabase connection string
+- If you use the Supabase session pooler for runtime traffic, set `DATABASE_MIGRATION_URL` to the direct Supabase Postgres connection string for Alembic migrations
 - Set `JWT_SECRET` to a real secret with at least 32 characters
 - Leave `AUTO_APPLY_MIGRATIONS=false` if you want to run Alembic manually
-- Set `CLOUDFLARE_MEDIA_API_BASE_URL` only if you are using hosted proctoring video uploads
+- Set `CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint (required for proctoring video storage)
 
 For local frontend development, `frontend/.env` can stay at:
 
@@ -153,6 +155,8 @@ cd frontend
 npx playwright install
 ```
 
+Note: CI runs the same mirrored backend suite path shown above and uses PostgreSQL, not SQLite.
+
 ## 8. Docker Compose deployment flow
 
 This project's `docker-compose.yml` expects an external PostgreSQL database such as Supabase.
@@ -162,9 +166,11 @@ This project's `docker-compose.yml` expects an external PostgreSQL database such
    - `cp frontend/.env.production.example frontend/.env.production`
 2. Set these in `backend/.env.docker`:
    - `DATABASE_URL`
+   - `DATABASE_MIGRATION_URL` if `DATABASE_URL` uses the Supabase pooler
    - `JWT_SECRET`
    - `FRONTEND_BASE_URL`
    - `BACKEND_BASE_URL`
+   - `CLOUDFLARE_MEDIA_API_BASE_URL`
 3. Start the stack:
 
 ```bash
@@ -180,7 +186,7 @@ bash scripts/setup-linux.sh
 ## Troubleshooting
 
 - `JWT_SECRET` validation error: use a secret with at least 32 characters.
-- Database connection failures: verify `DATABASE_URL`, SSL requirements, and network access to your Postgres host.
+- Database connection failures: verify `DATABASE_URL`, `DATABASE_MIGRATION_URL` when used, SSL requirements, and network access to your Postgres host.
 - Backend starts but frontend cannot log in: confirm `frontend/.env` points to `http://127.0.0.1:8000/api`.
-- Proctoring uploads fail: verify `CLOUDFLARE_MEDIA_API_BASE_URL` or switch `PROCTORING_VIDEO_STORAGE_PROVIDER=local`.
+- Proctoring uploads fail while using Cloudflare: verify `CLOUDFLARE_MEDIA_API_BASE_URL` and that your Cloudflare media gateway is reachable.
 - Local file artifacts are written under `backend/storage`.

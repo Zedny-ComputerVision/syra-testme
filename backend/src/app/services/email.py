@@ -1,4 +1,5 @@
 import asyncio
+import html as html_mod
 import logging
 import re
 import httpx
@@ -122,12 +123,16 @@ async def _send_email_once(subject: str, to: str, content: str) -> None:
             msg["Subject"] = subject
             msg["From"] = settings.SMTP_FROM
             msg["To"] = to
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            if settings.SMTP_TLS:
-                server.starttls()
-            if settings.SMTP_USER and settings.SMTP_PASS:
-                server.login(settings.SMTP_USER, settings.SMTP_PASS)
-            server.send_message(msg)
+
+        def _blocking_smtp_send():
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                if settings.SMTP_TLS:
+                    server.starttls()
+                if settings.SMTP_USER and settings.SMTP_PASS:
+                    server.login(settings.SMTP_USER, settings.SMTP_PASS)
+                server.send_message(msg)
+
+        await asyncio.to_thread(_blocking_smtp_send)
         return
 
     raise RuntimeError("Email transport not configured: set BREVO_API_KEY or SMTP settings.")
@@ -162,7 +167,7 @@ async def send_email(subject: str, to: str, content: str) -> bool:
 # ── Email templates ──────────────────────────────────────────────────────────
 
 async def send_welcome_email(user):
-    name = getattr(user, "name", None) or "there"
+    name = html_mod.escape(getattr(user, "name", None) or "there")
     frontend = (settings.FRONTEND_BASE_URL or "http://localhost:5173").rstrip("/")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
@@ -180,7 +185,7 @@ async def send_welcome_email(user):
 
 
 async def send_admin_setup_email(admin):
-    name = getattr(admin, "name", None) or "Admin"
+    name = html_mod.escape(getattr(admin, "name", None) or "Admin")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
 <p>Your <strong>SYRA LMS</strong> admin account has been set up successfully.</p>
@@ -196,7 +201,7 @@ async def send_admin_setup_email(admin):
 
 
 async def send_password_changed_email(user):
-    name = getattr(user, "name", None) or "there"
+    name = html_mod.escape(getattr(user, "name", None) or "there")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
 <p>Your <strong>SYRA LMS</strong> password was changed successfully.</p>
@@ -210,7 +215,7 @@ async def send_password_changed_email(user):
 
 
 async def send_password_reset_email(user, token: str):
-    name = getattr(user, "name", None) or "there"
+    name = html_mod.escape(getattr(user, "name", None) or "there")
     base = (settings.FRONTEND_BASE_URL or "http://localhost:5173").rstrip("/")
     reset_link = f"{base}/reset-password?token={token}"
     body = f"""

@@ -3,7 +3,7 @@ import logging
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
@@ -27,18 +27,27 @@ def _looks_like_pool_library_exam(exam: Exam, pool_id) -> bool:
     return str(getattr(exam, "title", "") or "").startswith(expected_prefix)
 
 
+def _first_scalar_row(result):
+    if hasattr(result, "first"):
+        return result.first()
+    rows = result.all() if hasattr(result, "all") else list(result)
+    return rows[0] if rows else None
+
+
 def _ensure_pool_library_exam(db: Session, current, pool: QuestionPool) -> Exam:
-    for exam in db.scalars(select(Exam).order_by(Exam.created_at)).all():
-        if _is_pool_library_exam(exam, pool.id):
-            return exam
+    existing = _first_scalar_row(db.scalars(select(Exam).where(Exam.library_pool_id == pool.id).limit(1)))
+    if existing:
+        return existing
 
     now = datetime.now(timezone.utc)
-    course = db.scalars(
-        select(Course).where(
-            Course.created_by_id == current.id,
-            Course.title == "Question Pool Library",
+    course = _first_scalar_row(
+        db.scalars(
+            select(Course).where(
+                Course.created_by_id == current.id,
+                Course.title == "Question Pool Library",
+            )
         )
-    ).first()
+    )
     if not course:
         course = Course(
             title="Question Pool Library",
@@ -51,12 +60,14 @@ def _ensure_pool_library_exam(db: Session, current, pool: QuestionPool) -> Exam:
         db.add(course)
         db.flush()
 
-    node = db.scalars(
-        select(Node).where(
-            Node.course_id == course.id,
-            Node.title == "Shared Pool Questions",
+    node = _first_scalar_row(
+        db.scalars(
+            select(Node).where(
+                Node.course_id == course.id,
+                Node.title == "Shared Pool Questions",
+            )
         )
-    ).first()
+    )
     if not node:
         node = Node(
             course_id=course.id,
@@ -88,16 +99,29 @@ def _ensure_pool_library_exam(db: Session, current, pool: QuestionPool) -> Exam:
 
 
 def _find_pool_library_exam(db: Session, pool_id) -> Exam | None:
-    for exam in db.scalars(select(Exam).order_by(Exam.created_at)).all():
-        if _is_pool_library_exam(exam, pool_id):
-            return exam
+    direct_match = _first_scalar_row(
+        db.scalars(select(Exam).where(Exam.library_pool_id == pool_id).limit(1))
+    )
+    if direct_match:
+        return direct_match
+
+    prefix = f"Pool Library {str(pool_id)[:8]}"
+    legacy_candidate = _first_scalar_row(
+        db.scalars(select(Exam).where(Exam.title.startswith(prefix)).order_by(Exam.created_at.desc()).limit(1))
+    )
+    if legacy_candidate and _is_pool_library_exam(legacy_candidate, pool_id):
+        return legacy_candidate
     return None
 
 
 def _find_corrupted_pool_library_exam(db: Session, pool_id) -> Exam | None:
-    for exam in db.scalars(select(Exam).order_by(Exam.created_at)).all():
-        if _looks_like_pool_library_exam(exam, pool_id) and not _is_pool_library_exam(exam, pool_id):
-            return exam
+    prefix = f"Pool Library {str(pool_id)[:8]}"
+    candidates = db.scalars(
+        select(Exam).where(Exam.title.startswith(prefix)).order_by(Exam.created_at.desc()).limit(5)
+    ).all()
+    for candidate in candidates:
+        if not _is_pool_library_exam(candidate, pool_id):
+            return candidate
     return None
 
 
@@ -170,7 +194,10 @@ async def create_pool(
 
 @router.get("/", response_model=list[QuestionPoolRead])
 async def list_pools(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    pools = db.scalars(select(QuestionPool).order_by(QuestionPool.name.asc())).all()
+    query = select(QuestionPool).order_by(QuestionPool.name.asc())
+    if current.role == RoleEnum.INSTRUCTOR:
+        query = query.where(QuestionPool.created_by_id == current.id)
+    pools = db.scalars(query).all()
     return [_serialize_pool(pool, db) for pool in pools]
 
 
@@ -320,7 +347,7 @@ async def delete_pool_question(
 async def seed_exam_from_pool(
     pool_id: str,
     exam_id: str,
-    count: int = 5,
+    count: int = Query(default=5, ge=1, le=500),
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
@@ -334,6 +361,8 @@ async def seed_exam_from_pool(
         raise HTTPException(status_code=404, detail="Test not found")
     if current.role == RoleEnum.INSTRUCTOR and exam.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
+    if exam.status == ExamStatus.OPEN:
+        raise HTTPException(status_code=409, detail="Cannot seed questions into a published test")
     pool_questions = _load_pool_questions(db, pool_pk)
     if not pool_questions:
         raise HTTPException(status_code=400, detail="Pool has no questions. Add questions to the pool before seeding this test.")

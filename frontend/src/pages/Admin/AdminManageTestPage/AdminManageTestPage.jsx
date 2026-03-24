@@ -296,6 +296,84 @@ function formatScore(score) {
   return Number.isInteger(numeric) ? `${numeric}%` : `${numeric.toFixed(2)}%`
 }
 
+function clampVideoUploadPercent(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.max(0, Math.min(100, Math.round(numeric)))
+}
+
+function normalizeVideoUploadSourceSummary(item) {
+  if (!item || typeof item !== 'object') return null
+  const source = String(item.source || 'camera').trim().toLowerCase() || 'camera'
+  const progressPercent = clampVideoUploadPercent(item.progress_percent)
+  return {
+    source,
+    label: String(item.label || `${source.charAt(0).toUpperCase()}${source.slice(1)}`),
+    progressPercent,
+    remainingPercent: Math.max(0, 100 - progressPercent),
+    status: String(item.status || 'not_started').trim().toLowerCase() || 'not_started',
+    hasSavedVideo: Boolean(item.has_saved_video),
+  }
+}
+
+function normalizeVideoUploadStatus(item) {
+  const sources = Array.isArray(item?.sources)
+    ? item.sources.map((entry) => normalizeVideoUploadSourceSummary(entry)).filter(Boolean)
+    : []
+  const fallbackPercent = sources.length > 0
+    ? Math.round(sources.reduce((sum, source) => sum + source.progressPercent, 0) / sources.length)
+    : 0
+  const uploadPercent = clampVideoUploadPercent(item?.upload_percent ?? fallbackPercent)
+  const requiredSources = Array.isArray(item?.required_sources)
+    ? item.required_sources.map((source) => String(source || '').trim().toLowerCase()).filter(Boolean)
+    : []
+
+  return {
+    hasVideo: Boolean(item?.has_video),
+    savedVideoCount: Number(item?.saved_video_count || 0),
+    uploadPercent,
+    remainingPercent: Math.max(0, 100 - uploadPercent),
+    uploading: Boolean(item?.uploading),
+    uploadStatus: String(item?.status || 'not_started').trim().toLowerCase() || 'not_started',
+    uploadStatusLabel: String(item?.status_label || (uploadPercent > 0 ? 'Uploading in background' : 'Not started')),
+    uploadSources: sources,
+    requiredVideoSources: requiredSources,
+    allRequiredVideosUploaded: Boolean(item?.all_required_uploaded),
+  }
+}
+
+function defaultVideoUploadStatus() {
+  return {
+    hasVideo: false,
+    savedVideoCount: 0,
+    uploadPercent: 0,
+    remainingPercent: 100,
+    uploading: false,
+    uploadStatus: 'not_started',
+    uploadStatusLabel: 'Not started',
+    uploadSources: [],
+    requiredVideoSources: [],
+    allRequiredVideosUploaded: false,
+  }
+}
+
+function applyVideoUploadStatus(row, rawStatus) {
+  const status = rawStatus || defaultVideoUploadStatus()
+  return {
+    ...row,
+    hasVideo: status.hasVideo,
+    savedVideoCount: status.savedVideoCount,
+    uploadPercent: status.uploadPercent,
+    remainingPercent: status.remainingPercent,
+    uploading: status.uploading,
+    uploadStatus: status.uploadStatus,
+    uploadStatusLabel: status.uploadStatusLabel,
+    uploadSources: status.uploadSources,
+    requiredVideoSources: status.requiredVideoSources,
+    allRequiredVideosUploaded: status.allRequiredVideosUploaded,
+  }
+}
+
 function safeJsonParse(value, fallback = null) {
   if (value == null || value === '') return fallback
   try { return JSON.parse(value) } catch { return '__INVALID__' }
@@ -495,20 +573,20 @@ function mergeExamAndTest(examData, testData) {
     exam_type: testData?.type || examData?.exam_type || examData?.type || 'MCQ',
     type: testData?.type || examData?.exam_type || examData?.type || 'MCQ',
     status: testData?.status || (examData?.status === 'OPEN' ? 'PUBLISHED' : examData?.status === 'CLOSED' ? 'ARCHIVED' : 'DRAFT'),
-    runtime_status: examData?.status || 'CLOSED',
+    runtime_status: testData?.runtime_status || examData?.status || 'CLOSED',
     code: testData?.code || '',
     course_id: testData?.course_id || examData?.course_id || '',
     course_title: testData?.course_title || examData?.course_title || '',
     time_limit_minutes: testData?.time_limit_minutes ?? examData?.time_limit_minutes ?? examData?.time_limit ?? '',
-    max_attempts: testData?.attempts_allowed ?? examData?.max_attempts ?? 1,
-    attempts_allowed: testData?.attempts_allowed ?? examData?.max_attempts ?? 1,
-    passing_score: examData?.passing_score ?? testData?.passing_score ?? null,
+    max_attempts: testData?.attempts_allowed ?? testData?.max_attempts ?? examData?.max_attempts ?? 1,
+    attempts_allowed: testData?.attempts_allowed ?? testData?.max_attempts ?? examData?.max_attempts ?? 1,
+    passing_score: testData?.passing_score ?? examData?.passing_score ?? null,
     grading_scale_id: testData?.grading_scale_id ?? examData?.grading_scale_id ?? '',
-    report_content: testData?.report_content || 'SCORE_AND_DETAILS',
-    report_displayed: testData?.report_displayed || 'IMMEDIATELY_AFTER_GRADING',
+    report_content: testData?.report_content || examData?.report_content || 'SCORE_AND_DETAILS',
+    report_displayed: testData?.report_displayed || examData?.report_displayed || 'IMMEDIATELY_AFTER_GRADING',
     settings,
-    proctoring_config: normalizeProctoringConfig(examData?.proctoring_config || testData?.proctoring_config || {}),
-    certificate: examData?.certificate || testData?.certificate || null,
+    proctoring_config: normalizeProctoringConfig(testData?.proctoring_config || examData?.proctoring_config || {}),
+    certificate: testData?.certificate || examData?.certificate || null,
   }
 }
 
@@ -863,6 +941,15 @@ export default function AdminManageTestPage() {
     setCertificateSyncError('')
   }, [])
 
+  const loadVideoUploadStatusMap = useCallback(async () => {
+    if (!id || id === 'undefined' || id === 'null') return new Map()
+    const { data } = await adminApi.listExamVideoUploadStatus(id)
+    const items = Array.isArray(data) ? data : []
+    return new Map(
+      items.map((item) => [String(item.attempt_id), normalizeVideoUploadStatus(item)]),
+    )
+  }, [id])
+
   const loadAll = useCallback(async (showSpinner = true) => {
     if (!id || id === 'undefined' || id === 'null') {
       if (isManageRoutePath(location.pathname)) {
@@ -874,17 +961,18 @@ export default function AdminManageTestPage() {
     setLoadError('')
     setError('')
     try {
-      const [{ data: ex }, { data: testData }, { data: attempts }, { data: scheds }, { data: usersData }, { data: questionsData }, { data: catsData }] = await Promise.all([
-        adminApi.getTestRuntime(id),
+      const uploadStatusPromise = loadVideoUploadStatusMap().catch(() => new Map())
+      const [{ data: testData }, { data: attempts }, { data: scheds }, { data: usersData }, { data: questionsData }, { data: catsData }, uploadStatusMap] = await Promise.all([
         adminApi.getTest(id),
         adminApi.attempts({ exam_id: id, skip: 0, limit: 200 }),
         adminApi.schedules(),
         adminApi.users({ skip: 0, limit: 200 }),
         adminApi.getQuestions(id),
         adminApi.categories(),
+        uploadStatusPromise,
       ])
       setCategories(catsData || [])
-      const mergedExam = mergeExamAndTest(ex, testData)
+      const mergedExam = mergeExamAndTest(null, testData)
       setExam(mergedExam)
       const userItems = readPaginatedItems(usersData)
       const attemptItems = readPaginatedItems(attempts)
@@ -903,17 +991,13 @@ export default function AdminManageTestPage() {
       const examAttempts = attemptItems
 
       const stateByAttempt = new Map()
-      await Promise.all(examAttempts.map(async (a) => {
+      examAttempts.forEach((a) => {
         let paused = Boolean(a.paused)
-        let hasVideo = false
         const highAlerts = Number(a.high_violations || 0)
         const mediumAlerts = Number(a.med_violations || 0)
-        try {
-          const { data: videos } = await adminApi.listAttemptVideos(a.id)
-          hasVideo = Array.isArray(videos) && videos.length > 0
-        } catch {}
-        stateByAttempt.set(String(a.id), { paused, hasVideo, highAlerts, mediumAlerts })
-      }))
+        const uploadStatus = uploadStatusMap.get(String(a.id)) || defaultVideoUploadStatus()
+        stateByAttempt.set(String(a.id), { paused, highAlerts, mediumAlerts, uploadStatus })
+      })
 
       setAttemptRows(examAttempts.map((a) => {
         const u = userMap.get(String(a.user_id))
@@ -921,7 +1005,7 @@ export default function AdminManageTestPage() {
         const st = stateByAttempt.get(String(a.id)) || {}
         const score = (st.highAlerts || 0) * 3 + (st.mediumAlerts || 0)
         const needsManualReview = a.status === 'SUBMITTED' && (a.score == null)
-        return {
+        return applyVideoUploadStatus({
           id: String(a.id),
           attemptIdFull: String(a.id),
           attemptId: String(a.id).slice(0, 8),
@@ -938,7 +1022,6 @@ export default function AdminManageTestPage() {
                 ? 'Auto-scored'
                 : 'In progress',
           paused: st.paused === true,
-          hasVideo: st.hasVideo === true,
           startedAt: a.started_at,
           submittedAt: a.submitted_at,
           userGroup: s?.access_mode || '-',
@@ -947,16 +1030,35 @@ export default function AdminManageTestPage() {
           sessionId: s?.id || '',
           highAlerts: st.highAlerts || 0,
           mediumAlerts: st.mediumAlerts || 0,
-        }
+        }, st.uploadStatus)
       }))
     } catch (e) {
       setLoadError(e.response?.data?.detail || 'Failed to load test data.')
     } finally {
       if (showSpinner) setLoading(false)
     }
-  }, [id, location.pathname, navigate, hydrateSettingsForm])
+  }, [id, location.pathname, navigate, hydrateSettingsForm, loadVideoUploadStatusMap])
 
   useEffect(() => { loadAll(true) }, [loadAll])
+
+  const refreshAttemptVideoUploadStatus = useCallback(async () => {
+    if (!id || id === 'undefined' || id === 'null') return
+    try {
+      const uploadStatusMap = await loadVideoUploadStatusMap()
+      setAttemptRows((prev) => prev.map((row) => applyVideoUploadStatus(row, uploadStatusMap.get(String(row.id)))))
+    } catch (refreshError) {
+      console.warn('Failed to refresh admin video upload status.', refreshError)
+    }
+  }, [id, loadVideoUploadStatusMap])
+
+  useEffect(() => {
+    if (tab !== 'proctoring' || view !== 'candidate_monitoring') return undefined
+    void refreshAttemptVideoUploadStatus()
+    const intervalId = window.setInterval(() => {
+      void refreshAttemptVideoUploadStatus()
+    }, 5000)
+    return () => window.clearInterval(intervalId)
+  }, [refreshAttemptVideoUploadStatus, tab, view])
 
   useEffect(() => {
     setGradeDrafts(
@@ -1061,7 +1163,7 @@ export default function AdminManageTestPage() {
       .filter((session) => !attemptRows.some((attempt) => String(attempt.sessionId) === String(session.id)))
       .map((session) => {
         const learner = users.find((user) => String(user.id) === String(session.user_id))
-        return {
+        return applyVideoUploadStatus({
           id: `scheduled-${session.id}`,
           attemptIdFull: null,
           attemptId: '-',
@@ -1071,7 +1173,6 @@ export default function AdminManageTestPage() {
           needsManualReview: false,
           reviewState: 'Scheduled, not started',
           paused: false,
-          hasVideo: false,
           startedAt: null,
           submittedAt: null,
           userGroup: session.access_mode || '-',
@@ -1081,7 +1182,7 @@ export default function AdminManageTestPage() {
           sessionName: `Session ${String(session.id).slice(0, 6)}`,
           highAlerts: 0,
           mediumAlerts: 0,
-        }
+        }, defaultVideoUploadStatus())
       })
     return [...attemptRows, ...sessionOnlyRows]
   }, [attemptRows, sessions, users])

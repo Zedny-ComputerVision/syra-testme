@@ -5,6 +5,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+import threading
+
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Body
@@ -35,10 +37,11 @@ logger = logging.getLogger(__name__)
 EVIDENCE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "identity"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 settings = get_settings()
-ALLOW_TEST_BYPASS = settings.precheck_test_bypass_enabled
+ALLOW_TEST_BYPASS = False
 _ID_TOKEN_RE = re.compile(r"[A-Z0-9]{6,24}")
 _HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _TESSERACT_CONFIGURED = False
+_TESSERACT_LOCK = threading.Lock()  # pytesseract is not thread-safe
 _EASYOCR_READER = None
 _EASYOCR_INIT_ATTEMPTED = False
 
@@ -70,6 +73,21 @@ def _extract_face_crop(img_bgr: np.ndarray) -> np.ndarray | None:
     return face_crop
 
 
+def _preprocess_id_image(img_bgr: np.ndarray) -> np.ndarray:
+    """Preprocess an ID card photo for OCR: grayscale, denoise, adaptive threshold."""
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    # Bilateral filter preserves edges while removing noise
+    gray = cv2.bilateralFilter(gray, 11, 17, 17)
+    # CLAHE for contrast normalisation under uneven lighting
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    # Adaptive threshold handles glare / shadow gradients
+    binary = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 10,
+    )
+    return binary
+
+
 def _tesseract_text(img_bgr: np.ndarray) -> dict:
     if pytesseract is None:
         return _easyocr_text(img_bgr, "pytesseract_not_installed")
@@ -85,9 +103,14 @@ def _tesseract_text(img_bgr: np.ndarray) -> dict:
                     pytesseract.pytesseract.tesseract_cmd = str(default_win_path)
             _TESSERACT_CONFIGURED = True
         _ = pytesseract.get_tesseract_version()
-        txt = pytesseract.image_to_string(img_bgr)
-        lines = [l.strip() for l in txt.splitlines() if l.strip()]
-        return {"raw": txt, "lines": lines[:20], "available": True, "error": None, "engine": "tesseract"}
+        # Run OCR on both raw and preprocessed image, merge results
+        preprocessed = _preprocess_id_image(img_bgr)
+        with _TESSERACT_LOCK:
+            raw_txt = pytesseract.image_to_string(img_bgr)
+            pre_txt = pytesseract.image_to_string(preprocessed, config="--psm 6")
+        combined = raw_txt + "\n" + pre_txt
+        lines = list(dict.fromkeys(line.strip() for line in combined.splitlines() if line.strip()))
+        return {"raw": combined, "lines": lines[:30], "available": True, "error": None, "engine": "tesseract"}
     except Exception as exc:
         return _easyocr_text(img_bgr, str(exc))
 
@@ -225,6 +248,68 @@ def _extract_id_candidates(ocr_text: dict) -> list[str]:
     return out
 
 
+def _normalize_for_matching(text: str) -> str:
+    """Lowercase, strip accents/diacritics, collapse whitespace."""
+    import unicodedata
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", text.lower().strip())
+
+
+def _match_user_id_in_ocr(user_id: str, ocr_candidates: list[str], ocr_raw: str) -> dict:
+    """Check if the user's student ID appears in OCR output.
+
+    Returns {"matched": bool, "method": str, "matched_token": str|None}.
+    """
+    if not user_id:
+        return {"matched": False, "method": "no_user_id", "matched_token": None}
+    clean_uid = re.sub(r"[^A-Z0-9]", "", user_id.upper())
+    if not clean_uid:
+        return {"matched": False, "method": "no_user_id", "matched_token": None}
+    # Exact match in OCR candidates
+    for candidate in ocr_candidates:
+        clean_candidate = re.sub(r"[^A-Z0-9]", "", candidate.upper())
+        if clean_uid == clean_candidate:
+            return {"matched": True, "method": "exact", "matched_token": candidate}
+    # Substring match in raw OCR text (handles spaces/dashes in printed IDs)
+    raw_upper = re.sub(r"[^A-Z0-9]", "", ocr_raw.upper())
+    if clean_uid in raw_upper:
+        return {"matched": True, "method": "substring", "matched_token": clean_uid}
+    # Fuzzy: allow up to 1 char difference (OCR misread)
+    if len(clean_uid) >= 6:
+        for candidate in ocr_candidates:
+            clean_candidate = re.sub(r"[^A-Z0-9]", "", candidate.upper())
+            if len(clean_candidate) == len(clean_uid):
+                diffs = sum(1 for a, b in zip(clean_uid, clean_candidate) if a != b)
+                if diffs <= 1:
+                    return {"matched": True, "method": "fuzzy_1", "matched_token": candidate}
+    return {"matched": False, "method": "not_found", "matched_token": None}
+
+
+def _match_user_name_in_ocr(user_name: str, ocr_raw: str) -> dict:
+    """Check if the user's name appears in OCR output.
+
+    Splits name into parts and checks how many appear in the OCR text.
+    Returns {"matched": bool, "parts_found": int, "parts_total": int, "method": str}.
+    """
+    if not user_name or not ocr_raw:
+        return {"matched": False, "parts_found": 0, "parts_total": 0, "method": "no_data"}
+    norm_raw = _normalize_for_matching(ocr_raw)
+    name_parts = [p for p in _normalize_for_matching(user_name).split() if len(p) >= 2]
+    if not name_parts:
+        return {"matched": False, "parts_found": 0, "parts_total": 0, "method": "no_name_parts"}
+    found = sum(1 for part in name_parts if part in norm_raw)
+    # Require at least half the name parts (handles middle names, OCR noise)
+    threshold = max(1, len(name_parts) // 2)
+    matched = found >= threshold
+    return {
+        "matched": matched,
+        "parts_found": found,
+        "parts_total": len(name_parts),
+        "method": "name_parts",
+    }
+
+
 def _image_similarity_score(img_a: np.ndarray, img_b: np.ndarray) -> float:
     gray_a = cv2.cvtColor(img_a, cv2.COLOR_BGR2GRAY)
     gray_b = cv2.cvtColor(img_b, cv2.COLOR_BGR2GRAY)
@@ -347,6 +432,43 @@ async def precheck(
     if requirements["fullscreen_required"] and not fs_ok:
         failure_reasons.append("FULLSCREEN_REQUIRED")
 
+    if ALLOW_TEST_BYPASS and requirements["identity_required"]:
+        if requirements["lighting_required"] and not lighting_ok:
+            failure_reasons.append("LOW_LIGHTING")
+        logger.warning("Precheck bypassed for attempt %s via local dev bypass", attempt_id)
+        all_pass = len(failure_reasons) == 0
+        attempt.id_text = _build_id_text_payload(
+            ocr_text=None,
+            ocr_candidates=[],
+            manual_token=manual_token,
+            manual_valid=manual_valid,
+            method="test_bypass",
+            ocr_available=False,
+            requirements=requirements,
+        )
+        attempt.id_verified = all_pass
+        attempt.lighting_score = lighting_score
+        attempt.precheck_passed_at = datetime.now(timezone.utc) if all_pass else None
+        attempt.identity_verified = all_pass
+        db.add(attempt)
+        db.commit()
+        return {
+            "status": "ok",
+            "requirements": requirements,
+            "face_match_score": 0.0,
+            "lighting_ok": lighting_ok,
+            "id_verified": all_pass,
+            "all_pass": all_pass,
+            "failure_reasons": failure_reasons,
+            "ocr_available": False,
+            "ocr_candidates": [],
+            "manual_id_valid": manual_valid,
+            "id_selfie_similarity": 0.0,
+            "id_face_ratio": 0.0,
+            "id_document_outline": True,
+            "signature_mode": {"selfie": "bypass", "id": "bypass"},
+        }
+
     if requirements["identity_required"]:
         selfie_b64 = _payload_value("selfie_b64")
         id_b64 = _payload_value("id_b64")
@@ -382,6 +504,16 @@ async def precheck(
         ocr_available = bool(ocr_text.get("available"))
         id_evidence_ok = manual_valid or len(ocr_candidates) > 0
 
+        # Smart identity matching: compare OCR output against user's student ID and name
+        user = current
+        ocr_raw = (ocr_text or {}).get("raw", "")
+        id_match = _match_user_id_in_ocr(user.user_id, ocr_candidates, ocr_raw)
+        name_match = _match_user_name_in_ocr(user.name, ocr_raw)
+        identity_verified = id_match["matched"] or name_match["matched"]
+        # If smart matching found the student, count that as valid ID evidence
+        if identity_verified:
+            id_evidence_ok = True
+
         image_similarity = _image_similarity_score(selfie_img, id_img)
         similarity_threshold = float((proctoring_payload or {}).get("id_selfie_similarity_threshold", 0.94))
         id_too_similar = image_similarity >= similarity_threshold
@@ -411,6 +543,10 @@ async def precheck(
             failure_reasons.append("ID_CAPTURE_LOOKS_LIKE_SELFIE")
         if strict_doc_checks and not id_has_document_outline:
             failure_reasons.append("ID_DOCUMENT_NOT_DETECTED")
+        # Strict mode: require OCR text to match the user's registered identity
+        require_identity_match = bool((proctoring_payload or {}).get("require_identity_match", False))
+        if require_identity_match and not identity_verified:
+            failure_reasons.append("IDENTITY_NOT_MATCHED")
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         selfie_filename = f"{attempt_id}_selfie_{ts}.bin"
@@ -459,6 +595,18 @@ async def precheck(
     db.add(attempt)
     db.commit()
 
+    # Build identity match results (only populated when identity check ran)
+    identity_match_result = {}
+    if requirements["identity_required"] and not (ALLOW_TEST_BYPASS):
+        try:
+            identity_match_result = {
+                "id_number_match": id_match,
+                "name_match": name_match,
+                "identity_verified_by_ocr": identity_verified,
+            }
+        except NameError:
+            pass
+
     return {
         "status": "ok",
         "requirements": requirements,
@@ -474,4 +622,5 @@ async def precheck(
         "id_face_ratio": id_face_ratio,
         "id_document_outline": id_has_document_outline,
         "signature_mode": {"selfie": selfie_sig_mode, "id": id_sig_mode},
+        **identity_match_result,
     }
