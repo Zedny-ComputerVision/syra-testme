@@ -501,6 +501,12 @@ class ScheduleRead(ScheduleBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="after")
+    def validate_target(self):
+        # Skip the parent validator for response models — exam_id can be null
+        # for orphaned schedules or during response serialization.
+        return self
+
 
 class QuestionPoolBase(BaseModel):
     name: str
