@@ -141,7 +141,7 @@ require_http_200() {
   local timeout_seconds="${3:-30}"
   local status
 
-  status="$(curl --silent --show-error --location --max-time "$timeout_seconds" --output /dev/null --write-out '%{http_code}' "$url" || true)"
+  status="$(curl --insecure --silent --show-error --location --max-time "$timeout_seconds" --output /dev/null --write-out '%{http_code}' "$url" || true)"
   [[ "$status" == "200" ]] || die "${label} check failed for ${url} (status ${status:-unreachable})."
   log "${label} check passed (${url})."
 }
