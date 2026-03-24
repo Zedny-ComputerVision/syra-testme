@@ -133,6 +133,13 @@ def main() -> None:
         ]
         db.commit()
 
+        revealed_passwords = {
+            "admin@example.com": admin_password,
+            "instructor@example.com": instructor_password,
+            "student1@example.com": student_password,
+            "student2@example.com": student_password,
+        }
+
         for user, created, password_reset in seeded:
             logger.info(
                 "ensured user email=%s role=%s created=%s password_reset=%s active=%s",
@@ -142,11 +149,10 @@ def main() -> None:
                 password_reset,
                 user.is_active,
             )
-
-        logger.info("Login credentials: admin@example.com / %s", admin_password)
-        logger.info("Login credentials: instructor@example.com / %s", instructor_password)
-        logger.info("Login credentials: student1@example.com / %s", student_password)
-        logger.info("Login credentials: student2@example.com / %s", student_password)
+            if created or password_reset:
+                logger.info("Login credentials: %s / %s", user.email, revealed_passwords[user.email])
+            else:
+                logger.info("Existing account kept its current password: %s", user.email)
     finally:
         db.close()
 
