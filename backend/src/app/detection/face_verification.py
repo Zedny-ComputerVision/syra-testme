@@ -135,6 +135,35 @@ def compute_face_signature(frame_bytes: bytes) -> Optional[list[float]]:
     return _embedding_via_landmarks(frame)
 
 
+def compute_face_signature_detected(frame_bgr: np.ndarray) -> Optional[list[float]]:
+    """Compute face embedding using DeepFace WITH face detection and alignment.
+
+    Unlike compute_face_signature (which uses detector_backend='skip'),
+    this uses OpenCV's built-in face detector to properly locate and align the
+    face before computing the neural embedding.  Much better for ID-card images
+    where the face is small and surrounded by text/borders.
+    """
+    if _deepface_available:
+        try:
+            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            result = _DeepFace.represent(
+                img_path=frame_rgb,
+                model_name=_deepface_model_name,
+                detector_backend="opencv",
+                enforce_detection=False,
+                align=True,
+            )
+            if result and isinstance(result, list) and "embedding" in result[0]:
+                emb = np.array(result[0]["embedding"], dtype=np.float32)
+                norm = np.linalg.norm(emb)
+                if norm > 1e-8:
+                    emb /= norm
+                return emb.tolist()
+        except Exception as exc:
+            logger.warning("DeepFace with detection failed: %s — trying landmarks", exc)
+    return _embedding_via_landmarks(frame_bgr)
+
+
 def compute_landmark_signature(frame_bgr: np.ndarray) -> Optional[list[float]]:
     """Return a 120-D MediaPipe FaceMesh landmark embedding from a BGR ndarray, or None.
 

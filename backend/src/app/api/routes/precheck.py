@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ...api.deps import get_current_user, get_db_dep, parse_uuid_param
 from ...core.config import get_settings
 from ...models import Attempt, RoleEnum
-from ...detection.face_verification import compute_face_signature, cosine_distance, compute_landmark_signature
+from ...detection.face_verification import compute_face_signature, compute_face_signature_detected, cosine_distance, compute_landmark_signature
 from ...services.normalized_relations import exam_proctoring
 from ...services.crypto_utils import encrypt_bytes
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
@@ -183,12 +183,19 @@ def _fallback_face_signature(img_bgr: np.ndarray) -> list[float] | None:
     return vec.tolist()
 
 
-def _compute_signature_with_fallback(img_bgr: np.ndarray) -> tuple[list[float] | None, str]:
-    raw = cv2.imencode(".jpg", img_bgr)[1].tobytes()
-    vec = compute_face_signature(raw)
-    if vec:
-        mode = "deepface" if len(vec) == 512 else "mediapipe"
-        return vec, mode
+def _compute_signature_with_fallback(img_bgr: np.ndarray, *, use_detection: bool = False) -> tuple[list[float] | None, str]:
+    if use_detection:
+        # Use DeepFace WITH face detection/alignment — much better for ID cards
+        vec = compute_face_signature_detected(img_bgr)
+        if vec:
+            mode = "deepface" if len(vec) == 512 else "mediapipe"
+            return vec, mode
+    else:
+        raw = cv2.imencode(".jpg", img_bgr)[1].tobytes()
+        vec = compute_face_signature(raw)
+        if vec:
+            mode = "deepface" if len(vec) == 512 else "mediapipe"
+            return vec, mode
     fallback = _fallback_face_signature(img_bgr)
     if fallback:
         return fallback, "haar"
@@ -490,10 +497,14 @@ async def precheck(
         lighting_score = _brightness_score(selfie_img)
         lighting_ok = lighting_score >= lighting_min
 
-        selfie_vec, selfie_sig_mode = _compute_signature_with_fallback(selfie_img)
+        # Use DeepFace WITH face detection for identity comparison — it properly
+        # detects, aligns, and crops the face before computing the embedding.
+        # Pass full images (not Haar crops) so DeepFace's detector can work.
+        selfie_vec, selfie_sig_mode = _compute_signature_with_fallback(selfie_img, use_detection=True)
+        id_vec, id_sig_mode = _compute_signature_with_fallback(id_img, use_detection=True)
+        # Keep Haar crop info for legacy fields / fallback comparison
         id_crop = _extract_face_crop(id_img)
         id_target = id_crop if id_crop is not None else id_img
-        id_vec, id_sig_mode = _compute_signature_with_fallback(id_target)
 
         # When embedding methods differ (e.g. DeepFace 512-D vs MediaPipe 120-D),
         # vectors cannot be compared.  Re-compute both with a consistent method.
@@ -519,7 +530,7 @@ async def precheck(
         face_match = False
         # ID-vs-selfie comparison needs a more lenient threshold than live
         # verification: the ID photo may differ in age, lighting, and angle.
-        base_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.40))
+        base_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.45))
         if selfie_sig_mode == id_sig_mode == "mediapipe":
             threshold = min(base_threshold, 0.25)
         elif selfie_sig_mode == id_sig_mode == "haar":
