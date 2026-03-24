@@ -31,9 +31,11 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
 
             echo ">>> Pulling latest code from main..."
-            # Forcefully wipe out any broken URLs stuck in the git config by removing and re-adding the remote
-            git remote remove origin || true
-            git remote add origin "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
+            # Forcefully wipe out the broken URL directly from the file system.
+            # Git commands fail because Git tries to parse the broken URL first.
+            sed -i 's|url = https://.*@github.com|url = https://github.com|g' .git/config || true
+            
+            git remote set-url origin "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
             
             git fetch origin main
             git reset --hard origin/main
