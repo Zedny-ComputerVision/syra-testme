@@ -48,10 +48,10 @@ services:
       AUTO_APPLY_MIGRATIONS: "true"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/health"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 10
+      start_period: 120s
     # Backend is only accessible via nginx — do NOT expose externally in production.
     # Uncomment the ports line below for local debugging only.
     # ports:

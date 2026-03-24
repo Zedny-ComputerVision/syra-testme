@@ -147,7 +147,60 @@ ensure_docker
 ensure_file "$BACKEND_ENV"
 ensure_file "$FRONTEND_ENV"
 
+# ── Pre-flight diagnostics ────────────────────────────────────
+avail_mem_mb="$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)"
+if (( avail_mem_mb > 0 )); then
+  log "Available memory: ${avail_mem_mb} MB"
+  if (( avail_mem_mb < 1500 )); then
+    log "WARNING: Low memory (${avail_mem_mb} MB). The backend loads TensorFlow + PyTorch and needs ~2 GB."
+    log "  Consider: increasing RAM, adding swap, or setting WORKERS=1 in backend/.env.docker"
+  fi
+fi
+
 ensure_backend_env_sane
+
+# ── Pre-flight database connectivity check ───────────────────
+db_url="$(read_env_value "$BACKEND_ENV" "DATABASE_URL")"
+if [[ -n "$db_url" ]]; then
+  log "Testing database connectivity..."
+  # Build the backend image first (if not cached) so we can use it for the check
+  (
+    cd "$REPO_ROOT"
+    compose build backend >/dev/null 2>&1 || true
+  )
+  db_check_output="$(
+    cd "$REPO_ROOT"
+    compose run --rm --no-deps -T \
+      -e DATABASE_URL="$db_url" \
+      backend python -c '
+import os, sys
+try:
+    from sqlalchemy import create_engine, text
+    url = os.environ["DATABASE_URL"]
+    engine = create_engine(url, connect_args={"connect_timeout": 10})
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    print("OK")
+except Exception as e:
+    print(f"FAIL: {e}", file=sys.stderr)
+    sys.exit(1)
+' 2>&1
+  )" || true
+  if echo "$db_check_output" | grep -q "^OK$"; then
+    log "Database connectivity check passed."
+  else
+    log "ERROR: Cannot connect to the database."
+    log "  URL: ${db_url%%@*}@*** (host hidden)"
+    log "  Error: $db_check_output"
+    log ""
+    log "Common causes:"
+    log "  1. Supabase project is paused (free tier pauses after inactivity)"
+    log "  2. Password is double-URL-encoded (check for %25 in your password)"
+    log "  3. Firewall/network blocks outbound connections on port 5432"
+    log "  4. Incorrect DATABASE_URL in backend/.env.docker"
+    die "Fix the database connection and try again."
+  fi
+fi
 
 SEED_LOGIN_USERS="${SYRA_SEED_LOGIN_USERS:-0}"
 RESET_LOGIN_PASSWORDS="${SYRA_RESET_LOGIN_PASSWORDS:-1}"
@@ -168,8 +221,27 @@ login_url="${frontend_url%/}/login"
 log "Deploying production stack with Docker Compose."
 (
   cd "$REPO_ROOT"
-  compose up --build -d --remove-orphans
+  if ! compose up --build -d --remove-orphans 2>&1; then
+    log "ERROR: 'docker compose up' failed. Fetching backend logs for diagnostics..."
+    compose logs --tail 200 backend >&2 || true
+    die "docker compose up failed — see backend logs above."
+  fi
 )
+
+# Give the backend a moment to start (or crash) before polling health
+sleep 3
+
+# If the backend container already exited, show logs immediately instead of
+# waiting through the full health-check timeout.
+_backend_cid="$(compose ps -q backend 2>/dev/null || true)"
+if [[ -n "$_backend_cid" ]]; then
+  _backend_state="$(docker inspect --format '{{.State.Status}}' "$_backend_cid" 2>/dev/null || true)"
+  if [[ "$_backend_state" == "exited" || "$_backend_state" == "dead" ]]; then
+    log "ERROR: Backend container already exited (state=$_backend_state). Logs:"
+    docker logs --tail 200 "$_backend_cid" >&2 || true
+    die "Backend container crashed on startup — see logs above."
+  fi
+fi
 
 wait_for_service_health backend
 seed_login_users
