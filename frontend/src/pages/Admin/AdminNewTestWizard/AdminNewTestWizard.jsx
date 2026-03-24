@@ -1017,10 +1017,23 @@ export default function AdminNewTestWizard() {
     setPanelError('')
     setSessionBusy(true)
     try {
-      const existingByUser = new Map(assignedSessions.map((session) => [String(session.userId), session]))
+      // Refresh server state to avoid stale-data 409 conflicts
+      let serverSchedules = []
+      try {
+        const { data: allSchedules } = await adminApi.schedules()
+        serverSchedules = (allSchedules || []).filter((s) => String(s.exam_id) === String(examId))
+      } catch {
+        // Fall back to local state if the list call fails
+        serverSchedules = []
+      }
+      const existingByUser = serverSchedules.length > 0
+        ? new Map(serverSchedules.map((s) => [String(s.user_id), { id: s.id, at: s.scheduled_at, mode: s.access_mode }]))
+        : new Map(assignedSessions.map((session) => [String(session.userId), session]))
       const selectedSet = new Set(selectedUsers.map((id) => String(id)))
-      const staleSessions = assignedSessions.filter((session) => !selectedSet.has(String(session.userId)))
-      for (const stale of staleSessions) {
+      const staleEntries = serverSchedules.length > 0
+        ? serverSchedules.filter((s) => !selectedSet.has(String(s.user_id)))
+        : assignedSessions.filter((session) => !selectedSet.has(String(session.userId)))
+      for (const stale of staleEntries) {
         await adminApi.deleteSchedule(stale.id)
       }
       for (const uid of selectedUsers) {
@@ -1033,11 +1046,24 @@ export default function AdminNewTestWizard() {
         if (existing?.id) {
           await adminApi.updateSchedule(existing.id, payload)
         } else {
-          await adminApi.createSchedule({
-            user_id: uid,
-            exam_id: examId,
-            ...payload,
-          })
+          try {
+            await adminApi.createSchedule({
+              user_id: uid,
+              exam_id: examId,
+              ...payload,
+            })
+          } catch (createErr) {
+            // If 409 conflict, the schedule already exists — try to update it
+            if (createErr.response?.status === 409) {
+              const { data: refreshed } = await adminApi.schedules()
+              const match = (refreshed || []).find((s) => String(s.user_id) === String(uid) && String(s.exam_id) === String(examId))
+              if (match) {
+                await adminApi.updateSchedule(match.id, payload)
+              }
+            } else {
+              throw createErr
+            }
+          }
         }
       }
       await loadAssignedSessions(examId)
