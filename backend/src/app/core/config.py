@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     MEDIA_STORAGE_PROVIDER: str = Field(default="local")
     PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
-    CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = True
+    CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_STREAM_SIGNING_KEY: str = Field(default="")
     CLOUDFLARE_STREAM_KEY_ID: str = Field(default="")
     CLOUDFLARE_MEDIA_WATERMARK_UID: str | None = None
