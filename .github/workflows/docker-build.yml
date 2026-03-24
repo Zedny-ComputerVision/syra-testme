@@ -31,21 +31,13 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
 
             echo ">>> Pulling latest code from main..."
-            ASKPASS_SCRIPT=$(mktemp)
-            chmod +x "$ASKPASS_SCRIPT"
-            cat > "$ASKPASS_SCRIPT" << 'EOF'
-            #!/bin/sh
-            case "$1" in
-              *Username*|*username*) echo "$GIT_USERNAME" ;;
-              *Password*|*password*) echo "$GIT_PASSWORD" ;;
-            esac
-            EOF
-            # Reset origin to the clean HTTPS URL first, in case it was left in a bad state
-            git remote set-url origin "https://github.com/Zedny-ComputerVision/syra-testme.git"
-            
-            GIT_ASKPASS="$ASKPASS_SCRIPT" git fetch origin main
-            rm -f "$ASKPASS_SCRIPT"
+            # GitHub requires a Personal Access Token (PAT) instead of a password.
+            # Assuming GIT_PASSWORD secret is actually a PAT.
+            git remote set-url origin "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
+            git fetch origin main
             git reset --hard origin/main
+            # Clean up the URL so the token isn't left in the .git/config on disk
+            git remote set-url origin "https://github.com/Zedny-ComputerVision/syra-testme.git"
 
             echo ">>> Running deploy script..."
             export SYRA_SEED_DEMO_DATA=0
