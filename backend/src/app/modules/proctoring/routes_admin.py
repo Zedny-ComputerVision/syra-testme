@@ -28,6 +28,7 @@ from ...api.deps import get_current_user, get_db_dep, require_permission
 from ...models import (
     Attempt,
     AttemptStatus,
+    Exam,
     ProctoringEvent,
     RoleEnum,
     SeverityEnum,
@@ -383,6 +384,49 @@ async def get_proctoring_config_history(
     }
 
 
+# ── Force Submit ──────────────────────────────────────────────────────────────
+
+@router.post("/admin/sessions/{attempt_id}/force-submit")
+async def force_submit_attempt(
+    attempt_id: str,
+    current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+    db: Session = Depends(get_db_dep),
+):
+    """Force-submit a learner's attempt. Admin can force any; instructor only their own exams."""
+    from ...api.deps import parse_uuid_param
+    from .routes_public import _auto_submit_attempt, _broadcast_to_viewers
+
+    pk = parse_uuid_param(attempt_id)
+    attempt = db.get(Attempt, pk)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    # Instructor can only force-submit attempts for exams they created
+    if current.role == RoleEnum.INSTRUCTOR:
+        exam = db.get(Exam, attempt.exam_id)
+        if not exam or exam.created_by_id != current.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+
+    if attempt.status == AttemptStatus.SUBMITTED:
+        raise HTTPException(status_code=409, detail="Attempt already submitted")
+
+    _auto_submit_attempt(
+        db,
+        attempt,
+        violation_count=0,
+        reason=f"Force-submitted by admin {current.name or current.id}",
+        actor_user_id=current.id,
+    )
+
+    # Notify live viewers that the session was force-submitted
+    await _broadcast_to_viewers(str(pk), {
+        "type": "force_submitted",
+        "detail": "Attempt was force-submitted by an administrator.",
+    })
+
+    return {"detail": "Attempt force-submitted", "attempt_id": str(pk)}
+
+
 # ── Live Monitoring ───────────────────────────────────────────────────────────
 
 @router.get("/admin/live")
@@ -422,6 +466,24 @@ async def live_monitor_ws(websocket: WebSocket, attempt_id: str, token: str):
     if payload.get("role") not in {"ADMIN", "INSTRUCTOR"}:
         await websocket.close(code=4403)
         return
+
+    # Instructor ownership check: only allow viewing sessions for their own exams
+    if payload.get("role") == "INSTRUCTOR":
+        session_info_check = _live_session_info.get(attempt_id)
+        if session_info_check:
+            from ...db.session import get_db
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                exam = db.get(Exam, session_info_check.get("exam_id"))
+                if not exam or str(exam.created_by_id) != payload.get("sub"):
+                    await websocket.close(code=4403)
+                    return
+            finally:
+                try:
+                    next(db_gen)
+                except StopIteration:
+                    pass
 
     await websocket.accept()
 

@@ -174,6 +174,8 @@ def list_tests(
         )
 
     ensure_permission(db, current, "Edit Tests")
+    if current.role == RoleEnum.INSTRUCTOR:
+        query = query.where(Exam.created_by_id == current.id)
     total = db.scalar(select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())) or 0
     rows = db.execute(query.offset(pagination.offset).limit(pagination.limit)).all()
     return build_page_response(
@@ -247,6 +249,16 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
         return serialize_legacy_test(test)
     _validate_update_payload(data)
     next_max_attempts = data.get("max_attempts", test.max_attempts)
+
+    # Block critical setting changes while exam is published (OPEN)
+    _LOCKED_WHILE_OPEN = {"time_limit", "max_attempts", "passing_score", "proctoring_config", "type"}
+    if test.status == ExamStatus.OPEN:
+        locked_fields = _LOCKED_WHILE_OPEN & data.keys()
+        if locked_fields:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot modify {', '.join(sorted(locked_fields))} while the test is published",
+            )
 
     for field, value in data.items():
         if field == "node_id":

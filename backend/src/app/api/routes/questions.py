@@ -56,6 +56,11 @@ async def list_questions(exam_id: str | None = None, db: Session = Depends(get_d
                 raise HTTPException(status_code=404, detail="Test not found")
         query = query.where(Question.exam_id == parsed_exam_id)
     questions = db.scalars(query.order_by(Question.order.asc(), Question.created_at.asc())).all()
+    if current.role == RoleEnum.LEARNER:
+        return [
+            QuestionRead.model_validate(q, from_attributes=True).model_copy(update={"correct_answer": None})
+            for q in questions
+        ]
     return questions
 
 
@@ -71,6 +76,8 @@ async def get_question(
     q = db.get(Question, parsed_id)
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
+    if current.role == RoleEnum.LEARNER:
+        return QuestionRead.model_validate(q, from_attributes=True).model_copy(update={"correct_answer": None})
     return q
 
 
@@ -80,7 +87,7 @@ async def update_question(question_id: str, body: QuestionBase, db: Session = De
     q = db.get(Question, parsed_id)
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
-    if current.role == RoleEnum.INSTRUCTOR and q.exam.created_by_id != current.id:
+    if current.role == RoleEnum.INSTRUCTOR and (not q.exam or q.exam.created_by_id != current.id):
         raise HTTPException(status_code=403, detail="Not allowed")
     if q.exam and q.exam.status == ExamStatus.OPEN:
         raise HTTPException(status_code=409, detail="Cannot modify questions on a published test")
@@ -102,7 +109,7 @@ async def delete_question(question_id: str, db: Session = Depends(get_db_dep), c
     q = db.get(Question, parsed_id)
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
-    if current.role == RoleEnum.INSTRUCTOR and q.exam.created_by_id != current.id:
+    if current.role == RoleEnum.INSTRUCTOR and (not q.exam or q.exam.created_by_id != current.id):
         raise HTTPException(status_code=403, detail="Not allowed")
     if q.exam and q.exam.status == ExamStatus.OPEN:
         raise HTTPException(status_code=409, detail="Cannot delete questions on a published test")

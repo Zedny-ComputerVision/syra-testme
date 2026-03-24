@@ -136,8 +136,8 @@ DEFAULT_ORCHESTRATOR_CONFIG = {
     "pose_change_threshold_rad": 0.1,
     # Liveness detection (EAR blink + anti-replay)
     "liveness_detection": True,
-    "no_blink_threshold_sec": 15.0,   # alert if no blink for 15 s
-    "eyes_closed_threshold_sec": 3.0, # alert if eyes closed for 3 s
+    "no_blink_threshold_sec": 15.0,  # alert if no blink for 15 s
+    "eyes_closed_threshold_sec": 3.0,  # alert if eyes closed for 3 s
     # Emotion / stress detection
     "emotion_detection": True,
     "stress_threshold_sec": 8.0,      # sustained stress cue before alerting
@@ -399,6 +399,10 @@ class ProctoringOrchestrator:
 
         # Thread pool for running object detection in parallel with face pipeline
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="obj_detect")
+
+    def close(self) -> None:
+        """Shut down the thread pool executor."""
+        self._executor.shutdown(wait=False)
 
     def process_frame(self, frame_bytes: bytes) -> list[dict]:
         """Run all visual detectors on a single frame.

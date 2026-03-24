@@ -106,7 +106,10 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
     total_admins = int(getattr(row, "total_admins", 0) or 0)
 
     upcoming = db.scalars(
-        select(Schedule).where(Schedule.scheduled_at >= now).order_by(Schedule.scheduled_at.asc())
+        select(Schedule)
+        .options(joinedload(Schedule.exam), joinedload(Schedule.user))
+        .where(Schedule.scheduled_at >= now)
+        .order_by(Schedule.scheduled_at.asc())
     ).all()
 
     return DashboardRead(

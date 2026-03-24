@@ -34,13 +34,13 @@ def _get_group_or_404(db: Session, group_id: str) -> UserGroup:
 
 
 def _ensure_unique_group_name(db: Session, name: str, existing_group_id=None):
-    groups = db.scalars(select(UserGroup)).all()
+    from sqlalchemy import func
     normalized = name.strip().lower()
-    for group in groups:
-        if group.id == existing_group_id:
-            continue
-        if str(group.name or "").strip().lower() == normalized:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group name exists")
+    existing = db.scalar(
+        select(UserGroup).where(func.lower(UserGroup.name) == normalized)
+    )
+    if existing and getattr(existing, "id", None) != existing_group_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group name exists")
 
 
 def _normalize_member_ids(db: Session, raw_member_ids: list[str] | None) -> list:

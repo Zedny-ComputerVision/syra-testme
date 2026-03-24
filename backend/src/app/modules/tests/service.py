@@ -215,7 +215,7 @@ class TestService:
         elif "attempts_allowed" in payload and next_max_attempts > 1:
             current_runtime = exam_runtime_settings(exam)
             if current_runtime.get("allow_retake") is False:
-                set_exam_runtime_settings(exam, { **current_runtime, "allow_retake": True })
+                set_exam_runtime_settings(exam, {**current_runtime, "allow_retake": True})
         if "proctoring_config" in payload:
             from ...services.normalized_relations import set_exam_proctoring, exam_proctoring
 

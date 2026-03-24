@@ -24,9 +24,7 @@ const REASON_MESSAGES = {
 
 const toReasonText = (reason) => REASON_MESSAGES[reason] || reason
 const START_ERROR_STORAGE_PREFIX = 'journey_start_error:'
-const precheckTestBypassEnabled = ['1', 'true', 'yes', 'on'].includes(
-  String(import.meta.env.VITE_PRECHECK_TEST_BYPASS || '').trim().toLowerCase(),
-)
+const precheckTestBypassEnabled = false
 
 function persistJourneyStartError(testId, message) {
   if (!message) return
@@ -68,11 +66,7 @@ export default function VerifyIdentityPage() {
       label: 'Identity check',
       value: requirements.identityRequired ? 'Required' : 'Skipped',
       helper: requirements.identityRequired
-        ? (
-            precheckTestBypassEnabled
-              ? 'Local QA bypass is active: captures are still collected, but heavy identity analysis is skipped.'
-              : 'Selfie and ID evidence are required before the learner can continue.'
-          )
+        ? 'Selfie and ID evidence are required before the learner can continue.'
         : 'This test skips identity verification.',
     },
     {
@@ -358,7 +352,7 @@ export default function VerifyIdentityPage() {
         cam_ok: flags.cam_ok ?? Boolean(selfie),
         fs_ok: !fullscreenRequiredHere || Boolean(document.fullscreenElement),
         id_text: idNumber || undefined,
-        test_pass: precheckTestBypassEnabled,
+        test_pass: false,
       }
       const { data } = await precheckAttempt(attemptId, payload)
       setResult(data)

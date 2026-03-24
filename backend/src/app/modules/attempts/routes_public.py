@@ -356,7 +356,7 @@ def _normalized_text(value) -> str:
 
 def _normalized_sequence(value) -> list[str] | None:
     if value is None:
-        return []
+        return None
     parsed = _parsed_answer_value(value)
     if isinstance(parsed, list):
         return [_normalized_text(item) for item in parsed]
@@ -365,7 +365,7 @@ def _normalized_sequence(value) -> list[str] | None:
 
 def _normalized_mapping(value) -> dict[str, str] | None:
     if value is None:
-        return {}
+        return None
     parsed = _parsed_answer_value(value)
     if isinstance(parsed, dict):
         return {
@@ -377,7 +377,7 @@ def _normalized_mapping(value) -> dict[str, str] | None:
 
 def _normalized_blank_values(value) -> list[str] | None:
     if value is None:
-        return []
+        return None
     parsed = _parsed_answer_value(value)
     if isinstance(parsed, list):
         return [_normalized_text(item) for item in parsed]
@@ -468,8 +468,8 @@ def _question_requires_manual_review(question: Question, submitted_answer) -> bo
     if not _answer_has_content(submitted_answer):
         return False
     if question.type == ExamType.TEXT:
-        # TEXT questions with a correct_answer can be auto-graded via exact match
-        return not bool(_normalized_text(question.correct_answer))
+        # Free-text responses always require reviewer scoring.
+        return True
     return not bool(_normalized_text(question.correct_answer))
 
 
@@ -695,12 +695,15 @@ def _pending_manual_review_attempt_ids(db: Session, attempt_ids: list) -> set:
     return pending_ids
 
 
-def _apply_admin_grade(attempt: Attempt, *, score: float, db: Session) -> Attempt:
+def _apply_admin_grade(attempt: Attempt, *, score: float, db: Session, graded_by=None) -> Attempt:
+    from ...services.audit import write_audit_log
+
     if score < 0 or score > 100:
         raise HTTPException(status_code=422, detail="Score must be between 0 and 100")
     if attempt.status == AttemptStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Attempt must be submitted before grading")
 
+    previous_score = attempt.score
     if attempt.submitted_at is None:
         attempt.submitted_at = datetime.now(timezone.utc)
     attempt.score = round(float(score), 2)
@@ -709,6 +712,17 @@ def _apply_admin_grade(attempt: Attempt, *, score: float, db: Session) -> Attemp
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
+    try:
+        write_audit_log(
+            db,
+            getattr(graded_by, "id", None),
+            "ATTEMPT_GRADED",
+            "attempt",
+            str(attempt.id),
+            f"Score changed from {previous_score} to {attempt.score} by admin",
+        )
+    except Exception:
+        pass
     return attempt
 
 
@@ -795,6 +809,7 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
                 Attempt.user_id == current.id,
             )
             .order_by(Attempt.started_at.desc(), Attempt.created_at.desc())
+            .with_for_update()
         ).all()
         count = len(existing_attempts)
         if count >= exam.max_attempts:
@@ -838,8 +853,25 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
         updated_at=now,
     )
     db.add(attempt)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Could not create attempt — please try again")
     db.refresh(attempt)
+    # Post-commit guard: if a concurrent request snuck past the pre-check,
+    # verify we haven't exceeded max_attempts and roll back if so.
+    if current.role == RoleEnum.LEARNER and exam.max_attempts:
+        post_count = db.scalar(
+            select(func.count(Attempt.id)).where(
+                Attempt.exam_id == exam.id,
+                Attempt.user_id == current.id,
+            )
+        )
+        if post_count and post_count > exam.max_attempts:
+            db.delete(attempt)
+            db.commit()
+            raise HTTPException(status_code=400, detail="Max attempts reached")
     return attempt
 
 
@@ -1009,8 +1041,9 @@ async def submit_answer(
     if _attempt_is_paused(db, attempt_pk):
         raise HTTPException(status_code=409, detail="Attempt is paused")
     # Server-side time limit enforcement
-    if attempt.exam and attempt.exam.time_limit and attempt.started_at:
-        deadline = attempt.started_at + timedelta(minutes=attempt.exam.time_limit)
+    time_limit = getattr(attempt.exam, "time_limit", None) if attempt.exam else None
+    if time_limit and attempt.started_at:
+        deadline = attempt.started_at + timedelta(minutes=time_limit)
         if datetime.now(timezone.utc) > deadline + timedelta(seconds=30):
             raise HTTPException(status_code=409, detail="Time limit exceeded")
     # Verify the question belongs to this attempt's exam
@@ -1102,19 +1135,24 @@ async def submit_attempt(
         raise HTTPException(status_code=400, detail="Attempt cannot be submitted in its current state")
     if _attempt_is_paused(db, attempt_pk):
         raise HTTPException(status_code=409, detail="Attempt is paused")
+    # Server-side time limit enforcement (same as submit_answer, with 30s grace)
+    time_limit = getattr(attempt.exam, "time_limit", None) if attempt.exam else None
+    if time_limit and attempt.started_at:
+        deadline = attempt.started_at + timedelta(minutes=time_limit)
+        if datetime.now(timezone.utc) > deadline + timedelta(seconds=30):
+            raise HTTPException(status_code=409, detail="Time limit exceeded")
     proctoring_payload = exam_proctoring(attempt.exam) if attempt.exam else None
     exam_requirements = get_proctoring_requirements(proctoring_payload)
     exam_requires_verification = exam_requirements["identity_required"]
     if (
         exam_requires_verification
         and not (attempt.id_verified or attempt.identity_verified)
-        and not settings.precheck_test_bypass_enabled
     ):
         raise HTTPException(status_code=400, detail="Pre-test verification required")
     if current.role == RoleEnum.LEARNER:
         score = None  # learners cannot grade
     elif score is not None:
-        graded = _apply_admin_grade(attempt, score=score, db=db)
+        graded = _apply_admin_grade(attempt, score=score, db=db, graded_by=current)
         _notify_attempt_result(db, graded, result_kind="graded")
         return _build_attempt_read(graded, db=db)
 
@@ -1153,7 +1191,7 @@ async def grade_attempt(
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
-    graded = _apply_admin_grade(attempt, score=score, db=db)
+    graded = _apply_admin_grade(attempt, score=score, db=db, graded_by=current)
     _notify_attempt_result(db, graded, result_kind="graded")
     return _build_attempt_read(graded, db=db, pending_manual_review=False)
 

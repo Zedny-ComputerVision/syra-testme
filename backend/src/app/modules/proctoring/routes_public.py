@@ -145,7 +145,6 @@ def _video_storage_provider() -> str:
     )
 
 
-
 def _require_cloudflare_video_storage() -> None:
     provider = str(get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER or "").strip().lower()
     if provider != "cloudflare":
@@ -1522,7 +1521,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     if (
         proctoring_requirements["identity_required"]
         and not attempt.precheck_passed_at
-        and not settings.precheck_test_bypass_enabled
     ):
         await websocket.send_json({"type": "alert", "event_type": "PRECHECK_BYPASS_DENIED", "severity": "HIGH", "detail": "Pre-exam checks not completed"})
         await websocket.close(code=4403)
@@ -1771,7 +1769,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     # Collect serious events for post-commit notification
                     _serious_batch: list[ProctoringEvent] = []
                     _integration_batch: list[ProctoringEvent] = []
-                    _frame_forced_submit = False
 
                     for alert in alerts:
                         severity = SEVERITY_MAP.get(alert.get("severity", "LOW"), SeverityEnum.LOW)
@@ -1834,7 +1831,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 "rule_id": rule_alert["rule_id"],
                             })
                         if rule_result["forced_submit"]:
-                            _frame_forced_submit = True
                             await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
                             break
 
@@ -2310,6 +2306,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
             with contextlib.suppress(Exception):
                 await websocket.send_json({"type": "server_shutdown"})
                 await websocket.close(code=1001)
+        # Shut down the orchestrator's thread pool to avoid leaked threads
+        with contextlib.suppress(Exception):
+            orchestrator.close()
         db.close()
 
 

@@ -28,6 +28,7 @@ Copy-Item frontend\.env.example frontend\.env
 Update `.env` before starting the backend:
 
 - Set `DATABASE_URL` to your PostgreSQL or Supabase connection string
+- If you use the Supabase session pooler for runtime traffic, set `DATABASE_MIGRATION_URL` to the direct Supabase Postgres connection string for Alembic migrations
 - Set `JWT_SECRET` to a real secret with at least 32 characters
 - Leave `AUTO_APPLY_MIGRATIONS=false` if you want to run Alembic manually
 - Set `CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint (required for proctoring video storage)
@@ -154,6 +155,7 @@ This project's `docker-compose.yml` expects an external PostgreSQL database such
    - `Copy-Item frontend\.env.production.example frontend\.env.production`
 2. Set these in `backend\.env.docker`:
    - `DATABASE_URL`
+   - `DATABASE_MIGRATION_URL` if `DATABASE_URL` uses the Supabase pooler
    - `JWT_SECRET`
    - `FRONTEND_BASE_URL`
    - `BACKEND_BASE_URL`
@@ -167,7 +169,7 @@ docker compose up --build -d
 ## Troubleshooting
 
 - `JWT_SECRET` validation error: use a secret with at least 32 characters.
-- Database connection failures: verify `DATABASE_URL`, SSL requirements, and network access to your Postgres host.
+- Database connection failures: verify `DATABASE_URL`, `DATABASE_MIGRATION_URL` when used, SSL requirements, and network access to your Postgres host.
 - Backend starts but frontend cannot log in: confirm `frontend\.env` points to `http://127.0.0.1:8000/api`.
 - Proctoring uploads fail: verify `CLOUDFLARE_MEDIA_API_BASE_URL` is correctly configured.
 - Local file artifacts are written under `backend\storage`.

@@ -11,6 +11,22 @@ from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_p
 router = APIRouter()
 
 
+def _query_first(db: Session, statement):
+    scalar = getattr(db, "scalar", None)
+    if callable(scalar):
+        existing = scalar(statement)
+        if existing is not None:
+            return existing
+    scalars = getattr(db, "scalars", None)
+    if not callable(scalars):
+        return None
+    result = scalars(statement)
+    if hasattr(result, "first"):
+        return result.first()
+    rows = result.all() if hasattr(result, "all") else list(result)
+    return rows[0] if rows else None
+
+
 def _clean_required_text(value: str | None, field_name: str) -> str:
     text = str(value or "").strip()
     if not text:
@@ -27,13 +43,13 @@ def _clean_optional_text(value: str | None) -> str | None:
 
 
 def _ensure_unique_course_title(db: Session, title: str, existing_course_id=None):
-    courses = db.scalars(select(Course)).all()
     normalized = title.strip().lower()
-    for course in courses:
-        if course.id == existing_course_id:
-            continue
-        if str(course.title or "").strip().lower() == normalized:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Course title exists")
+    existing = _query_first(
+        db,
+        select(Course).where(func.lower(Course.title) == normalized)
+    )
+    if existing and getattr(existing, "id", None) != existing_course_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Course title exists")
 
 
 def _normalize_course_payload(body: CourseBase) -> dict:

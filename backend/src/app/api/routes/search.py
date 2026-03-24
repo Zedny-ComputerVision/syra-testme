@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session, joinedload
 
 from ...models import Attempt, Exam, ExamStatus, RoleEnum, User
 from ...services.normalized_relations import is_exam_pool_library
@@ -23,10 +23,12 @@ async def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_
     can_view_attempt_analysis = permission_allowed(rows, current.role, "View Attempt Analysis")
     can_manage_users = permission_allowed(rows, current.role, "Manage Users")
 
+    like_pattern = f"%{query}%"
+
     exams = []
     if current.role == RoleEnum.LEARNER:
         exam_query = select(Exam).where(
-            Exam.title.ilike(f"%{query}%"),
+            Exam.title.ilike(like_pattern),
             Exam.status == ExamStatus.OPEN,
         )
         exams = [
@@ -35,18 +37,31 @@ async def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_
             if not _is_pool_library_exam(exam) and learner_can_access_exam(db, exam, current)
         ]
     elif can_edit_tests:
-        exam_query = select(Exam).where(Exam.title.ilike(f"%{query}%"))
+        exam_query = select(Exam).where(Exam.title.ilike(like_pattern))
         exams = [exam for exam in db.scalars(exam_query).all() if not _is_pool_library_exam(exam)]
 
+    attempts = []
+    attempt_query = (
+        select(Attempt)
+        .join(Exam, Attempt.exam_id == Exam.id, isouter=True)
+        .join(User, Attempt.user_id == User.id, isouter=True)
+        .options(joinedload(Attempt.exam), joinedload(Attempt.user))
+        .where(
+            or_(
+                Exam.title.ilike(like_pattern),
+                User.name.ilike(like_pattern),
+            )
+        )
+    )
     if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and can_view_attempt_analysis:
-        attempts = db.scalars(select(Attempt).where(Attempt.status.isnot(None))).all()
+        attempts = db.execute(attempt_query).unique().scalars().all()
     else:
-        attempts = db.scalars(select(Attempt).where(Attempt.user_id == current.id)).all()
-    attempts = [a for a in attempts if (a.exam and query in (a.exam.title or "").lower()) or (a.user and query in (a.user.name or "").lower())]
+        attempt_query = attempt_query.where(Attempt.user_id == current.id)
+        attempts = db.execute(attempt_query).unique().scalars().all()
 
     users = []
     if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and can_manage_users:
-        users = db.scalars(select(User).where((User.name.ilike(f"%{query}%")) | (User.email.ilike(f"%{query}%")) | (User.user_id.ilike(f"%{query}%")))).all()
+        users = db.scalars(select(User).where((User.name.ilike(like_pattern)) | (User.email.ilike(like_pattern)) | (User.user_id.ilike(like_pattern)))).all()
 
     return {
         "exams": [{"id": e.id, "title": e.title, "status": e.status} for e in exams],

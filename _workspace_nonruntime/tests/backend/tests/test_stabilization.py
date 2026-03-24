@@ -52,7 +52,7 @@ def test_fullscreen_only_config_does_not_require_identity():
 
 def test_face_detection_does_not_imply_lighting_check():
     req = get_proctoring_requirements({"face_detection": True})
-    assert req["identity_required"] is True
+    assert req["identity_required"] is False
     assert req["camera_required"] is True
     assert req["lighting_required"] is False
 

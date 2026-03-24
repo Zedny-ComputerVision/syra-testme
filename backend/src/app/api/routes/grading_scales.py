@@ -53,7 +53,7 @@ def _normalize_scale_bands(labels: list[dict]) -> list[dict]:
         if current["min_score"] <= previous["max_score"]:
             raise HTTPException(status_code=422, detail="Grade bands cannot overlap")
 
-    return ordered
+    return normalized
 
 
 def _normalize_scale_payload(body: GradingScaleBase) -> dict:

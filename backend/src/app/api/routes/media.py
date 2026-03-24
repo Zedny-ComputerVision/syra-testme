@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,6 +13,7 @@ from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_p
 
 router = APIRouter()
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
 REPORTS_DIR = BASE_STORAGE_DIR / "reports"
@@ -69,7 +71,8 @@ async def _redirect_supabase_media(folder: str, filename: str) -> RedirectRespon
     try:
         signed_url = await create_supabase_signed_url(f"{folder}/{cleaned}")
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Supabase media is unavailable: {exc}") from exc
+        logger.warning("Supabase media unavailable for %s/%s: %s", folder, cleaned, exc)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Media storage is temporarily unavailable") from exc
     return RedirectResponse(url=signed_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 

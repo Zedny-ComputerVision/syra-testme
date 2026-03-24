@@ -1045,9 +1045,9 @@ export default function Proctoring() {
 
     // Screen share lost — warn the learner and give them a chance to re-share.
     // Never auto-submit on screen share loss; just log a violation and retry.
-    sendBrowserViolation('SCREEN_SHARE_LOST', 'MEDIUM', 'Screen sharing was interrupted. Please re-share your entire screen.')
+    sendBrowserViolation('SCREEN_SHARE_LOST', 'HIGH', 'Screen sharing was interrupted. Please re-share your entire screen.')
     setToast({
-      severity: 'MEDIUM',
+      severity: 'HIGH',
       event_type: 'SCREEN_SHARE_LOST',
       detail: 'Screen sharing stopped. Please re-share your entire screen to continue.',
     })

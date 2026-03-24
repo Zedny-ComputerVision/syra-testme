@@ -203,7 +203,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         if cutoff:
             normalized_cutoff = cutoff if cutoff.tzinfo else cutoff.replace(tzinfo=timezone.utc)
-            if int(issued_at.timestamp()) <= int(normalized_cutoff.timestamp()):
+            if int(issued_at.timestamp()) < int(normalized_cutoff.timestamp()):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     def _invalidate_user_tokens(self, user: User) -> None:

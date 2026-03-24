@@ -68,6 +68,7 @@ def _origin_is_allowed(origin: str | None) -> bool:
         return True
     return False
 
+
 app = FastAPI(title="SYRA LMS", redirect_slashes=False)
 
 TRAILING_RESOURCES = {
@@ -253,6 +254,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Safety net: ensure CORS header exists on all responses for allowed origins
 class EnsureCORSHeaders(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -263,6 +265,7 @@ class EnsureCORSHeaders(BaseHTTPMiddleware):
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
+
 
 app.add_middleware(EnsureCORSHeaders)
 
@@ -299,7 +302,7 @@ def _run_alembic_upgrade() -> None:
             alembic_config.set_main_option("script_location", str(alembic_dir))
             alembic_config.set_main_option("prepend_sys_path", str(BASE_DIR))
             # Alembic uses configparser interpolation, so '%' in passwords must be escaped.
-            alembic_config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+            alembic_config.set_main_option("sqlalchemy.url", settings.database_migration_url.replace("%", "%%"))
             inspector = inspect(engine)
             table_names = set(inspector.get_table_names())
             if "alembic_version" not in table_names and {"users", "exams", "attempts", "schedules"}.issubset(table_names):

@@ -67,38 +67,49 @@ describe('Login page', () => {
     expect(screen.getByRole('link', { name: 'Create account' }).getAttribute('href')).toBe('/signup')
   })
 
-  it('repairs the localhost sandbox learner account before logging in', async () => {
-    const adminTokens = { access_token: 'admin-token', refresh_token: 'admin-refresh' }
+  it('lets the user toggle password visibility from the sign-in screen', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Login />
+      </MemoryRouter>,
+    )
+
+    const passwordInput = screen.getByLabelText('Password')
+    expect(passwordInput.getAttribute('type')).toBe('password')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(passwordInput.getAttribute('type')).toBe('text')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(passwordInput.getAttribute('type')).toBe('password')
+  })
+
+  it('uses the localhost seeded learner account for the quick login button', async () => {
     const learnerTokens = { access_token: 'learner-token', refresh_token: 'learner-refresh' }
 
     loginMock
-      .mockResolvedValueOnce({ data: adminTokens })
       .mockResolvedValueOnce({ data: learnerTokens })
-    signupStatusMock.mockResolvedValue({ data: { allowed: false } })
 
     axios.post.mockImplementation((url) => {
-      if (url.endsWith('/api/users/')) {
-        return Promise.reject({ response: { status: 409, data: { detail: 'Email exists' } } })
-      }
-      if (url.includes('/reset-password')) {
-        return Promise.resolve({ data: { detail: 'Password reset' } })
+      if (url.endsWith('/api/testing/reset-seed')) {
+        return Promise.resolve({
+          data: {
+            admin: {
+              email: 'admin@example.com',
+              password: 'Password123!',
+            },
+            learners: [
+              {
+                email: 'learner1@example.com',
+                password: 'Password123!',
+                user_id: 'LRN001',
+              },
+            ],
+          },
+        })
       }
       return Promise.reject(new Error(`Unexpected POST ${url}`))
     })
-    axios.get.mockResolvedValue({
-      data: {
-        items: [
-          {
-            id: 'learner-id',
-            email: 'sandbox.learner@example.com',
-            user_id: 'SBX001',
-            role: 'ADMIN',
-            is_active: false,
-          },
-        ],
-      },
-    })
-    axios.patch.mockResolvedValue({ data: {} })
 
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -108,34 +119,13 @@ describe('Login page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Learner' }))
 
-    await waitFor(() => expect(loginMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(loginMock).toHaveBeenCalledTimes(1))
 
     expect(setupMock).not.toHaveBeenCalled()
-    expect(signupStatusMock).toHaveBeenCalledTimes(1)
-    expect(axios.get).toHaveBeenCalledTimes(1)
-    expect(axios.patch).toHaveBeenCalledWith(
-      'http://localhost:3000/api/users/learner-id',
-      expect.objectContaining({
-        email: 'sandbox.learner@example.com',
-        user_id: 'SBX001',
-        role: 'LEARNER',
-        is_active: true,
-      }),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer admin-token',
-        }),
-      }),
-    )
-    expect(axios.post).toHaveBeenCalledWith(
-      'http://localhost:3000/api/users/learner-id/reset-password',
-      { new_password: 'Sandbox1234!' },
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer admin-token',
-        }),
-      }),
-    )
+    expect(signupStatusMock).not.toHaveBeenCalled()
+    expect(axios.get).not.toHaveBeenCalled()
+    expect(axios.patch).not.toHaveBeenCalled()
+    expect(loginMock).toHaveBeenCalledWith('learner1@example.com', 'Password123!')
     expect(authLoginMock).toHaveBeenCalledWith(learnerTokens)
     expect(navigateMock).toHaveBeenCalled()
   })

@@ -120,6 +120,32 @@
   }
 }
 
+.viewerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.forceSubmitBtn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+
+  &:hover {
+    background: #dc2626;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
 .closeBtn {
   padding: 6px 16px;
   border-radius: 6px;

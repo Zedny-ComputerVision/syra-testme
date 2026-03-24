@@ -126,8 +126,6 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
         "id_verification_required",
         "require_identity_verification",
         "require_id_verification",
-        "face_verify",
-        "face_verify_enabled",
         "require_id_document",
         "id_document_required",
     )
@@ -141,7 +139,7 @@ def get_proctoring_requirements(proctoring_config: Mapping[str, Any] | None) -> 
     if lighting_required is None:
         lighting_required = False
     if explicit_identity_required is None:
-        explicit_identity_required = bool(face_detection)
+        explicit_identity_required = False
 
     if _has_recorded_video_journey(cfg):
         camera_required = True

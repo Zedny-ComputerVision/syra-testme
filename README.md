@@ -44,6 +44,8 @@ Default seeded credentials:
 ```bash
 cp backend/.env.docker.example backend/.env.docker
 cp frontend/.env.production.example frontend/.env.production
+# Optional for Supabase:
+#   DATABASE_MIGRATION_URL (recommended when DATABASE_URL uses the Supabase pooler)
 # Edit backend/.env.docker — at minimum set:
 #   DATABASE_URL, JWT_SECRET, FRONTEND_BASE_URL, BACKEND_BASE_URL, CORS_ORIGINS, CLOUDFLARE_MEDIA_API_BASE_URL
 ```
@@ -53,6 +55,7 @@ cp frontend/.env.production.example frontend/.env.production
 | Variable | Example |
 |---|---|
 | `DATABASE_URL` | `postgresql+psycopg://user:pass@host:5432/syra_lms` |
+| `DATABASE_MIGRATION_URL` | `postgresql+psycopg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres?sslmode=require` |
 | `JWT_SECRET` | Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `FRONTEND_BASE_URL` | `https://your-domain.com` |
 | `BACKEND_BASE_URL` | `https://your-domain.com/api` |
@@ -67,7 +70,34 @@ cp frontend/.env.production.example frontend/.env.production
 | `MEDIA_STORAGE_PROVIDER` | `local` | `local` or `supabase` |
 | `PROCTORING_VIDEO_STORAGE_PROVIDER` | `cloudflare` | Proctoring recordings are uploaded to Cloudflare and streamed from there |
 
-### 2. Build and start
+Supabase production note:
+
+- Use the Supabase session pooler URL for `DATABASE_URL`.
+- Use the direct Postgres URL for `DATABASE_MIGRATION_URL` if you want migrations to run outside the pooler.
+- Supabase URLs will automatically get `sslmode=require` added if omitted.
+
+### 2. One-command production deploy
+
+```bash
+bash scripts/deploy-linux.sh
+```
+
+That script uses the production env files already in the repo, generates a persistent `JWT_SECRET` if the file still contains the local placeholder, starts the Docker stack, waits for container health, and verifies the frontend plus backend health endpoints.
+
+To also ensure demo login users exist with predictable passwords during deploy:
+
+```bash
+SYRA_SEED_LOGIN_USERS=1 bash scripts/deploy-linux.sh
+```
+
+Default seeded login credentials for that opt-in path:
+
+- `admin@example.com` / `Admin1234!`
+- `instructor@example.com` / `Instructor1234!`
+- `student1@example.com` / `Student1234!`
+- `student2@example.com` / `Student1234!`
+
+### 3. Build and start manually
 
 ```bash
 # Create storage directory (bind-mounted volume)
@@ -81,7 +111,7 @@ docker compose ps
 curl http://localhost/api/health/db
 ```
 
-### 3. Architecture
+### 4. Architecture
 
 ```
 Internet → :80 nginx (frontend) → /api/* proxy → :8000 gunicorn (backend) → PostgreSQL
@@ -93,7 +123,7 @@ Internet → :80 nginx (frontend) → /api/* proxy → :8000 gunicorn (backend) 
 - **Storage**: `backend/storage/` is bind-mounted for videos, evidence, reports, identity files
 - Backend port is **not** exposed externally — all traffic goes through nginx
 
-### 4. Local PostgreSQL Shortcut
+### 5. Local PostgreSQL Shortcut
 
 For a local Linux Docker stack that also starts PostgreSQL, use:
 

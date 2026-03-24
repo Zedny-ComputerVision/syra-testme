@@ -9,6 +9,22 @@ from ..deps import get_db_dep, parse_uuid_param, require_permission
 router = APIRouter()
 
 
+def _query_first(db: Session, statement):
+    scalar = getattr(db, "scalar", None)
+    if callable(scalar):
+        existing = scalar(statement)
+        if existing is not None:
+            return existing
+    scalars = getattr(db, "scalars", None)
+    if not callable(scalars):
+        return None
+    result = scalars(statement)
+    if hasattr(result, "first"):
+        return result.first()
+    rows = result.all() if hasattr(result, "all") else list(result)
+    return rows[0] if rows else None
+
+
 def _clean_required_text(value: str | None, field_name: str) -> str:
     text = str(value or "").strip()
     if not text:
@@ -22,13 +38,14 @@ def _clean_optional_text(value: str | None) -> str | None:
 
 
 def _ensure_unique_template_name(db: Session, name: str, existing_template_id=None):
-    templates = db.scalars(select(ExamTemplate)).all()
+    from sqlalchemy import func
     normalized = name.strip().lower()
-    for template in templates:
-        if template.id == existing_template_id:
-            continue
-        if str(template.name or "").strip().lower() == normalized:
-            raise HTTPException(status_code=409, detail="Template name exists")
+    existing = _query_first(
+        db,
+        select(ExamTemplate).where(func.lower(ExamTemplate.name) == normalized)
+    )
+    if existing and getattr(existing, "id", None) != existing_template_id:
+        raise HTTPException(status_code=409, detail="Template name exists")
 
 
 def _normalize_template_payload(body: ExamTemplateCreate) -> dict:
@@ -52,7 +69,10 @@ async def create_template(body: ExamTemplateCreate, db: Session = Depends(get_db
 
 @router.get("/", response_model=list[ExamTemplateRead])
 async def list_templates(db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    return db.scalars(select(ExamTemplate).order_by(ExamTemplate.created_at.desc())).all()
+    query = select(ExamTemplate).order_by(ExamTemplate.created_at.desc())
+    if current.role == RoleEnum.INSTRUCTOR:
+        query = query.where(ExamTemplate.created_by_id == current.id)
+    return db.scalars(query).all()
 
 
 @router.get("/{template_id}", response_model=ExamTemplateRead)

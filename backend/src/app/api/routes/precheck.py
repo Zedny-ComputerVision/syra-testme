@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 EVIDENCE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "identity"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 settings = get_settings()
-ALLOW_TEST_BYPASS = settings.precheck_test_bypass_enabled
+ALLOW_TEST_BYPASS = False
 _ID_TOKEN_RE = re.compile(r"[A-Z0-9]{6,24}")
 _HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _TESSERACT_CONFIGURED = False
@@ -109,7 +109,7 @@ def _tesseract_text(img_bgr: np.ndarray) -> dict:
             raw_txt = pytesseract.image_to_string(img_bgr)
             pre_txt = pytesseract.image_to_string(preprocessed, config="--psm 6")
         combined = raw_txt + "\n" + pre_txt
-        lines = list(dict.fromkeys(l.strip() for l in combined.splitlines() if l.strip()))
+        lines = list(dict.fromkeys(line.strip() for line in combined.splitlines() if line.strip()))
         return {"raw": combined, "lines": lines[:30], "available": True, "error": None, "engine": "tesseract"}
     except Exception as exc:
         return _easyocr_text(img_bgr, str(exc))

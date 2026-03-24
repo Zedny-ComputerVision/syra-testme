@@ -26,31 +26,38 @@ function SessionCard({ session, onWatch }) {
 function LiveViewer({ attemptId, token, onClose }) {
   const canvasRef = useRef(null)
   const wsRef = useRef(null)
+  const reconnectTimer = useRef(null)
+  const reconnectCount = useRef(0)
+  const intentionalClose = useRef(false)
   const [alerts, setAlerts] = useState([])
   const [summary, setSummary] = useState(null)
   const [sessionInfo, setSessionInfo] = useState(null)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
+  const [forceSubmitting, setForceSubmitting] = useState(false)
+  const [forceSubmitted, setForceSubmitted] = useState(false)
 
-  useEffect(() => {
+  const connectWs = useCallback(() => {
     if (!attemptId || !token) return
 
     const url = `${WS_BASE}/proctoring/admin/live/${attemptId}/ws?token=${encodeURIComponent(token)}`
     const ws = new WebSocket(url)
     wsRef.current = ws
 
-    ws.onopen = () => setConnected(true)
+    ws.onopen = () => {
+      setConnected(true)
+      setError('')
+      reconnectCount.current = 0
+    }
 
     ws.onmessage = (event) => {
       if (event.data instanceof Blob) {
-        // Binary: frame thumbnail
         event.data.arrayBuffer().then((buf) => {
           const bytes = new Uint8Array(buf)
           if (bytes.length < 2) return
-          // Skip type byte (0x01 = camera, 0x02 = screen)
           const jpegData = bytes.slice(1)
           const blob = new Blob([jpegData], { type: 'image/jpeg' })
-          const url = URL.createObjectURL(blob)
+          const blobUrl = URL.createObjectURL(blob)
           const img = new Image()
           img.onload = () => {
             const canvas = canvasRef.current
@@ -59,9 +66,9 @@ function LiveViewer({ attemptId, token, onClose }) {
             canvas.height = img.height
             const ctx = canvas.getContext('2d')
             ctx.drawImage(img, 0, 0)
-            URL.revokeObjectURL(url)
+            URL.revokeObjectURL(blobUrl)
           }
-          img.src = url
+          img.src = blobUrl
         })
         return
       }
@@ -77,6 +84,11 @@ function LiveViewer({ attemptId, token, onClose }) {
         } else if (data.type === 'session_ended') {
           setError('Session ended — learner disconnected.')
           setConnected(false)
+          intentionalClose.current = true
+        } else if (data.type === 'force_submitted') {
+          setForceSubmitted(true)
+          setError('Attempt was force-submitted.')
+          intentionalClose.current = true
         } else if (data.type === 'error') {
           setError(data.detail || 'Unknown error')
         }
@@ -85,14 +97,51 @@ function LiveViewer({ attemptId, token, onClose }) {
       }
     }
 
-    ws.onclose = () => setConnected(false)
-    ws.onerror = () => setError('WebSocket connection failed')
+    ws.onclose = () => {
+      setConnected(false)
+      // Auto-reconnect with exponential backoff (max 10s), up to 5 attempts
+      if (!intentionalClose.current && reconnectCount.current < 5) {
+        const delay = Math.min(1000 * 2 ** reconnectCount.current, 10000)
+        reconnectCount.current += 1
+        setError(`Disconnected. Reconnecting in ${Math.round(delay / 1000)}s...`)
+        reconnectTimer.current = setTimeout(connectWs, delay)
+      }
+    }
 
-    return () => {
-      ws.close()
-      wsRef.current = null
+    ws.onerror = () => {
+      if (!intentionalClose.current) {
+        setError('WebSocket connection failed')
+      }
     }
   }, [attemptId, token])
+
+  useEffect(() => {
+    intentionalClose.current = false
+    reconnectCount.current = 0
+    connectWs()
+
+    return () => {
+      intentionalClose.current = true
+      clearTimeout(reconnectTimer.current)
+      wsRef.current?.close()
+      wsRef.current = null
+    }
+  }, [connectWs])
+
+  const handleForceSubmit = async () => {
+    if (!window.confirm('Are you sure you want to force-submit this attempt? This cannot be undone.')) return
+    setForceSubmitting(true)
+    try {
+      await api.post(`/proctoring/admin/sessions/${attemptId}/force-submit`)
+      setForceSubmitted(true)
+      setError('Attempt was force-submitted.')
+    } catch (err) {
+      const detail = err.response?.data?.detail || 'Failed to force-submit'
+      setError(detail)
+    } finally {
+      setForceSubmitting(false)
+    }
+  }
 
   return (
     <div className={styles.liveViewer}>
@@ -101,13 +150,25 @@ function LiveViewer({ attemptId, token, onClose }) {
           <span className={`${styles.statusDot} ${connected ? styles.connected : styles.disconnected}`} />
           {sessionInfo?.user_name || 'Loading...'} — {sessionInfo?.exam_title || ''}
         </div>
-        <button className={styles.closeBtn} onClick={onClose}>Close</button>
+        <div className={styles.viewerActions}>
+          {!forceSubmitted && (
+            <button
+              className={styles.forceSubmitBtn}
+              onClick={handleForceSubmit}
+              disabled={forceSubmitting}
+            >
+              {forceSubmitting ? 'Submitting...' : 'Force Submit'}
+            </button>
+          )}
+          <button className={styles.closeBtn} onClick={onClose}>Close</button>
+        </div>
       </div>
 
       <div className={styles.viewerBody}>
         <div className={styles.videoPanel}>
           <canvas ref={canvasRef} className={styles.videoCanvas} />
           {!connected && error && <div className={styles.errorOverlay}>{error}</div>}
+          {forceSubmitted && <div className={styles.errorOverlay}>Attempt force-submitted</div>}
         </div>
 
         <div className={styles.sidePanel}>
