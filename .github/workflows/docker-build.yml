@@ -14,7 +14,6 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         env:
-          GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
           GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
         with:
           host: ${{ secrets.VM_HOST }}
@@ -22,7 +21,7 @@ jobs:
           password: ${{ secrets.VM_PASSWORD }}
           port: 22
           command_timeout: 30m
-          envs: GIT_USERNAME,GIT_PASSWORD
+          envs: GIT_PASSWORD
           script: |
             set -e
             cd /opt/syra-testme
@@ -30,20 +29,18 @@ jobs:
             echo ">>> Stopping existing services..."
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
 
-            echo ">>> Pulling latest code from main..."
-            # The existing repo at /opt/syra-testme is corrupted by a bad URL.
-            # We will clone fresh to a temp directory to guarantee it works.
-            cd /opt
-            rm -rf syra-testme-temp
-            git clone "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git" syra-testme-temp
+            echo ">>> Pulling repository directly on the server..."
+            # Clean up the broken origin URL and replace with PAT
+            git remote remove origin || true
+            git remote add origin "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
             
-            echo ">>> Replacing old code..."
-            # Make sure we don't delete the storage/ volumes inside the old directory
-            rsync -a --exclude 'backend/storage' syra-testme-temp/ syra-testme/
-            rm -rf syra-testme-temp
+            # Fetch and reset to guarantee it updates perfectly
+            git fetch origin main
+            git reset --hard origin/main
             
-            cd /opt/syra-testme
-            
+            # Remove PAT from URL for security
+            git remote set-url origin "https://github.com/Zedny-ComputerVision/syra-testme.git"
+
             echo ">>> Running deploy script..."
             export SYRA_SEED_DEMO_DATA=0
             bash scripts/deploy-linux.sh
