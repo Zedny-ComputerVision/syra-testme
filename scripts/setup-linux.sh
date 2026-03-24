@@ -7,34 +7,53 @@ BACKEND_ENV="${REPO_ROOT}/backend/.env.docker"
 BACKEND_ENV_EXAMPLE="${REPO_ROOT}/backend/.env.docker.example"
 FRONTEND_ENV="${REPO_ROOT}/frontend/.env.production"
 FRONTEND_ENV_EXAMPLE="${REPO_ROOT}/frontend/.env.production.example"
-COMPOSE_FILES=(-f "${REPO_ROOT}/docker-compose.yml" -f "${REPO_ROOT}/docker-compose.local-db.yml")
+COMPOSE_FILES=()
 PREPARE_ONLY=0
+SETUP_MODE="${SYRA_SETUP_MODE:-auto}"
+RUN_LOCAL_DB=0
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/setup-linux.sh [--prepare-only]
+Usage: bash scripts/setup-linux.sh [--prepare-only] [--local] [--production]
 
-Prepares a Linux Docker stack for local development:
+Bootstrap and run the full Linux Docker stack:
 - creates backend/.env.docker if missing
 - creates frontend/.env.production if missing
-- creates backend/storage if missing
-- starts frontend, backend, and a local PostgreSQL container
-- seeds a large demo dataset after the backend becomes healthy
+- fills the important env values from overrides or safe defaults
+- chooses local PostgreSQL or external PostgreSQL automatically
+- starts the website stack
+- waits for backend/frontend health
+- seeds demo data in local mode
+- ensures standard login users exist in external-db mode
+
+Flags:
+- --prepare-only   only create/update env files and storage directories
+- --local          force local PostgreSQL mode
+- --production     force external PostgreSQL mode
 
 Environment overrides:
+- SYRA_SETUP_MODE=auto|local|production
 - SYRA_DATABASE_URL
+- SYRA_DATABASE_MIGRATION_URL
 - SYRA_POSTGRES_PASSWORD
 - SYRA_JWT_SECRET
 - SYRA_FRONTEND_URL
 - SYRA_BACKEND_URL
 - SYRA_CORS_ORIGINS
+- SYRA_MEDIA_STORAGE_PROVIDER=local|supabase
 - SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER=cloudflare|supabase
 - SYRA_CLOUDFLARE_MEDIA_API_BASE_URL
 - SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS
 - SYRA_PRECHECK_ALLOW_TEST_BYPASS
 - SYRA_NGINX_CLIENT_MAX_BODY_SIZE
-- SYRA_SEED_DEMO_DATA=0 to skip automatic seeding
-- SYRA_SEED_FORCE=1 to append another seeded batch even if users already exist
+- SYRA_WORKERS
+- SYRA_SEED_DEMO_DATA=0|1
+- SYRA_SEED_FORCE=0|1
+- SYRA_SEED_LOGIN_USERS=0|1
+- SYRA_RESET_LOGIN_PASSWORDS=0|1
+- SYRA_ADMIN_PASSWORD
+- SYRA_INSTRUCTOR_PASSWORD
+- SYRA_STUDENT_PASSWORD
 EOF
 }
 
@@ -57,6 +76,7 @@ ensure_linux() {
 
 ensure_docker() {
   require_command docker
+  require_command curl
   docker compose version >/dev/null 2>&1 || die "Docker Compose plugin is required."
   docker info >/dev/null 2>&1 || die "Docker daemon is not reachable. Start Docker and try again."
 }
@@ -77,6 +97,15 @@ compose() {
 
 generate_secret() {
   printf '%s%s\n' "$(tr -d '-' </proc/sys/kernel/random/uuid)" "$(tr -d '-' </proc/sys/kernel/random/uuid)"
+}
+
+read_env_value() {
+  local file="$1"
+  local key="$2"
+  if [[ ! -f "$file" ]]; then
+    return
+  fi
+  awk -F= -v key="$key" 'index($0, key "=") == 1 { sub(/^[^=]*=/, "", $0); print; exit }' "$file"
 }
 
 set_env_value() {
@@ -102,6 +131,18 @@ set_env_value() {
   mv "$tmp_file" "$file"
 }
 
+is_placeholder_secret() {
+  local value="$1"
+  [[ -z "$value" || "$value" == "change-me-to-a-random-32-character-string" || "$value" == "local-dev-secret-with-at-least-32-chars" ]]
+}
+
+configure_compose_files() {
+  COMPOSE_FILES=(-f "${REPO_ROOT}/docker-compose.yml")
+  if [[ "$RUN_LOCAL_DB" == "1" ]]; then
+    COMPOSE_FILES+=(-f "${REPO_ROOT}/docker-compose.local-db.yml")
+  fi
+}
+
 wait_for_service_health() {
   local service="$1"
   local timeout_seconds="${2:-900}"
@@ -121,7 +162,7 @@ wait_for_service_health() {
         return 0
         ;;
       unhealthy|exited|dead)
-        docker logs --tail 80 "$container_id" >&2 || true
+        docker logs --tail 120 "$container_id" >&2 || true
         die "Service '$service' became $status."
         ;;
     esac
@@ -129,8 +170,19 @@ wait_for_service_health() {
     elapsed=$((elapsed + interval_seconds))
   done
 
-  docker logs --tail 80 "$container_id" >&2 || true
+  docker logs --tail 120 "$container_id" >&2 || true
   die "Timed out waiting for service '$service' to become healthy."
+}
+
+require_http_200() {
+  local url="$1"
+  local label="$2"
+  local timeout_seconds="${3:-30}"
+  local status
+
+  status="$(curl --silent --show-error --location --max-time "$timeout_seconds" --output /dev/null --write-out '%{http_code}' "$url" || true)"
+  [[ "$status" == "200" ]] || die "${label} check failed for ${url} (status ${status:-unreachable})."
+  log "${label} check passed (${url})."
 }
 
 seed_demo_data() {
@@ -147,10 +199,79 @@ seed_demo_data() {
   fi
 }
 
+seed_login_users() {
+  if [[ "$SEED_LOGIN_USERS" != "1" ]]; then
+    log "Skipping login-user seed because SYRA_SEED_LOGIN_USERS=${SEED_LOGIN_USERS}."
+    return
+  fi
+
+  log "Ensuring standard login users exist."
+  compose run --rm -T \
+    -v "${REPO_ROOT}/backend/scripts:/app/scripts:ro" \
+    -e SYRA_RESET_LOGIN_PASSWORDS="$RESET_LOGIN_PASSWORDS" \
+    -e SYRA_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+    -e SYRA_INSTRUCTOR_PASSWORD="$INSTRUCTOR_PASSWORD" \
+    -e SYRA_STUDENT_PASSWORD="$STUDENT_PASSWORD" \
+    backend python scripts/ensure_login_users.py
+}
+
+preflight_memory_warning() {
+  local avail_mem_mb
+  avail_mem_mb="$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)"
+  if (( avail_mem_mb > 0 )); then
+    log "Available memory: ${avail_mem_mb} MB"
+    if (( avail_mem_mb < 1500 )); then
+      log "WARNING: Low memory (${avail_mem_mb} MB)."
+      log "  Consider adding swap or setting SYRA_WORKERS=1."
+    fi
+  fi
+}
+
+database_connectivity_check() {
+  if [[ "$RUN_LOCAL_DB" == "1" ]]; then
+    return
+  fi
+
+  log "Testing database connectivity..."
+  local db_check_output
+  db_check_output="$(
+    cd "$REPO_ROOT"
+    compose run --rm --no-deps -T \
+      -e DATABASE_URL="$DATABASE_URL" \
+      backend python -c '
+import os, sys
+from sqlalchemy import create_engine, text
+try:
+    engine = create_engine(os.environ["DATABASE_URL"], connect_args={"connect_timeout": 10})
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    print("OK")
+except Exception as exc:
+    print(f"FAIL: {exc}", file=sys.stderr)
+    sys.exit(1)
+' 2>&1
+  )" || true
+  if echo "$db_check_output" | grep -q "^OK$"; then
+    log "Database connectivity check passed."
+    return
+  fi
+
+  log "ERROR: Cannot connect to the database."
+  log "  URL: ${DATABASE_URL%%@*}@*** (host hidden)"
+  log "  Error: $db_check_output"
+  die "Fix the database connection and try again."
+}
+
 for arg in "$@"; do
   case "$arg" in
     --prepare-only)
       PREPARE_ONLY=1
+      ;;
+    --local)
+      SETUP_MODE="local"
+      ;;
+    --production)
+      SETUP_MODE="production"
       ;;
     -h|--help)
       usage
@@ -163,31 +284,101 @@ for arg in "$@"; do
 done
 
 ensure_linux
-ensure_docker
 
 POSTGRES_PASSWORD="${SYRA_POSTGRES_PASSWORD:-syra-local-password}"
-JWT_SECRET="${SYRA_JWT_SECRET:-$(generate_secret)}"
-FRONTEND_URL="${SYRA_FRONTEND_URL:-http://localhost}"
-BACKEND_URL="${SYRA_BACKEND_URL:-http://localhost/api}"
-CORS_ORIGINS="${SYRA_CORS_ORIGINS:-http://localhost}"
-DATABASE_URL="${SYRA_DATABASE_URL:-postgresql+psycopg://syra:${POSTGRES_PASSWORD}@db:5432/syra_lms}"
-PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-}"
-CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-}"
-CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS="${SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS:-false}"
-PRECHECK_ALLOW_TEST_BYPASS="${SYRA_PRECHECK_ALLOW_TEST_BYPASS:-true}"
-NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-512m}"
-SEED_DEMO_DATA="${SYRA_SEED_DEMO_DATA:-1}"
-SEED_FORCE="${SYRA_SEED_FORCE:-0}"
+LOCAL_DATABASE_URL="postgresql+psycopg://syra:${POSTGRES_PASSWORD}@db:5432/syra_lms"
+
+ensure_file "$BACKEND_ENV_EXAMPLE" "$BACKEND_ENV"
+ensure_file "$FRONTEND_ENV_EXAMPLE" "$FRONTEND_ENV"
+
+existing_database_url="$(read_env_value "$BACKEND_ENV" "DATABASE_URL")"
+existing_database_migration_url="$(read_env_value "$BACKEND_ENV" "DATABASE_MIGRATION_URL")"
+existing_jwt_secret="$(read_env_value "$BACKEND_ENV" "JWT_SECRET")"
+existing_frontend_url="$(read_env_value "$BACKEND_ENV" "FRONTEND_BASE_URL")"
+existing_backend_url="$(read_env_value "$BACKEND_ENV" "BACKEND_BASE_URL")"
+existing_cors_origins="$(read_env_value "$BACKEND_ENV" "CORS_ORIGINS")"
+existing_media_storage_provider="$(read_env_value "$BACKEND_ENV" "MEDIA_STORAGE_PROVIDER")"
+existing_video_storage_provider="$(read_env_value "$BACKEND_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER")"
+existing_cloudflare_media_api_base_url="$(read_env_value "$BACKEND_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL")"
+existing_workers="$(read_env_value "$BACKEND_ENV" "WORKERS")"
+existing_nginx_client_max_body_size="$(read_env_value "$FRONTEND_ENV" "NGINX_CLIENT_MAX_BODY_SIZE")"
+
+DATABASE_URL="${SYRA_DATABASE_URL:-${existing_database_url:-$LOCAL_DATABASE_URL}}"
+DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-${existing_database_migration_url:-}}"
+JWT_SECRET="${SYRA_JWT_SECRET:-${existing_jwt_secret:-}}"
+FRONTEND_URL="${SYRA_FRONTEND_URL:-${existing_frontend_url:-http://localhost}}"
+BACKEND_URL="${SYRA_BACKEND_URL:-${existing_backend_url:-${FRONTEND_URL%/}/api}}"
+CORS_ORIGINS="${SYRA_CORS_ORIGINS:-${existing_cors_origins:-$FRONTEND_URL}}"
+MEDIA_STORAGE_PROVIDER="${SYRA_MEDIA_STORAGE_PROVIDER:-${existing_media_storage_provider:-local}}"
+WORKERS="${SYRA_WORKERS:-${existing_workers:-2}}"
+NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-${existing_nginx_client_max_body_size:-512m}}"
+CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-${existing_cloudflare_media_api_base_url:-}}"
+PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-${existing_video_storage_provider:-}}"
+
+if is_placeholder_secret "$JWT_SECRET"; then
+  JWT_SECRET="$(generate_secret)"
+  log "Generated a persistent JWT_SECRET."
+fi
+
+case "$SETUP_MODE" in
+  local)
+    RUN_LOCAL_DB=1
+    ;;
+  production)
+    RUN_LOCAL_DB=0
+    ;;
+  auto)
+    if [[ "$DATABASE_URL" == *"@db:"* ]]; then
+      RUN_LOCAL_DB=1
+    else
+      RUN_LOCAL_DB=0
+    fi
+    ;;
+  *)
+    die "Unsupported setup mode: ${SETUP_MODE}. Use auto, local, or production."
+    ;;
+esac
+
+if [[ "$PREPARE_ONLY" -eq 0 && "$RUN_LOCAL_DB" == "0" && "$DATABASE_URL" == "$LOCAL_DATABASE_URL" ]]; then
+  die "Production mode requires SYRA_DATABASE_URL or backend/.env.docker DATABASE_URL to point at an external database."
+fi
+
+configure_compose_files
+
+if [[ -n "${SYRA_PRECHECK_ALLOW_TEST_BYPASS:-}" ]]; then
+  PRECHECK_ALLOW_TEST_BYPASS="${SYRA_PRECHECK_ALLOW_TEST_BYPASS}"
+elif [[ "$RUN_LOCAL_DB" == "1" ]]; then
+  PRECHECK_ALLOW_TEST_BYPASS="true"
+else
+  PRECHECK_ALLOW_TEST_BYPASS="false"
+fi
+
+if [[ -n "${SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS:-}" ]]; then
+  CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS="${SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS}"
+elif [[ "$RUN_LOCAL_DB" == "1" ]]; then
+  CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS="false"
+else
+  CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS="true"
+fi
 
 if [[ -z "$PROCTORING_VIDEO_STORAGE_PROVIDER" ]]; then
-  PROCTORING_VIDEO_STORAGE_PROVIDER="cloudflare"
+  if [[ -n "$CLOUDFLARE_MEDIA_API_BASE_URL" ]]; then
+    PROCTORING_VIDEO_STORAGE_PROVIDER="cloudflare"
+  else
+    PROCTORING_VIDEO_STORAGE_PROVIDER="supabase"
+  fi
 fi
 PROCTORING_VIDEO_STORAGE_PROVIDER="$(printf '%s' "$PROCTORING_VIDEO_STORAGE_PROVIDER" | tr '[:upper:]' '[:lower:]')"
 
 case "$PROCTORING_VIDEO_STORAGE_PROVIDER" in
   cloudflare)
-    [[ -n "$CLOUDFLARE_MEDIA_API_BASE_URL" ]] || die "SYRA_CLOUDFLARE_MEDIA_API_BASE_URL is required when SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER=cloudflare."
-    log "Using Cloudflare proctoring video storage."
+    if [[ -z "$CLOUDFLARE_MEDIA_API_BASE_URL" ]]; then
+      log "WARNING: Cloudflare storage was selected without SYRA_CLOUDFLARE_MEDIA_API_BASE_URL."
+      log "Falling back to supabase proctoring video storage."
+      PROCTORING_VIDEO_STORAGE_PROVIDER="supabase"
+    else
+      log "Using Cloudflare proctoring video storage."
+    fi
     ;;
   supabase)
     log "Using Supabase proctoring video storage."
@@ -197,20 +388,52 @@ case "$PROCTORING_VIDEO_STORAGE_PROVIDER" in
     ;;
 esac
 
-ensure_file "$BACKEND_ENV_EXAMPLE" "$BACKEND_ENV"
-ensure_file "$FRONTEND_ENV_EXAMPLE" "$FRONTEND_ENV"
+if [[ "$RUN_LOCAL_DB" == "0" && "$FRONTEND_URL" == "http://localhost" ]]; then
+  log "WARNING: FRONTEND_BASE_URL is still http://localhost."
+  log "  Set SYRA_FRONTEND_URL and SYRA_BACKEND_URL for a public deployment."
+fi
+
+if [[ -n "${SYRA_SEED_DEMO_DATA:-}" ]]; then
+  SEED_DEMO_DATA="${SYRA_SEED_DEMO_DATA}"
+elif [[ "$RUN_LOCAL_DB" == "1" ]]; then
+  SEED_DEMO_DATA="1"
+else
+  SEED_DEMO_DATA="0"
+fi
+
+if [[ -n "${SYRA_SEED_LOGIN_USERS:-}" ]]; then
+  SEED_LOGIN_USERS="${SYRA_SEED_LOGIN_USERS}"
+elif [[ "$RUN_LOCAL_DB" == "1" && "$SEED_DEMO_DATA" == "1" ]]; then
+  SEED_LOGIN_USERS="0"
+else
+  SEED_LOGIN_USERS="1"
+fi
+
+if [[ -n "${SYRA_RESET_LOGIN_PASSWORDS:-}" ]]; then
+  RESET_LOGIN_PASSWORDS="${SYRA_RESET_LOGIN_PASSWORDS}"
+elif [[ "$RUN_LOCAL_DB" == "1" ]]; then
+  RESET_LOGIN_PASSWORDS="1"
+else
+  RESET_LOGIN_PASSWORDS="0"
+fi
+
+SEED_FORCE="${SYRA_SEED_FORCE:-0}"
+ADMIN_PASSWORD="${SYRA_ADMIN_PASSWORD:-Admin1234!}"
+INSTRUCTOR_PASSWORD="${SYRA_INSTRUCTOR_PASSWORD:-Instructor1234!}"
+STUDENT_PASSWORD="${SYRA_STUDENT_PASSWORD:-Student1234!}"
 
 set_env_value "$BACKEND_ENV" "DATABASE_URL" "$DATABASE_URL"
+set_env_value "$BACKEND_ENV" "DATABASE_MIGRATION_URL" "$DATABASE_MIGRATION_URL"
 set_env_value "$BACKEND_ENV" "JWT_SECRET" "$JWT_SECRET"
 set_env_value "$BACKEND_ENV" "FRONTEND_BASE_URL" "$FRONTEND_URL"
 set_env_value "$BACKEND_ENV" "BACKEND_BASE_URL" "$BACKEND_URL"
 set_env_value "$BACKEND_ENV" "CORS_ORIGINS" "$CORS_ORIGINS"
-set_env_value "$BACKEND_ENV" "MEDIA_STORAGE_PROVIDER" "local"
+set_env_value "$BACKEND_ENV" "MEDIA_STORAGE_PROVIDER" "$MEDIA_STORAGE_PROVIDER"
 set_env_value "$BACKEND_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER" "$PROCTORING_VIDEO_STORAGE_PROVIDER"
 set_env_value "$BACKEND_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL" "$CLOUDFLARE_MEDIA_API_BASE_URL"
 set_env_value "$BACKEND_ENV" "CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS" "$CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS"
 set_env_value "$BACKEND_ENV" "PRECHECK_ALLOW_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
-set_env_value "$BACKEND_ENV" "WORKERS" "2"
+set_env_value "$BACKEND_ENV" "WORKERS" "$WORKERS"
 
 set_env_value "$FRONTEND_ENV" "VITE_API_BASE_URL" "/api/"
 set_env_value "$FRONTEND_ENV" "VITE_PRECHECK_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
@@ -229,21 +452,38 @@ if [[ "$PREPARE_ONLY" -eq 1 ]]; then
   exit 0
 fi
 
-log "Starting frontend, backend, and local PostgreSQL with Docker Compose."
+ensure_docker
+
+if [[ "$RUN_LOCAL_DB" == "1" ]]; then
+  log "Running in local PostgreSQL mode."
+else
+  log "Running in external PostgreSQL mode."
+fi
+
+preflight_memory_warning
+database_connectivity_check
+
+log "Starting services..."
 (
   cd "$REPO_ROOT"
-  compose up --build -d
+  compose up --build -d --remove-orphans
 )
+
+sleep 3
+
+backend_cid="$(compose ps -a -q backend 2>/dev/null || true)"
+if [[ -n "$backend_cid" ]]; then
+  backend_state="$(docker inspect --format '{{.State.Status}}' "$backend_cid" 2>/dev/null || true)"
+  if [[ "$backend_state" == "exited" || "$backend_state" == "dead" ]]; then
+    docker logs --tail 200 "$backend_cid" >&2 || true
+    die "Backend container crashed on startup."
+  fi
+fi
 
 wait_for_service_health backend
 seed_demo_data
+seed_login_users
 wait_for_service_health frontend
-
-log "Stack started."
-(
-  cd "$REPO_ROOT"
-  compose ps
-)
 
 API_HEALTH_URL="${BACKEND_URL%/}"
 if [[ "$API_HEALTH_URL" == */api ]]; then
@@ -251,18 +491,42 @@ if [[ "$API_HEALTH_URL" == */api ]]; then
 else
   API_HEALTH_URL="${API_HEALTH_URL}/api/health"
 fi
+DB_HEALTH_URL="${API_HEALTH_URL%/health}/health/db"
+LOGIN_URL="${FRONTEND_URL%/}/login"
+
+require_http_200 "$FRONTEND_URL" "Frontend"
+require_http_200 "$API_HEALTH_URL" "API health"
+require_http_200 "$DB_HEALTH_URL" "API DB health"
+
+log "Stack started."
+(
+  cd "$REPO_ROOT"
+  compose ps
+)
+
+if [[ "$RUN_LOCAL_DB" == "1" ]]; then
+  STOP_CMD="docker compose -f docker-compose.yml -f docker-compose.local-db.yml down"
+else
+  STOP_CMD="docker compose -f docker-compose.yml down"
+fi
 
 cat <<EOF
 
 App: ${FRONTEND_URL}
+Login: ${LOGIN_URL}
 API health: ${API_HEALTH_URL}
+DB health: ${DB_HEALTH_URL}
 
-Demo credentials:
-  admin@example.com / Admin1234!
-  instructor@example.com / Instructor1234!
-  student1@example.com / Student1234!
-  student2@example.com / Student1234!
+Standard login users are managed by:
+  SYRA_SEED_LOGIN_USERS=${SEED_LOGIN_USERS}
+  SYRA_RESET_LOGIN_PASSWORDS=${RESET_LOGIN_PASSWORDS}
+
+Default login passwords when accounts are created or reset:
+  admin@example.com / ${ADMIN_PASSWORD}
+  instructor@example.com / ${INSTRUCTOR_PASSWORD}
+  student1@example.com / ${STUDENT_PASSWORD}
+  student2@example.com / ${STUDENT_PASSWORD}
 
 Stop the stack with:
-  docker compose -f docker-compose.yml -f docker-compose.local-db.yml down
+  ${STOP_CMD}
 EOF

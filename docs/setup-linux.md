@@ -33,8 +33,17 @@ If Docker Engine and the Docker Compose plugin are already installed, the quicke
 bash scripts/setup-linux.sh
 ```
 
-That one command prepares Docker env files, starts a local PostgreSQL container, builds the images, seeds a large demo dataset, and brings up the full stack at `http://localhost`.
-Proctoring recordings are stored on Cloudflare Stream. Set `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint.
+That one command now acts as the unified Linux bootstrap:
+- creates `backend/.env.docker` if missing
+- creates `frontend/.env.production` if missing
+- fills or updates the important runtime values
+- chooses local PostgreSQL or external PostgreSQL automatically
+- starts the full Docker stack
+
+With the default local database settings, it starts a local PostgreSQL container, seeds a large demo dataset, and brings up the full stack at `http://localhost`.
+If `DATABASE_URL` points at an external database such as Supabase, it runs in production-style mode instead.
+
+Proctoring recordings use Cloudflare when `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` is set. Otherwise the setup script falls back to Supabase-backed video storage.
 
 Default seeded credentials:
 
@@ -58,7 +67,7 @@ Update `.env` before starting the backend:
 - If you use the Supabase session pooler for runtime traffic, set `DATABASE_MIGRATION_URL` to the direct Supabase Postgres connection string for Alembic migrations
 - Set `JWT_SECRET` to a real secret with at least 32 characters
 - Leave `AUTO_APPLY_MIGRATIONS=false` if you want to run Alembic manually
-- Set `CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint (required for proctoring video storage)
+- Set `CLOUDFLARE_MEDIA_API_BASE_URL` only if you want Cloudflare-backed proctoring video storage
 
 For local frontend development, `frontend/.env` can stay at:
 
@@ -159,7 +168,20 @@ Note: CI runs the same mirrored backend suite path shown above and uses PostgreS
 
 ## 8. Docker Compose deployment flow
 
-This project's `docker-compose.yml` expects an external PostgreSQL database such as Supabase.
+The one-command production path is:
+
+```bash
+SYRA_DATABASE_URL='postgresql+psycopg://user:pass@host:5432/dbname?sslmode=require' \
+SYRA_FRONTEND_URL=http://167.172.169.79 \
+SYRA_BACKEND_URL=http://167.172.169.79/api \
+bash scripts/setup-linux.sh --production
+```
+
+That command creates the Docker env files if they do not exist yet, fills the key settings from the current env or the `SYRA_*` overrides, and starts the production stack.
+
+If you prefer the older deploy entrypoint, `bash scripts/deploy-linux.sh` still works and now forwards to `bash scripts/setup-linux.sh --production`.
+
+For a manual production flow, this project's `docker-compose.yml` expects an external PostgreSQL database such as Supabase.
 
 1. Create the Docker env files:
    - `cp backend/.env.docker.example backend/.env.docker`
@@ -170,7 +192,7 @@ This project's `docker-compose.yml` expects an external PostgreSQL database such
    - `JWT_SECRET`
    - `FRONTEND_BASE_URL`
    - `BACKEND_BASE_URL`
-   - `CLOUDFLARE_MEDIA_API_BASE_URL`
+   - `CLOUDFLARE_MEDIA_API_BASE_URL` if you want Cloudflare-backed proctoring video storage
 3. Start the stack:
 
 ```bash

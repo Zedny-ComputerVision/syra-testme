@@ -11,9 +11,9 @@ Full-stack LMS with a FastAPI backend and React frontend.
 
 1. Copy `.env.example` to `.env`.
 2. Copy `frontend/.env.example` to `frontend/.env`.
-3. Set `DATABASE_URL` and `JWT_SECRET` in `.env`, then either:
-   - set `CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint.
-4. Follow the platform-specific guide above.
+3. Set `DATABASE_URL` and `JWT_SECRET` in `.env`.
+4. Optionally set `CLOUDFLARE_MEDIA_API_BASE_URL` if you want Cloudflare-backed proctoring video storage.
+5. Follow the platform-specific guide above.
 
 Default local URLs:
 
@@ -21,14 +21,22 @@ Default local URLs:
 - Backend API: `http://127.0.0.1:8000/api`
 - Backend DB health check: `http://127.0.0.1:8000/api/health/db`
 
-## Linux One-Command Local Stack
+## Linux One-Command Stack
 
 ```bash
 bash scripts/setup-linux.sh
 ```
 
-That script prepares `backend/.env.docker` and `frontend/.env.production`, starts a local PostgreSQL container, builds the images, seeds a large demo dataset, and brings up the full stack at `http://localhost`.
-Proctoring recordings are stored on Cloudflare Stream. Set `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` to your Cloudflare Stream endpoint.
+That command now acts as the unified Linux bootstrap:
+- creates `backend/.env.docker` if missing
+- creates `frontend/.env.production` if missing
+- fills or updates the important runtime values
+- starts the full Docker stack
+
+By default it chooses local PostgreSQL mode when `DATABASE_URL` points at `db`, seeds demo data, and brings the site up at `http://localhost`.
+If `DATABASE_URL` points to an external database such as Supabase, it uses production-style mode instead and skips the mass demo seed.
+
+Proctoring recordings use Cloudflare when `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` is set. Otherwise the setup script falls back to Supabase-backed video storage.
 
 Default seeded credentials:
 
@@ -47,10 +55,10 @@ cp frontend/.env.production.example frontend/.env.production
 # Optional for Supabase:
 #   DATABASE_MIGRATION_URL (recommended when DATABASE_URL uses the Supabase pooler)
 # Edit backend/.env.docker — at minimum set:
-#   DATABASE_URL, JWT_SECRET, FRONTEND_BASE_URL, BACKEND_BASE_URL, CORS_ORIGINS, CLOUDFLARE_MEDIA_API_BASE_URL
+#   DATABASE_URL, JWT_SECRET, FRONTEND_BASE_URL, BACKEND_BASE_URL, CORS_ORIGINS
 ```
 
-**Required** `backend/.env.docker` values for Docker:
+**Core** `backend/.env.docker` values for Docker:
 
 | Variable | Example |
 |---|---|
@@ -60,7 +68,7 @@ cp frontend/.env.production.example frontend/.env.production
 | `FRONTEND_BASE_URL` | `https://your-domain.com` |
 | `BACKEND_BASE_URL` | `https://your-domain.com/api` |
 | `CORS_ORIGINS` | `https://your-domain.com` |
-| `CLOUDFLARE_MEDIA_API_BASE_URL` | `https://your-cloudflare-media-gateway.example/api` |
+| `CLOUDFLARE_MEDIA_API_BASE_URL` | `https://your-cloudflare-media-gateway.example/api` optional |
 
 **Optional** backend tuning:
 
@@ -68,7 +76,7 @@ cp frontend/.env.production.example frontend/.env.production
 |---|---|---|
 | `MAX_VIDEO_UPLOAD_MB` | `512` | Max proctoring video upload size |
 | `MEDIA_STORAGE_PROVIDER` | `local` | `local` or `supabase` |
-| `PROCTORING_VIDEO_STORAGE_PROVIDER` | `cloudflare` | Proctoring recordings are uploaded to Cloudflare and streamed from there |
+| `PROCTORING_VIDEO_STORAGE_PROVIDER` | `cloudflare` | Use `cloudflare` with `CLOUDFLARE_MEDIA_API_BASE_URL`, or `supabase` to keep proctoring video storage inside Supabase |
 
 Supabase production note:
 
@@ -79,15 +87,24 @@ Supabase production note:
 ### 2. One-command production deploy
 
 ```bash
-bash scripts/deploy-linux.sh
+SYRA_DATABASE_URL='postgresql+psycopg://user:pass@host:5432/dbname?sslmode=require' \
+SYRA_FRONTEND_URL=http://167.172.169.79 \
+SYRA_BACKEND_URL=http://167.172.169.79/api \
+bash scripts/setup-linux.sh --production
 ```
 
-That script uses the production env files already in the repo, generates a persistent `JWT_SECRET` if the file still contains the local placeholder, starts the Docker stack, waits for container health, and verifies the frontend plus backend health endpoints.
+That command creates the Docker env files if they do not exist yet, generates a persistent `JWT_SECRET` when needed, starts the production stack, waits for container health, and verifies the frontend plus backend health endpoints.
+
+`bash scripts/deploy-linux.sh` still works, but it now just forwards to `bash scripts/setup-linux.sh --production`.
 
 To also ensure demo login users exist with predictable passwords during deploy:
 
 ```bash
-SYRA_SEED_LOGIN_USERS=1 bash scripts/deploy-linux.sh
+SYRA_DATABASE_URL='postgresql+psycopg://user:pass@host:5432/dbname?sslmode=require' \
+SYRA_FRONTEND_URL=http://167.172.169.79 \
+SYRA_BACKEND_URL=http://167.172.169.79/api \
+SYRA_SEED_LOGIN_USERS=1 \
+bash scripts/setup-linux.sh --production
 ```
 
 Default seeded login credentials for that opt-in path:
@@ -134,7 +151,7 @@ bash scripts/setup-linux.sh
 ## Notes
 
 - AI proctoring uses YOLO + MediaPipe + DeepFace for face/object detection. Models are pre-warmed at startup.
-- Proctoring videos use local storage by default in the one-command Linux stack. Set `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` if you want Cloudflare streaming there.
+- The one-command Linux setup uses Cloudflare for proctoring videos only when `SYRA_CLOUDFLARE_MEDIA_API_BASE_URL` is set. Otherwise it falls back to Supabase-backed video storage.
 - Data retention cleanup runs every 24h (configurable via `*_RETENTION_DAYS` env vars).
 - Reports are written to `backend/storage/reports/`, evidence to `backend/storage/evidence/`.
 
