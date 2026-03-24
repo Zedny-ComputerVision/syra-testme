@@ -13,13 +13,16 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+          GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           password: ${{ secrets.VM_PASSWORD }}
           port: 22
-          script_stop: true
           command_timeout: 30m
+          envs: GIT_USERNAME,GIT_PASSWORD
           script: |
             set -e
             cd /opt/syra-testme
@@ -29,7 +32,7 @@ jobs:
 
             echo ">>> Configuring git credentials..."
             git config credential.helper store
-            echo "https://${{ secrets.GIT_USERNAME }}:${{ secrets.GIT_PASSWORD }}@github.com" > ~/.git-credentials
+            echo "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com" > ~/.git-credentials
 
             echo ">>> Pulling latest code from main..."
             git fetch origin main
