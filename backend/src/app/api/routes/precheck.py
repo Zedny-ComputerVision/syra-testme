@@ -528,15 +528,19 @@ async def precheck(
 
         match_score = 1.0
         face_match = False
-        # ID-vs-selfie comparison needs a more lenient threshold than live
-        # verification: the ID photo may differ in age, lighting, and angle.
-        base_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.55))
+        # ID-vs-selfie comparison needs a lenient threshold: the ID photo
+        # differs in age, lighting, angle, and camera quality from the selfie.
+        # DeepFace with proper face detection produces distances of 0.3–0.5 for
+        # same-person ID-vs-selfie pairs, so the floor must be >= 0.55.
+        raw_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.55))
         if selfie_sig_mode == id_sig_mode == "mediapipe":
-            threshold = min(base_threshold, 0.25)
+            threshold = min(raw_threshold, 0.25)
         elif selfie_sig_mode == id_sig_mode == "haar":
-            threshold = max(base_threshold, 0.50)
+            threshold = max(raw_threshold, 0.50)
         else:
-            threshold = base_threshold
+            # Enforce a minimum floor — old DB values (0.18) were calibrated for
+            # a broken pipeline that didn't detect/align faces.
+            threshold = max(raw_threshold, 0.55)
         if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
             match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
             face_match = match_score <= threshold
