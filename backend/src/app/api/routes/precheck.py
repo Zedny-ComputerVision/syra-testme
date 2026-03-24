@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ...api.deps import get_current_user, get_db_dep, parse_uuid_param
 from ...core.config import get_settings
 from ...models import Attempt, RoleEnum
-from ...detection.face_verification import compute_face_signature, cosine_distance
+from ...detection.face_verification import compute_face_signature, cosine_distance, compute_landmark_signature
 from ...services.normalized_relations import exam_proctoring
 from ...services.crypto_utils import encrypt_bytes
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
@@ -187,7 +187,8 @@ def _compute_signature_with_fallback(img_bgr: np.ndarray) -> tuple[list[float] |
     raw = cv2.imencode(".jpg", img_bgr)[1].tobytes()
     vec = compute_face_signature(raw)
     if vec:
-        return vec, "mediapipe"
+        mode = "deepface" if len(vec) == 512 else "mediapipe"
+        return vec, mode
     fallback = _fallback_face_signature(img_bgr)
     if fallback:
         return fallback, "haar"
@@ -491,10 +492,40 @@ async def precheck(
 
         selfie_vec, selfie_sig_mode = _compute_signature_with_fallback(selfie_img)
         id_crop = _extract_face_crop(id_img)
-        id_vec, id_sig_mode = _compute_signature_with_fallback(id_crop if id_crop is not None else id_img)
+        id_target = id_crop if id_crop is not None else id_img
+        id_vec, id_sig_mode = _compute_signature_with_fallback(id_target)
+
+        # When embedding methods differ (e.g. DeepFace 512-D vs MediaPipe 120-D),
+        # vectors cannot be compared.  Re-compute both with a consistent method.
+        if (selfie_vec is not None and id_vec is not None
+                and len(selfie_vec) != len(id_vec)):
+            logger.info(
+                "Embedding dimension mismatch: selfie=%s (%d-D) vs id=%s (%d-D) — retrying with consistent method",
+                selfie_sig_mode, len(selfie_vec), id_sig_mode, len(id_vec),
+            )
+            selfie_lm = compute_landmark_signature(selfie_img)
+            id_lm = compute_landmark_signature(id_target)
+            if selfie_lm is not None and id_lm is not None:
+                selfie_vec, selfie_sig_mode = selfie_lm, "mediapipe"
+                id_vec, id_sig_mode = id_lm, "mediapipe"
+            else:
+                selfie_hr = _fallback_face_signature(selfie_img)
+                id_hr = _fallback_face_signature(id_target)
+                if selfie_hr is not None and id_hr is not None:
+                    selfie_vec, selfie_sig_mode = selfie_hr, "haar"
+                    id_vec, id_sig_mode = id_hr, "haar"
+
         match_score = 1.0
         face_match = False
-        threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.30))
+        # ID-vs-selfie comparison needs a more lenient threshold than live
+        # verification: the ID photo may differ in age, lighting, and angle.
+        base_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.40))
+        if selfie_sig_mode == id_sig_mode == "mediapipe":
+            threshold = min(base_threshold, 0.25)
+        elif selfie_sig_mode == id_sig_mode == "haar":
+            threshold = max(base_threshold, 0.50)
+        else:
+            threshold = base_threshold
         if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
             match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
             face_match = match_score <= threshold

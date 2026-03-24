@@ -135,6 +135,15 @@ def compute_face_signature(frame_bytes: bytes) -> Optional[list[float]]:
     return _embedding_via_landmarks(frame)
 
 
+def compute_landmark_signature(frame_bgr: np.ndarray) -> Optional[list[float]]:
+    """Return a 120-D MediaPipe FaceMesh landmark embedding from a BGR ndarray, or None.
+
+    Useful as a consistent fallback when DeepFace produces different-dimension
+    vectors for two images (e.g. selfie vs ID card face crop).
+    """
+    return _embedding_via_landmarks(frame_bgr)
+
+
 def cosine_distance(v1: np.ndarray, v2: np.ndarray) -> float:
     if v1 is None or v2 is None:
         return 1.0

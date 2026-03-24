@@ -10,6 +10,8 @@ from ..core.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+_CLOUDFLARE_NOT_READY_STATUSES = {"queued", "pending", "uploading", "processing", "inprogress", "error", "failed"}
+
 
 def cloudflare_video_storage_enabled() -> bool:
     return bool(str(settings.CLOUDFLARE_MEDIA_API_BASE_URL or "").strip())
@@ -31,6 +33,15 @@ def _extract_video_payload(payload: object) -> dict:
     return payload
 
 
+def infer_cloudflare_ready_to_stream(*, status: object, ready_to_stream: object, playback_url: object) -> bool:
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status in _CLOUDFLARE_NOT_READY_STATUSES:
+        return False
+    if ready_to_stream is not None:
+        return bool(ready_to_stream)
+    return bool(str(playback_url or "").strip())
+
+
 def _normalize_remote_video(
     payload: dict,
     *,
@@ -42,9 +53,11 @@ def _normalize_remote_video(
     playback_url = str(payload.get("playback_url") or payload.get("url") or "").strip()
     created_at = payload.get("created") or fallback_created_at.astimezone(timezone.utc).isoformat()
     raw_status = str(payload.get("status") or "").strip().lower()
-    ready_to_stream = payload.get("ready_to_stream")
-    if ready_to_stream is None:
-        ready_to_stream = bool(playback_url)
+    ready_to_stream = infer_cloudflare_ready_to_stream(
+        status=raw_status,
+        ready_to_stream=payload.get("ready_to_stream"),
+        playback_url=playback_url,
+    )
     return {
         "provider": "cloudflare",
         "name": str(payload.get("name") or filename),

@@ -172,12 +172,12 @@ function Shell({ children }) {
       <a href="#app-main-content" className="skip-link">Skip to content</a>
       <ScrollRestoration />
       {!isExamMode && <ScrollProgress />}
+      {maintenance.mode !== 'off' && (
+        <div className="maintenance-banner">
+          {maintenance.banner || 'Maintenance in progress'}
+        </div>
+      )}
       <div className={`app-shell ${isExamMode ? 'app-shell--exam' : ''}`}>
-        {maintenance.mode !== 'off' && (
-          <div className="maintenance-banner">
-            {maintenance.banner || 'Maintenance in progress'}
-          </div>
-        )}
         {!isExamMode && <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />}
         <div className="app-shell__main">
           {!isExamMode && <Navbar onMenuToggle={() => setMobileOpen((prev) => !prev)} />}

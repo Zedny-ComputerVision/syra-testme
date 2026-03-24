@@ -3,8 +3,14 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+ROOT_ENV="${REPO_ROOT}/.env"
+ROOT_ENV_EXAMPLE="${REPO_ROOT}/.env.example"
+BACKEND_LOCAL_ENV="${REPO_ROOT}/backend/.env"
+BACKEND_LOCAL_ENV_EXAMPLE="${REPO_ROOT}/backend/.env.example"
 BACKEND_ENV="${REPO_ROOT}/backend/.env.docker"
 BACKEND_ENV_EXAMPLE="${REPO_ROOT}/backend/.env.docker.example"
+FRONTEND_LOCAL_ENV="${REPO_ROOT}/frontend/.env"
+FRONTEND_LOCAL_ENV_EXAMPLE="${REPO_ROOT}/frontend/.env.example"
 FRONTEND_ENV="${REPO_ROOT}/frontend/.env.production"
 FRONTEND_ENV_EXAMPLE="${REPO_ROOT}/frontend/.env.production.example"
 COMPOSE_FILES=()
@@ -17,7 +23,10 @@ usage() {
 Usage: bash scripts/setup-linux.sh [--prepare-only] [--local] [--production]
 
 Bootstrap and run the full Linux Docker stack:
+- creates .env if missing
+- creates backend/.env if missing
 - creates backend/.env.docker if missing
+- creates frontend/.env if missing
 - creates frontend/.env.production if missing
 - fills the important env values from overrides or safe defaults
 - chooses local PostgreSQL or external PostgreSQL automatically
@@ -37,9 +46,14 @@ Environment overrides:
 - SYRA_DATABASE_MIGRATION_URL
 - SYRA_POSTGRES_PASSWORD
 - SYRA_JWT_SECRET
+- SYRA_APP_DATABASE_URL
+- SYRA_APP_FRONTEND_URL
+- SYRA_APP_BACKEND_URL
+- SYRA_APP_CORS_ORIGINS
 - SYRA_FRONTEND_URL
 - SYRA_BACKEND_URL
 - SYRA_CORS_ORIGINS
+- SYRA_FRONTEND_DEV_API_BASE_URL
 - SYRA_MEDIA_STORAGE_PROVIDER=local|supabase
 - SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER=cloudflare|supabase
 - SYRA_CLOUDFLARE_MEDIA_API_BASE_URL
@@ -106,6 +120,17 @@ read_env_value() {
     return
   fi
   awk -F= -v key="$key" 'index($0, key "=") == 1 { sub(/^[^=]*=/, "", $0); print; exit }' "$file"
+}
+
+first_non_empty() {
+  local value
+  for value in "$@"; do
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+  return 0
 }
 
 set_env_value() {
@@ -288,9 +313,26 @@ ensure_linux
 POSTGRES_PASSWORD="${SYRA_POSTGRES_PASSWORD:-syra-local-password}"
 LOCAL_DATABASE_URL="postgresql+psycopg://syra:${POSTGRES_PASSWORD}@db:5432/syra_lms"
 
+ensure_file "$ROOT_ENV_EXAMPLE" "$ROOT_ENV"
+ensure_file "$BACKEND_LOCAL_ENV_EXAMPLE" "$BACKEND_LOCAL_ENV"
 ensure_file "$BACKEND_ENV_EXAMPLE" "$BACKEND_ENV"
+ensure_file "$FRONTEND_LOCAL_ENV_EXAMPLE" "$FRONTEND_LOCAL_ENV"
 ensure_file "$FRONTEND_ENV_EXAMPLE" "$FRONTEND_ENV"
 
+existing_root_database_url="$(read_env_value "$ROOT_ENV" "DATABASE_URL")"
+existing_root_database_migration_url="$(read_env_value "$ROOT_ENV" "DATABASE_MIGRATION_URL")"
+existing_root_jwt_secret="$(read_env_value "$ROOT_ENV" "JWT_SECRET")"
+existing_root_frontend_url="$(read_env_value "$ROOT_ENV" "FRONTEND_BASE_URL")"
+existing_root_backend_url="$(read_env_value "$ROOT_ENV" "BACKEND_BASE_URL")"
+existing_root_public_frontend_url="$(read_env_value "$ROOT_ENV" "PUBLIC_FRONTEND_BASE_URL")"
+existing_root_public_backend_url="$(read_env_value "$ROOT_ENV" "PUBLIC_BACKEND_BASE_URL")"
+existing_root_cors_origins="$(read_env_value "$ROOT_ENV" "CORS_ORIGINS")"
+existing_root_media_storage_provider="$(read_env_value "$ROOT_ENV" "MEDIA_STORAGE_PROVIDER")"
+existing_root_video_storage_provider="$(read_env_value "$ROOT_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER")"
+existing_root_cloudflare_media_api_base_url="$(read_env_value "$ROOT_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL")"
+existing_root_workers="$(read_env_value "$ROOT_ENV" "WORKERS")"
+existing_root_nginx_client_max_body_size="$(read_env_value "$ROOT_ENV" "NGINX_CLIENT_MAX_BODY_SIZE")"
+existing_root_vite_api_base_url="$(read_env_value "$ROOT_ENV" "VITE_API_BASE_URL")"
 existing_database_url="$(read_env_value "$BACKEND_ENV" "DATABASE_URL")"
 existing_database_migration_url="$(read_env_value "$BACKEND_ENV" "DATABASE_MIGRATION_URL")"
 existing_jwt_secret="$(read_env_value "$BACKEND_ENV" "JWT_SECRET")"
@@ -302,18 +344,24 @@ existing_video_storage_provider="$(read_env_value "$BACKEND_ENV" "PROCTORING_VID
 existing_cloudflare_media_api_base_url="$(read_env_value "$BACKEND_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL")"
 existing_workers="$(read_env_value "$BACKEND_ENV" "WORKERS")"
 existing_nginx_client_max_body_size="$(read_env_value "$FRONTEND_ENV" "NGINX_CLIENT_MAX_BODY_SIZE")"
+existing_backend_local_database_url="$(read_env_value "$BACKEND_LOCAL_ENV" "DATABASE_URL")"
+existing_backend_local_database_migration_url="$(read_env_value "$BACKEND_LOCAL_ENV" "DATABASE_MIGRATION_URL")"
+existing_backend_local_frontend_url="$(read_env_value "$BACKEND_LOCAL_ENV" "FRONTEND_BASE_URL")"
+existing_backend_local_backend_url="$(read_env_value "$BACKEND_LOCAL_ENV" "BACKEND_BASE_URL")"
+existing_backend_local_cors_origins="$(read_env_value "$BACKEND_LOCAL_ENV" "CORS_ORIGINS")"
+existing_frontend_local_vite_api_base_url="$(read_env_value "$FRONTEND_LOCAL_ENV" "VITE_API_BASE_URL")"
 
-DATABASE_URL="${SYRA_DATABASE_URL:-${existing_database_url:-$LOCAL_DATABASE_URL}}"
-DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-${existing_database_migration_url:-}}"
-JWT_SECRET="${SYRA_JWT_SECRET:-${existing_jwt_secret:-}}"
-FRONTEND_URL="${SYRA_FRONTEND_URL:-${existing_frontend_url:-http://localhost}}"
-BACKEND_URL="${SYRA_BACKEND_URL:-${existing_backend_url:-${FRONTEND_URL%/}/api}}"
-CORS_ORIGINS="${SYRA_CORS_ORIGINS:-${existing_cors_origins:-$FRONTEND_URL}}"
-MEDIA_STORAGE_PROVIDER="${SYRA_MEDIA_STORAGE_PROVIDER:-${existing_media_storage_provider:-local}}"
-WORKERS="${SYRA_WORKERS:-${existing_workers:-2}}"
-NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-${existing_nginx_client_max_body_size:-512m}}"
-CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-${existing_cloudflare_media_api_base_url:-}}"
-PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-${existing_video_storage_provider:-}}"
+DATABASE_URL="${SYRA_DATABASE_URL:-$(first_non_empty "$existing_database_url" "$existing_root_database_url" "$LOCAL_DATABASE_URL")}"
+DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-$(first_non_empty "$existing_database_migration_url" "$existing_root_database_migration_url" "$existing_backend_local_database_migration_url" "")}"
+JWT_SECRET="${SYRA_JWT_SECRET:-$(first_non_empty "$existing_jwt_secret" "$existing_root_jwt_secret" "")}"
+FRONTEND_URL="${SYRA_FRONTEND_URL:-$(first_non_empty "$existing_frontend_url" "$existing_root_public_frontend_url" "http://localhost")}"
+BACKEND_URL="${SYRA_BACKEND_URL:-$(first_non_empty "$existing_backend_url" "$existing_root_public_backend_url" "${FRONTEND_URL%/}/api")}"
+CORS_ORIGINS="${SYRA_CORS_ORIGINS:-$(first_non_empty "$existing_cors_origins" "$existing_root_cors_origins" "$FRONTEND_URL")}"
+MEDIA_STORAGE_PROVIDER="${SYRA_MEDIA_STORAGE_PROVIDER:-$(first_non_empty "$existing_media_storage_provider" "$existing_root_media_storage_provider" "local")}"
+WORKERS="${SYRA_WORKERS:-$(first_non_empty "$existing_workers" "$existing_root_workers" "2")}"
+NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-$(first_non_empty "$existing_nginx_client_max_body_size" "$existing_root_nginx_client_max_body_size" "512m")}"
+CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-$(first_non_empty "$existing_cloudflare_media_api_base_url" "$existing_root_cloudflare_media_api_base_url" "")}"
+PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-$(first_non_empty "$existing_video_storage_provider" "$existing_root_video_storage_provider" "")}"
 
 if is_placeholder_secret "$JWT_SECRET"; then
   JWT_SECRET="$(generate_secret)"
@@ -422,6 +470,59 @@ ADMIN_PASSWORD="${SYRA_ADMIN_PASSWORD:-Admin1234!}"
 INSTRUCTOR_PASSWORD="${SYRA_INSTRUCTOR_PASSWORD:-Instructor1234!}"
 STUDENT_PASSWORD="${SYRA_STUDENT_PASSWORD:-Student1234!}"
 
+if [[ "$RUN_LOCAL_DB" == "1" ]]; then
+  APP_DATABASE_URL_DEFAULT="postgresql+psycopg://postgres:postgres@localhost:5432/syra_lms"
+  APP_FRONTEND_URL_DEFAULT="http://localhost:5173"
+  APP_BACKEND_URL_DEFAULT="http://localhost:8000"
+  APP_CORS_ORIGINS_DEFAULT="http://localhost:5173,http://127.0.0.1:5173"
+  FRONTEND_DEV_API_BASE_URL_DEFAULT="http://127.0.0.1:8000/api"
+else
+  APP_DATABASE_URL_DEFAULT="${DATABASE_MIGRATION_URL:-$DATABASE_URL}"
+  APP_FRONTEND_URL_DEFAULT="$FRONTEND_URL"
+  APP_BACKEND_URL_DEFAULT="$BACKEND_URL"
+  APP_CORS_ORIGINS_DEFAULT="$CORS_ORIGINS"
+  FRONTEND_DEV_API_BASE_URL_DEFAULT="${BACKEND_URL%/}"
+fi
+
+APP_DATABASE_URL="${SYRA_APP_DATABASE_URL:-$(first_non_empty "$existing_backend_local_database_url" "$existing_root_database_url" "$APP_DATABASE_URL_DEFAULT")}"
+APP_DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-$(first_non_empty "$existing_backend_local_database_migration_url" "$existing_root_database_migration_url" "$DATABASE_MIGRATION_URL")}"
+APP_FRONTEND_URL="${SYRA_APP_FRONTEND_URL:-$(first_non_empty "$existing_backend_local_frontend_url" "$existing_root_frontend_url" "$APP_FRONTEND_URL_DEFAULT")}"
+APP_BACKEND_URL="${SYRA_APP_BACKEND_URL:-$(first_non_empty "$existing_backend_local_backend_url" "$existing_root_backend_url" "$APP_BACKEND_URL_DEFAULT")}"
+APP_CORS_ORIGINS="${SYRA_APP_CORS_ORIGINS:-$(first_non_empty "$existing_backend_local_cors_origins" "$existing_root_cors_origins" "$APP_CORS_ORIGINS_DEFAULT")}"
+FRONTEND_DEV_API_BASE_URL="${SYRA_FRONTEND_DEV_API_BASE_URL:-$(first_non_empty "$existing_frontend_local_vite_api_base_url" "$existing_root_vite_api_base_url" "$FRONTEND_DEV_API_BASE_URL_DEFAULT")}"
+
+set_env_value "$ROOT_ENV" "DATABASE_URL" "$APP_DATABASE_URL"
+set_env_value "$ROOT_ENV" "DATABASE_MIGRATION_URL" "$APP_DATABASE_MIGRATION_URL"
+set_env_value "$ROOT_ENV" "JWT_SECRET" "$JWT_SECRET"
+set_env_value "$ROOT_ENV" "FRONTEND_BASE_URL" "$APP_FRONTEND_URL"
+set_env_value "$ROOT_ENV" "BACKEND_BASE_URL" "$APP_BACKEND_URL"
+set_env_value "$ROOT_ENV" "PUBLIC_FRONTEND_BASE_URL" "$FRONTEND_URL"
+set_env_value "$ROOT_ENV" "PUBLIC_BACKEND_BASE_URL" "$BACKEND_URL"
+set_env_value "$ROOT_ENV" "CORS_ORIGINS" "$APP_CORS_ORIGINS"
+set_env_value "$ROOT_ENV" "VITE_API_BASE_URL" "$FRONTEND_DEV_API_BASE_URL"
+set_env_value "$ROOT_ENV" "MAX_VIDEO_UPLOAD_MB" "512"
+set_env_value "$ROOT_ENV" "NGINX_CLIENT_MAX_BODY_SIZE" "$NGINX_CLIENT_MAX_BODY_SIZE"
+set_env_value "$ROOT_ENV" "WORKERS" "$WORKERS"
+set_env_value "$ROOT_ENV" "AUTO_APPLY_MIGRATIONS" "false"
+set_env_value "$ROOT_ENV" "PRECHECK_ALLOW_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
+set_env_value "$ROOT_ENV" "MEDIA_STORAGE_PROVIDER" "$MEDIA_STORAGE_PROVIDER"
+set_env_value "$ROOT_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER" "$PROCTORING_VIDEO_STORAGE_PROVIDER"
+set_env_value "$ROOT_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL" "$CLOUDFLARE_MEDIA_API_BASE_URL"
+set_env_value "$ROOT_ENV" "CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS" "$CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS"
+
+set_env_value "$BACKEND_LOCAL_ENV" "DATABASE_URL" "$APP_DATABASE_URL"
+set_env_value "$BACKEND_LOCAL_ENV" "DATABASE_MIGRATION_URL" "$APP_DATABASE_MIGRATION_URL"
+set_env_value "$BACKEND_LOCAL_ENV" "JWT_SECRET" "$JWT_SECRET"
+set_env_value "$BACKEND_LOCAL_ENV" "FRONTEND_BASE_URL" "$APP_FRONTEND_URL"
+set_env_value "$BACKEND_LOCAL_ENV" "BACKEND_BASE_URL" "$APP_BACKEND_URL"
+set_env_value "$BACKEND_LOCAL_ENV" "CORS_ORIGINS" "$APP_CORS_ORIGINS"
+set_env_value "$BACKEND_LOCAL_ENV" "PRECHECK_ALLOW_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
+set_env_value "$BACKEND_LOCAL_ENV" "MAX_VIDEO_UPLOAD_MB" "512"
+set_env_value "$BACKEND_LOCAL_ENV" "MEDIA_STORAGE_PROVIDER" "$MEDIA_STORAGE_PROVIDER"
+set_env_value "$BACKEND_LOCAL_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER" "$PROCTORING_VIDEO_STORAGE_PROVIDER"
+set_env_value "$BACKEND_LOCAL_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL" "$CLOUDFLARE_MEDIA_API_BASE_URL"
+set_env_value "$BACKEND_LOCAL_ENV" "CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS" "$CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS"
+
 set_env_value "$BACKEND_ENV" "DATABASE_URL" "$DATABASE_URL"
 set_env_value "$BACKEND_ENV" "DATABASE_MIGRATION_URL" "$DATABASE_MIGRATION_URL"
 set_env_value "$BACKEND_ENV" "JWT_SECRET" "$JWT_SECRET"
@@ -438,6 +539,8 @@ set_env_value "$BACKEND_ENV" "WORKERS" "$WORKERS"
 set_env_value "$FRONTEND_ENV" "VITE_API_BASE_URL" "/api/"
 set_env_value "$FRONTEND_ENV" "VITE_PRECHECK_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
 set_env_value "$FRONTEND_ENV" "NGINX_CLIENT_MAX_BODY_SIZE" "$NGINX_CLIENT_MAX_BODY_SIZE"
+
+set_env_value "$FRONTEND_LOCAL_ENV" "VITE_API_BASE_URL" "$FRONTEND_DEV_API_BASE_URL"
 
 mkdir -p \
   "${REPO_ROOT}/backend/storage" \

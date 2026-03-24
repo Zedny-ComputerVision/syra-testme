@@ -7,6 +7,7 @@ import { readPaginatedItems } from '../../../utils/pagination'
 import styles from './AdminAttemptVideos.module.scss'
 
 const WARN_SEVERITIES = new Set(['HIGH', 'MEDIUM'])
+const NOT_READY_VIDEO_STATUSES = new Set(['queued', 'pending', 'uploading', 'processing', 'inprogress', 'error', 'failed'])
 
 function formatSeconds(sec) {
   if (!Number.isFinite(sec)) return '--:--'
@@ -65,6 +66,34 @@ function readBestVideoDuration(videoEl) {
 function readVideoDurationValue(video) {
   const value = Number(video?.duration)
   return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function normalizeVideoStatus(video) {
+  return String(video?.status || '').trim().toLowerCase()
+}
+
+function isVideoPlayable(video) {
+  if (!video?.url) return false
+  const status = normalizeVideoStatus(video)
+  if (status && NOT_READY_VIDEO_STATUSES.has(status)) return false
+  return video.ready_to_stream !== false
+}
+
+function describeVideoAvailability(video) {
+  const status = normalizeVideoStatus(video)
+  if (status === 'processing' || status === 'uploading' || status === 'queued' || status === 'pending' || status === 'inprogress') {
+    return 'This recording is still processing. Refresh in a moment.'
+  }
+  if (status === 'error' || status === 'failed') {
+    return 'This recording failed to process and cannot be played.'
+  }
+  if (!video?.url) {
+    return 'This recording does not have a playable file yet.'
+  }
+  if (video?.ready_to_stream === false) {
+    return 'This recording is not ready to stream yet.'
+  }
+  return 'Loading recording...'
 }
 
 export default function AdminAttemptVideos() {
@@ -201,10 +230,15 @@ export default function AdminAttemptVideos() {
         }
 
         const sortedVideos = [...videosData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        const defaultVideo = sortedVideos.find((video) => isVideoPlayable(video)) || sortedVideos[0] || null
         setAttempt(attemptData)
         setVideos(sortedVideos)
         setEvents(eventsData)
-        setSelectedVideoName((prev) => prev || (sortedVideos[0]?.name || ''))
+        setSelectedVideoName((prev) => (
+          prev && sortedVideos.some((video) => video.name === prev)
+            ? prev
+            : (defaultVideo?.name || '')
+        ))
         setWarning(warnings.join(' '))
       } catch (e) {
         if (off) return
@@ -221,6 +255,10 @@ export default function AdminAttemptVideos() {
     () => videos.find((v) => v.name === selectedVideoName) || videos[0] || null,
     [videos, selectedVideoName],
   )
+  const selectedVideoIsPlayable = useMemo(
+    () => isVideoPlayable(selectedVideo),
+    [selectedVideo],
+  )
   const effectiveDuration = useMemo(
     () => (duration > 0 ? duration : readVideoDurationValue(selectedVideo)),
     [duration, selectedVideo],
@@ -233,7 +271,7 @@ export default function AdminAttemptVideos() {
     const bySource = new Map()
     for (const video of videos) {
       if (!video?.source || bySource.has(video.source)) continue
-      const isPlayable = video.ready_to_stream !== false && video.status !== 'error' && Boolean(video.url)
+      const isPlayable = isVideoPlayable(video)
       if (isPlayable) bySource.set(video.source, video)
     }
     return bySource
@@ -345,7 +383,8 @@ export default function AdminAttemptVideos() {
     setSelectedVideoUrl('')
 
     async function loadVideoUrl() {
-      if (!selectedVideo?.url) return
+      if (!selectedVideo) return
+      if (!selectedVideoIsPlayable) return
       if (!isAbsoluteHttpUrl(selectedVideo.url)) {
         setWarning((current) => current || 'The selected recording does not have a usable playback URL.')
         return
@@ -369,7 +408,7 @@ export default function AdminAttemptVideos() {
       active = false
       revokeObjectUrl(objectUrl)
     }
-  }, [selectedVideo?.url])
+  }, [selectedVideo, selectedVideoIsPlayable])
 
   useEffect(() => {
     let active = true
@@ -756,7 +795,7 @@ export default function AdminAttemptVideos() {
               {selectedVideoUrl ? (
                 <a href={selectedVideoUrl} target="_blank" rel="noreferrer">Open file</a>
               ) : (
-                <span className={styles.loadingFile}>Loading file...</span>
+                <span className={styles.loadingFile}>{describeVideoAvailability(selectedVideo)}</span>
               )}
             </div>
 
@@ -780,7 +819,7 @@ export default function AdminAttemptVideos() {
                   }}
                 />
               ) : (
-                <div className={styles.videoLoading}>Loading recording...</div>
+                <div className={styles.videoLoading}>{describeVideoAvailability(selectedVideo)}</div>
               )}
             </div>
 

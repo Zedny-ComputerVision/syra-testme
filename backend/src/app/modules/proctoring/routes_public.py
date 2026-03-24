@@ -30,7 +30,11 @@ from ...reporting.report_generator import generate_html_report
 from ...services.integrations import send_proctoring_integration_event
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
-from ...services.cloudflare_media import cloudflare_video_storage_enabled, upload_video_to_cloudflare
+from ...services.cloudflare_media import (
+    cloudflare_video_storage_enabled,
+    infer_cloudflare_ready_to_stream,
+    upload_video_to_cloudflare,
+)
 from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from ...utils.request_ip import get_request_ip, get_websocket_ip
@@ -200,6 +204,13 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     created_at = meta.get("created_at")
     if not created_at and occurred_at:
         created_at = occurred_at.isoformat()
+    status = str(meta.get("status") or "").strip().lower()
+    explicit_ready = meta.get("ready_to_stream") if isinstance(meta, dict) and "ready_to_stream" in meta else None
+    ready_to_stream = (
+        infer_cloudflare_ready_to_stream(status=status, ready_to_stream=explicit_ready, playback_url=url)
+        if provider == "cloudflare"
+        else bool(path or _is_absolute_http_url(url))
+    )
 
     resolved_name = name or (Path(path).name if path else "") or (str(meta.get("uid") or "").strip() or url.rstrip("/").rsplit("/", 1)[-1] or "recording")
     item: dict[str, object] = {
@@ -208,20 +219,17 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
         "source": _normalize_video_source(meta.get("source")),
         "created_at": created_at,
         "provider": provider,
+        "ready_to_stream": ready_to_stream,
     }
     if path:
         item["path"] = path
     if _is_absolute_http_url(url):
         item["url"] = url
         item["playback_url"] = str(meta.get("playback_url") or url).strip()
-        item["ready_to_stream"] = True
 
     for key in ("uid", "status", "thumbnail", "duration", "session_id", "playback_type", "recording_started_at", "recording_stopped_at", "bucket"):
         if meta.get(key) not in (None, ""):
             item[key] = meta.get(key)
-
-    if "ready_to_stream" in meta:
-        item["ready_to_stream"] = bool(meta.get("ready_to_stream"))
 
     return item
 
@@ -455,11 +463,11 @@ def _build_registered_video_info(
         playback_type = "hls" if playback_url.endswith(".m3u8") else "direct"
 
     status = str(raw.get("status") or remote.get("status") or "").strip().lower()
-    ready_to_stream = raw.get("ready_to_stream")
-    if ready_to_stream is None:
-        ready_to_stream = remote.get("ready_to_stream")
-    if ready_to_stream is None:
-        ready_to_stream = bool(playback_url)
+    ready_to_stream = infer_cloudflare_ready_to_stream(
+        status=status,
+        ready_to_stream=raw.get("ready_to_stream", remote.get("ready_to_stream")),
+        playback_url=playback_url,
+    )
 
     file_info = {
         "provider": "cloudflare",
