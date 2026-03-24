@@ -31,9 +31,10 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
 
             echo ">>> Pulling latest code from main..."
-            # GitHub requires a Personal Access Token (PAT) instead of a password.
-            # Assuming GIT_PASSWORD secret is actually a PAT.
-            git remote set-url origin "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
+            # Forcefully wipe out any broken URLs stuck in the git config by removing and re-adding the remote
+            git remote remove origin || true
+            git remote add origin "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
+            
             git fetch origin main
             git reset --hard origin/main
             # Clean up the URL so the token isn't left in the .git/config on disk
