@@ -1,0 +1,45 @@
+name: Deploy to VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Production VM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          password: ${{ secrets.VM_PASSWORD }}
+          port: 22
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /opt/syra-testme
+
+            echo ">>> Stopping existing services..."
+            docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
+
+            echo ">>> Configuring git credentials..."
+            git config credential.helper store
+            echo "https://${{ secrets.GIT_USERNAME }}:${{ secrets.GIT_PASSWORD }}@github.com" > ~/.git-credentials
+
+            echo ">>> Pulling latest code from main..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo ">>> Running setup script..."
+            export SYRA_SEED_DEMO_DATA=0
+            bash scripts/deploy-linux.sh
+
+            echo ">>> Cleaning up git credentials..."
+            rm -f ~/.git-credentials
+
+            echo ">>> Deployment complete!"
