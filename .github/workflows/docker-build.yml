@@ -40,6 +40,8 @@ jobs:
 
             echo ">>> Running deploy script..."
             export SYRA_SEED_DEMO_DATA=0
+            export SYRA_FRONTEND_URL="https://testme.zedny.ai"
+            export SYRA_BACKEND_URL="https://testme.zedny.ai/api"
             bash scripts/deploy-linux.sh
 
             echo ">>> Deployment complete!"
