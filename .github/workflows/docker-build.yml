@@ -31,17 +31,15 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
 
             echo ">>> Pulling latest code from main..."
-            # Forcefully wipe out the broken URL directly from the file system.
-            # Git commands fail because Git tries to parse the broken URL first.
-            sed -i 's|url = https://.*@github.com|url = https://github.com|g' .git/config || true
+            # The config file on the VM is corrupted and git commands fail when trying 
+            # to read the remote URL. We will bypass the `origin` remote entirely.
             
-            git remote set-url origin "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git"
+            # Clean up working tree
+            git reset --hard HEAD
             
-            git fetch origin main
-            git reset --hard origin/main
-            # Clean up the URL so the token isn't left in the .git/config on disk
-            git remote set-url origin "https://github.com/Zedny-ComputerVision/syra-testme.git"
-
+            # Pull directly from the URL, bypassing any saved remotes
+            git pull "https://${GIT_PASSWORD}@github.com/Zedny-ComputerVision/syra-testme.git" main
+            
             echo ">>> Running deploy script..."
             export SYRA_SEED_DEMO_DATA=0
             bash scripts/deploy-linux.sh
