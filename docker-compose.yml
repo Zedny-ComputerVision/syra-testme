@@ -53,9 +53,8 @@ services:
       retries: 5
       start_period: 60s
     # Backend is only accessible via nginx — do NOT expose externally in production.
-    # Uncomment the ports line below for local debugging only.
-    # ports:
-    #   - "${BACKEND_PORT:-8000}:8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     expose:
       - "8000"
     volumes:
