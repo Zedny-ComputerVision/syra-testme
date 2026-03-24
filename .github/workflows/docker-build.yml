@@ -40,6 +40,9 @@ jobs:
               *Password*|*password*) echo "$GIT_PASSWORD" ;;
             esac
             EOF
+            # Reset origin to the clean HTTPS URL first, in case it was left in a bad state
+            git remote set-url origin "https://github.com/Zedny-ComputerVision/syra-testme.git"
+            
             GIT_ASKPASS="$ASKPASS_SCRIPT" git fetch origin main
             rm -f "$ASKPASS_SCRIPT"
             git reset --hard origin/main
