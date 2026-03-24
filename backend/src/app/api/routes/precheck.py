@@ -583,9 +583,11 @@ async def precheck(
             failure_reasons.append("ID_TEXT_MISSING_OR_INVALID")
         if require_id_text and not ocr_available and not manual_valid:
             failure_reasons.append("OCR_UNAVAILABLE_AND_MANUAL_ID_REQUIRED")
-        if strict_doc_checks and id_too_similar:
+        # Basic anti-fraud checks always run when identity is required:
+        # reject if the "ID" image is just another selfie or the same photo.
+        if id_too_similar:
             failure_reasons.append("ID_IMAGE_TOO_SIMILAR_TO_SELFIE")
-        if strict_doc_checks and id_looks_like_selfie:
+        if id_looks_like_selfie:
             failure_reasons.append("ID_CAPTURE_LOOKS_LIKE_SELFIE")
         if strict_doc_checks and not id_has_document_outline:
             failure_reasons.append("ID_DOCUMENT_NOT_DETECTED")
