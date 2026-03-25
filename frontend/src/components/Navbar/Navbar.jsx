@@ -7,6 +7,13 @@ import { getUnreadCount, markAllRead, listNotifications } from '../../services/n
 import { searchAll } from '../../services/search.service'
 import styles from './Navbar.module.scss'
 
+const UNREAD_COUNT_CACHE_TTL_MS = 30000
+let unreadCountCache = {
+  count: 0,
+  fetchedAt: 0,
+  inflight: null,
+}
+
 function getErrorMessage(error, fallback) {
   const detail = error?.response?.data?.detail
   if (typeof detail === 'string' && detail.trim()) return detail
@@ -14,6 +21,28 @@ function getErrorMessage(error, fallback) {
   if (typeof message === 'string' && message.trim()) return message
   if (typeof error?.message === 'string' && error.message.trim()) return error.message
   return fallback
+}
+
+async function readUnreadCount() {
+  const now = Date.now()
+  if (unreadCountCache.fetchedAt && (now - unreadCountCache.fetchedAt) < UNREAD_COUNT_CACHE_TTL_MS) {
+    return unreadCountCache.count
+  }
+  if (unreadCountCache.inflight) {
+    return unreadCountCache.inflight
+  }
+
+  unreadCountCache.inflight = getUnreadCount()
+    .then(({ data }) => {
+      unreadCountCache.count = data?.count || 0
+      unreadCountCache.fetchedAt = Date.now()
+      return unreadCountCache.count
+    })
+    .finally(() => {
+      unreadCountCache.inflight = null
+    })
+
+  return unreadCountCache.inflight
 }
 
 export default function Navbar({ onMenuToggle }) {
@@ -59,9 +88,9 @@ export default function Navbar({ onMenuToggle }) {
         return
       }
       try {
-        const { data } = await getUnreadCount()
+        const count = await readUnreadCount()
         if (!cancelled) {
-          setUnread(data?.count || 0)
+          setUnread(count)
           setNotifSyncError('')
         }
       } catch (error) {
@@ -155,6 +184,8 @@ export default function Navbar({ onMenuToggle }) {
     setNotifError('')
     try {
       await markAllRead()
+      unreadCountCache.count = 0
+      unreadCountCache.fetchedAt = Date.now()
       setUnread(0)
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
     } catch (error) {

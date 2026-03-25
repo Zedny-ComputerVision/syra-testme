@@ -75,6 +75,38 @@ const AdminAuditLog = lazyPage(() => import('../pages/Admin/AdminAuditLog/AdminA
 const AdminLiveMonitor = lazyPage(() => import('../pages/Admin/AdminLiveMonitor/AdminLiveMonitor'), { label: 'Loading live monitor...' })
 const Maintenance = lazyPage(() => import('../pages/Maintenance/Maintenance'), { fullPage: true, label: 'Loading maintenance notice...' })
 
+const MAINTENANCE_CACHE_TTL_MS = 120000
+let maintenanceCache = {
+  data: { mode: 'off', banner: '' },
+  fetchedAt: 0,
+  inflight: null,
+}
+
+async function readMaintenanceStatus() {
+  const now = Date.now()
+  if (maintenanceCache.fetchedAt && (now - maintenanceCache.fetchedAt) < MAINTENANCE_CACHE_TTL_MS) {
+    return maintenanceCache.data
+  }
+  if (maintenanceCache.inflight) {
+    return maintenanceCache.inflight
+  }
+
+  maintenanceCache.inflight = api.get('admin-settings/maintenance/public')
+    .then(({ data }) => {
+      maintenanceCache.data = {
+        mode: data?.mode || 'off',
+        banner: data?.banner || '',
+      }
+      maintenanceCache.fetchedAt = Date.now()
+      return maintenanceCache.data
+    })
+    .finally(() => {
+      maintenanceCache.inflight = null
+    })
+
+  return maintenanceCache.inflight
+}
+
 function ProtectedRoute({ children, roles, permission }) {
   const location = useLocation()
   const { user, loading, hasPermission } = useAuth()
@@ -112,8 +144,8 @@ function Shell({ children }) {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const { data } = await api.get('admin-settings/maintenance/public')
-        setMaintenance({ mode: data.mode, banner: data.banner })
+        const data = await readMaintenanceStatus()
+        setMaintenance(data)
       } catch {
         // ignore
       }
