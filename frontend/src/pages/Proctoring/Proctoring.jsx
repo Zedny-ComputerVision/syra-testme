@@ -214,6 +214,7 @@ export default function Proctoring() {
   const [cameraRecordingStatus, setCameraRecordingStatus] = useState('idle')
   const [screenRecordingStatus, setScreenRecordingStatus] = useState('disabled')
   const [uploadPercent, setUploadPercent] = useState({})
+  const [uploadSkippable, setUploadSkippable] = useState(false)
   const [screenShareBusy, setScreenShareBusy] = useState(false)
   const [screenShareRequestReady, setScreenShareRequestReady] = useState(false)
   const [proctorStatus, setProctorStatus] = useState('connecting')
@@ -914,14 +915,20 @@ export default function Proctoring() {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
         })
       }
-      // Upload recordings before navigating so the learner sees progress
+      // Upload recordings — show progress but don't block forever
       if (requiredRecordingSources.length > 0) {
         setSubmitPhase('Uploading exam recordings... Please wait.')
+        setUploadSkippable(false)
+        const skipTimer = setTimeout(() => setUploadSkippable(true), 10000)
         try {
-          await uploadRecordingSources(requiredRecordingSources)
+          await Promise.race([
+            uploadRecordingSources(requiredRecordingSources),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 300000)),
+          ])
         } catch (error) {
-          console.warn('Recording upload failed:', error)
+          console.warn('Recording upload failed or timed out:', error)
         }
+        clearTimeout(skipTimer)
       }
       setSubmitting(false)
       navigate(`/attempts/${attemptId}`)
@@ -1771,9 +1778,15 @@ export default function Proctoring() {
                   <button type="button" className={styles.btnNav} onClick={() => setShowSubmitConfirm(false)} disabled={submitting}>
                     Keep Reviewing
                   </button>
-                  <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? (submitPhase.includes('Uploading') ? 'Uploading...' : submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
-                  </button>
+                  {uploadSkippable && submitting && submitPhase.includes('Uploading') ? (
+                    <button type="button" className={styles.btnNav} onClick={() => navigate(`/attempts/${attemptId}`)} style={{ marginLeft: 8 }}>
+                      Skip upload &amp; view results
+                    </button>
+                  ) : (
+                    <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
+                      {submitting ? (submitPhase.includes('Uploading') ? 'Uploading...' : submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
