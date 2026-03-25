@@ -1,5 +1,6 @@
 import React from 'react'
 import styles from './ErrorBoundary.module.scss'
+import { isDynamicImportFailure, recoverFromChunkFailure } from '../../utils/chunkRecovery'
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -13,6 +14,9 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Unhandled UI error', error, info)
+    if (isDynamicImportFailure(error)) {
+      recoverFromChunkFailure()
+    }
   }
 
   handleReload = () => {
