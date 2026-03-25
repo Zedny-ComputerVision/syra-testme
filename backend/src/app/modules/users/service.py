@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import load_only
 
 from ...api.deps import load_permission_rows, parse_uuid_param, permission_allowed
 from ...core.security import hash_password
@@ -73,19 +74,35 @@ class UserService:
         if current.role not in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} or not (can_schedule or can_manage_users):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
-        query = select(User).where(User.role == RoleEnum.LEARNER)
+        query = (
+            select(User)
+            .options(
+                load_only(
+                    User.id,
+                    User.email,
+                    User.name,
+                    User.user_id,
+                    User.role,
+                    User.is_active,
+                    User.created_at,
+                    User.updated_at,
+                )
+            )
+            .where(User.role == RoleEnum.LEARNER)
+        )
         if is_active is not None:
             query = query.where(User.is_active == is_active)
-        learners = self.repository.list_users(query.order_by(User.created_at.desc())).all()
         if search:
             q = search.strip().lower()
-            learners = [
-                learner
-                for learner in learners
-                if q in (learner.name or "").lower()
-                or q in (learner.email or "").lower()
-                or q in (learner.user_id or "").lower()
-            ]
+            like = f"%{q}%"
+            query = query.where(
+                or_(
+                    func.lower(User.name).like(like),
+                    func.lower(User.email).like(like),
+                    func.lower(User.user_id).like(like),
+                )
+            )
+        learners = self.repository.list_users(query.order_by(User.created_at.desc())).all()
         return learners
 
     def create_user(self, *, body: UserCreate) -> User:

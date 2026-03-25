@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import case, exists, func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, load_only
 
 from ..api.deps import ensure_permission
 from ..models import AccessMode, Attempt, AttemptStatus, Exam, ExamStatus, RoleEnum, Schedule, User
@@ -55,7 +55,29 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
         )
         upcoming = db.scalars(
             select(Schedule)
-            .options(joinedload(Schedule.exam), joinedload(Schedule.user))
+            .options(
+                load_only(
+                    Schedule.id,
+                    Schedule.exam_id,
+                    Schedule.user_id,
+                    Schedule.scheduled_at,
+                    Schedule.access_mode,
+                    Schedule.notes,
+                    Schedule.created_at,
+                    Schedule.updated_at,
+                ),
+                joinedload(Schedule.exam).load_only(
+                    Exam.id,
+                    Exam.title,
+                    Exam.type,
+                    Exam.time_limit,
+                ),
+                joinedload(Schedule.user).load_only(
+                    User.id,
+                    User.name,
+                    User.user_id,
+                ),
+            )
             .where(
                 Schedule.user_id == current.id,
                 Schedule.scheduled_at >= now,
@@ -115,7 +137,29 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
     )
     upcoming = db.scalars(
         select(Schedule)
-        .options(joinedload(Schedule.exam), joinedload(Schedule.user))
+        .options(
+            load_only(
+                Schedule.id,
+                Schedule.exam_id,
+                Schedule.user_id,
+                Schedule.scheduled_at,
+                Schedule.access_mode,
+                Schedule.notes,
+                Schedule.created_at,
+                Schedule.updated_at,
+            ),
+            joinedload(Schedule.exam).load_only(
+                Exam.id,
+                Exam.title,
+                Exam.type,
+                Exam.time_limit,
+            ),
+            joinedload(Schedule.user).load_only(
+                User.id,
+                User.name,
+                User.user_id,
+            ),
+        )
         .where(Schedule.scheduled_at >= now)
         .order_by(Schedule.scheduled_at.asc())
         .limit(PRIVILEGED_UPCOMING_PREVIEW_LIMIT)

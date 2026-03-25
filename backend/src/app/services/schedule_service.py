@@ -4,14 +4,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, joinedload, load_only
 
 from ..api.deps import ensure_permission, normalize_utc_datetime, parse_uuid_param
-from ..models import Attempt, AttemptStatus, Exam, RoleEnum, Schedule
+from ..models import Attempt, AttemptStatus, Category, Course, Exam, Node, Question, RoleEnum, Schedule, User
 from ..schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
 from .audit import write_audit_log
-from .normalized_relations import exam_archived_at, exam_certificate, exam_proctoring, exam_runtime_settings
+from .normalized_relations import exam_archived_at
 from .notifications import notify_user
 
 logger = logging.getLogger(__name__)
@@ -71,6 +71,7 @@ def serialize_schedulable_test(exam: Exam) -> ExamRead:
     node = exam.node
     course = node.course if node else None
     category_name = exam.category.name if exam.category else None
+    question_count = getattr(exam, "_question_count", None)
     return ExamRead(
         id=exam.id,
         node_id=exam.node_id,
@@ -83,16 +84,13 @@ def serialize_schedulable_test(exam: Exam) -> ExamRead:
         time_limit=exam.time_limit,
         max_attempts=exam.max_attempts,
         passing_score=exam.passing_score,
-        proctoring_config=exam_proctoring(exam),
         description=exam.description,
-        settings=exam_runtime_settings(exam),
-        certificate=exam_certificate(exam),
         category_id=exam.category_id,
         grading_scale_id=exam.grading_scale_id,
         category_name=category_name,
         created_at=exam.created_at,
         updated_at=exam.updated_at,
-        question_count=exam.question_count,
+        question_count=int(question_count or 0),
     )
 
 
@@ -131,17 +129,76 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
 
 
 def list_schedulable_tests(*, db: Session) -> list[ExamRead]:
+    question_count_sq = (
+        select(func.count())
+        .select_from(Question)
+        .where(Question.exam_id == Exam.id)
+        .correlate(Exam)
+        .scalar_subquery()
+    )
     exams = db.execute(
-        select(Exam)
-        .options(joinedload(Exam.node), joinedload(Exam.category), joinedload(Exam.questions))
+        select(Exam, question_count_sq.label("question_count"))
+        .options(
+            load_only(
+                Exam.id,
+                Exam.node_id,
+                Exam.title,
+                Exam.type,
+                Exam.status,
+                Exam.time_limit,
+                Exam.max_attempts,
+                Exam.passing_score,
+                Exam.description,
+                Exam.category_id,
+                Exam.grading_scale_id,
+                Exam.created_at,
+                Exam.updated_at,
+                Exam.library_pool_id,
+            ),
+            joinedload(Exam.node)
+            .load_only(Node.id, Node.title, Node.course_id)
+            .joinedload(Node.course)
+            .load_only(Course.id, Course.title),
+            joinedload(Exam.category).load_only(Category.id, Category.name),
+        )
         .where(Exam.library_pool_id.is_(None))
         .order_by(Exam.created_at.desc())
-    ).unique().scalars().all()
-    return [serialize_schedulable_test(exam) for exam in exams]
+    ).all()
+    items: list[ExamRead] = []
+    for exam, question_count in exams:
+        setattr(exam, "_question_count", int(question_count or 0))
+        items.append(serialize_schedulable_test(exam))
+    return items
 
 
 def list_schedules(*, db: Session, current) -> list[ScheduleRead]:
-    query = select(Schedule).options(joinedload(Schedule.exam), joinedload(Schedule.user)).order_by(Schedule.scheduled_at.asc())
+    query = (
+        select(Schedule)
+        .options(
+            load_only(
+                Schedule.id,
+                Schedule.exam_id,
+                Schedule.user_id,
+                Schedule.scheduled_at,
+                Schedule.access_mode,
+                Schedule.notes,
+                Schedule.created_at,
+                Schedule.updated_at,
+            ),
+            joinedload(Schedule.exam).load_only(
+                Exam.id,
+                Exam.title,
+                Exam.type,
+                Exam.time_limit,
+            ),
+            joinedload(Schedule.user).load_only(
+                User.id,
+                User.name,
+                User.user_id,
+            ),
+        )
+        .order_by(Schedule.scheduled_at.asc())
+    )
     if current.role == RoleEnum.LEARNER:
         query = query.where(Schedule.user_id == current.id)
     else:
