@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 EVIDENCE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage" / "identity"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 settings = get_settings()
-ALLOW_TEST_BYPASS = False
+ALLOW_TEST_BYPASS = settings.precheck_test_bypass_enabled
 _ID_TOKEN_RE = re.compile(r"[A-Z0-9]{6,24}")
 _HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _TESSERACT_CONFIGURED = False

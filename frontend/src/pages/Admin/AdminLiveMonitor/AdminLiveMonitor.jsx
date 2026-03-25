@@ -4,7 +4,7 @@ import useAuth from '../../../hooks/useAuth'
 import api from '../../../services/api'
 import styles from './AdminLiveMonitor.module.scss'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 const WS_BASE = API_BASE.replace(/^http/, 'ws').replace(/\/api\/?$/, '/api')
 
 function SessionCard({ session, onWatch }) {

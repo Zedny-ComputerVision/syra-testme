@@ -13,7 +13,7 @@ function resolveApiUrl(path) {
   return new URL(path, new URL(apiBaseURL, window.location.origin)).toString()
 }
 
-const DEV_USERS = {
+const DEV_USERS = import.meta.env.DEV ? {
   admin: {
     email: 'admin@example.com',
     password: 'Password123!',
@@ -28,7 +28,7 @@ const DEV_USERS = {
     user_id: 'LRN001',
     role: 'LEARNER',
   },
-}
+} : {}
 
 function isLocalDevHost() {
   if (typeof window === 'undefined') return false

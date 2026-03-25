@@ -1254,16 +1254,20 @@ async def upload_video_capture(
         temp_path.unlink(missing_ok=True)
 
     file_info["upload_ip"] = get_request_ip(request)
-    event = ProctoringEvent(
-        attempt_id=attempt_id,
-        event_type="VIDEO_SAVED",
-        severity=SeverityEnum.LOW,
-        detail=f"Proctoring {normalized_source} video saved",
-        meta=file_info,
-        occurred_at=datetime.now(timezone.utc),
-    )
-    db.add(event)
-    db.commit()
+    try:
+        event = ProctoringEvent(
+            attempt_id=attempt_id,
+            event_type="VIDEO_SAVED",
+            severity=SeverityEnum.LOW,
+            detail=f"Proctoring {normalized_source} video saved",
+            meta=file_info,
+            occurred_at=datetime.now(timezone.utc),
+        )
+        db.add(event)
+        db.commit()
+    except Exception:
+        logger.warning("Failed to log VIDEO_SAVED event for attempt %s — video was uploaded successfully", attempt_id)
+        db.rollback()
     return {"detail": response_detail, "file": await _hydrate_video_file_info(file_info)}
 
 

@@ -435,9 +435,11 @@ def _auto_submit_stale_attempts() -> None:
     try:
         with SessionLocal() as db:
             # Find all IN_PROGRESS attempts
-            stale = db.query(Attempt).filter(
-                Attempt.status == AttemptStatus.IN_PROGRESS,
-                Attempt.started_at.isnot(None),
+            stale = db.scalars(
+                select(Attempt).where(
+                    Attempt.status == AttemptStatus.IN_PROGRESS,
+                    Attempt.started_at.isnot(None),
+                )
             ).all()
 
             for attempt in stale:
