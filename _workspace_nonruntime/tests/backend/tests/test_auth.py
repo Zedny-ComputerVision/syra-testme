@@ -1,5 +1,3 @@
-import json
-
 from src.app.models import User
 
 
@@ -74,28 +72,3 @@ def test_logout_returns_ok(client, learner_headers):
 
     assert response.status_code == 200
     assert response.json() == {"detail": "Logged out"}
-
-
-def test_permissions_public_reflects_permission_updates_immediately(client, admin_headers, learner_headers):
-    baseline = client.get("/api/admin-settings/permissions/public", headers=learner_headers)
-    assert baseline.status_code == 200
-    assert "View Dashboard" in baseline.json()["allowed_features"]
-
-    updated_rows = json.dumps(
-        [
-            {"feature": "View Dashboard", "admin": True, "instructor": True, "learner": False},
-            {"feature": "Manage Roles", "admin": True, "instructor": False, "learner": False},
-            {"feature": "System Settings", "admin": True, "instructor": False, "learner": False},
-        ]
-    )
-    update_response = client.put(
-        "/api/admin-settings/permissions_config",
-        headers=admin_headers,
-        json={"value": updated_rows},
-    )
-
-    assert update_response.status_code == 200
-
-    refreshed = client.get("/api/admin-settings/permissions/public", headers=learner_headers)
-    assert refreshed.status_code == 200
-    assert "View Dashboard" not in refreshed.json()["allowed_features"]

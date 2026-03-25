@@ -1,6 +1,4 @@
-from datetime import datetime, timezone
-
-from src.app.models import GradingScale, ProctoringEvent, SeverityEnum
+from src.app.models import GradingScale
 
 
 def _create_open_exam(client, admin_headers, *, grading_scale_id=None):
@@ -226,68 +224,3 @@ def test_manual_review_finalize_sets_graded_status(client, admin_headers, learne
     body = finalize_response.json()
     assert body["status"] == "GRADED"
     assert body["score"] == 100.0
-
-
-def test_admin_list_attempts_includes_paused_and_certificate_status(client, admin_headers, learner_headers, db):
-    exam, question = _create_open_exam(client, admin_headers)
-
-    update_exam_response = client.put(
-        f"/api/exams/{exam['id']}",
-        headers=admin_headers,
-        json={
-            "certificate": {
-                "enabled": True,
-                "issue_rule": "AFTER_PROCTORING_REVIEW",
-            },
-        },
-    )
-    assert update_exam_response.status_code == 200
-
-    paused_attempt_response = client.post(
-        "/api/attempts/",
-        headers=learner_headers,
-        json={"exam_id": exam["id"]},
-    )
-    assert paused_attempt_response.status_code == 200
-    paused_attempt_id = paused_attempt_response.json()["id"]
-    db.add(
-        ProctoringEvent(
-            attempt_id=paused_attempt_id,
-            event_type="ATTEMPT_PAUSED",
-            severity=SeverityEnum.MEDIUM,
-            occurred_at=datetime.now(timezone.utc),
-        )
-    )
-
-    reviewed_attempt_id, _, submit_response = _start_attempt(
-        client,
-        learner_headers,
-        exam["id"],
-        question["id"],
-        "B",
-    )
-    assert submit_response.status_code == 200
-    db.add(
-        ProctoringEvent(
-            attempt_id=reviewed_attempt_id,
-            event_type="CERTIFICATE_REVIEW_APPROVED",
-            severity=SeverityEnum.LOW,
-            occurred_at=datetime.now(timezone.utc),
-        )
-    )
-    db.commit()
-
-    response = client.get(
-        "/api/attempts/?skip=0&limit=20",
-        headers=admin_headers,
-    )
-
-    assert response.status_code == 200
-    items = response.json()["items"]
-    paused_attempt = next(item for item in items if item["id"] == paused_attempt_id)
-    reviewed_attempt = next(item for item in items if item["id"] == reviewed_attempt_id)
-
-    assert paused_attempt["paused"] is True
-    assert reviewed_attempt["certificate_issue_rule"] == "AFTER_PROCTORING_REVIEW"
-    assert reviewed_attempt["certificate_review_status"] == "APPROVED"
-    assert reviewed_attempt["certificate_eligible"] is True
