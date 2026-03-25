@@ -45,7 +45,7 @@ services:
     env_file:
       - backend/.env.docker
     environment:
-      AUTO_APPLY_MIGRATIONS: "true"
+      AUTO_APPLY_MIGRATIONS: "${AUTO_APPLY_MIGRATIONS:-false}"
       PROCTORING_INFERENCE_MODE: "remote"
       AI_INFERENCE_URL: "http://ai-inference:8081"
       PROCTORING_BATCH_ANALYSIS_ENABLED: "true"
