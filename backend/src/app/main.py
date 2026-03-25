@@ -22,8 +22,9 @@ from .core.config import get_settings
 from .core.logging import setup_logging
 from .core.limiter import limiter
 from .core.security import verify_token
-from .db.session import SessionLocal, engine
-from sqlalchemy import inspect, select
+from .db.session import SessionLocal
+from sqlalchemy import create_engine, inspect, select
+from sqlalchemy.pool import NullPool
 from .models import ReportSchedule, SystemSettings
 from .api.routes.report_schedules import report_schedule_due, run_report_schedule
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -293,6 +294,7 @@ app.include_router(media.router, prefix="/api/media", tags=["media"])
 def _run_alembic_upgrade() -> None:
     max_retries = 5
     for attempt_number in range(max_retries):
+        migration_engine = None
         try:
             alembic_ini = BASE_DIR / "alembic.ini"
             alembic_dir = BASE_DIR / "alembic"
@@ -301,9 +303,17 @@ def _run_alembic_upgrade() -> None:
             alembic_config = Config(str(alembic_ini))
             alembic_config.set_main_option("script_location", str(alembic_dir))
             alembic_config.set_main_option("prepend_sys_path", str(BASE_DIR))
+            migration_url = settings.database_migration_url
             # Alembic uses configparser interpolation, so '%' in passwords must be escaped.
-            alembic_config.set_main_option("sqlalchemy.url", settings.database_migration_url.replace("%", "%%"))
-            inspector = inspect(engine)
+            alembic_config.set_main_option("sqlalchemy.url", migration_url.replace("%", "%%"))
+            migration_engine = create_engine(
+                migration_url,
+                poolclass=NullPool,
+                pool_pre_ping=True,
+                future=True,
+                connect_args={"connect_timeout": 10},
+            )
+            inspector = inspect(migration_engine)
             table_names = set(inspector.get_table_names())
             if "alembic_version" not in table_names and {"users", "exams", "attempts", "schedules"}.issubset(table_names):
                 logger.warning(
@@ -321,6 +331,9 @@ def _run_alembic_upgrade() -> None:
             else:
                 logger.error("Database unavailable after %d retries", max_retries)
                 raise
+        finally:
+            if migration_engine is not None:
+                migration_engine.dispose()
 
 
 def _run_retention_cleanup() -> None:

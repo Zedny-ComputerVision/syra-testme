@@ -145,6 +145,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      disable: true
     volumes:
       - backend-storage:/app/storage
     networks:
