@@ -87,6 +87,7 @@ server {
 
     client_max_body_size 512M;
 
+    # Backend API Proxy
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -96,14 +97,37 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 30s;
     }
 
+    # FastAPI Docs
+    location /docs {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /redoc {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /openapi.json {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Frontend Proxy
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
     }
 }
 ```
@@ -118,35 +142,46 @@ sudo systemctl restart nginx
 
 ---
 
-## 5. Docker Backend Setup (Port 8000)
+## 5. Docker Port Configuration
 
-Your `testme.zedny.ai/api/` will forward to `localhost:8000`. You must ensure your backend Docker container publishes this port specifically to localhost:
+The host Nginx listens on ports 80/443 and proxies internally to the Docker containers. The `docker-compose.yml` must expose the containers on different ports:
+
+### Backend (Port 8000) — bound to localhost only
 ```yaml
-# docker-compose.yml
 backend:
   ports:
     - "127.0.0.1:8000:8000"
 ```
 
----
-
-## 6. Docker Frontend Setup (Port 8080)
-
-Your `testme.zedny.ai/` will forward to `localhost:8080`. You must ensure your frontend Docker container publishes this port specifically to localhost:
+### Frontend (Port 8080) — bound to localhost only
 ```yaml
-# docker-compose.yml
 frontend:
   ports:
-    - "127.0.0.1:8080:80"
+    - "8080:80"
 ```
 
 ---
 
-## 7. Push & Deploy
+## 6. Push & Deploy
 
-Once codes are pushed to `main`, use the following in your GitHub Actions to point to production:
+Once codes are pushed to `main`, the GitHub Actions workflow automatically:
+1. SSHs into the VM
+2. Pulls the latest code via `git fetch` + `git reset --hard`
+3. Runs `scripts/deploy-linux.sh` which rebuilds Docker containers and verifies health
+
+The workflow sets these environment variables for production:
 ```bash
 export SYRA_FRONTEND_URL="https://testme.zedny.ai"
 export SYRA_BACKEND_URL="https://testme.zedny.ai/api"
 ```
-The automated script will now handle the pull, rebuild, and internal container healthchecks.
+
+---
+
+## 7. Useful URLs
+
+| URL | Description |
+|-----|-------------|
+| `https://testme.zedny.ai` | Frontend (React SPA) |
+| `https://testme.zedny.ai/api/health` | Backend health check |
+| `https://testme.zedny.ai/docs` | Swagger API docs |
+| `https://testme.zedny.ai/redoc` | ReDoc API docs |
