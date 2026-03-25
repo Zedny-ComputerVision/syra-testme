@@ -289,7 +289,7 @@ preflight_memory_warning() {
 
 database_connectivity_check() {
   if [[ "$RUN_LOCAL_DB" == "1" ]]; then
-    return
+    return 0
   fi
 
   log "Testing database connectivity..."
@@ -335,7 +335,7 @@ except Exception as exc:
 
     if echo "$db_check_output" | grep -q "^OK$"; then
       log "Database connectivity check passed."
-      return
+      return 0
     fi
 
     if (( attempt < max_attempts )); then
@@ -348,7 +348,7 @@ except Exception as exc:
   log "ERROR: Cannot connect to the database."
   log "  URL: ${db_check_url%%@*}@*** (host hidden)"
   log "  Error: $db_check_output"
-  die "Fix the database connection and try again."
+  return 1
 }
 
 for arg in "$@"; do
@@ -673,7 +673,9 @@ else
 fi
 
 preflight_memory_warning
-database_connectivity_check
+if ! database_connectivity_check; then
+  log "WARNING: Database preflight failed. Continuing to service startup; post-start health checks will validate the deployment."
+fi
 
 log "Starting services..."
 (
