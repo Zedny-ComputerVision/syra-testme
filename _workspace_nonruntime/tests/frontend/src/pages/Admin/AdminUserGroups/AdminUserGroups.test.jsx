@@ -66,7 +66,7 @@ describe('AdminUserGroups page', () => {
 
     await waitFor(() => expect(screen.getByText('Learner lookup is temporarily unavailable. Retry to manage group members.')).toBeTruthy())
     expect(screen.getByText('Test and schedule data are temporarily unavailable. Retry before running bulk assignments.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Add' }).disabled).toBe(true)
+    expect(screen.getByPlaceholderText('Search learners by name, email, or ID...').disabled).toBe(true)
   })
 
   it('shows a busy confirmation state while deleting a group', async () => {
