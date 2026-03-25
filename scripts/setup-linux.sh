@@ -266,13 +266,23 @@ seed_login_users() {
   fi
 
   log "Ensuring standard login users exist."
-  compose run --rm -T \
+  if compose run --rm -T \
     -v "${REPO_ROOT}/backend/scripts:/app/scripts:ro" \
     -e SYRA_RESET_LOGIN_PASSWORDS="$RESET_LOGIN_PASSWORDS" \
     -e SYRA_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
     -e SYRA_INSTRUCTOR_PASSWORD="$INSTRUCTOR_PASSWORD" \
     -e SYRA_STUDENT_PASSWORD="$STUDENT_PASSWORD" \
-    backend python scripts/ensure_login_users.py
+    backend python scripts/ensure_login_users.py; then
+    return
+  fi
+
+  if [[ "$RUN_LOCAL_DB" == "0" ]]; then
+    log "WARNING: Standard login-user seed failed against the external database."
+    log "Continuing deploy because runtime health checks still validate the app."
+    return
+  fi
+
+  die "Standard login-user seed failed."
 }
 
 preflight_memory_warning() {
@@ -497,6 +507,11 @@ if [[ "$RUN_LOCAL_DB" == "0" ]]; then
   fi
 fi
 
+DB_DISABLE_POOLING_VALUE=""
+if [[ "$DATABASE_URL" == *".pooler.supabase.com:6543"* ]]; then
+  DB_DISABLE_POOLING_VALUE="true"
+fi
+
 if [[ "$PREPARE_ONLY" -eq 0 && "$RUN_LOCAL_DB" == "0" && "$DATABASE_URL" == "$LOCAL_DATABASE_URL" ]]; then
   die "Production mode requires SYRA_DATABASE_URL or backend/.env.docker DATABASE_URL to point at an external database."
 fi
@@ -623,6 +638,7 @@ set_env_value "$ROOT_ENV" "VITE_API_BASE_URL" "$FRONTEND_DEV_API_BASE_URL"
 set_env_value "$ROOT_ENV" "MAX_VIDEO_UPLOAD_MB" "512"
 set_env_value "$ROOT_ENV" "NGINX_CLIENT_MAX_BODY_SIZE" "$NGINX_CLIENT_MAX_BODY_SIZE"
 set_env_value "$ROOT_ENV" "WORKERS" "$WORKERS"
+set_env_value "$ROOT_ENV" "DB_DISABLE_POOLING" "$DB_DISABLE_POOLING_VALUE"
 set_env_value "$ROOT_ENV" "AUTO_APPLY_MIGRATIONS" "false"
 set_env_value "$ROOT_ENV" "PRECHECK_ALLOW_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
 set_env_value "$ROOT_ENV" "MEDIA_STORAGE_PROVIDER" "$MEDIA_STORAGE_PROVIDER"
@@ -637,6 +653,7 @@ set_env_value "$BACKEND_LOCAL_ENV" "FRONTEND_BASE_URL" "$APP_FRONTEND_URL"
 set_env_value "$BACKEND_LOCAL_ENV" "BACKEND_BASE_URL" "$APP_BACKEND_URL"
 set_env_value "$BACKEND_LOCAL_ENV" "CORS_ORIGINS" "$APP_CORS_ORIGINS"
 set_env_value "$BACKEND_LOCAL_ENV" "PRECHECK_ALLOW_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
+set_env_value "$BACKEND_LOCAL_ENV" "DB_DISABLE_POOLING" "$DB_DISABLE_POOLING_VALUE"
 set_env_value "$BACKEND_LOCAL_ENV" "MAX_VIDEO_UPLOAD_MB" "512"
 set_env_value "$BACKEND_LOCAL_ENV" "MEDIA_STORAGE_PROVIDER" "$MEDIA_STORAGE_PROVIDER"
 set_env_value "$BACKEND_LOCAL_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER" "$PROCTORING_VIDEO_STORAGE_PROVIDER"
@@ -655,6 +672,7 @@ set_env_value "$BACKEND_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL" "$CLOUDFLARE_MEDIA_
 set_env_value "$BACKEND_ENV" "CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS" "$CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS"
 set_env_value "$BACKEND_ENV" "PRECHECK_ALLOW_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
 set_env_value "$BACKEND_ENV" "WORKERS" "$WORKERS"
+set_env_value "$BACKEND_ENV" "DB_DISABLE_POOLING" "$DB_DISABLE_POOLING_VALUE"
 
 set_env_value "$FRONTEND_ENV" "VITE_API_BASE_URL" "/api/"
 set_env_value "$FRONTEND_ENV" "VITE_PRECHECK_TEST_BYPASS" "$PRECHECK_ALLOW_TEST_BYPASS"
@@ -691,7 +709,7 @@ fi
 log "Starting services..."
 (
   cd "$REPO_ROOT"
-  compose up --build -d --remove-orphans
+  compose up --build -d --remove-orphans --force-recreate
 )
 
 sleep 3
