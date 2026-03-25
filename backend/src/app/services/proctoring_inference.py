@@ -14,9 +14,6 @@ import httpx
 from pydantic import BaseModel, Field
 
 from ..core.config import get_settings
-from ..detection._yolo_face import get_face_model
-from ..detection.orchestrator import ProctoringOrchestrator, prewarm_shared_mesh
-from ..detection.screen_analysis import analyze_screen_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +35,32 @@ class InferenceResult(BaseModel):
 
 @dataclass
 class InferenceSession:
-    orchestrator: ProctoringOrchestrator
+    orchestrator: Any
     lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+def _get_face_model() -> Any:
+    from ..detection._yolo_face import get_face_model
+
+    return get_face_model()
+
+
+def _prewarm_shared_mesh() -> None:
+    from ..detection.orchestrator import prewarm_shared_mesh
+
+    prewarm_shared_mesh()
+
+
+def _create_orchestrator(exam_cfg: Mapping[str, Any]) -> Any:
+    from ..detection.orchestrator import ProctoringOrchestrator
+
+    return ProctoringOrchestrator(dict(exam_cfg or {}))
+
+
+def _analyze_screen_frame(frame_bytes: bytes) -> dict[str, Any] | None:
+    from ..detection.screen_analysis import analyze_screen_bytes
+
+    return analyze_screen_bytes(frame_bytes)
 
 
 def warm_inference_models() -> dict[str, bool]:
@@ -54,7 +75,7 @@ def warm_inference_models() -> dict[str, bool]:
     }
 
     try:
-        model = get_face_model()
+        model = _get_face_model()
         status["face_detection"] = model is not None
         status["multi_face"] = model is not None
         if model is not None:
@@ -74,7 +95,7 @@ def warm_inference_models() -> dict[str, bool]:
         logger.warning("Failed to pre-warm YOLO object model: %s", exc)
 
     try:
-        prewarm_shared_mesh()
+        _prewarm_shared_mesh()
     except Exception as exc:
         logger.warning("Failed to pre-warm MediaPipe FaceMesh: %s", exc)
 
@@ -95,7 +116,7 @@ class ProctoringInferenceStore:
     ) -> SessionOpenResponse:
         attempt_key = str(attempt_id)
         config = dict(exam_cfg or {})
-        orchestrator = ProctoringOrchestrator(config)
+        orchestrator = _create_orchestrator(config)
         orchestrator.violation_score = float(initial_violation_score or 0.0)
         session = InferenceSession(orchestrator=orchestrator)
 
@@ -137,7 +158,7 @@ class ProctoringInferenceStore:
         started = time.perf_counter()
         alerts: list[dict[str, Any]] = []
         with session.lock:
-            screen_alert = analyze_screen_bytes(frame_bytes)
+            screen_alert = _analyze_screen_frame(frame_bytes)
             if screen_alert:
                 alerts.append(screen_alert)
             summary = session.orchestrator.get_summary()
@@ -182,12 +203,12 @@ class ProctoringInferenceStore:
         )
 
     @staticmethod
-    def _build_detection_status(orchestrator: ProctoringOrchestrator, exam_cfg: Mapping[str, Any]) -> dict[str, bool]:
+    def _build_detection_status(orchestrator: Any, exam_cfg: Mapping[str, Any]) -> dict[str, bool]:
         def enabled(key: str, default: bool = False) -> bool:
             return bool(exam_cfg.get(key, default))
 
         try:
-            face_model_ok = get_face_model() is not None
+            face_model_ok = _get_face_model() is not None
         except Exception:
             face_model_ok = False
 
