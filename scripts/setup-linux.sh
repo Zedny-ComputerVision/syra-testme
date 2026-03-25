@@ -392,22 +392,9 @@ PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-$(f
 
 existing_worker_value="$(first_non_empty "$existing_workers" "$existing_root_workers" "")"
 default_workers="2"
-if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
-  default_workers="1"
-fi
 
 if [[ -n "${SYRA_WORKERS:-}" ]]; then
   WORKERS="$SYRA_WORKERS"
-elif [[ "$default_workers" == "1" ]]; then
-  case "$existing_worker_value" in
-    ""|"2"|"4")
-      WORKERS="1"
-      log "Supabase session pooler detected; defaulting WORKERS=1 to reduce database client pressure."
-      ;;
-    *)
-      WORKERS="$existing_worker_value"
-      ;;
-  esac
 else
   WORKERS="${existing_worker_value:-$default_workers}"
 fi
