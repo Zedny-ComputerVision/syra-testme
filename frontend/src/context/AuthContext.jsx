@@ -143,11 +143,11 @@ export function AuthProvider({ children }) {
       refreshPromiseRef.current = (async () => {
         try {
           const refreshUrl = resolveApiUrl('auth/refresh');
-          const { data } = await axios.post(
-            refreshUrl,
-            { refresh_token: currentTokens.refresh_token },
-            { timeout: 5000 },
-          );
+        const { data } = await axios.post(
+          refreshUrl,
+          { refresh_token: currentTokens.refresh_token },
+          { timeout: 10000 },
+        );
           if (!data?.access_token) return null;
           return {
             ...currentTokens,
@@ -226,6 +226,7 @@ export function AuthProvider({ children }) {
         const permissionsUrl = resolveApiUrl('admin-settings/permissions/public');
         const { data } = await axios.get(permissionsUrl, {
           headers: { Authorization: `Bearer ${tokens.access_token}` },
+          timeout: 10000,
         });
         if (!cancelled && Array.isArray(data?.permissions) && data.permissions.length > 0) {
           setPermissionRows(canonicalizePermissionRows(data.permissions));
@@ -321,8 +322,6 @@ export function AuthProvider({ children }) {
           safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
           setTokens(refreshed);
           setUser(decodeUser(refreshed.access_token));
-        } else {
-          clearAuthState();
         }
       }, refreshAt);
     } catch {

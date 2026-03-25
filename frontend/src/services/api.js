@@ -11,6 +11,7 @@ const api = axios.create({ baseURL, timeout: DEFAULT_TIMEOUT_MS })
 let refreshPromise = null
 const inflightGetRequests = new Map()
 const recentGetResponses = new Map()
+const routeScopedControllers = new Set()
 
 function normalizeForCache(value) {
   if (Array.isArray(value)) {
@@ -79,6 +80,36 @@ function storeRecentGetResponse(key, response) {
     expiresAt: Date.now() + GET_REPLAY_TTL_MS,
     response: cloneAxiosResponse(response),
   })
+}
+
+function shouldTrackRouteScopedRequest(config) {
+  const method = String(config?.method || 'get').trim().toLowerCase()
+  if (!['get', 'head'].includes(method)) {
+    return false
+  }
+  if (config?.signal || config?.persistentRequest || config?.disableNavigationAbort) {
+    return false
+  }
+  const url = String(config?.url || '')
+  return !AUTH_ENDPOINTS.some((path) => url.includes(path))
+}
+
+function detachRouteScopedController(config) {
+  const controller = config?._routeScopedAbortController
+  if (!controller) return
+  routeScopedControllers.delete(controller)
+  delete config._routeScopedAbortController
+}
+
+export function cancelRouteScopedRequests(reason = 'route-change') {
+  for (const controller of Array.from(routeScopedControllers)) {
+    try {
+      controller.abort(reason)
+    } catch {
+      // ignore abort failures
+    }
+  }
+  routeScopedControllers.clear()
 }
 
 function assignValidationField(fields, path, message) {
@@ -232,6 +263,12 @@ api.interceptors.request.use((config) => {
   if (!config.timeout) {
     config.timeout = DEFAULT_TIMEOUT_MS
   }
+  if (shouldTrackRouteScopedRequest(config)) {
+    const controller = new AbortController()
+    config.signal = controller.signal
+    config._routeScopedAbortController = controller
+    routeScopedControllers.add(controller)
+  }
   const tokens = readTokens()
   if (tokens?.access_token) {
     config.headers.Authorization = `Bearer ${tokens.access_token}`
@@ -241,6 +278,7 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (res) => {
+    detachRouteScopedController(res?.config)
     const payload = res?.data && typeof res.data === 'object' && Object.prototype.hasOwnProperty.call(res.data, 'data')
       ? res.data.data
       : res?.data
@@ -250,11 +288,17 @@ api.interceptors.response.use(
     return res
   },
   async (err) => {
+    detachRouteScopedController(err?.config)
     const status = err.response?.status
     const original = err.config || {}
     const url = String(original.url || '')
     const isAuthEndpoint = AUTH_ENDPOINTS.some((path) => url.includes(path))
     const detail = err.response?.data?.detail
+
+    if (err.code === 'ERR_CANCELED' || axios.isCancel?.(err)) {
+      err.isCanceled = true
+      return Promise.reject(err)
+    }
 
     if (!err.response) {
       const timeout = err.code === 'ECONNABORTED' || /timeout/i.test(String(err.message || ''))

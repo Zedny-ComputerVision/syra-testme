@@ -9,7 +9,7 @@ import ScrollTopButton from '../components/ScrollTopButton/ScrollTopButton'
 import Sidebar from '../components/Sidebar/Sidebar'
 import Loader from '../components/common/Loader/Loader'
 import useAuth from '../hooks/useAuth'
-import api from '../services/api'
+import api, { cancelRouteScopedRequests } from '../services/api'
 
 function lazyPage(importer, options = {}) {
   const LazyComponent = lazy(importer)
@@ -165,6 +165,10 @@ function Shell({ children }) {
   useEffect(() => {
     setMobileOpen(false)
   }, [location.pathname])
+
+  useEffect(() => () => {
+    cancelRouteScopedRequests('navigation')
+  }, [location.key])
 
   if (!user) return children
 
