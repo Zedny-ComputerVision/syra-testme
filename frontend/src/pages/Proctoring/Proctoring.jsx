@@ -990,6 +990,10 @@ export default function Proctoring() {
       const screenCaptureActive = proctorCfg.screen_capture && screenShareEstablishedRef.current
       const screenSharePending = proctorCfg.screen_capture && !screenShareEstablishedRef.current
 
+      if (submittedRef.current) {
+        // Exam already submitted — the system itself exits fullscreen, not the student.
+        return
+      }
       if (screenShareTransition || screenSharePending) {
         // Don't enforce fullscreen while screen share picker is open, during
         // grace period, or before screen share is established — the picker
