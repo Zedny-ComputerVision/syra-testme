@@ -910,16 +910,17 @@ export default function Proctoring() {
       setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)
       submittedRef.current = true
+      setSubmitting(false)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch((error) => {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
         })
       }
-      // Upload recordings — show progress but don't block forever
+      // Show upload overlay — exam content is hidden, learner sees only progress
       if (requiredRecordingSources.length > 0) {
-        setSubmitPhase('Uploading exam recordings... Please wait.')
+        setSubmitPhase('uploading')
         setUploadSkippable(false)
-        const skipTimer = setTimeout(() => setUploadSkippable(true), 10000)
+        const skipTimer = setTimeout(() => setUploadSkippable(true), 15000)
         try {
           await Promise.race([
             uploadRecordingSources(requiredRecordingSources),
@@ -930,7 +931,7 @@ export default function Proctoring() {
         }
         clearTimeout(skipTimer)
       }
-      setSubmitting(false)
+      setSubmitPhase('')
       navigate(`/attempts/${attemptId}`)
     } catch (e) {
       setSubmitError(e.response?.data?.detail || e.message || 'Submission failed. Please try again.')
@@ -1468,6 +1469,64 @@ export default function Proctoring() {
     )
   }
 
+  // ── Post-submit upload overlay ──────────────────────────────────────────────
+  if (submittedRef.current && submitPhase === 'uploading') {
+    const allDone = Object.values(uploadPercent).length > 0 && Object.values(uploadPercent).every((p) => p >= 100)
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <div style={{
+          background: 'rgba(30,41,59,0.95)', borderRadius: 16, padding: '2.5rem 3rem',
+          minWidth: 400, maxWidth: 500, textAlign: 'center',
+          border: '1px solid rgba(6,182,212,0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f1f5f9', marginBottom: '0.5rem' }}>
+            Exam Submitted
+          </div>
+          <div style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
+            Uploading your exam recordings. Please do not close this page.
+          </div>
+          {Object.entries(uploadPercent).map(([src, pct]) => (
+            <div key={src} style={{ marginBottom: '1rem', textAlign: 'left' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontSize: '0.9rem', marginBottom: 4 }}>
+                <span>{src.charAt(0).toUpperCase() + src.slice(1)} recording</span>
+                <span>{pct}%</span>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 6, height: 10, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${pct}%`, height: '100%', borderRadius: 6,
+                  background: pct >= 100 ? '#22c55e' : '#06b6d4',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+            </div>
+          ))}
+          {allDone && (
+            <div style={{ color: '#22c55e', fontWeight: 500, marginTop: '1rem' }}>
+              Upload complete! Redirecting...
+            </div>
+          )}
+          {uploadSkippable && !allDone && (
+            <button
+              type="button"
+              onClick={() => navigate(`/attempts/${attemptId}`)}
+              style={{
+                marginTop: '1rem', padding: '0.5rem 1.5rem',
+                background: 'transparent', border: '1px solid rgba(148,163,184,0.4)',
+                color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: '0.85rem',
+              }}
+            >
+              Skip upload &amp; view results
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const currentQ = questions[currentIdx]
   const currentQType = currentQ?.question_type || 'TEXT'
   const answeredCount = questions.filter((question) => hasAnswerValue(answers[question.id])).length
@@ -1759,34 +1818,16 @@ export default function Proctoring() {
                 </div>
                 {submitting && submitPhase && (
                   <div className={styles.submitStatus}>
-                    {submitPhase}
-                    {Object.keys(uploadPercent).length > 0 && (
-                      <div style={{ marginTop: '0.5rem', fontSize: '0.9em', opacity: 0.85 }}>
-                        {Object.entries(uploadPercent).map(([src, pct]) => (
-                          <div key={src} style={{ marginTop: '0.25rem' }}>
-                            {src.charAt(0).toUpperCase() + src.slice(1)}: {pct}%
-                            <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 4, height: 6, marginTop: 3 }}>
-                              <div style={{ width: `${pct}%`, background: pct >= 100 ? '#22c55e' : '#06b6d4', height: '100%', borderRadius: 4, transition: 'width 0.3s ease' }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {submitPhase === 'uploading' ? 'Uploading recordings...' : submitPhase}
                   </div>
                 )}
                 <div className={styles.submitConfirmActions}>
                   <button type="button" className={styles.btnNav} onClick={() => setShowSubmitConfirm(false)} disabled={submitting}>
                     Keep Reviewing
                   </button>
-                  {uploadSkippable && submitting && submitPhase.includes('Uploading') ? (
-                    <button type="button" className={styles.btnNav} onClick={() => navigate(`/attempts/${attemptId}`)} style={{ marginLeft: 8 }}>
-                      Skip upload &amp; view results
-                    </button>
-                  ) : (
-                    <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
-                      {submitting ? (submitPhase.includes('Uploading') ? 'Uploading...' : submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
-                    </button>
-                  )}
+                  <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
+                    {submitting ? (submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
+                  </button>
                 </div>
               </div>
             )}
