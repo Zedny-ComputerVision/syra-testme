@@ -213,6 +213,7 @@ export default function Proctoring() {
   const [screenStream, setScreenStream] = useState(null)
   const [cameraRecordingStatus, setCameraRecordingStatus] = useState('idle')
   const [screenRecordingStatus, setScreenRecordingStatus] = useState('disabled')
+  const [uploadPercent, setUploadPercent] = useState({})
   const [screenShareBusy, setScreenShareBusy] = useState(false)
   const [screenShareRequestReady, setScreenShareRequestReady] = useState(false)
   const [proctorStatus, setProctorStatus] = useState('connecting')
@@ -770,6 +771,9 @@ export default function Proctoring() {
       progressState.lastReportedAt = now
       progressState.lastStatus = status
 
+      // Update local UI progress
+      setUploadPercent((prev) => ({ ...prev, [source]: Math.round(normalizedPercent) }))
+
       try {
         await reportProctoringVideoUploadProgress(uploadAttemptId, {
           session_id: sessionId,
@@ -905,18 +909,21 @@ export default function Proctoring() {
       setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)
       submittedRef.current = true
-      setSubmitting(false)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch((error) => {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
         })
       }
-      // Upload recordings in the background — don't block navigation
+      // Upload recordings before navigating so the learner sees progress
       if (requiredRecordingSources.length > 0) {
-        uploadRecordingSources(requiredRecordingSources).catch((error) => {
-          console.warn('Background recording upload failed:', error)
-        })
+        setSubmitPhase('Uploading exam recordings... Please wait.')
+        try {
+          await uploadRecordingSources(requiredRecordingSources)
+        } catch (error) {
+          console.warn('Recording upload failed:', error)
+        }
       }
+      setSubmitting(false)
       navigate(`/attempts/${attemptId}`)
     } catch (e) {
       setSubmitError(e.response?.data?.detail || e.message || 'Submission failed. Please try again.')
@@ -1746,6 +1753,18 @@ export default function Proctoring() {
                 {submitting && submitPhase && (
                   <div className={styles.submitStatus}>
                     {submitPhase}
+                    {Object.keys(uploadPercent).length > 0 && (
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.9em', opacity: 0.85 }}>
+                        {Object.entries(uploadPercent).map(([src, pct]) => (
+                          <div key={src} style={{ marginTop: '0.25rem' }}>
+                            {src.charAt(0).toUpperCase() + src.slice(1)}: {pct}%
+                            <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 4, height: 6, marginTop: 3 }}>
+                              <div style={{ width: `${pct}%`, background: pct >= 100 ? '#22c55e' : '#06b6d4', height: '100%', borderRadius: 4, transition: 'width 0.3s ease' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className={styles.submitConfirmActions}>
@@ -1753,7 +1772,7 @@ export default function Proctoring() {
                     Keep Reviewing
                   </button>
                   <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? (submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
+                    {submitting ? (submitPhase.includes('Uploading') ? 'Uploading...' : submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
                   </button>
                 </div>
               </div>
