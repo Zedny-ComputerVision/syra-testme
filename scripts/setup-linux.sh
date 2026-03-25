@@ -525,20 +525,30 @@ if [[ "$RUN_LOCAL_DB" == "1" ]]; then
   APP_BACKEND_URL_DEFAULT="http://localhost:8000"
   APP_CORS_ORIGINS_DEFAULT="http://localhost:5173,http://127.0.0.1:5173"
   FRONTEND_DEV_API_BASE_URL_DEFAULT="http://127.0.0.1:8000/api"
+
+  APP_DATABASE_URL="${SYRA_APP_DATABASE_URL:-$(first_non_empty "$existing_backend_local_database_url" "$existing_root_database_url" "$APP_DATABASE_URL_DEFAULT")}"
+  APP_DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-$(first_non_empty "$existing_backend_local_database_migration_url" "$existing_root_database_migration_url" "$DATABASE_MIGRATION_URL")}"
+  APP_FRONTEND_URL="${SYRA_APP_FRONTEND_URL:-$(first_non_empty "$existing_backend_local_frontend_url" "$existing_root_frontend_url" "$APP_FRONTEND_URL_DEFAULT")}"
+  APP_BACKEND_URL="${SYRA_APP_BACKEND_URL:-$(first_non_empty "$existing_backend_local_backend_url" "$existing_root_backend_url" "$APP_BACKEND_URL_DEFAULT")}"
+  APP_CORS_ORIGINS="${SYRA_APP_CORS_ORIGINS:-$(first_non_empty "$existing_backend_local_cors_origins" "$existing_root_cors_origins" "$APP_CORS_ORIGINS_DEFAULT")}"
+  FRONTEND_DEV_API_BASE_URL="${SYRA_FRONTEND_DEV_API_BASE_URL:-$(first_non_empty "$existing_frontend_local_vite_api_base_url" "$existing_root_vite_api_base_url" "$FRONTEND_DEV_API_BASE_URL_DEFAULT")}"
 else
   APP_DATABASE_URL_DEFAULT="${DATABASE_MIGRATION_URL:-$DATABASE_URL}"
   APP_FRONTEND_URL_DEFAULT="$FRONTEND_URL"
   APP_BACKEND_URL_DEFAULT="$BACKEND_URL"
   APP_CORS_ORIGINS_DEFAULT="$CORS_ORIGINS"
   FRONTEND_DEV_API_BASE_URL_DEFAULT="${BACKEND_URL%/}"
-fi
 
-APP_DATABASE_URL="${SYRA_APP_DATABASE_URL:-$(first_non_empty "$existing_backend_local_database_url" "$existing_root_database_url" "$APP_DATABASE_URL_DEFAULT")}"
-APP_DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-$(first_non_empty "$existing_backend_local_database_migration_url" "$existing_root_database_migration_url" "$DATABASE_MIGRATION_URL")}"
-APP_FRONTEND_URL="${SYRA_APP_FRONTEND_URL:-$(first_non_empty "$existing_backend_local_frontend_url" "$existing_root_frontend_url" "$APP_FRONTEND_URL_DEFAULT")}"
-APP_BACKEND_URL="${SYRA_APP_BACKEND_URL:-$(first_non_empty "$existing_backend_local_backend_url" "$existing_root_backend_url" "$APP_BACKEND_URL_DEFAULT")}"
-APP_CORS_ORIGINS="${SYRA_APP_CORS_ORIGINS:-$(first_non_empty "$existing_backend_local_cors_origins" "$existing_root_cors_origins" "$APP_CORS_ORIGINS_DEFAULT")}"
-FRONTEND_DEV_API_BASE_URL="${SYRA_FRONTEND_DEV_API_BASE_URL:-$(first_non_empty "$existing_frontend_local_vite_api_base_url" "$existing_root_vite_api_base_url" "$FRONTEND_DEV_API_BASE_URL_DEFAULT")}"
+  # In production, prefer the resolved deployment URLs over local-dev env files.
+  # backend/.env is intentionally localhost-oriented and must not override the
+  # container runtime DATABASE_URL written to backend/.env.docker.
+  APP_DATABASE_URL="${SYRA_APP_DATABASE_URL:-$APP_DATABASE_URL_DEFAULT}"
+  APP_DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-${DATABASE_MIGRATION_URL:-$APP_DATABASE_URL_DEFAULT}}"
+  APP_FRONTEND_URL="${SYRA_APP_FRONTEND_URL:-$APP_FRONTEND_URL_DEFAULT}"
+  APP_BACKEND_URL="${SYRA_APP_BACKEND_URL:-$APP_BACKEND_URL_DEFAULT}"
+  APP_CORS_ORIGINS="${SYRA_APP_CORS_ORIGINS:-$APP_CORS_ORIGINS_DEFAULT}"
+  FRONTEND_DEV_API_BASE_URL="${SYRA_FRONTEND_DEV_API_BASE_URL:-$FRONTEND_DEV_API_BASE_URL_DEFAULT}"
+fi
 
 set_env_value "$ROOT_ENV" "DATABASE_URL" "$APP_DATABASE_URL"
 set_env_value "$ROOT_ENV" "DATABASE_MIGRATION_URL" "$APP_DATABASE_MIGRATION_URL"
