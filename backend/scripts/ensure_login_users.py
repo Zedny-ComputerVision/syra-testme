@@ -95,9 +95,10 @@ def ensure_user(
 
 def main() -> None:
     settings = get_settings()
-    connect_args = build_connect_args(settings.database_migration_url)
+    database_url = settings.DATABASE_URL
+    connect_args = build_connect_args(database_url)
     engine = create_engine(
-        settings.database_migration_url,
+        database_url,
         poolclass=NullPool,
         pool_pre_ping=True,
         future=True,
