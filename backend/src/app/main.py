@@ -379,6 +379,35 @@ def _run_startup_initialization(*, is_test_env: bool) -> None:
     logger.info("Alembic migrations applied successfully")
 
 
+def _run_startup_initialization_once_per_container(*, is_test_env: bool) -> None:
+    """Serialize startup init so gunicorn workers do not race migrations."""
+    marker_path = Path(os.getenv("SYRA_STARTUP_INIT_MARKER", "/tmp/syra-startup-init.done"))
+    lock_path = Path(os.getenv("SYRA_STARTUP_INIT_LOCK", "/tmp/syra-startup-init.lock"))
+
+    if marker_path.exists():
+        return
+
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock_path, "a", encoding="utf-8") as lock_fd:  # noqa: SIM115
+            try:
+                import fcntl
+
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            except (ImportError, AttributeError):
+                _run_startup_initialization(is_test_env=is_test_env)
+                return
+
+            if marker_path.exists():
+                return
+
+            _run_startup_initialization(is_test_env=is_test_env)
+            marker_path.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+    except Exception:
+        marker_path.unlink(missing_ok=True)
+        raise
+
+
 async def _schedule_loop():
     while True:
         await asyncio.sleep(300)  # check every 5 min instead of 60s to reduce DB pressure
@@ -512,7 +541,7 @@ def _try_acquire_leader_lock() -> bool:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     is_test_env = _is_test_env()
-    _run_startup_initialization(is_test_env=is_test_env)
+    _run_startup_initialization_once_per_container(is_test_env=is_test_env)
     is_leader = _try_acquire_leader_lock()
     background_tasks = []
     if not is_test_env and is_leader:
