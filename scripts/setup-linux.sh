@@ -468,14 +468,15 @@ case "$SETUP_MODE" in
 esac
 
 if [[ "$RUN_LOCAL_DB" == "0" ]]; then
-  if [[ -n "${DATABASE_MIGRATION_URL:-}" && "$DATABASE_MIGRATION_URL" != *".pooler.supabase.com"* ]]; then
-    :
-  else
+  derived_supabase_migration_url=""
+  if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
+    derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "$DATABASE_URL" || true)"
+  elif [[ -z "${DATABASE_MIGRATION_URL:-}" || "$DATABASE_MIGRATION_URL" == *".pooler.supabase.com"* ]]; then
     derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
-    if [[ -n "$derived_supabase_migration_url" ]]; then
-      DATABASE_MIGRATION_URL="$derived_supabase_migration_url"
-      log "Derived Supabase transaction-pooler DATABASE_MIGRATION_URL for migrations and preflight."
-    fi
+  fi
+  if [[ -n "$derived_supabase_migration_url" ]]; then
+    DATABASE_MIGRATION_URL="$derived_supabase_migration_url"
+    log "Derived Supabase transaction-pooler DATABASE_MIGRATION_URL for migrations and preflight."
   fi
 fi
 
