@@ -11,7 +11,7 @@ export const adminApi = {
     },
     ...opts,
   }),
-  getTest: (id) => api.get(`admin/tests/${id}`),
+  getTest: (id, opts = {}) => api.get(`admin/tests/${id}`, opts),
   createTest: (data) => api.post('admin/tests', data),
   updateTest: (id, data) => api.patch(`admin/tests/${id}`, data),
   publishTest: (id) => api.post(`admin/tests/${id}/publish`),
@@ -22,7 +22,7 @@ export const adminApi = {
   downloadTestReport: (id) => api.get(`admin/tests/${id}/report`, { responseType: 'text' }),
 
   // Categories
-  categories: () => api.get('categories/'),
+  categories: (opts = {}) => api.get('categories/', opts),
   getCategory: (id) => api.get(`categories/${id}`),
   createCategory: (data) => api.post('categories/', data),
   updateCategory: (id, data) => api.put(`categories/${id}`, data),
@@ -57,7 +57,7 @@ export const adminApi = {
   assignSchedule: (data) => api.post('schedules/', data),
 
   // Questions
-  getQuestions: (examId) => api.get('questions/', { params: { exam_id: examId } }),
+  getQuestions: (examId, opts = {}) => api.get('questions/', { params: { exam_id: examId }, ...opts }),
   addQuestion: (data) => api.post('questions/', data),
   updateQuestion: (id, data) => api.put(`questions/${id}`, data),
   deleteQuestion: (id) => api.delete(`questions/${id}`),
@@ -95,7 +95,7 @@ export const adminApi = {
   pauseAttempt: (attemptId) => api.post(`proctoring/${attemptId}/pause`),
   resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
   listAttemptVideos: (attemptId, opts) => api.get(`proctoring/${attemptId}/videos`, opts),
-  listExamVideoUploadStatus: (examId) => api.get(`proctoring/exam/${examId}/video-upload-status`),
+  listExamVideoUploadStatus: (examId, opts = {}) => api.get(`proctoring/exam/${examId}/video-upload-status`, opts),
   getAttemptAnswers: (attemptId, opts) => api.get(`attempts/${attemptId}/answers`, opts),
   reviewAttemptCertificate: (attemptId, decision) => api.post(`attempts/${attemptId}/certificate-review`, { decision }),
   testReportCsv: (testId) => api.get(`reports/test/${testId}`, { responseType: 'blob' }),

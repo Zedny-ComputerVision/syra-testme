@@ -268,6 +268,19 @@ function isManageRoutePath(pathname) {
   return /^\/admin\/tests\/[^/]+\/manage$/.test(pathname || '')
 }
 
+function isCanceledRequest(error) {
+  return error?.name === 'AbortError' || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED'
+}
+
+function readRequestError(error, fallback) {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  if (typeof error?.message === 'string' && error.message.trim() && !isCanceledRequest(error)) {
+    return error.message.trim()
+  }
+  return fallback
+}
+
 const EMPTY_QUESTION_FORM = {
   text: '',
   question_type: 'MCQ',
@@ -724,6 +737,10 @@ export default function AdminManageTestPage() {
   })
   const settingsFormRef = useRef(settingsForm)
   const settingsBaselineRef = useRef(JSON.stringify(settingsForm))
+  const examRef = useRef(exam)
+  const usersRef = useRef(users)
+  const sessionsRef = useRef(sessions)
+  const loadAbortRef = useRef(null)
   const setSettingsForm = useCallback((updater) => {
     setSettingsFormState((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater
@@ -788,6 +805,18 @@ export default function AdminManageTestPage() {
   useEffect(() => {
     settingsFormRef.current = settingsForm
   }, [settingsForm])
+
+  useEffect(() => {
+    examRef.current = exam
+  }, [exam])
+
+  useEffect(() => {
+    usersRef.current = users
+  }, [users])
+
+  useEffect(() => {
+    sessionsRef.current = sessions
+  }, [sessions])
 
   const handleTabChange = useCallback((nextTab, nextSection = settingsSection) => {
     if (!TABS.some((item) => item.id === nextTab)) return
@@ -941,9 +970,57 @@ export default function AdminManageTestPage() {
     setCertificateSyncError('')
   }, [])
 
-  const loadVideoUploadStatusMap = useCallback(async () => {
+  useEffect(() => () => {
+    if (loadAbortRef.current) loadAbortRef.current.abort()
+  }, [])
+
+  const buildAttemptRows = useCallback((attemptItems, userItems, examSessions, uploadStatusMap = new Map()) => {
+    const userMap = new Map((userItems || []).map((user) => [String(user.id), user]))
+    const sessionByUserId = new Map((examSessions || []).map((session) => [String(session.user_id), session]))
+
+    return (attemptItems || []).map((attempt) => {
+      const user = userMap.get(String(attempt.user_id))
+      const session = sessionByUserId.get(String(attempt.user_id))
+      const uploadStatus = uploadStatusMap.get(String(attempt.id)) || defaultVideoUploadStatus()
+      const highAlerts = Number(attempt.high_violations || 0)
+      const mediumAlerts = Number(attempt.med_violations || 0)
+      const score = highAlerts * 3 + mediumAlerts
+      const needsManualReview = attempt.status === 'SUBMITTED' && (attempt.score == null)
+
+      return applyVideoUploadStatus({
+        id: String(attempt.id),
+        attemptIdFull: String(attempt.id),
+        attemptId: String(attempt.id).slice(0, 8),
+        username: attempt.user_student_id || user?.user_id || attempt.user_name || user?.name || String(attempt.user_id).slice(0, 8),
+        sessionName: session ? `Session ${String(session.id).slice(0, 6)}` : '-',
+        status: attempt.status || '-',
+        score: typeof attempt.score === 'number' ? attempt.score : null,
+        needsManualReview,
+        reviewState: needsManualReview
+          ? 'Awaiting manual grading'
+          : attempt.status === 'GRADED'
+            ? 'Finalized'
+            : attempt.status === 'SUBMITTED'
+              ? 'Auto-scored'
+              : 'In progress',
+        paused: Boolean(attempt.paused),
+        startedAt: attempt.started_at,
+        submittedAt: attempt.submitted_at,
+        userGroup: session?.access_mode || '-',
+        comment: attempt.paused
+          ? 'Paused by proctor'
+          : (needsManualReview ? 'Manual grading required' : (attempt.status === 'GRADED' ? 'Reviewed' : attempt.status === 'SUBMITTED' ? 'Submitted' : '')),
+        proctorRate: score,
+        sessionId: session?.id || '',
+        highAlerts,
+        mediumAlerts,
+      }, uploadStatus)
+    })
+  }, [])
+
+  const loadVideoUploadStatusMap = useCallback(async (signal) => {
     if (!id || id === 'undefined' || id === 'null') return new Map()
-    const { data } = await adminApi.listExamVideoUploadStatus(id)
+    const { data } = await adminApi.listExamVideoUploadStatus(id, signal ? { signal } : {})
     const items = Array.isArray(data) ? data : []
     return new Map(
       items.map((item) => [String(item.attempt_id), normalizeVideoUploadStatus(item)]),
@@ -957,89 +1034,95 @@ export default function AdminManageTestPage() {
       }
       return
     }
-    if (showSpinner) setLoading(true)
+    if (loadAbortRef.current) loadAbortRef.current.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
+    if (showSpinner || !examRef.current) setLoading(true)
     setLoadError('')
     setError('')
     try {
-      const uploadStatusPromise = loadVideoUploadStatusMap().catch(() => new Map())
-      const [{ data: testData }, { data: attempts }, { data: scheds }, { data: usersData }, { data: questionsData }, { data: catsData }, uploadStatusMap] = await Promise.all([
-        adminApi.getTest(id),
-        adminApi.attempts({ exam_id: id, skip: 0, limit: 200 }),
-        adminApi.schedules(),
-        adminApi.users({ skip: 0, limit: 200 }),
-        adminApi.getQuestions(id),
-        adminApi.categories(),
-        uploadStatusPromise,
-      ])
-      setCategories(catsData || [])
+      const requestOptions = { signal: controller.signal }
+      const { data: testData } = await adminApi.getTest(id, requestOptions)
+      if (controller.signal.aborted) return
+
       const mergedExam = mergeExamAndTest(null, testData)
       setExam(mergedExam)
-      const userItems = readPaginatedItems(usersData)
-      const attemptItems = readPaginatedItems(attempts)
-      setUsers(userItems)
-      setQuestions(questionsData || [])
       hydrateSettingsForm(mergedExam)
 
-      // Render the page shell as soon as the primary test payload is ready.
-      // Attempt/video enrichment can continue in the background without
-      // blocking the selected tab from becoming visible.
-      if (showSpinner) setLoading(false)
+      const needsCategories = tab === 'settings' && settingsSection === 'categories'
+      const needsQuestions = tab === 'sections'
+      const needsSessions = tab === 'sessions' || tab === 'proctoring'
+      const needsUsers = tab === 'sessions' || tab === 'candidates' || tab === 'proctoring'
+      const needsAttempts = tab === 'candidates' || tab === 'proctoring' || tab === 'administration' || tab === 'reports'
+      const needsUploadStatus = tab === 'proctoring'
 
-      const examScheds = (scheds || []).filter((s) => String(s.exam_id) === String(id))
-      setSessions(examScheds)
-      const userMap = new Map(userItems.map((u) => [String(u.id), u]))
-      const examAttempts = attemptItems
+      const tasks = []
+      if (needsCategories) tasks.push(['categories', adminApi.categories(requestOptions)])
+      if (needsQuestions) tasks.push(['questions', adminApi.getQuestions(id, requestOptions)])
+      if (needsSessions) tasks.push(['sessions', adminApi.schedules(requestOptions)])
+      if (needsUsers) tasks.push(['users', adminApi.users({ role: 'LEARNER', skip: 0, limit: 200 }, requestOptions)])
+      if (needsAttempts) tasks.push(['attempts', adminApi.attempts({ exam_id: id, skip: 0, limit: 200 }, requestOptions)])
+      if (needsUploadStatus) tasks.push(['uploadStatus', loadVideoUploadStatusMap(controller.signal)])
 
-      const stateByAttempt = new Map()
-      examAttempts.forEach((a) => {
-        let paused = Boolean(a.paused)
-        const highAlerts = Number(a.high_violations || 0)
-        const mediumAlerts = Number(a.med_violations || 0)
-        const uploadStatus = uploadStatusMap.get(String(a.id)) || defaultVideoUploadStatus()
-        stateByAttempt.set(String(a.id), { paused, highAlerts, mediumAlerts, uploadStatus })
+      if (tasks.length === 0) return
+
+      const results = await Promise.allSettled(tasks.map(([, promise]) => promise))
+      if (controller.signal.aborted) return
+
+      const payloads = {}
+      const failures = []
+      tasks.forEach(([key], index) => {
+        const result = results[index]
+        if (result.status === 'fulfilled') {
+          payloads[key] = result.value?.data ?? result.value
+        } else if (!isCanceledRequest(result.reason)) {
+          failures.push(readRequestError(result.reason, `Failed to load ${key}.`))
+        }
       })
 
-      setAttemptRows(examAttempts.map((a) => {
-        const u = userMap.get(String(a.user_id))
-        const s = examScheds.find((x) => String(x.user_id) === String(a.user_id))
-        const st = stateByAttempt.get(String(a.id)) || {}
-        const score = (st.highAlerts || 0) * 3 + (st.mediumAlerts || 0)
-        const needsManualReview = a.status === 'SUBMITTED' && (a.score == null)
-        return applyVideoUploadStatus({
-          id: String(a.id),
-          attemptIdFull: String(a.id),
-          attemptId: String(a.id).slice(0, 8),
-          username: a.user_student_id || u?.user_id || a.user_name || u?.name || String(a.user_id).slice(0, 8),
-          sessionName: s ? `Session ${String(s.id).slice(0, 6)}` : '-',
-          status: a.status || '-',
-          score: typeof a.score === 'number' ? a.score : null,
-          needsManualReview,
-          reviewState: needsManualReview
-            ? 'Awaiting manual grading'
-            : a.status === 'GRADED'
-              ? 'Finalized'
-              : a.status === 'SUBMITTED'
-                ? 'Auto-scored'
-                : 'In progress',
-          paused: st.paused === true,
-          startedAt: a.started_at,
-          submittedAt: a.submitted_at,
-          userGroup: s?.access_mode || '-',
-          comment: st.paused ? 'Paused by proctor' : (needsManualReview ? 'Manual grading required' : (a.status === 'GRADED' ? 'Reviewed' : a.status === 'SUBMITTED' ? 'Submitted' : '')),
-          proctorRate: score,
-          sessionId: s?.id || '',
-          highAlerts: st.highAlerts || 0,
-          mediumAlerts: st.mediumAlerts || 0,
-        }, st.uploadStatus)
-      }))
-    } catch (e) {
-      setLoadError(e.response?.data?.detail || 'Failed to load test data.')
-    } finally {
-      if (showSpinner) setLoading(false)
-    }
-  }, [id, location.pathname, navigate, hydrateSettingsForm, loadVideoUploadStatusMap])
+      if (needsCategories) setCategories(payloads.categories || [])
+      if (needsQuestions) setQuestions(payloads.questions || [])
 
-  useEffect(() => { loadAll(true) }, [loadAll])
+      const resolvedUsers = payloads.users != null ? readPaginatedItems(payloads.users) : usersRef.current
+      if (needsUsers) setUsers(resolvedUsers)
+
+      const resolvedSessions = payloads.sessions != null
+        ? (payloads.sessions || []).filter((session) => String(session.exam_id) === String(id))
+        : sessionsRef.current
+      if (needsSessions) setSessions(resolvedSessions)
+
+      if (needsAttempts) {
+        const resolvedAttempts = payloads.attempts != null ? readPaginatedItems(payloads.attempts) : []
+        const uploadStatusMap = payloads.uploadStatus instanceof Map ? payloads.uploadStatus : new Map()
+        setAttemptRows(buildAttemptRows(resolvedAttempts, resolvedUsers, resolvedSessions, uploadStatusMap))
+      } else if (needsUploadStatus && payloads.uploadStatus instanceof Map) {
+        setAttemptRows((prev) => prev.map((row) => applyVideoUploadStatus(row, payloads.uploadStatus.get(String(row.id)))))
+      }
+
+      if (failures.length > 0) {
+        setLoadError(failures[0])
+      }
+    } catch (e) {
+      if (!isCanceledRequest(e)) {
+        setLoadError(readRequestError(e, 'Failed to load test data.'))
+      }
+    } finally {
+      if (!controller.signal.aborted && loadAbortRef.current === controller) {
+        loadAbortRef.current = null
+        setLoading(false)
+      }
+    }
+  }, [id, location.pathname, navigate, hydrateSettingsForm, loadVideoUploadStatusMap, tab, settingsSection, buildAttemptRows])
+
+  const loadAllRef = useRef(loadAll)
+  useEffect(() => {
+    loadAllRef.current = loadAll
+  }, [loadAll])
+
+  useEffect(() => {
+    const shouldShowSpinner = !examRef.current || String(examRef.current.id) !== String(id)
+    void loadAllRef.current(shouldShowSpinner)
+  }, [id, tab, settingsSection])
 
   const refreshAttemptVideoUploadStatus = useCallback(async () => {
     if (!id || id === 'undefined' || id === 'null') return
