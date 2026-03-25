@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import useAuth from '../../hooks/useAuth'
-import PrefetchLink from '../common/PrefetchLink/PrefetchLink'
 import styles from './Sidebar.module.scss'
 
 const Icon = ({ d, size = 18 }) => (
@@ -51,7 +50,7 @@ function pathMatches(currentPath, targetPath) {
 
 function NavLink({ to, icon, label, active, onNavigate }) {
   return (
-    <PrefetchLink
+    <Link
       to={to}
       className={`${styles.link} ${active ? styles.active : ''}`}
       aria-current={active ? 'page' : undefined}
@@ -59,7 +58,7 @@ function NavLink({ to, icon, label, active, onNavigate }) {
     >
       <span className={styles.linkIcon}><Icon d={ICONS[icon] || ICONS.home} /></span>
       <span className={styles.linkLabel}>{label}</span>
-    </PrefetchLink>
+    </Link>
   )
 }
 
@@ -198,12 +197,12 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
         transition={{ type: 'spring', stiffness: 120, damping: 14 }}
       >
         <div className={styles.brand}>
-          <PrefetchLink to={dashboardPath} className={styles.brandLink} onClick={handleNavigate}>
+          <Link to={dashboardPath} className={styles.brandLink} onClick={handleNavigate}>
             <span className={styles.brandLogo}>S</span>
             <span className={styles.brandTextWrap}>
               <span className={styles.brandText}>SYRA LMS</span>
             </span>
-          </PrefetchLink>
+          </Link>
         </div>
 
         <nav className={styles.nav}>
