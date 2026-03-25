@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -31,6 +32,32 @@ from src.app.db.base import Base
 from src.app.models import RoleEnum, User
 
 logger = logging.getLogger(__name__)
+
+
+def build_connect_args(database_url: str) -> dict[str, object]:
+    connect_args: dict[str, object] = {"connect_timeout": 10}
+    if ".pooler.supabase.com:6543" in database_url:
+        connect_args["prepare_threshold"] = None
+    return connect_args
+
+
+def prepare_database(engine) -> None:
+    max_attempts = 5
+    for attempt in range(1, max_attempts + 1):
+        try:
+            Base.metadata.create_all(bind=engine)
+            return
+        except Exception:
+            if attempt >= max_attempts:
+                raise
+            wait_seconds = 2 ** (attempt - 1)
+            logger.warning(
+                "Database not ready for login-user seed, retrying in %ss (attempt %s/%s)",
+                wait_seconds,
+                attempt,
+                max_attempts,
+            )
+            time.sleep(wait_seconds)
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -89,12 +116,13 @@ def ensure_user(
 
 def main() -> None:
     settings = get_settings()
+    connect_args = build_connect_args(settings.database_migration_url)
     engine = create_engine(
         settings.database_migration_url,
         poolclass=NullPool,
         pool_pre_ping=True,
         future=True,
-        connect_args={"connect_timeout": 10},
+        connect_args=connect_args,
     )
     session_factory = sessionmaker(
         bind=engine,
@@ -104,7 +132,7 @@ def main() -> None:
         future=True,
     )
 
-    Base.metadata.create_all(bind=engine)
+    prepare_database(engine)
     db = session_factory()
 
     reset_passwords = env_flag("SYRA_RESET_LOGIN_PASSWORDS", default=True)
