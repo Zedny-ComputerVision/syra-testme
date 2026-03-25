@@ -24,9 +24,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = Field(default="postgresql+psycopg://postgres:password@localhost:5432/syra_lms")
     DATABASE_MIGRATION_URL: str | None = None
-    DB_POOL_SIZE: int = Field(default=3, ge=1)
-    DB_MAX_OVERFLOW: int = Field(default=0, ge=0)
-    DB_POOL_TIMEOUT_SECONDS: int = Field(default=15, ge=1)
+    DB_POOL_SIZE: int = Field(default=5, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=5, ge=0)
+    DB_POOL_TIMEOUT_SECONDS: int = Field(default=30, ge=1)
     DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=60)
     DB_DISABLE_POOLING: bool | None = None
     JWT_SECRET: str = Field(..., min_length=32, validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"))

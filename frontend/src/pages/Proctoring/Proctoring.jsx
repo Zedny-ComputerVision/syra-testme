@@ -1397,7 +1397,7 @@ export default function Proctoring() {
         // is sufficient feedback for the learner.
         console.debug('[Proctoring] HTTP ping failed, WS connected:', wsConnectedRef.current)
       })
-    }, 5000)
+    }, 10000)
     return () => clearInterval(interval)
   }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctoringEnabled, tabBlurs])
 

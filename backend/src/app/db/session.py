@@ -25,13 +25,12 @@ else:
     )
 
 _connect_args = {}
-# Supabase free tier has very low connection limits — reduce pool size and
-# recycle aggressively to avoid "MaxClientsInSessionMode" errors.
+# Supabase pooler (pgbouncer) — recycle connections aggressively to avoid
+# stale connections, but allow a reasonable pool size since pgbouncer
+# multiplexes app-side connections to a smaller set of DB connections.
 if "supabase" in settings.DATABASE_URL or "pooler" in settings.DATABASE_URL:
     _connect_args["connect_timeout"] = 10
     if not settings.db_disable_pooling:
-        engine_kwargs["pool_size"] = min(engine_kwargs.get("pool_size", 3), 2)
-        engine_kwargs["max_overflow"] = 0
         engine_kwargs["pool_recycle"] = 120  # recycle every 2 min
 
 engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args, **engine_kwargs)
