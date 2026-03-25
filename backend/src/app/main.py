@@ -428,16 +428,26 @@ async def _schedule_loop():
     while True:
         await asyncio.sleep(300)  # check every 5 min instead of 60s to reduce DB pressure
         try:
-            with SessionLocal() as db:
-                schedules = db.scalars(
-                    select(ReportSchedule).where(ReportSchedule.is_active.is_(True))
-                ).all()
-                now = datetime.now(timezone.utc)
-                for sched in schedules:
-                    if report_schedule_due(sched, now):
-                        await run_report_schedule(db, sched)
+            await asyncio.to_thread(_run_report_scheduler_tick_sync)
         except Exception as exc:
             logger.error("Report scheduler error: %s", exc)
+
+
+def _run_report_scheduler_tick_sync() -> None:
+    """Run report scheduling work off the request event loop.
+
+    The scheduler touches the database and may perform report rendering/upload
+    work; keeping it in a worker thread prevents transient DB stalls from
+    freezing normal HTTP request handling on the leader process.
+    """
+    with SessionLocal() as db:
+        schedules = db.scalars(
+            select(ReportSchedule).where(ReportSchedule.is_active.is_(True))
+        ).all()
+        now = datetime.now(timezone.utc)
+        for sched in schedules:
+            if report_schedule_due(sched, now):
+                asyncio.run(run_report_schedule(db, sched))
 
 
 def _auto_submit_stale_attempts() -> None:
@@ -509,7 +519,7 @@ async def _stale_attempt_cleanup_loop():
     while True:
         await asyncio.sleep(30 * 60)
         try:
-            _auto_submit_stale_attempts()
+            await asyncio.to_thread(_auto_submit_stale_attempts)
         except Exception as exc:
             logger.error("Stale attempt cleanup loop error: %s", exc)
 
@@ -517,7 +527,7 @@ async def _stale_attempt_cleanup_loop():
 async def _retention_cleanup_loop():
     while True:
         try:
-            _run_retention_cleanup()
+            await asyncio.to_thread(_run_retention_cleanup)
         except Exception as exc:
             logger.error("Retention cleanup error: %s", exc)
         await asyncio.sleep(24 * 60 * 60)

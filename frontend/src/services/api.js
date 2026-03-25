@@ -6,6 +6,7 @@ const baseURL = rawBase.endsWith('/') ? rawBase : `${rawBase}/`
 const AUTH_ENDPOINTS = ['auth/login', 'auth/signup', 'auth/setup', 'auth/refresh', 'auth/forgot-password', 'auth/reset-password']
 const DEFAULT_TIMEOUT_MS = 30000
 const GET_REPLAY_TTL_MS = 1000
+const GET_INFLIGHT_DEDUPE_MAX_MS = 1500
 
 const api = axios.create({ baseURL, timeout: DEFAULT_TIMEOUT_MS })
 let refreshPromise = null
@@ -110,6 +111,7 @@ export function cancelRouteScopedRequests(reason = 'route-change') {
     }
   }
   routeScopedControllers.clear()
+  inflightGetRequests.clear()
 }
 
 function assignValidationField(fields, path, message) {
@@ -379,8 +381,11 @@ api.get = (url, config = {}) => {
   }
 
   const inflightRequest = inflightGetRequests.get(key)
+  if (inflightRequest && (Date.now() - inflightRequest.startedAt) < GET_INFLIGHT_DEDUPE_MAX_MS) {
+    return inflightRequest.request.then((response) => cloneAxiosResponse(response))
+  }
   if (inflightRequest) {
-    return inflightRequest.then((response) => cloneAxiosResponse(response))
+    inflightGetRequests.delete(key)
   }
 
   const request = originalGet(url, config)
@@ -389,12 +394,15 @@ api.get = (url, config = {}) => {
       return response
     })
     .finally(() => {
-      if (inflightGetRequests.get(key) === request) {
+      if (inflightGetRequests.get(key)?.request === request) {
         inflightGetRequests.delete(key)
       }
     })
 
-  inflightGetRequests.set(key, request)
+  inflightGetRequests.set(key, {
+    request,
+    startedAt: Date.now(),
+  })
   return request.then((response) => cloneAxiosResponse(response))
 }
 
