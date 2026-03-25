@@ -408,6 +408,8 @@
   padding: 1.5rem;
   min-width: 400px;
   max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modalTitle {

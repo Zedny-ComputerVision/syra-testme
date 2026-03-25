@@ -121,6 +121,7 @@ export const adminApi = {
   deleteUserGroup: (id) => api.delete(`user-groups/${id}`),
   getUserGroupMembers: (id) => api.get(`user-groups/${id}/members`),
   addUserGroupMember: (groupId, userId) => api.post(`user-groups/${groupId}/members`, { user_id: userId }),
+  addUserGroupMembersBulk: (groupId, userIds) => api.post(`user-groups/${groupId}/members/bulk`, { user_ids: userIds }),
   removeUserGroupMember: (groupId, userId) => api.delete(`user-groups/${groupId}/members/${userId}`),
 
   // Exam Templates

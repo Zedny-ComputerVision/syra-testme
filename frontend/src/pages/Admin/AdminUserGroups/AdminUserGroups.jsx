@@ -30,6 +30,8 @@ export default function AdminUserGroups() {
   const [selectedGroup, setSelectedGroup] = useState(null)
   const [members, setMembers] = useState([])
   const [addUserId, setAddUserId] = useState('')
+  const [selectedUserIds, setSelectedUserIds] = useState([])
+  const [memberSearch, setMemberSearch] = useState('')
   const [memberLoading, setMemberLoading] = useState(false)
   const [error, setError] = useState('')
   const [bootstrapMessage, setBootstrapMessage] = useState('')
@@ -117,6 +119,8 @@ export default function AdminUserGroups() {
     setSelectedGroup(group)
     setMemberLoading(true)
     setBulkNotice('')
+    setSelectedUserIds([])
+    setMemberSearch('')
     try {
       const { data } = await adminApi.getUserGroupMembers(group.id)
       setMembers(data || [])
@@ -201,6 +205,28 @@ export default function AdminUserGroups() {
     }
   }
 
+  const addSelectedMembers = async () => {
+    if (!selectedGroup || selectedUserIds.length === 0) return
+    setAddingMember(true)
+    setError('')
+    setNotice('')
+    try {
+      const { data } = await adminApi.addUserGroupMembersBulk(selectedGroup.id, selectedUserIds)
+      setSelectedUserIds([])
+      setMemberSearch('')
+      setNotice(data?.detail || `${selectedUserIds.length} members added.`)
+      await loadMembers(selectedGroup)
+    } catch (err) {
+      setError(resolveError(err) || 'Failed to add members')
+    } finally {
+      setAddingMember(false)
+    }
+  }
+
+  const toggleUserSelection = (userId) => {
+    setSelectedUserIds((prev) => prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId])
+  }
+
   const removeMember = async (userId) => {
     setError('')
     setNotice('')
@@ -253,6 +279,14 @@ export default function AdminUserGroups() {
   }
 
   const nonMembers = users.filter((user) => !members.find((member) => member.id === user.id || member.user_id === user.user_id))
+  const normalizedMemberSearch = memberSearch.trim().toLowerCase()
+  const filteredNonMembers = normalizedMemberSearch
+    ? nonMembers.filter((user) =>
+        (user.name || '').toLowerCase().includes(normalizedMemberSearch) ||
+        (user.email || '').toLowerCase().includes(normalizedMemberSearch) ||
+        (user.user_id || '').toLowerCase().includes(normalizedMemberSearch)
+      )
+    : nonMembers
 
   return (
     <div className={styles.page}>
@@ -310,16 +344,39 @@ export default function AdminUserGroups() {
                 <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>Retry</button>
               </div>
             )}
-            <div className={styles.addRow}>
-              <select className={styles.select} value={addUserId} onChange={(event) => setAddUserId(event.target.value)} disabled={!usersReady}>
-                <option value="">Add learner...</option>
-                {nonMembers.map((user) => (
-                  <option key={user.id} value={user.id}>{user.name || user.user_id} ({user.email})</option>
-                ))}
-              </select>
-              <button type="button" className={styles.btnPrimary} onClick={addMember} disabled={!addUserId || !usersReady || addingMember}>
-                {addingMember ? 'Adding...' : 'Add'}
-              </button>
+            <div className={styles.addSection}>
+              <input
+                className={styles.input}
+                placeholder="Search learners by name, email, or ID..."
+                value={memberSearch}
+                onChange={(event) => setMemberSearch(event.target.value)}
+                disabled={!usersReady}
+              />
+              {usersReady && nonMembers.length > 0 && (
+                <div className={styles.userChecklist}>
+                  {filteredNonMembers.length === 0 && (
+                    <div className={styles.empty}>No learners match your search.</div>
+                  )}
+                  {filteredNonMembers.map((user) => (
+                    <label key={user.id} className={styles.checklistItem}>
+                      <input
+                        type="checkbox"
+                        checked={selectedUserIds.includes(user.id)}
+                        onChange={() => toggleUserSelection(user.id)}
+                      />
+                      <div>
+                        <div className={styles.checklistName}>{user.name || user.user_id}</div>
+                        <div className={styles.checklistSub}>{user.email}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {selectedUserIds.length > 0 && (
+                <button type="button" className={styles.btnPrimary} onClick={addSelectedMembers} disabled={addingMember}>
+                  {addingMember ? 'Adding...' : `Add ${selectedUserIds.length} selected member${selectedUserIds.length !== 1 ? 's' : ''}`}
+                </button>
+              )}
             </div>
             {usersReady && !memberLoading && nonMembers.length === 0 && (
               <div className={styles.empty}>All available learners are already assigned to this group.</div>

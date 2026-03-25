@@ -131,12 +131,12 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
 
 
 def list_schedulable_tests(*, db: Session) -> list[ExamRead]:
-    exams = db.scalars(
+    exams = db.execute(
         select(Exam)
         .options(joinedload(Exam.node), joinedload(Exam.category), joinedload(Exam.questions))
         .where(Exam.library_pool_id.is_(None))
         .order_by(Exam.created_at.desc())
-    ).all()
+    ).unique().scalars().all()
     return [serialize_schedulable_test(exam) for exam in exams]
 
 

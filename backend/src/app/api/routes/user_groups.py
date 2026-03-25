@@ -173,6 +173,36 @@ async def add_group_member(
     return Message(detail="Member added")
 
 
+@router.post("/{group_id}/members/bulk", response_model=Message)
+async def add_group_members_bulk(
+    group_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db_dep),
+    current=Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
+):
+    group = _get_group_or_404(db, group_id)
+    user_ids = payload.get("user_ids")
+    if not user_ids or not isinstance(user_ids, list):
+        raise HTTPException(status_code=422, detail="user_ids list is required")
+    member_ids = serialize_user_group_member_ids(group)
+    added = 0
+    for raw_id in user_ids:
+        user_pk = parse_uuid_param(str(raw_id), detail="User not found")
+        user = db.get(User, user_pk)
+        if not user:
+            continue
+        if user.role != RoleEnum.LEARNER:
+            continue
+        normalized_user_id = str(user.id)
+        if normalized_user_id not in member_ids:
+            member_ids.append(normalized_user_id)
+            added += 1
+    replace_user_group_members(group, member_ids)
+    db.add(group)
+    db.commit()
+    return Message(detail=f"{added} member{'s' if added != 1 else ''} added")
+
+
 @router.delete("/{group_id}/members/{user_id}", response_model=Message)
 async def remove_group_member(
     group_id: str,
