@@ -135,16 +135,14 @@ first_non_empty() {
   return 0
 }
 
-derive_supabase_direct_url() {
+derive_supabase_transaction_pooler_url() {
   local url="$1"
   local scheme
   local remainder
   local userinfo
   local host_and_path
-  local username_and_project
-  local password
-  local direct_username
-  local project_ref
+  local host_port
+  local host_only
   local path_and_query
 
   [[ -n "$url" && "$url" == *".pooler.supabase.com"* ]] || return 1
@@ -155,23 +153,19 @@ derive_supabase_direct_url() {
 
   userinfo="${remainder%%@*}"
   host_and_path="${remainder#*@}"
-  [[ "$userinfo" == *:* ]] || return 1
-
-  username_and_project="${userinfo%%:*}"
-  password="${userinfo#*:}"
-  [[ "$username_and_project" == *.* ]] || return 1
-
-  direct_username="${username_and_project%%.*}"
-  project_ref="${username_and_project#*.}"
-  [[ -n "$direct_username" && -n "$project_ref" ]] || return 1
 
   if [[ "$host_and_path" == */* ]]; then
+    host_port="${host_and_path%%/*}"
     path_and_query="/${host_and_path#*/}"
   else
+    host_port="$host_and_path"
     path_and_query=""
   fi
 
-  printf '%s%s:%s@db.%s.supabase.co:5432%s' "$scheme" "$direct_username" "$password" "$project_ref" "$path_and_query"
+  host_only="${host_port%%:*}"
+  [[ -n "$host_only" ]] || return 1
+
+  printf '%s%s@%s:6543%s' "$scheme" "$userinfo" "$host_only" "$path_and_query"
 }
 
 set_env_value() {
@@ -320,10 +314,13 @@ import os, sys
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 try:
+    connect_args = {"connect_timeout": 10}
+    if ".pooler.supabase.com:6543" in os.environ["DATABASE_URL"]:
+        connect_args["prepare_threshold"] = None
     engine = create_engine(
         os.environ["DATABASE_URL"],
         poolclass=NullPool,
-        connect_args={"connect_timeout": 10},
+        connect_args=connect_args,
         future=True,
     )
     with engine.connect() as conn:
@@ -474,10 +471,10 @@ if [[ "$RUN_LOCAL_DB" == "0" ]]; then
   if [[ -n "${DATABASE_MIGRATION_URL:-}" && "$DATABASE_MIGRATION_URL" != *".pooler.supabase.com"* ]]; then
     :
   else
-    derived_supabase_migration_url="$(derive_supabase_direct_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
+    derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
     if [[ -n "$derived_supabase_migration_url" ]]; then
       DATABASE_MIGRATION_URL="$derived_supabase_migration_url"
-      log "Derived direct Supabase DATABASE_MIGRATION_URL for migrations and preflight."
+      log "Derived Supabase transaction-pooler DATABASE_MIGRATION_URL for migrations and preflight."
     fi
   fi
 fi

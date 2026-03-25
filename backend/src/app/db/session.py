@@ -30,6 +30,8 @@ _connect_args = {}
 # multiplexes app-side connections to a smaller set of DB connections.
 if "supabase" in settings.DATABASE_URL or "pooler" in settings.DATABASE_URL:
     _connect_args["connect_timeout"] = 10
+    if ".pooler.supabase.com:6543" in settings.DATABASE_URL:
+        _connect_args["prepare_threshold"] = None
     if not settings.db_disable_pooling:
         engine_kwargs["pool_recycle"] = 120  # recycle every 2 min
 

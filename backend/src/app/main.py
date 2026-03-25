@@ -306,12 +306,15 @@ def _run_alembic_upgrade() -> None:
             migration_url = settings.database_migration_url
             # Alembic uses configparser interpolation, so '%' in passwords must be escaped.
             alembic_config.set_main_option("sqlalchemy.url", migration_url.replace("%", "%%"))
+            connect_args = {"connect_timeout": 10}
+            if ".pooler.supabase.com:6543" in migration_url:
+                connect_args["prepare_threshold"] = None
             migration_engine = create_engine(
                 migration_url,
                 poolclass=NullPool,
                 pool_pre_ping=True,
                 future=True,
-                connect_args={"connect_timeout": 10},
+                connect_args=connect_args,
             )
             inspector = inspect(migration_engine)
             table_names = set(inspector.get_table_names())
