@@ -14,6 +14,7 @@ from ..deps import (
     ensure_permission,
     get_db_dep,
     get_current_user,
+    invalidate_permission_rows_cache,
     load_permission_rows,
     normalize_feature,
     permission_allowed,
@@ -229,6 +230,8 @@ async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depe
         db.add(setting)
     db.commit()
     db.refresh(setting)
+    if key == PERMISSIONS_CONFIG_KEY:
+        invalidate_permission_rows_cache(db)
     if key == PERMISSIONS_CONFIG_KEY and previous_value != setting.value:
         _write_role_permission_audit_logs(db, current, previous_value, setting.value)
     return setting

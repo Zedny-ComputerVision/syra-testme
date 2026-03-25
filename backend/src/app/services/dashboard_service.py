@@ -9,6 +9,8 @@ from ..api.deps import ensure_permission
 from ..models import AccessMode, Attempt, AttemptStatus, Exam, ExamStatus, RoleEnum, Schedule, User
 from ..schemas import DashboardRead, ScheduleRead
 
+PRIVILEGED_UPCOMING_PREVIEW_LIMIT = 10
+
 
 def build_dashboard(*, db: Session, current) -> DashboardRead:
     ensure_permission(db, current, "View Dashboard")
@@ -105,11 +107,18 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
     total_learners = int(getattr(row, "total_learners", 0) or 0)
     total_admins = int(getattr(row, "total_admins", 0) or 0)
 
+    upcoming_count = int(
+        db.scalar(
+            select(func.count(Schedule.id)).where(Schedule.scheduled_at >= now)
+        )
+        or 0
+    )
     upcoming = db.scalars(
         select(Schedule)
         .options(joinedload(Schedule.exam), joinedload(Schedule.user))
         .where(Schedule.scheduled_at >= now)
         .order_by(Schedule.scheduled_at.asc())
+        .limit(PRIVILEGED_UPCOMING_PREVIEW_LIMIT)
     ).all()
 
     return DashboardRead(
@@ -124,7 +133,7 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
         completed_attempts=total_attempts - in_progress,
         best_score=best_score,
         average_score=average_score,
-        upcoming_count=len(upcoming),
+        upcoming_count=upcoming_count,
         upcoming_schedules=[_serialize_schedule(schedule) for schedule in upcoming],
     )
 

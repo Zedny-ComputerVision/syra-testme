@@ -1,5 +1,7 @@
 import uuid
 import json
+import time
+from threading import Lock
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -38,6 +40,9 @@ DEFAULT_PERMISSION_ROWS = [
     {"feature": "System Settings", "admin": True, "instructor": False, "learner": False},
     {"feature": "proctoring.admin", "admin": True, "instructor": False, "learner": False},
 ]
+PERMISSION_ROWS_CACHE_TTL_SECONDS = 60.0
+_permission_rows_cache: dict[str, dict[str, object]] = {}
+_permission_rows_cache_lock = Lock()
 
 
 def get_db_dep():
@@ -134,14 +139,35 @@ def load_permission_rows(db: Session):
     scalar = getattr(db, "scalar", None)
     if not callable(scalar):
         return DEFAULT_PERMISSION_ROWS
+
+    cache_key = _permission_rows_cache_key(db)
+    now = time.monotonic()
+    cached = _permission_rows_cache.get(cache_key)
+    if cached and float(cached.get("expires_at", 0.0) or 0.0) > now:
+        return _clone_permission_rows(cached.get("rows"))
+
     setting = scalar(select(SystemSettings).where(SystemSettings.key == "permissions_config"))
     if not setting or not setting.value:
-        return DEFAULT_PERMISSION_ROWS
+        rows = DEFAULT_PERMISSION_ROWS
+        _write_permission_rows_cache(cache_key, rows, now=now)
+        return _clone_permission_rows(rows)
     try:
         parsed = json.loads(setting.value)
     except Exception:
-        return DEFAULT_PERMISSION_ROWS
-    return canonicalize_permission_rows(parsed)
+        rows = DEFAULT_PERMISSION_ROWS
+        _write_permission_rows_cache(cache_key, rows, now=now)
+        return _clone_permission_rows(rows)
+    rows = canonicalize_permission_rows(parsed)
+    _write_permission_rows_cache(cache_key, rows, now=now)
+    return _clone_permission_rows(rows)
+
+
+def invalidate_permission_rows_cache(db: Session | None = None):
+    with _permission_rows_cache_lock:
+        if db is None:
+            _permission_rows_cache.clear()
+            return
+        _permission_rows_cache.pop(_permission_rows_cache_key(db), None)
 
 
 def permission_allowed(rows, role: RoleEnum | str | None, feature: str | None) -> bool:
@@ -205,3 +231,31 @@ def require_permission(feature: str, *roles: RoleEnum):
         return user
 
     return _wrapper
+
+
+def _permission_rows_cache_key(db: Session) -> str:
+    try:
+        bind = db.get_bind()
+        url = getattr(bind, "url", None)
+        if url:
+            return str(url)
+        engine = getattr(bind, "engine", None)
+        if engine is not None and getattr(engine, "url", None):
+            return str(engine.url)
+    except Exception:
+        pass
+    return "default"
+
+
+def _clone_permission_rows(rows) -> list[dict]:
+    source = canonicalize_permission_rows(rows)
+    return [dict(row) for row in source]
+
+
+def _write_permission_rows_cache(cache_key: str, rows, *, now: float | None = None):
+    expires_at = (now if now is not None else time.monotonic()) + PERMISSION_ROWS_CACHE_TTL_SECONDS
+    with _permission_rows_cache_lock:
+        _permission_rows_cache[cache_key] = {
+            "rows": _clone_permission_rows(rows),
+            "expires_at": expires_at,
+        }
