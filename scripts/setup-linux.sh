@@ -469,14 +469,20 @@ esac
 
 if [[ "$RUN_LOCAL_DB" == "0" ]]; then
   derived_supabase_migration_url=""
+  derived_supabase_runtime_url=""
   if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
     derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "$DATABASE_URL" || true)"
+    derived_supabase_runtime_url="$derived_supabase_migration_url"
   elif [[ -z "${DATABASE_MIGRATION_URL:-}" || "$DATABASE_MIGRATION_URL" == *".pooler.supabase.com"* ]]; then
     derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
   fi
   if [[ -n "$derived_supabase_migration_url" ]]; then
     DATABASE_MIGRATION_URL="$derived_supabase_migration_url"
     log "Derived Supabase transaction-pooler DATABASE_MIGRATION_URL for migrations and preflight."
+  fi
+  if [[ -n "$derived_supabase_runtime_url" ]]; then
+    DATABASE_URL="$derived_supabase_runtime_url"
+    log "Derived Supabase transaction-pooler DATABASE_URL for runtime app connections."
   fi
 fi
 
