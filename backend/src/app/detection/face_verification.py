@@ -1,61 +1,53 @@
-"""Face verification — neural embeddings (DeepFace) with landmark fallback.
+"""Face verification using neural embeddings with a landmark fallback.
 
-Primary path: DeepFace Facenet512 model produces a 512-D L2-normalised embedding
-per face.  Cosine distance between two embeddings is < 0.30 for the same person
-and > 0.40 for different people (calibrated on LFW/VGG-Face2 benchmarks).
-Accuracy: ~99.6% on LFW (Facenet512 backbone).
-
-Fallback path (if deepface/tf unavailable): 40-point MediaPipe FaceMesh landmark
-vector normalised to unit Frobenius norm. Less accurate but zero extra dependencies.
-
-Usage
------
-  sig = compute_face_signature(frame_bytes)   # call once at precheck
-  verifier = FaceVerifier(baseline=sig)
-  event = verifier.process_ndarray(frame)     # called every frame in orchestrator
+Primary path: DeepFace Facenet512 produces a 512-D L2-normalized embedding.
+Fallback path: a 40-point MediaPipe FaceMesh landmark vector.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from typing import Optional
+
 import cv2
 import numpy as np
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# ─── Primary: DeepFace neural embeddings ──────────────────────────────────────
-_deepface_available = False
 _deepface_model_name = os.environ.get("DEEPFACE_MODEL", "Facenet512")
 _deepface_warned = False
-
-try:
-    from deepface import DeepFace as _DeepFace
-    # Validate that the requested model can actually be built
-    _deepface_available = True
-    logger.info("DeepFace face verification available (model=%s)", _deepface_model_name)
-except Exception as _e:
-    logger.warning("DeepFace unavailable (%s) — falling back to landmark verification", _e)
-
-# ─── Fallback: MediaPipe FaceMesh landmarks ────────────────────────────────────
-try:
-    import mediapipe as _mp
-except Exception:
-    _mp = None
+_DeepFace = None
+_deepface_checked = False
 
 # 40 stable landmark indices covering all facial regions
 _LANDMARK_INDICES = [
-    33, 133, 160, 144, 362, 263, 387, 373,  # eye corners + eyelid
-    468, 473,                                 # iris centres
-    70, 63, 66, 105, 296, 300, 334, 293,     # eyebrows
-    1, 4, 197, 98, 327,                      # nose
-    61, 291, 13, 14, 78, 308,               # mouth
-    152, 172, 136, 356, 397,                 # chin / jaw
-    234, 454, 93, 323,                        # cheeks
-    10, 151,                                  # forehead
+    33, 133, 160, 144, 362, 263, 387, 373,
+    468, 473,
+    70, 63, 66, 105, 296, 300, 334, 293,
+    1, 4, 197, 98, 327,
+    61, 291, 13, 14, 78, 308,
+    152, 172, 136, 356, 397,
+    234, 454, 93, 323,
+    10, 151,
 ]
 assert len(_LANDMARK_INDICES) == 40
+
+
+def _get_deepface_class():
+    global _DeepFace, _deepface_checked
+    if _deepface_checked:
+        return _DeepFace
+    _deepface_checked = True
+    try:
+        from deepface import DeepFace as deepface_class
+
+        _DeepFace = deepface_class
+        logger.info("DeepFace face verification available (model=%s)", _deepface_model_name)
+    except Exception as exc:
+        logger.warning("DeepFace unavailable (%s) - falling back to landmark verification", exc)
+        _DeepFace = None
+    return _DeepFace
 
 
 def _landmark_vector(landmarks) -> Optional[np.ndarray]:
@@ -74,15 +66,17 @@ def _landmark_vector(landmarks) -> Optional[np.ndarray]:
 
 
 def _embedding_via_deepface(frame_bgr: np.ndarray) -> Optional[list[float]]:
-    """Extract a 512-D ArcFace/Facenet512 embedding via DeepFace."""
+    """Extract a 512-D embedding via DeepFace."""
     global _deepface_warned
+    deepface_class = _get_deepface_class()
+    if deepface_class is None:
+        return None
     try:
-        # Use pre-decoded ndarray; skip internal detector since YOLO already confirms face
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        result = _DeepFace.represent(
+        result = deepface_class.represent(
             img_path=frame_rgb,
             model_name=_deepface_model_name,
-            detector_backend="skip",     # face already confirmed by YOLO
+            detector_backend="skip",
             enforce_detection=False,
             align=True,
         )
@@ -94,7 +88,7 @@ def _embedding_via_deepface(frame_bgr: np.ndarray) -> Optional[list[float]]:
             return emb.tolist()
     except Exception as exc:
         if not _deepface_warned:
-            logger.warning("DeepFace represent() failed: %s — falling back to landmarks", exc)
+            logger.warning("DeepFace represent() failed: %s - falling back to landmarks", exc)
             _deepface_warned = True
     return None
 
@@ -103,6 +97,7 @@ def _embedding_via_landmarks(frame_bgr: np.ndarray) -> Optional[list[float]]:
     """Fallback: 40-point MediaPipe FaceMesh landmark embedding."""
     try:
         import mediapipe as mp
+
         if not hasattr(mp, "solutions"):
             return None
         mesh = mp.solutions.face_mesh.FaceMesh(
@@ -119,34 +114,24 @@ def _embedding_via_landmarks(frame_bgr: np.ndarray) -> Optional[list[float]]:
 
 
 def compute_face_signature(frame_bytes: bytes) -> Optional[list[float]]:
-    """Return a face embedding list or None if no face is found.
-
-    Tries DeepFace Facenet512 first (512-D neural embeddings), then falls back
-    to 40-point MediaPipe landmarks.
-    """
+    """Return a face embedding list or None if no face is found."""
     np_arr = np.frombuffer(frame_bytes, np.uint8)
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if frame is None:
         return None
-    if _deepface_available:
-        emb = _embedding_via_deepface(frame)
-        if emb is not None:
-            return emb
+    emb = _embedding_via_deepface(frame)
+    if emb is not None:
+        return emb
     return _embedding_via_landmarks(frame)
 
 
 def compute_face_signature_detected(frame_bgr: np.ndarray) -> Optional[list[float]]:
-    """Compute face embedding using DeepFace WITH face detection and alignment.
-
-    Unlike compute_face_signature (which uses detector_backend='skip'),
-    this uses OpenCV's built-in face detector to properly locate and align the
-    face before computing the neural embedding.  Much better for ID-card images
-    where the face is small and surrounded by text/borders.
-    """
-    if _deepface_available:
+    """Compute a face embedding with detection/alignment suitable for ID cards."""
+    deepface_class = _get_deepface_class()
+    if deepface_class is not None:
         try:
             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-            result = _DeepFace.represent(
+            result = deepface_class.represent(
                 img_path=frame_rgb,
                 model_name=_deepface_model_name,
                 detector_backend="opencv",
@@ -160,16 +145,12 @@ def compute_face_signature_detected(frame_bgr: np.ndarray) -> Optional[list[floa
                     emb /= norm
                 return emb.tolist()
         except Exception as exc:
-            logger.warning("DeepFace with detection failed: %s — trying landmarks", exc)
+            logger.warning("DeepFace with detection failed: %s - trying landmarks", exc)
     return _embedding_via_landmarks(frame_bgr)
 
 
 def compute_landmark_signature(frame_bgr: np.ndarray) -> Optional[list[float]]:
-    """Return a 120-D MediaPipe FaceMesh landmark embedding from a BGR ndarray, or None.
-
-    Useful as a consistent fallback when DeepFace produces different-dimension
-    vectors for two images (e.g. selfie vs ID card face crop).
-    """
+    """Return a 120-D MediaPipe FaceMesh landmark embedding from a BGR ndarray."""
     return _embedding_via_landmarks(frame_bgr)
 
 
@@ -183,23 +164,15 @@ def cosine_distance(v1: np.ndarray, v2: np.ndarray) -> float:
 
 
 class FaceVerifier:
-    """Compares live face against a pre-enrolled identity embedding.
+    """Compare a live face against a pre-enrolled identity embedding."""
 
-    Uses DeepFace Facenet512 when available (threshold 0.30 for same person).
-    Falls back to 40-landmark MediaPipe approach (threshold 0.18).
-    """
-
-    # DeepFace Facenet512 cosine-distance thresholds (LFW-calibrated)
     _DEEPFACE_THRESHOLD = float(os.environ.get("DEEPFACE_VERIFY_THRESHOLD", "0.30"))
-    # Landmark fallback threshold
     _LANDMARK_THRESHOLD = 0.18
 
     def __init__(self, baseline: list[float] | None, threshold: float | None = None, enabled: bool = True):
         self.enabled = enabled and baseline is not None
         self.baseline = np.array(baseline, dtype=np.float32) if baseline is not None else None
 
-        # Auto-select threshold based on embedding dimensionality:
-        # 512-D → DeepFace (threshold 0.30), 120-D → landmarks (threshold 0.18)
         if threshold is not None:
             self.threshold = float(threshold)
         elif baseline is not None and len(baseline) == 512:
@@ -207,11 +180,11 @@ class FaceVerifier:
         else:
             self.threshold = self._LANDMARK_THRESHOLD
 
-        self._use_deepface = _deepface_available and (baseline is not None and len(baseline) == 512)
+        self._use_deepface = _get_deepface_class() is not None and (baseline is not None and len(baseline) == 512)
 
-        # FaceMesh for fallback path
         try:
             import mediapipe as mp
+
             self._mesh = (
                 mp.solutions.face_mesh.FaceMesh(
                     static_image_mode=False, refine_landmarks=True, max_num_faces=1
@@ -232,7 +205,6 @@ class FaceVerifier:
             emb = _embedding_via_deepface(frame)
             if emb is not None:
                 return np.array(emb, dtype=np.float32)
-        # Landmark fallback
         if self._mesh is None:
             return None
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -243,7 +215,6 @@ class FaceVerifier:
         return vec if vec is not None else None
 
     def _compare_embedding(self, live_vec: np.ndarray) -> dict | None:
-        """Compare a live embedding against the enrolled baseline."""
         dist = cosine_distance(self.baseline, live_vec)
 
         if dist > self.threshold:
@@ -284,16 +255,14 @@ class FaceVerifier:
         return self._compare_embedding(live_vec)
 
     def process_landmarks(self, landmarks, frame: np.ndarray | None = None) -> dict | None:
-        """Use pre-computed FaceMesh landmarks. Falls back to DeepFace if frame provided."""
+        """Use pre-computed FaceMesh landmarks and fall back to DeepFace when a frame is available."""
         if not self.enabled or self.baseline is None:
             return None
         live_vec = None
-        # Primary: DeepFace neural embedding (doesn't use FaceMesh)
         if self._use_deepface and frame is not None:
             emb = _embedding_via_deepface(frame)
             if emb is not None:
                 live_vec = np.array(emb, dtype=np.float32)
-        # Fallback: landmark embedding from shared FaceMesh
         if live_vec is None and landmarks is not None:
             vec = _landmark_vector(landmarks)
             if vec is not None:

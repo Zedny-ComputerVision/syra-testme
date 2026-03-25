@@ -59,16 +59,20 @@ from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabas
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 from ...utils.pagination import MAX_PAGE_SIZE, build_page_response, clamp_sort_field, normalize_pagination
 
-try:
-    import mediapipe as mp
-except Exception:  # pragma: no cover - optional dependency
-    mp = None
-
 router = APIRouter()
 settings = get_settings()
 
 CERTIFICATE_REVIEW_APPROVED = "CERTIFICATE_REVIEW_APPROVED"
 CERTIFICATE_REVIEW_REJECTED = "CERTIFICATE_REVIEW_REJECTED"
+
+
+def _get_mediapipe():
+    try:
+        import mediapipe as mp
+
+        return mp
+    except Exception:  # pragma: no cover - optional dependency
+        return None
 
 
 def _notify_attempt_result(db: Session, attempt: Attempt, *, result_kind: str) -> None:
@@ -939,6 +943,7 @@ def _face_present(image_bytes: bytes) -> bool:
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if frame is None:
         return False
+    mp = _get_mediapipe()
     if mp is not None and hasattr(mp, "solutions") and getattr(mp.solutions, "face_detection", None):
         try:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
