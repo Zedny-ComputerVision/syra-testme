@@ -52,4 +52,4 @@ HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=10 \
 # Production: gunicorn with uvicorn workers for proper process management.
 # WORKERS defaults to 2; override via docker-compose environment.
 ENV WORKERS=2
-CMD ["sh", "-c", "gunicorn src.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${WORKERS} --preload --timeout 120 --graceful-timeout 30 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips '*'"]
+CMD ["sh", "-c", "gunicorn src.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${WORKERS} --preload --timeout 600 --graceful-timeout 30 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips '*'"]
