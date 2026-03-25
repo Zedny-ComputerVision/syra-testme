@@ -292,6 +292,17 @@ database_connectivity_check() {
     return 0
   fi
 
+  local existing_backend_cid
+  local existing_backend_state
+  existing_backend_cid="$(compose ps -q backend 2>/dev/null || true)"
+  if [[ -n "$existing_backend_cid" ]]; then
+    existing_backend_state="$(docker inspect --format '{{.State.Status}}' "$existing_backend_cid" 2>/dev/null || true)"
+    if [[ "$existing_backend_state" == "running" ]]; then
+      log "Existing backend container detected; skipping database preflight and relying on post-start health checks."
+      return 0
+    fi
+  fi
+
   log "Testing database connectivity..."
   local db_check_url="$DATABASE_URL"
   local db_check_output=""
