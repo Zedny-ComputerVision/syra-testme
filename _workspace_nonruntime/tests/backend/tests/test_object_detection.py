@@ -15,7 +15,7 @@ def test_object_detector_uses_phone_friendly_threshold(monkeypatch):
             calls["imgsz"] = imgsz
             return [
                 SimpleNamespace(
-                    boxes=SimpleNamespace(cls=[0, 1], conf=[0.28, 0.28]),
+                    boxes=SimpleNamespace(cls=[0, 1], conf=[0.35, 0.35]),
                     names={0: "cell phone", 1: "book"},
                 )
             ]
@@ -27,7 +27,7 @@ def test_object_detector_uses_phone_friendly_threshold(monkeypatch):
     alerts = detector.process_ndarray(np.zeros((20, 20, 3), dtype=np.uint8))
 
     assert calls["verbose"] is False
-    assert calls["conf"] == 0.25
+    assert calls["conf"] == 0.30
     assert calls["imgsz"] == 960
     assert len(alerts) == 1
     assert alerts[0]["detail"] == "Forbidden object detected: cell phone"
