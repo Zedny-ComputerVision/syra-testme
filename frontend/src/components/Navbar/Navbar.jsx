@@ -7,7 +7,8 @@ import { getUnreadCount, markAllRead, listNotifications } from '../../services/n
 import { searchAll } from '../../services/search.service'
 import styles from './Navbar.module.scss'
 
-const UNREAD_COUNT_CACHE_TTL_MS = 30000
+const UNREAD_COUNT_CACHE_TTL_MS = 120000
+const UNREAD_COUNT_REFRESH_INTERVAL_MS = 120000
 let unreadCountCache = {
   count: 0,
   fetchedAt: 0,
@@ -23,9 +24,13 @@ function getErrorMessage(error, fallback) {
   return fallback
 }
 
-async function readUnreadCount() {
+async function readUnreadCount({ force = false } = {}) {
   const now = Date.now()
-  if (unreadCountCache.fetchedAt && (now - unreadCountCache.fetchedAt) < UNREAD_COUNT_CACHE_TTL_MS) {
+  if (
+    !force
+    && unreadCountCache.fetchedAt
+    && (now - unreadCountCache.fetchedAt) < UNREAD_COUNT_CACHE_TTL_MS
+  ) {
     return unreadCountCache.count
   }
   if (unreadCountCache.inflight) {
@@ -83,12 +88,12 @@ export default function Navbar({ onMenuToggle }) {
       return
     }
     let cancelled = false
-    const loadUnread = async () => {
+    const loadUnread = async ({ force = false } = {}) => {
       if (document.visibilityState === 'hidden') {
         return
       }
       try {
-        const count = await readUnreadCount()
+        const count = await readUnreadCount({ force })
         if (!cancelled) {
           setUnread(count)
           setNotifSyncError('')
@@ -101,13 +106,25 @@ export default function Navbar({ onMenuToggle }) {
     }
 
     void loadUnread()
-    const intervalId = window.setInterval(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadUnread()
+      }
+    }
+    const handleWindowFocus = () => {
       void loadUnread()
-    }, 30000)
+    }
+    const intervalId = window.setInterval(() => {
+      void loadUnread({ force: true })
+    }, UNREAD_COUNT_REFRESH_INTERVAL_MS)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
 
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleWindowFocus)
     }
   }, [user])
 
