@@ -135,6 +135,45 @@ first_non_empty() {
   return 0
 }
 
+derive_supabase_direct_url() {
+  local url="$1"
+  local scheme
+  local remainder
+  local userinfo
+  local host_and_path
+  local username_and_project
+  local password
+  local direct_username
+  local project_ref
+  local path_and_query
+
+  [[ -n "$url" && "$url" == *".pooler.supabase.com"* ]] || return 1
+
+  scheme="${url%%://*}://"
+  remainder="${url#*://}"
+  [[ "$remainder" == *@* ]] || return 1
+
+  userinfo="${remainder%%@*}"
+  host_and_path="${remainder#*@}"
+  [[ "$userinfo" == *:* ]] || return 1
+
+  username_and_project="${userinfo%%:*}"
+  password="${userinfo#*:}"
+  [[ "$username_and_project" == *.* ]] || return 1
+
+  direct_username="${username_and_project%%.*}"
+  project_ref="${username_and_project#*.}"
+  [[ -n "$direct_username" && -n "$project_ref" ]] || return 1
+
+  if [[ "$host_and_path" == */* ]]; then
+    path_and_query="/${host_and_path#*/}"
+  else
+    path_and_query=""
+  fi
+
+  printf '%s%s:%s@db.%s.supabase.co:5432%s' "$scheme" "$direct_username" "$password" "$project_ref" "$path_and_query"
+}
+
 set_env_value() {
   local file="$1"
   local key="$2"
@@ -430,6 +469,18 @@ case "$SETUP_MODE" in
     die "Unsupported setup mode: ${SETUP_MODE}. Use auto, local, or production."
     ;;
 esac
+
+if [[ "$RUN_LOCAL_DB" == "0" ]]; then
+  if [[ -n "${DATABASE_MIGRATION_URL:-}" && "$DATABASE_MIGRATION_URL" != *".pooler.supabase.com"* ]]; then
+    :
+  else
+    derived_supabase_migration_url="$(derive_supabase_direct_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
+    if [[ -n "$derived_supabase_migration_url" ]]; then
+      DATABASE_MIGRATION_URL="$derived_supabase_migration_url"
+      log "Derived direct Supabase DATABASE_MIGRATION_URL for migrations and preflight."
+    fi
+  fi
+fi
 
 if [[ "$PREPARE_ONLY" -eq 0 && "$RUN_LOCAL_DB" == "0" && "$DATABASE_URL" == "$LOCAL_DATABASE_URL" ]]; then
   die "Production mode requires SYRA_DATABASE_URL or backend/.env.docker DATABASE_URL to point at an external database."
