@@ -379,8 +379,16 @@ existing_backend_local_backend_url="$(read_env_value "$BACKEND_LOCAL_ENV" "BACKE
 existing_backend_local_cors_origins="$(read_env_value "$BACKEND_LOCAL_ENV" "CORS_ORIGINS")"
 existing_frontend_local_vite_api_base_url="$(read_env_value "$FRONTEND_LOCAL_ENV" "VITE_API_BASE_URL")"
 
-DATABASE_URL="${SYRA_DATABASE_URL:-$(first_non_empty "$existing_database_url" "$existing_root_database_url" "$LOCAL_DATABASE_URL")}"
-DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-$(first_non_empty "$existing_database_migration_url" "$existing_root_database_migration_url" "$existing_backend_local_database_migration_url" "")}"
+if [[ "$SETUP_MODE" == "production" ]]; then
+  # backend/.env.docker is generated output. In production, prefer the persisted
+  # root .env values so a previous bad deploy does not permanently poison future
+  # deploys by making the generated file authoritative.
+  DATABASE_URL="${SYRA_DATABASE_URL:-$(first_non_empty "$existing_root_database_url" "$existing_database_url" "$LOCAL_DATABASE_URL")}"
+  DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-$(first_non_empty "$existing_root_database_migration_url" "$existing_database_migration_url" "$existing_backend_local_database_migration_url" "")}"
+else
+  DATABASE_URL="${SYRA_DATABASE_URL:-$(first_non_empty "$existing_database_url" "$existing_root_database_url" "$LOCAL_DATABASE_URL")}"
+  DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-$(first_non_empty "$existing_database_migration_url" "$existing_root_database_migration_url" "$existing_backend_local_database_migration_url" "")}"
+fi
 JWT_SECRET="${SYRA_JWT_SECRET:-$(first_non_empty "$existing_jwt_secret" "$existing_root_jwt_secret" "")}"
 FRONTEND_URL="${SYRA_FRONTEND_URL:-$(first_non_empty "$existing_frontend_url" "$existing_root_public_frontend_url" "http://localhost")}"
 BACKEND_URL="${SYRA_BACKEND_URL:-$(first_non_empty "$existing_backend_url" "$existing_root_public_backend_url" "${FRONTEND_URL%/}/api")}"
@@ -520,7 +528,7 @@ if [[ "$RUN_LOCAL_DB" == "1" ]]; then
   APP_CORS_ORIGINS="${SYRA_APP_CORS_ORIGINS:-$(first_non_empty "$existing_backend_local_cors_origins" "$existing_root_cors_origins" "$APP_CORS_ORIGINS_DEFAULT")}"
   FRONTEND_DEV_API_BASE_URL="${SYRA_FRONTEND_DEV_API_BASE_URL:-$(first_non_empty "$existing_frontend_local_vite_api_base_url" "$existing_root_vite_api_base_url" "$FRONTEND_DEV_API_BASE_URL_DEFAULT")}"
 else
-  APP_DATABASE_URL_DEFAULT="${DATABASE_MIGRATION_URL:-$DATABASE_URL}"
+  APP_DATABASE_URL_DEFAULT="$DATABASE_URL"
   APP_FRONTEND_URL_DEFAULT="$FRONTEND_URL"
   APP_BACKEND_URL_DEFAULT="$BACKEND_URL"
   APP_CORS_ORIGINS_DEFAULT="$CORS_ORIGINS"
@@ -530,7 +538,7 @@ else
   # backend/.env is intentionally localhost-oriented and must not override the
   # container runtime DATABASE_URL written to backend/.env.docker.
   APP_DATABASE_URL="${SYRA_APP_DATABASE_URL:-$APP_DATABASE_URL_DEFAULT}"
-  APP_DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-${DATABASE_MIGRATION_URL:-$APP_DATABASE_URL_DEFAULT}}"
+  APP_DATABASE_MIGRATION_URL="${SYRA_DATABASE_MIGRATION_URL:-${DATABASE_MIGRATION_URL:-$DATABASE_URL}}"
   APP_FRONTEND_URL="${SYRA_APP_FRONTEND_URL:-$APP_FRONTEND_URL_DEFAULT}"
   APP_BACKEND_URL="${SYRA_APP_BACKEND_URL:-$APP_BACKEND_URL_DEFAULT}"
   APP_CORS_ORIGINS="${SYRA_APP_CORS_ORIGINS:-$APP_CORS_ORIGINS_DEFAULT}"

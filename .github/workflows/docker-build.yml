@@ -46,9 +46,6 @@ jobs:
 
             trap dump_deploy_diagnostics ERR
 
-            echo ">>> Stopping existing services..."
-            docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
-
             echo ">>> Pulling repository directly on the server..."
             # Now that the repo is public, we only need the clean HTTPS URL
             git remote remove origin || true
