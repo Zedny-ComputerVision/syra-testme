@@ -502,7 +502,7 @@ if [[ "$RUN_LOCAL_DB" == "0" ]]; then
   derived_supabase_runtime_url=""
   if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
     derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "$DATABASE_URL" || true)"
-    derived_supabase_runtime_url="$(derive_supabase_session_pooler_url "$DATABASE_URL" || true)"
+    derived_supabase_runtime_url="$(derive_supabase_transaction_pooler_url "$DATABASE_URL" || true)"
   elif [[ -z "${DATABASE_MIGRATION_URL:-}" || "$DATABASE_MIGRATION_URL" == *".pooler.supabase.com"* ]]; then
     derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
   fi
@@ -512,7 +512,7 @@ if [[ "$RUN_LOCAL_DB" == "0" ]]; then
   fi
   if [[ -n "$derived_supabase_runtime_url" ]]; then
     DATABASE_URL="$derived_supabase_runtime_url"
-    log "Normalized Supabase session-pooler DATABASE_URL for runtime app connections."
+    log "Derived Supabase transaction-pooler DATABASE_URL for runtime app connections."
   fi
 fi
 
