@@ -386,10 +386,31 @@ FRONTEND_URL="${SYRA_FRONTEND_URL:-$(first_non_empty "$existing_frontend_url" "$
 BACKEND_URL="${SYRA_BACKEND_URL:-$(first_non_empty "$existing_backend_url" "$existing_root_public_backend_url" "${FRONTEND_URL%/}/api")}"
 CORS_ORIGINS="${SYRA_CORS_ORIGINS:-$(first_non_empty "$existing_cors_origins" "$existing_root_cors_origins" "$FRONTEND_URL")}"
 MEDIA_STORAGE_PROVIDER="${SYRA_MEDIA_STORAGE_PROVIDER:-$(first_non_empty "$existing_media_storage_provider" "$existing_root_media_storage_provider" "local")}"
-WORKERS="${SYRA_WORKERS:-$(first_non_empty "$existing_workers" "$existing_root_workers" "2")}"
 NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-$(first_non_empty "$existing_nginx_client_max_body_size" "$existing_root_nginx_client_max_body_size" "512m")}"
 CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-$(first_non_empty "$existing_cloudflare_media_api_base_url" "$existing_root_cloudflare_media_api_base_url" "")}"
 PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-$(first_non_empty "$existing_video_storage_provider" "$existing_root_video_storage_provider" "")}"
+
+existing_worker_value="$(first_non_empty "$existing_workers" "$existing_root_workers" "")"
+default_workers="2"
+if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
+  default_workers="1"
+fi
+
+if [[ -n "${SYRA_WORKERS:-}" ]]; then
+  WORKERS="$SYRA_WORKERS"
+elif [[ "$default_workers" == "1" ]]; then
+  case "$existing_worker_value" in
+    ""|"2"|"4")
+      WORKERS="1"
+      log "Supabase session pooler detected; defaulting WORKERS=1 to reduce database client pressure."
+      ;;
+    *)
+      WORKERS="$existing_worker_value"
+      ;;
+  esac
+else
+  WORKERS="${existing_worker_value:-$default_workers}"
+fi
 
 if is_placeholder_secret "$JWT_SECRET"; then
   JWT_SECRET="$(generate_secret)"

@@ -700,6 +700,11 @@ def _is_serious_alert(raw_severity: str | None, severity: SeverityEnum) -> bool:
     return str(raw_severity or getattr(severity, "value", severity) or "").upper() in {"HIGH", "CRITICAL"}
 
 
+def _release_db_session(db: Session) -> None:
+    with contextlib.suppress(Exception):
+        db.close()
+
+
 def _notify_admin_monitors_for_event(db: Session, attempt: Attempt, event: ProctoringEvent) -> None:
     occurred_at = event.occurred_at or datetime.now(timezone.utc)
     event_type = event.event_type or "UNKNOWN"
@@ -1561,6 +1566,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     for _prev in _prev_events:
         sev_name = _prev.severity.value if hasattr(_prev.severity, "value") else str(_prev.severity or "LOW")
         orchestrator.violation_score += orchestrator.score_weights.get(sev_name.upper(), 1)
+    _release_db_session(db)
 
     # ── Register live monitoring session ──────────────────────────────────────
     _live_session_info[attempt_id] = {
@@ -1730,6 +1736,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     logger.info("WebSocket no longer connected for attempt %s, exiting loop", attempt_id)
                     break
                 await websocket.send_json({"type": "error", "detail": "Malformed websocket message"})
+                _release_db_session(db)
                 continue
 
             try:
@@ -2300,6 +2307,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         })
                     except Exception:
                         pass
+            finally:
+                _release_db_session(db)
 
     except WebSocketDisconnect:
         pass
@@ -2331,7 +2340,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         # Shut down the orchestrator's thread pool to avoid leaked threads
         with contextlib.suppress(Exception):
             orchestrator.close()
-        db.close()
+        _release_db_session(db)
 
 
 @router.get("/{attempt_id}/events", response_model=list[ProctoringEventRead])
