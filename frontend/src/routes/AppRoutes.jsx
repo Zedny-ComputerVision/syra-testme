@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { createBrowserRouter, Navigate, RouterProvider, useLocation, useParams } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation, useParams } from 'react-router-dom'
 import ErrorBoundary from '../components/ErrorBoundary/ErrorBoundary'
 import Navbar from '../components/Navbar/Navbar'
 import ScrollProgress from '../components/ScrollProgress/ScrollProgress'
@@ -107,9 +107,9 @@ async function readMaintenanceStatus() {
   return maintenanceCache.inflight
 }
 
-function ProtectedRoute({ children, roles, permission }) {
+function RequireLogin({ children }) {
   const location = useLocation()
-  const { user, loading, hasPermission } = useAuth()
+  const { user, loading } = useAuth()
 
   if (loading) return <Loader fullPage label="Authenticating..." />
   if (!user) {
@@ -121,6 +121,12 @@ function ProtectedRoute({ children, roles, permission }) {
       />
     )
   }
+  return children
+}
+
+function RequireAccess({ children, roles, permission }) {
+  const { user, hasPermission } = useAuth()
+
   if (roles && roles.length > 0 && !roles.includes(user.role)) {
     return <Navigate to="/access-denied" replace />
   }
@@ -206,11 +212,13 @@ function Shell({ children }) {
   )
 }
 
-function AuthPage({ children, roles, permission }) {
+function AuthenticatedLayout() {
   return (
-    <ProtectedRoute roles={roles} permission={permission}>
-      <Shell>{children}</Shell>
-    </ProtectedRoute>
+    <RequireLogin>
+      <Shell>
+        <Outlet />
+      </Shell>
+    </RequireLogin>
   )
 }
 
@@ -218,7 +226,11 @@ const ADMIN_ROLES = ['ADMIN']
 const SUPER_ADMIN = ['ADMIN']
 const ANALYSIS_ROLES = ['ADMIN', 'INSTRUCTOR']
 const ADMIN_OR_INSTRUCTOR_ROLES = ['ADMIN', 'INSTRUCTOR']
-const withAuth = (element, roles, permission) => <AuthPage roles={roles} permission={permission}>{element}</AuthPage>
+const withAccess = (element, roles, permission) => (
+  <RequireAccess roles={roles} permission={permission}>
+    {element}
+  </RequireAccess>
+)
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -296,77 +308,78 @@ const router = createBrowserRouter(
     { path: '/signup', element: <SignUp /> },
     { path: '/forgot-password', element: <ForgotPassword /> },
     { path: '/reset-password', element: <ResetPassword /> },
-    { path: '/change-password', element: withAuth(<ChangePassword />) },
-    { path: '/access-denied', element: withAuth(<AccessDenied />) },
     { path: '/maintenance', element: <Maintenance /> },
-
-    { path: '/', element: withAuth(<HomeRoute />, undefined, 'View Dashboard') },
-    { path: '/tests', element: withAuth(<Exams />, undefined, 'Take Tests') },
-    { path: '/tests/:testId', element: withAuth(<ExamInstructions />) },
-    { path: '/training', element: withAuth(<TrainingCourses />) },
-    { path: '/surveys', element: withAuth(<MySurveys />) },
-    { path: '/tests/:testId/system-check', element: withAuth(<SystemCheckPage />) },
-    { path: '/tests/:testId/verify-identity', element: withAuth(<VerifyIdentityPage />) },
-    { path: '/tests/:testId/rules', element: withAuth(<RulesPage />) },
-    { path: '/attempts/:attemptId/take', element: withAuth(<Proctoring />) },
     { path: '/exams', element: <LegacyLearnerTestsRedirect /> },
     { path: '/exams/:examId', element: <LegacyLearnerTestDetailRedirect /> },
     { path: '/system-check/:examId', element: <LegacyLearnerSystemCheckRedirect /> },
     { path: '/verify-identity/:examId', element: <LegacyLearnerVerifyIdentityRedirect /> },
     { path: '/rules/:examId', element: <LegacyLearnerRulesRedirect /> },
     { path: '/exam/:attemptId', element: <LegacyAttemptTakeRedirect /> },
-    { path: '/attempts', element: withAuth(<Attempts />, undefined, 'View Own Attempts') },
-    { path: '/attempts/:id', element: withAuth(<AttemptResult />) },
-    { path: '/attempt-result/:id', element: withAuth(<AttemptResult />) },
-    { path: '/schedule', element: withAuth(<Schedule />, undefined, 'View Own Schedule') },
-    { path: '/profile', element: withAuth(<Profile />) },
-
-    { path: '/admin', element: withAuth(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
-    { path: '/admin/dashboard', element: withAuth(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
-
-    { path: '/admin/tests', element: withAuth(<AdminExams />, ADMIN_ROLES, 'Edit Tests') },
-    { path: '/admin/tests/:id', element: <LegacyTestDetailRedirect /> },
-    { path: '/admin/tests/:id/manage', element: withAuth(<AdminManageTestPage />, ADMIN_ROLES, 'Edit Tests') },
-    { path: '/admin/tests/new', element: withAuth(<AdminNewTestWizard />, ADMIN_ROLES, 'Create Tests') },
-    { path: '/admin/tests/:id/edit', element: withAuth(<AdminNewTestWizard />, ADMIN_ROLES, 'Edit Tests') },
-    { path: '/admin/attempts/:attemptId/videos', element: withAuth(<AdminAttemptVideos />, ANALYSIS_ROLES, 'View Attempt Analysis') },
-    { path: '/admin/videos/:attemptId', element: withAuth(<AdminAttemptVideos />, ANALYSIS_ROLES, 'View Attempt Analysis') },
-    { path: '/admin/videos', element: withAuth(<AdminAttemptVideos />, ANALYSIS_ROLES, 'View Attempt Analysis') },
     { path: '/admin/exams', element: <Navigate to="/admin/tests" replace /> },
     { path: '/admin/exams/:id', element: <LegacyTestDetailRedirect /> },
     { path: '/admin/exams/:id/manage', element: <LegacyTestDetailRedirect /> },
     { path: '/admin/exams/new', element: <Navigate to="/admin/tests/new" replace /> },
     { path: '/admin/exams/:id/edit', element: <LegacyTestEditRedirect /> },
     { path: '/admin/new', element: <Navigate to="/admin/tests/new" replace /> },
-    { path: '/admin/categories', element: withAuth(<AdminCategories />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Categories') },
-    { path: '/admin/grading-scales', element: withAuth(<AdminGradingScales />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Grading Scales') },
-    { path: '/admin/question-pools', element: withAuth(<AdminQuestionPools />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Question Pools') },
-    { path: '/admin/question-pools/:id', element: withAuth(<QuestionPoolDetail />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Question Pools') },
-
-    { path: '/admin/sessions', element: withAuth(<AdminTestingSessions />, ADMIN_OR_INSTRUCTOR_ROLES, 'Assign Schedules') },
     { path: '/admin/schedules', element: <Navigate to="/admin/sessions" replace /> },
-    { path: '/admin/candidates', element: withAuth(<AdminCandidates />, ANALYSIS_ROLES, 'View Attempt Analysis') },
-    { path: '/admin/attempt-analysis', element: withAuth(<AdminAttemptAnalysis />, ANALYSIS_ROLES, 'View Attempt Analysis') },
-    { path: '/admin/live-monitor', element: withAuth(<AdminLiveMonitor />, ANALYSIS_ROLES, 'View Attempt Analysis') },
-
-    { path: '/admin/users', element: withAuth(<AdminUsers />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Users') },
-    { path: '/admin/roles', element: withAuth(<AdminRolesPermissions />, SUPER_ADMIN, 'Manage Roles') },
     { path: '/admin/roles-permissions', element: <Navigate to="/admin/roles" replace /> },
 
-    { path: '/admin/templates', element: withAuth(<AdminTemplates />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
-    { path: '/admin/certificates', element: withAuth(<AdminCertificates />, ADMIN_ROLES, 'Edit Tests') },
-    { path: '/admin/reports', element: withAuth(<AdminReports />, ADMIN_ROLES, 'Generate Reports') },
-    { path: '/admin/courses', element: withAuth(<AdminCourses />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
-    { path: '/admin/user-groups', element: withAuth(<AdminUserGroups />, ADMIN_ROLES, 'Manage Users') },
-    { path: '/admin/settings', element: withAuth(<AdminSettings />, ADMIN_ROLES, 'System Settings') },
-    { path: '/admin/surveys', element: withAuth(<AdminSurveys />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
-    { path: '/admin/predefined-reports', element: withAuth(<AdminPredefinedReports />, ADMIN_ROLES, 'Generate Reports') },
-    { path: '/admin/favorite-reports', element: withAuth(<AdminFavoriteReports />, ADMIN_ROLES, 'Generate Reports') },
-    { path: '/admin/report-builder', element: withAuth(<AdminCustomReports />, ADMIN_ROLES, 'Generate Reports') },
-    { path: '/admin/integrations', element: withAuth(<AdminIntegrations />, ADMIN_ROLES, 'System Settings') },
-    { path: '/admin/maintenance', element: withAuth(<AdminMaintenance />, ADMIN_ROLES, 'System Settings') },
-    { path: '/admin/subscribers', element: withAuth(<AdminSubscribers />, ADMIN_ROLES, 'System Settings') },
-    { path: '/admin/audit-log', element: withAuth(<AdminAuditLog />, ADMIN_ROLES, 'View Audit Log') },
+    {
+      element: <AuthenticatedLayout />,
+      children: [
+        { path: '/change-password', element: <ChangePassword /> },
+        { path: '/access-denied', element: <AccessDenied /> },
+
+        { path: '/', element: withAccess(<HomeRoute />, undefined, 'View Dashboard') },
+        { path: '/tests', element: withAccess(<Exams />, undefined, 'Take Tests') },
+        { path: '/tests/:testId', element: <ExamInstructions /> },
+        { path: '/training', element: <TrainingCourses /> },
+        { path: '/surveys', element: <MySurveys /> },
+        { path: '/tests/:testId/system-check', element: <SystemCheckPage /> },
+        { path: '/tests/:testId/verify-identity', element: <VerifyIdentityPage /> },
+        { path: '/tests/:testId/rules', element: <RulesPage /> },
+        { path: '/attempts/:attemptId/take', element: <Proctoring /> },
+        { path: '/attempts', element: withAccess(<Attempts />, undefined, 'View Own Attempts') },
+        { path: '/attempts/:id', element: <AttemptResult /> },
+        { path: '/attempt-result/:id', element: <AttemptResult /> },
+        { path: '/schedule', element: withAccess(<Schedule />, undefined, 'View Own Schedule') },
+        { path: '/profile', element: <Profile /> },
+
+        { path: '/admin', element: withAccess(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
+        { path: '/admin/dashboard', element: withAccess(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
+        { path: '/admin/tests', element: withAccess(<AdminExams />, ADMIN_ROLES, 'Edit Tests') },
+        { path: '/admin/tests/:id/manage', element: withAccess(<AdminManageTestPage />, ADMIN_ROLES, 'Edit Tests') },
+        { path: '/admin/tests/new', element: withAccess(<AdminNewTestWizard />, ADMIN_ROLES, 'Create Tests') },
+        { path: '/admin/tests/:id/edit', element: withAccess(<AdminNewTestWizard />, ADMIN_ROLES, 'Edit Tests') },
+        { path: '/admin/attempts/:attemptId/videos', element: withAccess(<AdminAttemptVideos />, ANALYSIS_ROLES, 'View Attempt Analysis') },
+        { path: '/admin/videos/:attemptId', element: withAccess(<AdminAttemptVideos />, ANALYSIS_ROLES, 'View Attempt Analysis') },
+        { path: '/admin/videos', element: withAccess(<AdminAttemptVideos />, ANALYSIS_ROLES, 'View Attempt Analysis') },
+        { path: '/admin/categories', element: withAccess(<AdminCategories />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Categories') },
+        { path: '/admin/grading-scales', element: withAccess(<AdminGradingScales />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Grading Scales') },
+        { path: '/admin/question-pools', element: withAccess(<AdminQuestionPools />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Question Pools') },
+        { path: '/admin/question-pools/:id', element: withAccess(<QuestionPoolDetail />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Question Pools') },
+        { path: '/admin/sessions', element: withAccess(<AdminTestingSessions />, ADMIN_OR_INSTRUCTOR_ROLES, 'Assign Schedules') },
+        { path: '/admin/candidates', element: withAccess(<AdminCandidates />, ANALYSIS_ROLES, 'View Attempt Analysis') },
+        { path: '/admin/attempt-analysis', element: withAccess(<AdminAttemptAnalysis />, ANALYSIS_ROLES, 'View Attempt Analysis') },
+        { path: '/admin/live-monitor', element: withAccess(<AdminLiveMonitor />, ANALYSIS_ROLES, 'View Attempt Analysis') },
+        { path: '/admin/users', element: withAccess(<AdminUsers />, ADMIN_OR_INSTRUCTOR_ROLES, 'Manage Users') },
+        { path: '/admin/roles', element: withAccess(<AdminRolesPermissions />, SUPER_ADMIN, 'Manage Roles') },
+        { path: '/admin/templates', element: withAccess(<AdminTemplates />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
+        { path: '/admin/certificates', element: withAccess(<AdminCertificates />, ADMIN_ROLES, 'Edit Tests') },
+        { path: '/admin/reports', element: withAccess(<AdminReports />, ADMIN_ROLES, 'Generate Reports') },
+        { path: '/admin/courses', element: withAccess(<AdminCourses />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
+        { path: '/admin/user-groups', element: withAccess(<AdminUserGroups />, ADMIN_ROLES, 'Manage Users') },
+        { path: '/admin/settings', element: withAccess(<AdminSettings />, ADMIN_ROLES, 'System Settings') },
+        { path: '/admin/surveys', element: withAccess(<AdminSurveys />, ADMIN_OR_INSTRUCTOR_ROLES, 'Edit Tests') },
+        { path: '/admin/predefined-reports', element: withAccess(<AdminPredefinedReports />, ADMIN_ROLES, 'Generate Reports') },
+        { path: '/admin/favorite-reports', element: withAccess(<AdminFavoriteReports />, ADMIN_ROLES, 'Generate Reports') },
+        { path: '/admin/report-builder', element: withAccess(<AdminCustomReports />, ADMIN_ROLES, 'Generate Reports') },
+        { path: '/admin/integrations', element: withAccess(<AdminIntegrations />, ADMIN_ROLES, 'System Settings') },
+        { path: '/admin/maintenance', element: withAccess(<AdminMaintenance />, ADMIN_ROLES, 'System Settings') },
+        { path: '/admin/subscribers', element: withAccess(<AdminSubscribers />, ADMIN_ROLES, 'System Settings') },
+        { path: '/admin/audit-log', element: withAccess(<AdminAuditLog />, ADMIN_ROLES, 'View Audit Log') },
+      ],
+    },
 
     { path: '*', element: <NotFound /> },
   ],
