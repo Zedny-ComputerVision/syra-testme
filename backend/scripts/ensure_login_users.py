@@ -21,9 +21,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
+
+from src.app.core.config import get_settings
 from src.app.core.security import hash_password
 from src.app.db.base import Base
-from src.app.db.session import SessionLocal, engine
 from src.app.models import RoleEnum, User
 
 logger = logging.getLogger(__name__)
@@ -84,8 +88,24 @@ def ensure_user(
 
 
 def main() -> None:
+    settings = get_settings()
+    engine = create_engine(
+        settings.database_migration_url,
+        poolclass=NullPool,
+        pool_pre_ping=True,
+        future=True,
+        connect_args={"connect_timeout": 10},
+    )
+    session_factory = sessionmaker(
+        bind=engine,
+        autoflush=False,
+        autocommit=False,
+        expire_on_commit=False,
+        future=True,
+    )
+
     Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+    db = session_factory()
 
     reset_passwords = env_flag("SYRA_RESET_LOGIN_PASSWORDS", default=True)
     admin_password = os.getenv("SYRA_ADMIN_PASSWORD", "Admin1234!")
@@ -155,6 +175,7 @@ def main() -> None:
                 logger.info("Existing account kept its current password: %s", user.email)
     finally:
         db.close()
+        engine.dispose()
 
 
 if __name__ == "__main__":
