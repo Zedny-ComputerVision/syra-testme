@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import useAuth from '../../../hooks/useAuth'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
@@ -50,19 +50,24 @@ export default function AdminTestingSessions() {
   const [editForm, setEditForm] = useState({ scheduled_at: '', access_mode: 'OPEN', notes: '' })
   const [editError, setEditError] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const abortRef = useRef(null)
   const PAGE_SIZE = 20
   const canAssignSchedules = hasPermission?.('Assign Schedules')
   const canCreateSession = canAssignSchedules && sessionsReady && testsReady && usersReady
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     setError('')
     try {
       const [sRes, tRes, uRes] = await Promise.allSettled([
-        adminApi.schedules(),
-        adminApi.schedulableTests(),
-        adminApi.learnersForScheduling(),
+        adminApi.schedules({ signal: controller.signal }),
+        adminApi.schedulableTests({ signal: controller.signal }),
+        adminApi.learnersForScheduling(undefined, { signal: controller.signal }),
       ])
+      if (controller.signal.aborted) return
       const failures = []
 
       if (sRes.status === 'fulfilled') {
@@ -100,14 +105,27 @@ export default function AdminTestingSessions() {
       } else {
         setBootstrapMessage('')
       }
+    } catch (err) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return
+      setSessions([])
+      setTests([])
+      setUsers([])
+      setSessionsReady(false)
+      setTestsReady(false)
+      setUsersReady(false)
+      setBootstrapMessage('Scheduling data could not be loaded. Retry to continue.')
+      setError(resolveError(err, 'Failed to load sessions.'))
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void load()
-  }, [])
+    return () => {
+      if (abortRef.current) abortRef.current.abort()
+    }
+  }, [load])
 
   const formatDate = (iso) => (iso ? new Date(iso).toLocaleString('en-US', {
     month: 'short',

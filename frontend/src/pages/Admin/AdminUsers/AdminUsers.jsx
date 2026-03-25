@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import useAuth from '../../../hooks/useAuth'
@@ -75,10 +75,14 @@ export default function AdminUsers() {
   const [showResetPw, setShowResetPw] = useState(false)
   const [resetPwValue, setResetPwValue] = useState('')
   const [resetPwSaving, setResetPwSaving] = useState(false)
+  const abortRef = useRef(null)
   const isAdmin = user?.role === 'ADMIN'
   const modalBusy = saving || resetPwSaving
 
   const load = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     setLoadError('')
     try {
@@ -94,7 +98,8 @@ export default function AdminUsers() {
       if (statusFilter === 'Active') params.is_active = true
       if (statusFilter === 'Inactive') params.is_active = false
 
-      const { data } = await adminApi.users(params)
+      const { data } = await adminApi.users(params, { signal: controller.signal })
+      if (controller.signal.aborted) return
       const nextUsers = readPaginatedItems(data)
       const nextTotal = readPaginatedTotal(data)
       setUsers(nextUsers)
@@ -102,15 +107,20 @@ export default function AdminUsers() {
       setSelected((prev) => prev.filter((id) => nextUsers.some((nextUser) => nextUser.id === id)))
       setError('')
     } catch (err) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return
       setUsers([])
       setTotalUsers(0)
       setLoadError(resolveError(err) || 'Could not load users.')
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [page, pageSize, roleFilter, search, sortBy, statusFilter])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => () => {
+    if (abortRef.current) abortRef.current.abort()
+  }, [])
 
   useEffect(() => {
     setSearch(searchParamValue)

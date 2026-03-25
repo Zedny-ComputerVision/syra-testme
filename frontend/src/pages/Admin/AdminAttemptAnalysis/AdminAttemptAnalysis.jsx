@@ -40,6 +40,10 @@ function evidenceKeyForEvent(event, index) {
   return String(event?.id || event?.meta?.evidence || index)
 }
 
+function isAbortError(err) {
+  return err?.name === 'AbortError' || err?.code === 'ERR_CANCELED'
+}
+
 export default function AdminAttemptAnalysis() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [attempts, setAttempts] = useState([])
@@ -59,19 +63,24 @@ export default function AdminAttemptAnalysis() {
   const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [evidenceUrls, setEvidenceUrls] = useState({})
   const evidenceUrlsRef = useRef({})
+  const listAbortRef = useRef(null)
+  const detailAbortRef = useRef(null)
+  const evidenceAbortRef = useRef(null)
   const [listReloadKey, setListReloadKey] = useState(0)
   const [detailReloadKey, setDetailReloadKey] = useState(0)
 
   useEffect(() => {
-    let cancelled = false
+    if (listAbortRef.current) listAbortRef.current.abort()
+    const controller = new AbortController()
+    listAbortRef.current = controller
 
     async function loadAttempts() {
       setListLoading(true)
       setListError('')
 
       try {
-        const { data } = await adminApi.attempts({ skip: 0, limit: 200 })
-        if (cancelled) return
+        const { data } = await adminApi.attempts({ skip: 0, limit: 200 }, { signal: controller.signal })
+        if (controller.signal.aborted) return
 
         const rows = readPaginatedItems(data)
         setAttempts(rows)
@@ -81,18 +90,18 @@ export default function AdminAttemptAnalysis() {
           setSearchParams({ id: rows[0].id }, { replace: true })
         }
       } catch (err) {
-        if (cancelled) return
+        if (isAbortError(err)) return
         setAttempts([])
         setListError(resolveError(err, 'Failed to load attempts list.'))
       } finally {
-        if (!cancelled) setListLoading(false)
+        if (!controller.signal.aborted) setListLoading(false)
       }
     }
 
     void loadAttempts()
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [listReloadKey, setSearchParams])
 
@@ -101,7 +110,9 @@ export default function AdminAttemptAnalysis() {
   }, [searchParams])
 
   useEffect(() => {
-    let cancelled = false
+    if (detailAbortRef.current) detailAbortRef.current.abort()
+    const controller = new AbortController()
+    detailAbortRef.current = controller
 
     async function loadAttemptDetails() {
       if (!selectedId) {
@@ -127,12 +138,12 @@ export default function AdminAttemptAnalysis() {
       setAnswers([])
 
       const [attemptResponse, eventsResponse, answersResponse] = await Promise.allSettled([
-        adminApi.getAttempt(selectedId),
-        adminApi.getAttemptEvents(selectedId),
-        adminApi.getAttemptAnswers(selectedId),
+        adminApi.getAttempt(selectedId, { signal: controller.signal }),
+        adminApi.getAttemptEvents(selectedId, { signal: controller.signal }),
+        adminApi.getAttemptAnswers(selectedId, { signal: controller.signal }),
       ])
 
-      if (cancelled) return
+      if (controller.signal.aborted) return
 
       if (attemptResponse.status !== 'fulfilled') {
         setDetailError(resolveError(attemptResponse.reason, 'Failed to load attempt details.'))
@@ -157,7 +168,7 @@ export default function AdminAttemptAnalysis() {
     void loadAttemptDetails()
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [selectedId, detailReloadKey])
 
@@ -172,33 +183,53 @@ export default function AdminAttemptAnalysis() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    if (evidenceAbortRef.current) evidenceAbortRef.current.abort()
+    const controller = new AbortController()
+    evidenceAbortRef.current = controller
     const evidenceEvents = events.filter((event) => event?.meta?.evidence)
+    const shouldLoadEvidence = tab === 'Evidence' || Boolean(selectedEvidence)
+
+    if (!shouldLoadEvidence) {
+      setEvidenceUrls((current) => {
+        Object.values(current).forEach(revokeObjectUrl)
+        return {}
+      })
+      return () => {
+        controller.abort()
+      }
+    }
 
     if (evidenceEvents.length === 0) {
       setEvidenceUrls((current) => {
         Object.values(current).forEach(revokeObjectUrl)
         return {}
       })
-      return undefined
+      return () => {
+        controller.abort()
+      }
     }
 
     async function loadEvidenceUrls() {
-      const nextEntries = await Promise.all(
-        evidenceEvents.map(async (event, index) => {
-          const key = evidenceKeyForEvent(event, index)
-          try {
-            const url = await fetchAuthenticatedMediaObjectUrl(event.meta.evidence)
-            return [key, url]
-          } catch {
-            return [key, '']
-          }
-        }),
-      )
-
-      if (cancelled) {
-        nextEntries.forEach(([, url]) => revokeObjectUrl(url))
-        return
+      const nextEntries = []
+      const batchSize = 4
+      for (let index = 0; index < evidenceEvents.length; index += batchSize) {
+        const batchEntries = await Promise.all(
+          evidenceEvents.slice(index, index + batchSize).map(async (event, batchIndex) => {
+            const key = evidenceKeyForEvent(event, index + batchIndex)
+            try {
+              const url = await fetchAuthenticatedMediaObjectUrl(event.meta.evidence, { signal: controller.signal })
+              return [key, url]
+            } catch (err) {
+              if (isAbortError(err)) throw err
+              return [key, '']
+            }
+          }),
+        )
+        nextEntries.push(...batchEntries)
+        if (controller.signal.aborted) {
+          nextEntries.forEach(([, url]) => revokeObjectUrl(url))
+          return
+        }
       }
 
       setEvidenceUrls((current) => {
@@ -207,12 +238,16 @@ export default function AdminAttemptAnalysis() {
       })
     }
 
-    void loadEvidenceUrls()
+    void loadEvidenceUrls().catch((err) => {
+      if (!isAbortError(err)) {
+        setDetailWarning((current) => current || 'Some evidence screenshots could not be loaded.')
+      }
+    })
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [events])
+  }, [events, selectedEvidence, tab])
 
   useEffect(() => {
     if (!selectedEvidence) return undefined

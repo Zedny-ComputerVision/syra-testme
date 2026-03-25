@@ -3,12 +3,13 @@ import api from './api'
 export const adminApi = {
   // Canonical admin tests
   tests: (params, opts) => api.get('admin/tests', { params, ...opts }),
-  allTests: (params = {}) => api.get('admin/tests', {
+  allTests: (params = {}, opts = {}) => api.get('admin/tests', {
     params: {
       page_size: 100,
       status: 'DRAFT,PUBLISHED,ARCHIVED',
       ...params,
     },
+    ...opts,
   }),
   getTest: (id) => api.get(`admin/tests/${id}`),
   createTest: (data) => api.post('admin/tests', data),
@@ -48,8 +49,8 @@ export const adminApi = {
   deleteQuestionPool: (id) => api.delete(`question-pools/${id}`),
 
   // Schedules
-  schedulableTests: () => api.get('schedules/tests'),
-  schedules: () => api.get('schedules/'),
+  schedulableTests: (opts) => api.get('schedules/tests', opts),
+  schedules: (opts) => api.get('schedules/', opts),
   createSchedule: (data) => api.post('schedules/', data),
   updateSchedule: (id, data) => api.put(`schedules/${id}`, data),
   deleteSchedule: (id) => api.delete(`schedules/${id}`),
@@ -62,8 +63,8 @@ export const adminApi = {
   deleteQuestion: (id) => api.delete(`questions/${id}`),
 
   // Users
-  users: (params) => api.get('users/', { params }),
-  learnersForScheduling: (params) => api.get('users/learners', { params }),
+  users: (params, opts) => api.get('users/', { params, ...opts }),
+  learnersForScheduling: (params, opts) => api.get('users/learners', { params, ...opts }),
   getUser: (id) => api.get(`users/${id}`),
   createUser: (data) => api.post('users/', data),
   updateUser: (id, data) => api.patch(`users/${id}`, data),
@@ -86,16 +87,16 @@ export const adminApi = {
   deleteNode: (id) => api.delete(`nodes/${id}`),
 
   // Attempts / Analysis
-  attempts: (params) => api.get('attempts/', { params }),
-  getAttempt: (id) => api.get(`attempts/${id}`),
+  attempts: (params, opts) => api.get('attempts/', { params, ...opts }),
+  getAttempt: (id, opts) => api.get(`attempts/${id}`, opts),
   importAttempts: (rows) => api.post('attempts/import', rows),
-  getAttemptEvents: (attemptId) => api.get(`proctoring/${attemptId}/events`),
+  getAttemptEvents: (attemptId, opts) => api.get(`proctoring/${attemptId}/events`, opts),
   generateReport: (attemptId) => api.post(`proctoring/${attemptId}/generate-report`, null, { responseType: 'text' }),
   pauseAttempt: (attemptId) => api.post(`proctoring/${attemptId}/pause`),
   resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
-  listAttemptVideos: (attemptId) => api.get(`proctoring/${attemptId}/videos`),
+  listAttemptVideos: (attemptId, opts) => api.get(`proctoring/${attemptId}/videos`, opts),
   listExamVideoUploadStatus: (examId) => api.get(`proctoring/exam/${examId}/video-upload-status`),
-  getAttemptAnswers: (attemptId) => api.get(`attempts/${attemptId}/answers`),
+  getAttemptAnswers: (attemptId, opts) => api.get(`attempts/${attemptId}/answers`, opts),
   reviewAttemptCertificate: (attemptId, decision) => api.post(`attempts/${attemptId}/certificate-review`, { decision }),
   testReportCsv: (testId) => api.get(`reports/test/${testId}`, { responseType: 'blob' }),
   generateTestReportPdf: (testId) => api.get(`reports/test/${testId}/pdf`, { responseType: 'blob' }),
@@ -116,10 +117,10 @@ export const adminApi = {
   createSurvey: (data) => api.post('surveys/', data),
 
   // User Groups
-  userGroups: () => api.get('user-groups/'),
+  userGroups: (opts) => api.get('user-groups/', opts),
   createUserGroup: (data) => api.post('user-groups/', data),
   deleteUserGroup: (id) => api.delete(`user-groups/${id}`),
-  getUserGroupMembers: (id) => api.get(`user-groups/${id}/members`),
+  getUserGroupMembers: (id, opts) => api.get(`user-groups/${id}/members`, opts),
   addUserGroupMember: (groupId, userId) => api.post(`user-groups/${groupId}/members`, { user_id: userId }),
   addUserGroupMembersBulk: (groupId, userIds) => api.post(`user-groups/${groupId}/members/bulk`, { user_ids: userIds }),
   removeUserGroupMember: (groupId, userId) => api.delete(`user-groups/${groupId}/members/${userId}`),

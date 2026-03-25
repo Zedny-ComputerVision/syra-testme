@@ -96,6 +96,10 @@ function describeVideoAvailability(video) {
   return 'Loading recording...'
 }
 
+function isAbortError(err) {
+  return err?.name === 'AbortError' || err?.code === 'ERR_CANCELED'
+}
+
 export default function AdminAttemptVideos() {
   const { attemptId } = useParams()
   const [searchParams] = useSearchParams()
@@ -105,6 +109,7 @@ export default function AdminAttemptVideos() {
   const videoRef = useRef(null)
   const hlsRef = useRef(null)
   const durationProbeKeyRef = useRef('')
+  const dataAbortRef = useRef(null)
 
   // Supervision mode: exam-level attempt picker
   const [examAttempts, setExamAttempts] = useState([])
@@ -137,12 +142,12 @@ export default function AdminAttemptVideos() {
       return
     }
 
-    let cancelled = false
+    const controller = new AbortController()
     setAttemptsLoading(true)
     setError('')
-    adminApi.attempts({ exam_id: examIdFilter, skip: 0, limit: 200 })
+    adminApi.attempts({ exam_id: examIdFilter, skip: 0, limit: 200 }, { signal: controller.signal })
       .then(({ data }) => {
-        if (cancelled) return
+        if (controller.signal.aborted) return
         const filtered = readPaginatedItems(data)
         setExamAttempts(filtered)
         if (filtered.length > 0) {
@@ -157,7 +162,7 @@ export default function AdminAttemptVideos() {
         }
       })
       .catch((e) => {
-        if (cancelled) return
+        if (isAbortError(e)) return
         setExamAttempts([])
         setSelectedAttemptId('')
         setAttempt(null)
@@ -168,10 +173,10 @@ export default function AdminAttemptVideos() {
         setLoading(false)
       })
       .finally(() => {
-        if (!cancelled) setAttemptsLoading(false)
+        if (!controller.signal.aborted) setAttemptsLoading(false)
       })
 
-    return () => { cancelled = true }
+    return () => { controller.abort() }
   }, [inSupervisionMode, examIdFilter, retryToken])
 
   useEffect(() => {
@@ -196,7 +201,9 @@ export default function AdminAttemptVideos() {
       return
     }
 
-    let off = false
+    if (dataAbortRef.current) dataAbortRef.current.abort()
+    const controller = new AbortController()
+    dataAbortRef.current = controller
     async function load() {
       setLoading(true)
       setError('')
@@ -204,11 +211,11 @@ export default function AdminAttemptVideos() {
       setSelectedVideoName('')
       try {
         const [attemptResult, videosResult, eventsResult] = await Promise.allSettled([
-          adminApi.getAttempt(resolvedId),
-          adminApi.listAttemptVideos(resolvedId),
-          adminApi.getAttemptEvents(resolvedId),
+          adminApi.getAttempt(resolvedId, { signal: controller.signal }),
+          adminApi.listAttemptVideos(resolvedId, { signal: controller.signal }),
+          adminApi.getAttemptEvents(resolvedId, { signal: controller.signal }),
         ])
-        if (off) return
+        if (controller.signal.aborted) return
         if (attemptResult.status !== 'fulfilled') {
           setAttempt(null)
           setVideos([])
@@ -241,14 +248,14 @@ export default function AdminAttemptVideos() {
         ))
         setWarning(warnings.join(' '))
       } catch (e) {
-        if (off) return
+        if (isAbortError(e)) return
         setError(e.response?.data?.detail || 'Failed to load attempt recordings')
       } finally {
-        if (!off) setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
     load()
-    return () => { off = true }
+    return () => { controller.abort() }
   }, [activeAttemptId, attemptsLoading, inSupervisionMode, retryToken])
 
   const selectedVideo = useMemo(
@@ -378,7 +385,7 @@ export default function AdminAttemptVideos() {
   )
 
   useEffect(() => {
-    let active = true
+    const controller = new AbortController()
     let objectUrl = ''
     setSelectedVideoUrl('')
 
@@ -390,14 +397,14 @@ export default function AdminAttemptVideos() {
         return
       }
       try {
-        objectUrl = await fetchAuthenticatedMediaObjectUrl(selectedVideo.url)
-        if (!active) {
+        objectUrl = await fetchAuthenticatedMediaObjectUrl(selectedVideo.url, { signal: controller.signal })
+        if (controller.signal.aborted) {
           revokeObjectUrl(objectUrl)
           return
         }
         setSelectedVideoUrl(objectUrl)
-      } catch {
-        if (active) {
+      } catch (err) {
+        if (!isAbortError(err)) {
           setWarning((current) => current || 'The selected recording could not be loaded.')
         }
       }
@@ -405,13 +412,13 @@ export default function AdminAttemptVideos() {
 
     void loadVideoUrl()
     return () => {
-      active = false
+      controller.abort()
       revokeObjectUrl(objectUrl)
     }
   }, [selectedVideo, selectedVideoIsPlayable])
 
   useEffect(() => {
-    let active = true
+    const controller = new AbortController()
     let objectUrl = ''
     setSelectedEvidenceUrl('')
 
@@ -419,14 +426,14 @@ export default function AdminAttemptVideos() {
       const evidencePath = selectedEvent?.meta?.evidence
       if (!evidencePath) return
       try {
-        objectUrl = await fetchAuthenticatedMediaObjectUrl(evidencePath)
-        if (!active) {
+        objectUrl = await fetchAuthenticatedMediaObjectUrl(evidencePath, { signal: controller.signal })
+        if (controller.signal.aborted) {
           revokeObjectUrl(objectUrl)
           return
         }
         setSelectedEvidenceUrl(objectUrl)
-      } catch {
-        if (active) {
+      } catch (err) {
+        if (!isAbortError(err)) {
           setWarning((current) => current || 'Evidence screenshots could not be loaded.')
         }
       }
@@ -434,7 +441,7 @@ export default function AdminAttemptVideos() {
 
     void loadEvidenceUrl()
     return () => {
-      active = false
+      controller.abort()
       revokeObjectUrl(objectUrl)
     }
   }, [selectedEvent?.id, selectedEvent?.meta?.evidence])
@@ -631,6 +638,20 @@ export default function AdminAttemptVideos() {
       }
     }
   }, [probeVideoDuration, selectedVideoUrl, selectedVideoUsesHls, syncDurationFromVideo])
+
+  useEffect(() => () => {
+    if (dataAbortRef.current) dataAbortRef.current.abort()
+    if (hlsRef.current) {
+      hlsRef.current.destroy()
+      hlsRef.current = null
+    }
+    const videoEl = videoRef.current
+    if (videoEl) {
+      videoEl.pause()
+      videoEl.removeAttribute('src')
+      videoEl.load()
+    }
+  }, [])
 
   if (attemptsLoading || (loading && hasResolvedAttempt)) return <div className={`${styles.page} ${styles.loadingState}`}>Loading recordings...</div>
 

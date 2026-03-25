@@ -50,7 +50,7 @@ export function normalizeMediaRequestPath(path, _depth = 0) {
   return normalized
 }
 
-export async function fetchAuthenticatedMediaObjectUrl(path) {
+export async function fetchAuthenticatedMediaObjectUrl(path, options = {}) {
   const requestPath = normalizeMediaRequestPath(path)
   if (!requestPath) return ''
 
@@ -58,7 +58,10 @@ export async function fetchAuthenticatedMediaObjectUrl(path) {
     return requestPath
   }
 
-  const { data } = await api.get(requestPath, { responseType: 'blob' })
+  const { data } = await api.get(requestPath, {
+    responseType: 'blob',
+    signal: options.signal,
+  })
   return URL.createObjectURL(data)
 }
 

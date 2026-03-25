@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
@@ -45,16 +45,21 @@ export default function AdminUserGroups() {
   const [bulkNotice, setBulkNotice] = useState('')
   const [addingMember, setAddingMember] = useState(false)
   const [removingMemberId, setRemovingMemberId] = useState(null)
+  const abortRef = useRef(null)
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     try {
       const [groupsRes, usersRes, testsRes, schedulesRes] = await Promise.allSettled([
-        adminApi.userGroups(),
-        adminApi.users({ role: 'LEARNER', skip: 0, limit: 200 }),
-        adminApi.allTests(),
-        adminApi.schedules(),
+        adminApi.userGroups({ signal: controller.signal }),
+        adminApi.users({ role: 'LEARNER', skip: 0, limit: 200 }, { signal: controller.signal }),
+        adminApi.allTests({}, { signal: controller.signal }),
+        adminApi.schedules({ signal: controller.signal }),
       ])
+      if (controller.signal.aborted) return
       const partialFailures = []
 
       if (groupsRes.status === 'fulfilled') {
@@ -108,12 +113,29 @@ export default function AdminUserGroups() {
       } else {
         setBootstrapMessage('')
       }
+    } catch (err) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return
+      setGroups([])
+      setUsers([])
+      setAllTests([])
+      setAllSchedules([])
+      setGroupsReady(false)
+      setUsersReady(false)
+      setTestsReady(false)
+      setSchedulesReady(false)
+      setBootstrapMessage('Group management data could not be loaded. Retry to continue.')
+      setError(resolveError(err) || 'Failed to load groups.')
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+    return () => {
+      if (abortRef.current) abortRef.current.abort()
+    }
+  }, [load])
 
   const loadMembers = async (group) => {
     setSelectedGroup(group)
