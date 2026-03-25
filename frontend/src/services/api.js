@@ -5,9 +5,81 @@ const rawBase = import.meta.env.VITE_API_BASE_URL || '/api/'
 const baseURL = rawBase.endsWith('/') ? rawBase : `${rawBase}/`
 const AUTH_ENDPOINTS = ['auth/login', 'auth/signup', 'auth/setup', 'auth/refresh', 'auth/forgot-password', 'auth/reset-password']
 const DEFAULT_TIMEOUT_MS = 30000
+const GET_REPLAY_TTL_MS = 1000
 
 const api = axios.create({ baseURL, timeout: DEFAULT_TIMEOUT_MS })
 let refreshPromise = null
+const inflightGetRequests = new Map()
+const recentGetResponses = new Map()
+
+function normalizeForCache(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeForCache(item))
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce((accumulator, key) => {
+        const nextValue = value[key]
+        if (typeof nextValue !== 'undefined' && typeof nextValue !== 'function') {
+          accumulator[key] = normalizeForCache(nextValue)
+        }
+        return accumulator
+      }, {})
+  }
+  return value ?? null
+}
+
+function buildGetRequestKey(url, config = {}) {
+  return JSON.stringify({
+    url: String(url || ''),
+    baseURL: config.baseURL || baseURL,
+    params: normalizeForCache(config.params || null),
+    responseType: config.responseType || 'json',
+    headers: normalizeForCache(config.headers || null),
+  })
+}
+
+function cloneResponseData(data) {
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(data)
+    } catch {
+      return data
+    }
+  }
+  return data
+}
+
+function cloneAxiosResponse(response) {
+  return {
+    ...response,
+    data: cloneResponseData(response?.data),
+    headers: response?.headers && typeof response.headers === 'object'
+      ? { ...response.headers }
+      : response?.headers,
+    config: response?.config && typeof response.config === 'object'
+      ? { ...response.config }
+      : response?.config,
+  }
+}
+
+function readRecentGetResponse(key) {
+  const cached = recentGetResponses.get(key)
+  if (!cached) return null
+  if (cached.expiresAt <= Date.now()) {
+    recentGetResponses.delete(key)
+    return null
+  }
+  return cloneAxiosResponse(cached.response)
+}
+
+function storeRecentGetResponse(key, response) {
+  recentGetResponses.set(key, {
+    expiresAt: Date.now() + GET_REPLAY_TTL_MS,
+    response: cloneAxiosResponse(response),
+  })
+}
 
 function assignValidationField(fields, path, message) {
   if (!path) return
@@ -248,5 +320,38 @@ api.interceptors.response.use(
     }
   }
 )
+
+const originalGet = api.get.bind(api)
+
+api.get = (url, config = {}) => {
+  if (config.disableRequestDeduping) {
+    return originalGet(url, config)
+  }
+
+  const key = buildGetRequestKey(url, config)
+  const cachedResponse = readRecentGetResponse(key)
+  if (cachedResponse) {
+    return Promise.resolve(cachedResponse)
+  }
+
+  const inflightRequest = inflightGetRequests.get(key)
+  if (inflightRequest) {
+    return inflightRequest.then((response) => cloneAxiosResponse(response))
+  }
+
+  const request = originalGet(url, config)
+    .then((response) => {
+      storeRecentGetResponse(key, response)
+      return response
+    })
+    .finally(() => {
+      if (inflightGetRequests.get(key) === request) {
+        inflightGetRequests.delete(key)
+      }
+    })
+
+  inflightGetRequests.set(key, request)
+  return request.then((response) => cloneAxiosResponse(response))
+}
 
 export default api
