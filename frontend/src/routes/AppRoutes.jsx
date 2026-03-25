@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { createBrowserRouter, Navigate, RouterProvider, useLocation, useParams } from 'react-router-dom'
 import ErrorBoundary from '../components/ErrorBoundary/ErrorBoundary'
@@ -10,7 +10,6 @@ import Sidebar from '../components/Sidebar/Sidebar'
 import Loader from '../components/common/Loader/Loader'
 import useAuth from '../hooks/useAuth'
 import api from '../services/api'
-import { preloadRoutes } from '../utils/routePrefetch'
 
 function lazyPage(importer, options = {}) {
   const LazyComponent = lazy(importer)
@@ -110,17 +109,6 @@ function Shell({ children }) {
   const isTestJourneyMode = /^\/tests\/[^/]+(\/(system-check|verify-identity|rules))?$/.test(location.pathname)
   const isVideoReviewMode = /^\/admin\/(videos|attempts\/[^/]+\/videos)/.test(location.pathname)
   const isExamMode = isAttemptTakeMode || isLegacyExamMode || isTestJourneyMode || isVideoReviewMode
-  const warmRoutes = useMemo(() => {
-    if (!user) return []
-    if (user.role === 'ADMIN') {
-      return ['/admin/tests', '/admin/users', '/admin/candidates', '/admin/reports']
-    }
-    if (user.role === 'INSTRUCTOR') {
-      return ['/admin/tests', '/admin/candidates', '/admin/users']
-    }
-    return ['/tests', '/attempts', '/schedule', '/profile']
-  }, [user])
-
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -139,21 +127,6 @@ function Shell({ children }) {
   useEffect(() => {
     setMobileOpen(false)
   }, [location.pathname])
-
-  useEffect(() => {
-    if (!user || isExamMode || warmRoutes.length === 0) {
-      return undefined
-    }
-
-    const warm = () => preloadRoutes(warmRoutes)
-    if (typeof window.requestIdleCallback === 'function') {
-      const handle = window.requestIdleCallback(warm, { timeout: 1500 })
-      return () => window.cancelIdleCallback(handle)
-    }
-
-    const timeoutId = window.setTimeout(warm, 600)
-    return () => window.clearTimeout(timeoutId)
-  }, [isExamMode, user, warmRoutes])
 
   if (!user) return children
 
