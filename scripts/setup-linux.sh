@@ -135,8 +135,9 @@ first_non_empty() {
   return 0
 }
 
-derive_supabase_transaction_pooler_url() {
+rewrite_supabase_pooler_url_port() {
   local url="$1"
+  local target_port="$2"
   local scheme
   local remainder
   local userinfo
@@ -165,7 +166,15 @@ derive_supabase_transaction_pooler_url() {
   host_only="${host_port%%:*}"
   [[ -n "$host_only" ]] || return 1
 
-  printf '%s%s@%s:6543%s' "$scheme" "$userinfo" "$host_only" "$path_and_query"
+  printf '%s%s@%s:%s%s' "$scheme" "$userinfo" "$host_only" "$target_port" "$path_and_query"
+}
+
+derive_supabase_transaction_pooler_url() {
+  rewrite_supabase_pooler_url_port "$1" "6543"
+}
+
+derive_supabase_session_pooler_url() {
+  rewrite_supabase_pooler_url_port "$1" "5432"
 }
 
 set_env_value() {
@@ -490,14 +499,20 @@ esac
 
 if [[ "$RUN_LOCAL_DB" == "0" ]]; then
   derived_supabase_migration_url=""
+  derived_supabase_runtime_url=""
   if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
     derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "$DATABASE_URL" || true)"
+    derived_supabase_runtime_url="$(derive_supabase_session_pooler_url "$DATABASE_URL" || true)"
   elif [[ -z "${DATABASE_MIGRATION_URL:-}" || "$DATABASE_MIGRATION_URL" == *".pooler.supabase.com"* ]]; then
     derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
   fi
   if [[ -n "$derived_supabase_migration_url" ]]; then
     DATABASE_MIGRATION_URL="$derived_supabase_migration_url"
     log "Derived Supabase transaction-pooler DATABASE_MIGRATION_URL for migrations and preflight."
+  fi
+  if [[ -n "$derived_supabase_runtime_url" ]]; then
+    DATABASE_URL="$derived_supabase_runtime_url"
+    log "Normalized Supabase session-pooler DATABASE_URL for runtime app connections."
   fi
 fi
 
@@ -578,7 +593,7 @@ if [[ -n "${SYRA_SEED_LOGIN_USERS:-}" ]]; then
 elif [[ "$RUN_LOCAL_DB" == "1" && "$SEED_DEMO_DATA" == "1" ]]; then
   SEED_LOGIN_USERS="0"
 else
-  SEED_LOGIN_USERS="1"
+  SEED_LOGIN_USERS="0"
 fi
 
 if [[ -n "${SYRA_RESET_LOGIN_PASSWORDS:-}" ]]; then
