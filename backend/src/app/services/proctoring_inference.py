@@ -183,7 +183,8 @@ class ProctoringInferenceStore:
 
     @staticmethod
     def _build_detection_status(orchestrator: ProctoringOrchestrator, exam_cfg: Mapping[str, Any]) -> dict[str, bool]:
-        enabled = lambda key, default=False: bool(exam_cfg.get(key, default))
+        def enabled(key: str, default: bool = False) -> bool:
+            return bool(exam_cfg.get(key, default))
 
         try:
             face_model_ok = get_face_model() is not None

@@ -244,7 +244,7 @@ def _permission_rows_cache_key(db: Session) -> str:
             return str(engine.url)
     except Exception:
         pass
-    return "default"
+    return f"session:{id(db)}"
 
 
 def _clone_permission_rows(rows) -> list[dict]:
