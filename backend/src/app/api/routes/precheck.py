@@ -431,6 +431,7 @@ async def precheck(
     id_has_document_outline = True
     selfie_sig_mode = "none"
     id_sig_mode = "none"
+    selfie_baseline = None
 
     failure_reasons: list[str] = []
     if requirements["mic_required"] and not mic_ok:
@@ -502,6 +503,8 @@ async def precheck(
         # Pass full images (not Haar crops) so DeepFace's detector can work.
         selfie_vec, selfie_sig_mode = _compute_signature_with_fallback(selfie_img, use_detection=True)
         id_vec, id_sig_mode = _compute_signature_with_fallback(id_img, use_detection=True)
+        # Preserve original selfie embedding for live proctoring face verification
+        selfie_baseline = selfie_vec
         # Keep Haar crop info for legacy fields / fallback comparison
         id_crop = _extract_face_crop(id_img)
         id_target = id_crop if id_crop is not None else id_img
@@ -635,6 +638,11 @@ async def precheck(
             method="manual" if manual_token else "ocr",
             ocr_available=False,
             requirements=requirements,
+        )
+    if selfie_baseline is not None:
+        attempt.face_signature = (
+            selfie_baseline if isinstance(selfie_baseline, list)
+            else selfie_baseline.tolist()
         )
     attempt.id_verified = all_pass
     attempt.lighting_score = lighting_score

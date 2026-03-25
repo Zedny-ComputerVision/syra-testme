@@ -111,6 +111,33 @@ def _attempt_is_paused(db: Session, attempt_id) -> bool:
     return bool(last_state_event and last_state_event.event_type == "ATTEMPT_PAUSED")
 
 
+def _paused_attempt_ids(db: Session, attempt_ids: list) -> set:
+    if not attempt_ids:
+        return set()
+
+    rows = db.execute(
+        select(
+            ProctoringEvent.attempt_id,
+            ProctoringEvent.event_type,
+        )
+        .where(
+            ProctoringEvent.attempt_id.in_(attempt_ids),
+            ProctoringEvent.event_type.in_(["ATTEMPT_PAUSED", "ATTEMPT_RESUMED"]),
+        )
+        .order_by(ProctoringEvent.attempt_id, ProctoringEvent.occurred_at.desc())
+    ).all()
+
+    paused_ids = set()
+    seen_attempt_ids = set()
+    for attempt_id, event_type in rows:
+        if attempt_id in seen_attempt_ids:
+            continue
+        seen_attempt_ids.add(attempt_id)
+        if event_type == "ATTEMPT_PAUSED":
+            paused_ids.add(attempt_id)
+    return paused_ids
+
+
 def _violation_counts_by_attempt(db: Session, attempt_ids: list) -> dict[str, dict[str, int]]:
     if not attempt_ids:
         return {}
@@ -146,6 +173,29 @@ def _certificate_review_event(attempt: Attempt, db: Session) -> ProctoringEvent 
     )
 
 
+def _certificate_review_events_by_attempt(db: Session, attempt_ids: list) -> dict:
+    if not attempt_ids:
+        return {}
+
+    rows = db.execute(
+        select(
+            ProctoringEvent.attempt_id,
+            ProctoringEvent.event_type,
+            ProctoringEvent.occurred_at,
+        )
+        .where(
+            ProctoringEvent.attempt_id.in_(attempt_ids),
+            ProctoringEvent.event_type.in_([CERTIFICATE_REVIEW_APPROVED, CERTIFICATE_REVIEW_REJECTED]),
+        )
+        .order_by(ProctoringEvent.attempt_id, ProctoringEvent.occurred_at.desc())
+    ).all()
+
+    latest_events = {}
+    for attempt_id, event_type, occurred_at in rows:
+        latest_events.setdefault(attempt_id, (event_type, occurred_at))
+    return latest_events
+
+
 def _has_negative_proctoring_signal(attempt: Attempt, db: Session) -> bool:
     count = db.scalar(
         select(func.count())
@@ -157,6 +207,21 @@ def _has_negative_proctoring_signal(attempt: Attempt, db: Session) -> bool:
         )
     )
     return bool(count)
+
+
+def _attempt_ids_with_negative_proctoring_signal(db: Session, attempt_ids: list) -> set:
+    if not attempt_ids:
+        return set()
+    rows = db.scalars(
+        select(ProctoringEvent.attempt_id)
+        .where(
+            ProctoringEvent.attempt_id.in_(attempt_ids),
+            ProctoringEvent.event_type.notin_([CERTIFICATE_REVIEW_APPROVED, CERTIFICATE_REVIEW_REJECTED]),
+            ProctoringEvent.severity.in_([SeverityEnum.HIGH, SeverityEnum.MEDIUM]),
+        )
+        .distinct()
+    ).all()
+    return set(rows)
 
 
 def _certificate_decision(
@@ -247,6 +312,97 @@ def _certificate_decision(
     }
 
 
+def _certificate_decisions_by_attempt(
+    attempts: list[Attempt],
+    *,
+    db: Session,
+    pending_manual_review_ids: set | None = None,
+) -> dict:
+    if not attempts:
+        return {}
+
+    pending_manual_review_ids = pending_manual_review_ids or set()
+    completed_attempt_ids = []
+    positive_signal_attempt_ids = []
+    results = {}
+
+    for attempt in attempts:
+        exam = attempt.exam
+        certificate = exam_certificate(exam) if exam else None
+        if not exam or not certificate:
+            results[attempt.id] = {
+                "eligible": False,
+                "issue_rule": None,
+                "review_status": None,
+                "reviewed_at": None,
+                "block_reason": None,
+            }
+            continue
+
+        issue_rule = normalize_certificate_issue_rule(certificate.get("issue_rule"))
+        result = {
+            "eligible": False,
+            "issue_rule": issue_rule,
+            "review_status": None,
+            "reviewed_at": None,
+            "block_reason": None,
+        }
+
+        if attempt.status not in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
+            result["block_reason"] = "Attempt not completed yet"
+            results[attempt.id] = result
+            continue
+
+        if attempt.id in pending_manual_review_ids:
+            result["block_reason"] = "Awaiting answer review"
+            results[attempt.id] = result
+            continue
+
+        if exam.passing_score is not None and attempt.score is not None and attempt.score < exam.passing_score:
+            result["block_reason"] = "Passing score not met"
+            results[attempt.id] = result
+            continue
+
+        completed_attempt_ids.append(attempt.id)
+        if issue_rule == "POSITIVE_PROCTORING":
+            positive_signal_attempt_ids.append(attempt.id)
+        results[attempt.id] = result
+
+    review_events = _certificate_review_events_by_attempt(db, completed_attempt_ids)
+    negative_signal_attempt_ids = _attempt_ids_with_negative_proctoring_signal(db, positive_signal_attempt_ids)
+
+    for attempt in attempts:
+        result = results[attempt.id]
+        issue_rule = result["issue_rule"]
+        if not issue_rule or result["block_reason"]:
+            continue
+
+        review_event = review_events.get(attempt.id)
+        if review_event:
+            event_type, occurred_at = review_event
+            result["review_status"] = "APPROVED" if event_type == CERTIFICATE_REVIEW_APPROVED else "REJECTED"
+            result["reviewed_at"] = occurred_at
+
+        if issue_rule == "POSITIVE_PROCTORING":
+            if attempt.id in negative_signal_attempt_ids:
+                result["block_reason"] = "Positive proctoring result not achieved"
+                continue
+        elif issue_rule == "AFTER_PROCTORING_REVIEW":
+            effective_status = result["review_status"] or "PENDING"
+            if effective_status != "APPROVED":
+                result["review_status"] = effective_status
+                result["block_reason"] = (
+                    "Certificate release rejected after proctoring review"
+                    if effective_status == "REJECTED"
+                    else "Awaiting proctoring review"
+                )
+                continue
+
+        result["eligible"] = True
+
+    return results
+
+
 def _build_attempt_read(
     attempt: Attempt,
     *,
@@ -254,29 +410,33 @@ def _build_attempt_read(
     pending_manual_review: bool | None = None,
     high_violations: int = 0,
     med_violations: int = 0,
+    paused: bool | None = None,
+    certificate: dict | None = None,
 ) -> AttemptRead:
     exam = attempt.exam
     user = getattr(attempt, "user", None)
     title = getattr(exam, "title", None) if exam else None
     exam_type = getattr(exam, "type", None) if exam else None
     time_limit = getattr(exam, "time_limit", None) if exam else None
-    certificate = _certificate_decision(
-        attempt,
-        db=db,
-        pending_manual_review=pending_manual_review,
-    ) if db is not None else {
-        "eligible": False,
-        "issue_rule": None,
-        "review_status": None,
-        "reviewed_at": None,
-        "block_reason": None,
-    }
+    resolved_certificate = certificate or (
+        _certificate_decision(
+            attempt,
+            db=db,
+            pending_manual_review=pending_manual_review,
+        ) if db is not None else {
+            "eligible": False,
+            "issue_rule": None,
+            "review_status": None,
+            "reviewed_at": None,
+            "block_reason": None,
+        }
+    )
     return AttemptRead(
         id=attempt.id,
         exam_id=attempt.exam_id,
         user_id=attempt.user_id,
         status=attempt.status,
-        paused=_attempt_is_paused(db, attempt.id) if db is not None else False,
+        paused=paused if paused is not None else (_attempt_is_paused(db, attempt.id) if db is not None else False),
         high_violations=high_violations,
         med_violations=med_violations,
         score=attempt.score,
@@ -298,11 +458,11 @@ def _build_attempt_read(
         attempts_remaining=None,
         user_name=getattr(user, "name", None) if user else None,
         user_student_id=getattr(user, "user_id", None) if user else None,
-        certificate_eligible=bool(certificate["eligible"]) if certificate["issue_rule"] else None,
-        certificate_issue_rule=certificate["issue_rule"],
-        certificate_review_status=certificate["review_status"],
-        certificate_reviewed_at=certificate["reviewed_at"],
-        certificate_block_reason=certificate["block_reason"],
+        certificate_eligible=bool(resolved_certificate["eligible"]) if resolved_certificate["issue_rule"] else None,
+        certificate_issue_rule=resolved_certificate["issue_rule"],
+        certificate_review_status=resolved_certificate["review_status"],
+        certificate_reviewed_at=resolved_certificate["reviewed_at"],
+        certificate_block_reason=resolved_certificate["block_reason"],
     )
 
 
@@ -984,8 +1144,15 @@ async def list_attempts(
         .limit(pagination.limit)
     )
     attempts = db.scalars(query).all()
-    pending_ids = _pending_manual_review_attempt_ids(db, [attempt.id for attempt in attempts])
-    violation_counts = _violation_counts_by_attempt(db, [attempt.id for attempt in attempts])
+    attempt_ids = [attempt.id for attempt in attempts]
+    pending_ids = _pending_manual_review_attempt_ids(db, attempt_ids)
+    violation_counts = _violation_counts_by_attempt(db, attempt_ids)
+    paused_ids = _paused_attempt_ids(db, attempt_ids)
+    certificate_decisions = _certificate_decisions_by_attempt(
+        attempts,
+        db=db,
+        pending_manual_review_ids=pending_ids,
+    )
     return build_page_response(
         items=[
             _build_attempt_read(
@@ -994,6 +1161,8 @@ async def list_attempts(
                 pending_manual_review=a.id in pending_ids,
                 high_violations=violation_counts.get(str(a.id), {}).get("high_violations", 0),
                 med_violations=violation_counts.get(str(a.id), {}).get("med_violations", 0),
+                paused=a.id in paused_ids,
+                certificate=certificate_decisions.get(a.id),
             )
             for a in attempts
         ],

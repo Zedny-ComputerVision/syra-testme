@@ -58,6 +58,8 @@ Environment overrides:
 - SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER=cloudflare|supabase
 - SYRA_CLOUDFLARE_MEDIA_API_BASE_URL
 - SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS
+- SYRA_DB_CONNECT_RETRIES
+- SYRA_DB_CONNECT_RETRY_DELAY_SECONDS
 - SYRA_PRECHECK_ALLOW_TEST_BYPASS
 - SYRA_NGINX_CLIENT_MAX_BODY_SIZE
 - SYRA_WORKERS
@@ -258,31 +260,57 @@ database_connectivity_check() {
   fi
 
   log "Testing database connectivity..."
-  local db_check_output
-  db_check_output="$(
-    cd "$REPO_ROOT"
-    compose run --rm --no-deps -T \
-      -e DATABASE_URL="$DATABASE_URL" \
-      backend python -c '
+  local db_check_url="$DATABASE_URL"
+  local db_check_output=""
+  local max_attempts="${SYRA_DB_CONNECT_RETRIES:-12}"
+  local retry_delay_seconds="${SYRA_DB_CONNECT_RETRY_DELAY_SECONDS:-5}"
+  local attempt=1
+
+  if [[ -n "${DATABASE_MIGRATION_URL:-}" ]]; then
+    db_check_url="$DATABASE_MIGRATION_URL"
+    log "Using DATABASE_MIGRATION_URL for preflight connectivity check."
+  fi
+
+  while (( attempt <= max_attempts )); do
+    db_check_output="$(
+      cd "$REPO_ROOT"
+      compose run --rm --no-deps -T \
+        -e DATABASE_URL="$db_check_url" \
+        backend python -c '
 import os, sys
 from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
 try:
-    engine = create_engine(os.environ["DATABASE_URL"], connect_args={"connect_timeout": 10})
+    engine = create_engine(
+        os.environ["DATABASE_URL"],
+        poolclass=NullPool,
+        connect_args={"connect_timeout": 10},
+        future=True,
+    )
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
+    engine.dispose()
     print("OK")
 except Exception as exc:
     print(f"FAIL: {exc}", file=sys.stderr)
     sys.exit(1)
 ' 2>&1
-  )" || true
-  if echo "$db_check_output" | grep -q "^OK$"; then
-    log "Database connectivity check passed."
-    return
-  fi
+    )" || true
+
+    if echo "$db_check_output" | grep -q "^OK$"; then
+      log "Database connectivity check passed."
+      return
+    fi
+
+    if (( attempt < max_attempts )); then
+      log "Database connectivity attempt ${attempt}/${max_attempts} failed; retrying in ${retry_delay_seconds}s."
+      sleep "$retry_delay_seconds"
+    fi
+    attempt=$((attempt + 1))
+  done
 
   log "ERROR: Cannot connect to the database."
-  log "  URL: ${DATABASE_URL%%@*}@*** (host hidden)"
+  log "  URL: ${db_check_url%%@*}@*** (host hidden)"
   log "  Error: $db_check_output"
   die "Fix the database connection and try again."
 }
@@ -358,10 +386,31 @@ FRONTEND_URL="${SYRA_FRONTEND_URL:-$(first_non_empty "$existing_frontend_url" "$
 BACKEND_URL="${SYRA_BACKEND_URL:-$(first_non_empty "$existing_backend_url" "$existing_root_public_backend_url" "${FRONTEND_URL%/}/api")}"
 CORS_ORIGINS="${SYRA_CORS_ORIGINS:-$(first_non_empty "$existing_cors_origins" "$existing_root_cors_origins" "$FRONTEND_URL")}"
 MEDIA_STORAGE_PROVIDER="${SYRA_MEDIA_STORAGE_PROVIDER:-$(first_non_empty "$existing_media_storage_provider" "$existing_root_media_storage_provider" "local")}"
-WORKERS="${SYRA_WORKERS:-$(first_non_empty "$existing_workers" "$existing_root_workers" "2")}"
 NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-$(first_non_empty "$existing_nginx_client_max_body_size" "$existing_root_nginx_client_max_body_size" "512m")}"
 CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-$(first_non_empty "$existing_cloudflare_media_api_base_url" "$existing_root_cloudflare_media_api_base_url" "")}"
 PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-$(first_non_empty "$existing_video_storage_provider" "$existing_root_video_storage_provider" "")}"
+
+existing_worker_value="$(first_non_empty "$existing_workers" "$existing_root_workers" "")"
+default_workers="2"
+if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
+  default_workers="1"
+fi
+
+if [[ -n "${SYRA_WORKERS:-}" ]]; then
+  WORKERS="$SYRA_WORKERS"
+elif [[ "$default_workers" == "1" ]]; then
+  case "$existing_worker_value" in
+    ""|"2"|"4")
+      WORKERS="1"
+      log "Supabase session pooler detected; defaulting WORKERS=1 to reduce database client pressure."
+      ;;
+    *)
+      WORKERS="$existing_worker_value"
+      ;;
+  esac
+else
+  WORKERS="${existing_worker_value:-$default_workers}"
+fi
 
 if is_placeholder_secret "$JWT_SECRET"; then
   JWT_SECRET="$(generate_secret)"
