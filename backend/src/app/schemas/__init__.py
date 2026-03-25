@@ -36,6 +36,24 @@ class Message(BaseModel):
     detail: str
 
 
+class ProctoringVideoUploadResponse(BaseModel):
+    detail: str
+    file: dict[str, Any] | None = None
+    job_id: str | None = None
+    status: str | None = None
+    analysis_status_url: str | None = None
+
+
+class ProctoringJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    detail: str
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    file: dict[str, Any] | None = None
+    completed_at: datetime | str | None = None
+
+
 T = TypeVar("T")
 
 

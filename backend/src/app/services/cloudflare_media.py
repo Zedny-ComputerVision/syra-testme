@@ -163,6 +163,39 @@ async def _lookup_video_by_name(filename: str, source: str, fallback_size: int) 
     )
 
 
+async def get_cloudflare_video_details(
+    *,
+    uid: str | None = None,
+    filename: str | None = None,
+    source: str = "camera",
+    fallback_size: int = 0,
+) -> dict:
+    normalized_source = str(source or "camera").strip().lower() or "camera"
+
+    if uid:
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.get(f"{_base_url()}/videos/{uid}")
+                response.raise_for_status()
+                payload = response.json()
+            normalized = _normalize_remote_video(
+                _extract_video_payload(payload),
+                filename=str(filename or uid),
+                source=normalized_source,
+                fallback_size=fallback_size,
+                fallback_created_at=datetime.now(timezone.utc),
+            )
+            if normalized:
+                return normalized
+        except Exception as exc:
+            logger.warning("Failed to fetch Cloudflare video %s: %s", uid, exc)
+
+    if filename:
+        return await _lookup_video_by_name(str(filename), normalized_source, fallback_size)
+
+    return {}
+
+
 async def upload_video_to_cloudflare(file_path: Path, *, filename: str, source: str) -> dict:
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     file_size = file_path.stat().st_size if file_path.exists() else 0

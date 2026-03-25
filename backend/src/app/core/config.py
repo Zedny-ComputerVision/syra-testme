@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
     PROCTORING_INFERENCE_MODE: str = Field(default="local")
     AI_INFERENCE_URL: str = Field(default="http://127.0.0.1:8081")
+    PROCTORING_BATCH_ANALYSIS_ENABLED: bool = False
+    REDIS_URL: str | None = None
+    CELERY_BROKER_URL: str | None = None
+    CELERY_RESULT_BACKEND: str | None = None
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_STREAM_SIGNING_KEY: str = Field(default="")
@@ -180,6 +184,14 @@ class Settings(BaseSettings):
             raise ValueError("AI_INFERENCE_URL must start with http:// or https://")
         return normalized
 
+    @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", mode="before")
+    @classmethod
+    def normalize_queue_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
     @field_validator("CLOUDFLARE_MEDIA_API_BASE_URL", mode="before")
     @classmethod
     def normalize_cloudflare_media_api_base_url(cls, value: str | None) -> str:
@@ -243,6 +255,14 @@ class Settings(BaseSettings):
     @property
     def database_migration_url(self) -> str:
         return self.DATABASE_MIGRATION_URL or self.DATABASE_URL
+
+    @property
+    def celery_broker_url(self) -> str | None:
+        return self.CELERY_BROKER_URL or self.REDIS_URL
+
+    @property
+    def celery_result_backend(self) -> str | None:
+        return self.CELERY_RESULT_BACKEND or self.REDIS_URL
 
 
 @lru_cache

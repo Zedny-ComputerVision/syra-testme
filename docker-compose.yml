@@ -48,8 +48,14 @@ services:
       AUTO_APPLY_MIGRATIONS: "true"
       PROCTORING_INFERENCE_MODE: "remote"
       AI_INFERENCE_URL: "http://ai-inference:8081"
+      PROCTORING_BATCH_ANALYSIS_ENABLED: "true"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
     depends_on:
       ai-inference:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/health"]
@@ -76,6 +82,25 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  # â”€â”€ Redis for Celery broker/result backend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # â”€â”€ Dedicated AI inference service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ai-inference:
     build:
@@ -94,6 +119,34 @@ services:
       start_period: 180s
     expose:
       - "8081"
+    networks:
+      - internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # â”€â”€ Batch proctoring worker (Celery) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  ai-batch-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - backend/.env.docker
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      PROCTORING_BATCH_ANALYSIS_ENABLED: "true"
+    command: ["celery", "-A", "src.app.core.celery_app.celery_app", "worker", "--loglevel=info", "--queues=proctoring-batch", "--concurrency=1"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend-storage:/app/storage
     networks:
       - internal
     logging:

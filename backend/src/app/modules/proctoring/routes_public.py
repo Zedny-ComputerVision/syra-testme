@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.websockets import WebSocketState
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,10 +22,21 @@ from ...core.security import verify_token
 from ...core.config import get_settings
 from ...models import Attempt, Notification, ProctoringEvent, SeverityEnum, RoleEnum, AttemptStatus, SystemSettings, User
 from ...services.normalized_relations import exam_proctoring
-from ...schemas import ProctoringEventRead, Message, ProctoringPingResponse
+from ...schemas import (
+    ProctoringEventRead,
+    Message,
+    ProctoringPingResponse,
+    ProctoringVideoUploadResponse,
+    ProctoringJobStatusResponse,
+)
 from ...reporting.report_generator import generate_html_report
 from ...services.integrations import send_proctoring_integration_event
 from ...services.proctoring_inference import get_proctoring_inference_gateway
+from ...services.proctoring_video_batch import (
+    enqueue_video_batch_analysis,
+    get_video_batch_job_status,
+    video_batch_analysis_enabled,
+)
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
 from ...services.cloudflare_media import (
@@ -421,6 +432,122 @@ def _find_saved_video_file_info(db: Session, attempt_id: str, session_id: str, s
         if str(info.get("session_id") or "") == session_id and _normalize_video_source(info.get("source")) == normalized_source:
             return info
     return None
+
+
+_VIDEO_BATCH_EVENT_TYPES = (
+    "VIDEO_BATCH_ANALYSIS_QUEUED",
+    "VIDEO_BATCH_ANALYSIS_COMPLETED",
+    "VIDEO_BATCH_ANALYSIS_FAILED",
+)
+
+
+def _build_video_batch_status_url(attempt_id: str, job_id: str) -> str:
+    return f"/api/proctoring/{attempt_id}/jobs/{job_id}/status"
+
+
+def _normalize_video_batch_meta(meta: object, occurred_at: datetime | None = None) -> dict[str, object] | None:
+    if not isinstance(meta, dict):
+        return None
+    job_id = str(meta.get("job_id") or "").strip()
+    if not job_id:
+        return None
+    summary = dict(meta.get("summary") or {}) if isinstance(meta.get("summary"), dict) else {}
+    file_info = dict(meta.get("file") or {}) if isinstance(meta.get("file"), dict) else None
+    normalized = {
+        "job_id": job_id,
+        "status": str(meta.get("status") or "QUEUED").strip().upper() or "QUEUED",
+        "detail": str(meta.get("detail") or "").strip(),
+        "session_id": str(meta.get("session_id") or summary.get("session_id") or (file_info or {}).get("session_id") or "").strip(),
+        "source": _normalize_video_source(meta.get("source") or summary.get("source") or (file_info or {}).get("source")),
+        "analysis_status_url": str(meta.get("analysis_status_url") or "").strip(),
+        "completed_at": meta.get("completed_at") or (occurred_at.isoformat() if occurred_at else None),
+        "findings": list(meta.get("findings") or []),
+        "summary": summary,
+        "file": file_info,
+    }
+    return normalized
+
+
+def _find_video_batch_info(db: Session, attempt_id: str, session_id: str, source: str) -> dict[str, object] | None:
+    normalized_source = _normalize_video_source(source)
+    events = db.scalars(
+        select(ProctoringEvent)
+        .where(
+            ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+            ProctoringEvent.event_type.in_(_VIDEO_BATCH_EVENT_TYPES),
+        )
+        .order_by(ProctoringEvent.occurred_at.desc())
+    ).all()
+    for event in events:
+        info = _normalize_video_batch_meta(event.meta, event.occurred_at)
+        if not info:
+            continue
+        if str(info.get("session_id") or "") == str(session_id or "").strip() and _normalize_video_source(info.get("source")) == normalized_source:
+            return info
+    return None
+
+
+def _find_video_batch_info_by_job_id(db: Session, attempt_id: str, job_id: str) -> dict[str, object] | None:
+    events = db.scalars(
+        select(ProctoringEvent)
+        .where(
+            ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+            ProctoringEvent.event_type.in_(_VIDEO_BATCH_EVENT_TYPES),
+        )
+        .order_by(ProctoringEvent.occurred_at.desc())
+    ).all()
+    for event in events:
+        info = _normalize_video_batch_meta(event.meta, event.occurred_at)
+        if info and str(info.get("job_id") or "") == str(job_id or "").strip():
+            return info
+    return None
+
+
+def _queue_video_batch_event(
+    db: Session,
+    *,
+    attempt_id: str,
+    file_info: dict[str, object],
+    job_info: dict[str, object],
+) -> None:
+    meta = {
+        **job_info,
+        "session_id": str(file_info.get("session_id") or ""),
+        "source": _normalize_video_source(file_info.get("source")),
+        "file": file_info,
+    }
+    event = ProctoringEvent(
+        attempt_id=attempt_id,
+        event_type="VIDEO_BATCH_ANALYSIS_QUEUED",
+        severity=SeverityEnum.LOW,
+        detail=f"Batch analysis queued for {_normalize_video_source(file_info.get('source')).title()} recording",
+        meta=meta,
+        occurred_at=datetime.now(timezone.utc),
+    )
+    db.add(event)
+    db.commit()
+
+
+async def _build_video_upload_response(
+    attempt_id: str,
+    *,
+    detail: str,
+    file_info: dict[str, object],
+    job_info: dict[str, object] | None = None,
+    status_code: int = 200,
+) -> JSONResponse:
+    payload: dict[str, object] = {
+        "detail": detail,
+        "file": await _hydrate_video_file_info(file_info),
+    }
+    if job_info:
+        payload["job_id"] = str(job_info.get("job_id") or "")
+        payload["status"] = str(job_info.get("status") or "QUEUED").upper()
+        payload["analysis_status_url"] = (
+            str(job_info.get("analysis_status_url") or "").strip()
+            or _build_video_batch_status_url(attempt_id, str(job_info.get("job_id") or ""))
+        )
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 def _build_registered_video_info(
@@ -1157,7 +1284,7 @@ async def finalize_video_capture(
     )
 
 
-@router.post("/{attempt_id}/video/upload")
+@router.post("/{attempt_id}/video/upload", response_model=ProctoringVideoUploadResponse)
 async def upload_video_capture(
     attempt_id: str,
     request: Request,
@@ -1177,7 +1304,15 @@ async def upload_video_capture(
 
     existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, normalized_source)
     if existing_file_info:
-        return {"detail": "video already uploaded", "file": await _hydrate_video_file_info(existing_file_info)}
+        existing_job = _find_video_batch_info(db, attempt_id, session_id, normalized_source)
+        existing_status = str(existing_job.get("status") or "").upper() if existing_job else ""
+        return await _build_video_upload_response(
+            attempt_id,
+            detail="video already uploaded",
+            file_info=existing_file_info,
+            job_info=existing_job,
+            status_code=202 if existing_status in {"QUEUED", "PROCESSING"} else 200,
+        )
 
     content_type = str(request.headers.get("content-type") or "application/octet-stream").split(";", 1)[0].strip().lower()
     if not (content_type.startswith("video/") or content_type == "application/octet-stream"):
@@ -1261,10 +1396,30 @@ async def upload_video_capture(
     except Exception:
         logger.warning("Failed to log VIDEO_SAVED event for attempt %s — video was uploaded successfully", attempt_id)
         db.rollback()
-    return {"detail": response_detail, "file": await _hydrate_video_file_info(file_info)}
+    job_info: dict[str, object] | None = None
+    if video_batch_analysis_enabled():
+        try:
+            queued_job = enqueue_video_batch_analysis(attempt_id, file_info)
+            if queued_job:
+                queued_job["analysis_status_url"] = _build_video_batch_status_url(attempt_id, str(queued_job.get("job_id") or ""))
+                _queue_video_batch_event(db, attempt_id=attempt_id, file_info=file_info, job_info=queued_job)
+                job_info = queued_job
+                response_detail = "video uploaded and batch analysis queued"
+        except Exception as exc:
+            logger.warning("Failed to queue batch analysis for attempt %s: %s", attempt_id, exc)
+            with contextlib.suppress(Exception):
+                db.rollback()
+
+    return await _build_video_upload_response(
+        attempt_id,
+        detail=response_detail,
+        file_info=file_info,
+        job_info=job_info,
+        status_code=202 if job_info else 200,
+    )
 
 
-@router.post("/{attempt_id}/video/register")
+@router.post("/{attempt_id}/video/register", response_model=ProctoringVideoUploadResponse)
 async def register_video_capture(
     attempt_id: str,
     payload: dict = Body(...),
@@ -1281,7 +1436,15 @@ async def register_video_capture(
 
     existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, source)
     if existing_file_info:
-        return {"detail": "video already registered", "file": await _hydrate_video_file_info(existing_file_info)}
+        existing_job = _find_video_batch_info(db, attempt_id, session_id, source)
+        existing_status = str(existing_job.get("status") or "").upper() if existing_job else ""
+        return await _build_video_upload_response(
+            attempt_id,
+            detail="video already registered",
+            file_info=existing_file_info,
+            job_info=existing_job,
+            status_code=202 if existing_status in {"QUEUED", "PROCESSING"} else 200,
+        )
 
     file_info = _build_registered_video_info(attempt_id, payload, session_id=session_id, source=source)
     event = ProctoringEvent(
@@ -1294,7 +1457,26 @@ async def register_video_capture(
     )
     db.add(event)
     db.commit()
-    return {"detail": "video registered", "file": await _hydrate_video_file_info(file_info)}
+    job_info: dict[str, object] | None = None
+    if video_batch_analysis_enabled():
+        try:
+            queued_job = enqueue_video_batch_analysis(attempt_id, file_info)
+            if queued_job:
+                queued_job["analysis_status_url"] = _build_video_batch_status_url(attempt_id, str(queued_job.get("job_id") or ""))
+                _queue_video_batch_event(db, attempt_id=attempt_id, file_info=file_info, job_info=queued_job)
+                job_info = queued_job
+        except Exception as exc:
+            logger.warning("Failed to queue registered video batch analysis for attempt %s: %s", attempt_id, exc)
+            with contextlib.suppress(Exception):
+                db.rollback()
+
+    return await _build_video_upload_response(
+        attempt_id,
+        detail="video registered" if not job_info else "video registered and batch analysis queued",
+        file_info=file_info,
+        job_info=job_info,
+        status_code=202 if job_info else 200,
+    )
 
 
 @router.post("/{attempt_id}/video/upload-progress", response_model=Message)
@@ -1350,6 +1532,41 @@ async def report_video_upload_progress(
     db.add(event)
     db.commit()
     return Message(detail="Video upload progress recorded")
+
+
+@router.get("/{attempt_id}/jobs/{job_id}/status", response_model=ProctoringJobStatusResponse)
+async def get_video_batch_status(
+    attempt_id: str,
+    job_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    _attempt_or_forbidden(attempt_id, db, current)
+    if not video_batch_analysis_enabled():
+        raise HTTPException(status_code=503, detail="Batch video analysis is not enabled")
+
+    status_payload = get_video_batch_job_status(job_id)
+    event_payload = _find_video_batch_info_by_job_id(db, attempt_id, job_id)
+
+    if event_payload:
+        event_status = str(event_payload.get("status") or "").upper()
+        if status_payload.get("status") in {"QUEUED", "PROCESSING"} and event_status in {"COMPLETED", "FAILED"}:
+            status_payload["status"] = event_status
+            status_payload["detail"] = str(event_payload.get("detail") or status_payload.get("detail") or "")
+        if not status_payload.get("file") and event_payload.get("file"):
+            status_payload["file"] = event_payload.get("file")
+        if not status_payload.get("summary") and event_payload.get("summary"):
+            status_payload["summary"] = event_payload.get("summary")
+        if not status_payload.get("findings") and event_payload.get("findings"):
+            status_payload["findings"] = event_payload.get("findings")
+        if not status_payload.get("completed_at") and event_payload.get("completed_at"):
+            status_payload["completed_at"] = event_payload.get("completed_at")
+
+    file_info = status_payload.get("file")
+    if isinstance(file_info, dict):
+        status_payload["file"] = await _hydrate_video_file_info(file_info)
+
+    return ProctoringJobStatusResponse(**status_payload)
 
 
 @router.post("/{attempt_id}/pause", response_model=Message)

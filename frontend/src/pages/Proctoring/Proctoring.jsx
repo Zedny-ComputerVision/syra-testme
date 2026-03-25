@@ -6,7 +6,12 @@ import ViolationToast from '../../components/ViolationToast/ViolationToast'
 import useAuth from '../../hooks/useAuth'
 import { getAttempt, getAttemptAnswers, submitAnswer, submitAttempt } from '../../services/attempt.service'
 import { getTestQuestions, getTest } from '../../services/test.service'
-import { proctoringPing, reportProctoringVideoUploadProgress, uploadProctoringVideo } from '../../services/proctoring.service'
+import {
+  getProctoringVideoJobStatus,
+  proctoringPing,
+  reportProctoringVideoUploadProgress,
+  uploadProctoringVideo,
+} from '../../services/proctoring.service'
 import { normalizeQuestion, normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements, normalizeProctoringConfig } from '../../utils/proctoringRequirements'
 import { requestEntireScreenShare, ENTIRE_SCREEN_REQUIRED } from '../../utils/screenCapture'
@@ -46,6 +51,8 @@ const DEFAULT_PROCTORING = {
 
 const VIDEO_UPLOAD_PROGRESS_STEP = 5
 const VIDEO_UPLOAD_PROGRESS_INTERVAL_MS = 1000
+const VIDEO_ANALYSIS_POLL_INTERVAL_MS = 5000
+const VIDEO_ANALYSIS_POLL_ATTEMPTS = 12
 
 function clampUploadPercent(value) {
   const numeric = Number(value)
@@ -732,6 +739,36 @@ export default function Proctoring() {
     return payloads.filter(Boolean)
   }, [prepareSingleRecordingUpload])
 
+  const waitForVideoAnalysisJob = useCallback(async (uploadAttemptId, jobId, source) => {
+    setRecordingStatusForSource(source, 'processing')
+    for (let attempt = 0; attempt < VIDEO_ANALYSIS_POLL_ATTEMPTS; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 0 : VIDEO_ANALYSIS_POLL_INTERVAL_MS))
+      try {
+        const response = await getProctoringVideoJobStatus(uploadAttemptId, jobId)
+        const payload = response?.data ?? response?.payload ?? {}
+        const status = String(payload?.status || '').toUpperCase()
+        if (status === 'COMPLETED') {
+          return payload
+        }
+        if (status === 'FAILED') {
+          const message = String(payload?.detail || 'Background video analysis failed.').trim()
+          emitProctoringNotice(`video_analysis_failed_${source}`, message, 'LOW', 'VIDEO_ANALYSIS_FAILED', 15000)
+          return payload
+        }
+      } catch (error) {
+        console.warn(`Failed to poll ${source} video analysis job ${jobId}.`, error)
+      }
+    }
+    emitProctoringNotice(
+      `video_analysis_pending_${source}`,
+      `${source.charAt(0).toUpperCase() + source.slice(1)} upload finished. Background analysis will continue after you leave this page.`,
+      'LOW',
+      'VIDEO_ANALYSIS_PENDING',
+      15000,
+    )
+    return null
+  }, [emitProctoringNotice, setRecordingStatusForSource])
+
   const uploadPreparedRecording = useCallback(async (payload) => {
     const { attemptId: uploadAttemptId, sessionId, source, filename, blob, metadata } = payload
     const progressState = {
@@ -794,7 +831,7 @@ export default function Proctoring() {
     let lastError = null
     for (let i = 0; i < 3; i += 1) {
       try {
-        await uploadProctoringVideo(uploadAttemptId, sessionId, source, filename, blob, metadata, {
+        const uploadResponse = await uploadProctoringVideo(uploadAttemptId, sessionId, source, filename, blob, metadata, {
           onUploadProgress: (event) => {
             const uploadedBytes = Number(event?.loaded || 0)
             const eventTotal = Number(event?.total || 0)
@@ -809,6 +846,16 @@ export default function Proctoring() {
             })
           },
         })
+        const uploadPayload = uploadResponse?.data ?? uploadResponse?.payload ?? {}
+        const jobId = String(uploadPayload?.job_id || '').trim()
+        if (jobId) {
+          await sendUploadProgress({
+            uploadedBytes: totalBytes || Number(blob?.size || 0),
+            progressPercent: 100,
+            status: 'processing',
+          })
+          await waitForVideoAnalysisJob(uploadAttemptId, jobId, source)
+        }
         await sendUploadProgress({
           uploadedBytes: totalBytes || Number(blob?.size || 0),
           progressPercent: 100,
@@ -832,7 +879,7 @@ export default function Proctoring() {
       throw lastError
     }
     setRecordingStatusForSource(source, 'saved')
-  }, [setRecordingStatusForSource])
+  }, [setRecordingStatusForSource, waitForVideoAnalysisJob])
 
   const uploadRecordingSources = useCallback(async (sources = []) => {
     const payloads = await prepareRecordingUploads(sources)
@@ -1471,7 +1518,8 @@ export default function Proctoring() {
 
   // ── Post-submit upload overlay ──────────────────────────────────────────────
   if (submittedRef.current && submitPhase === 'uploading') {
-    const allDone = Object.values(uploadPercent).length > 0 && Object.values(uploadPercent).every((p) => p >= 100)
+    const anyProcessing = cameraRecordingStatus === 'processing' || screenRecordingStatus === 'processing'
+    const allDone = Object.values(uploadPercent).length > 0 && Object.values(uploadPercent).every((p) => p >= 100) && !anyProcessing
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 9999,
@@ -1487,7 +1535,9 @@ export default function Proctoring() {
             Exam Submitted
           </div>
           <div style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
-            Uploading your exam recordings. Please do not close this page.
+            {anyProcessing
+              ? 'Upload finished. Final video processing is still running. Please do not close this page.'
+              : 'Uploading your exam recordings. Please do not close this page.'}
           </div>
           {Object.entries(uploadPercent).map(([src, pct]) => (
             <div key={src} style={{ marginBottom: '1rem', textAlign: 'left' }}>
@@ -1540,7 +1590,7 @@ export default function Proctoring() {
   }
   const recordingBadgeClass = (status) => {
     if (status === 'saved' || status === 'recording') return styles.badgeConnected
-    if (status === 'ready' || status === 'waiting' || status === 'checking' || status === 'saving' || status === 'disabled') return styles.badgePending
+    if (status === 'ready' || status === 'waiting' || status === 'checking' || status === 'saving' || status === 'processing' || status === 'disabled') return styles.badgePending
     return styles.badgeDisconnected
   }
   const proctorPane = (

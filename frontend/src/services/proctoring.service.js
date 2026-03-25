@@ -20,5 +20,8 @@ export const uploadProctoringVideo = (attemptId, session_id, source, filename, b
 export const reportProctoringVideoUploadProgress = (attemptId, payload) =>
   api.post(`proctoring/${attemptId}/video/upload-progress`, payload)
 
+export const getProctoringVideoJobStatus = (attemptId, jobId) =>
+  api.get(`proctoring/${attemptId}/jobs/${jobId}/status`)
+
 export const listProctoringVideos = (attemptId) =>
   api.get(`proctoring/${attemptId}/videos`)
