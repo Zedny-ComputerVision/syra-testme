@@ -23,8 +23,28 @@ jobs:
           command_timeout: 30m
           envs: GIT_PASSWORD
           script: |
-            set -e
+            set -Eeuo pipefail
             cd /opt/syra-testme
+
+            dump_deploy_diagnostics() {
+              local exit_code=$?
+              set +e
+              echo ">>> Deployment failed (exit ${exit_code}). Collecting Docker diagnostics..."
+              docker compose ps -a || true
+              echo ">>> Backend logs"
+              docker compose logs --tail 200 backend || true
+              echo ">>> AI inference logs"
+              docker compose logs --tail 120 ai-inference || true
+              echo ">>> Batch worker logs"
+              docker compose logs --tail 120 ai-batch-worker || true
+              echo ">>> Redis logs"
+              docker compose logs --tail 80 redis || true
+              echo ">>> Frontend logs"
+              docker compose logs --tail 80 frontend || true
+              exit "$exit_code"
+            }
+
+            trap dump_deploy_diagnostics ERR
 
             echo ">>> Stopping existing services..."
             docker compose -f docker-compose.yml -f docker-compose.local-db.yml down || true
@@ -44,4 +64,5 @@ jobs:
             export SYRA_BACKEND_URL="https://testme.zedny.ai/api"
             bash scripts/deploy-linux.sh
 
+            trap - ERR
             echo ">>> Deployment complete!"
