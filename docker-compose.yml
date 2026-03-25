@@ -46,6 +46,11 @@ services:
       - backend/.env.docker
     environment:
       AUTO_APPLY_MIGRATIONS: "true"
+      PROCTORING_INFERENCE_MODE: "remote"
+      AI_INFERENCE_URL: "http://ai-inference:8081"
+    depends_on:
+      ai-inference:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/health"]
       interval: 15s
@@ -65,6 +70,32 @@ services:
     # depends_on:
     #   db:
     #     condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # â”€â”€ Dedicated AI inference service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  ai-inference:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - backend/.env.docker
+    command: ["uvicorn", "src.app.ai_inference.main:app", "--host", "0.0.0.0", "--port", "8081"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8081/ready"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    expose:
+      - "8081"
+    networks:
+      - internal
     logging:
       driver: "json-file"
       options:

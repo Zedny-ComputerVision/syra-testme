@@ -355,32 +355,6 @@ def _run_retention_cleanup() -> None:
     )
 
 
-def _prewarm_detection_models() -> None:
-    """Pre-load YOLO and MediaPipe models at startup to avoid cold-start lag on first frame."""
-    try:
-        from .detection._yolo_face import get_face_model
-        model = get_face_model()
-        if model is not None:
-            logger.info("YOLO face model pre-warmed successfully")
-        else:
-            logger.warning("YOLO face model not available for pre-warming")
-    except Exception as exc:
-        logger.warning("Failed to pre-warm YOLO face model: %s", exc)
-
-    try:
-        from .detection.object_detection import preload as preload_object_model
-        preload_object_model()
-        logger.info("YOLO object model pre-warmed successfully")
-    except Exception as exc:
-        logger.warning("Failed to pre-warm YOLO object model: %s", exc)
-
-    try:
-        from .detection.orchestrator import prewarm_shared_mesh
-        prewarm_shared_mesh()
-    except Exception as exc:
-        logger.warning("Failed to pre-warm MediaPipe FaceMesh: %s", exc)
-
-
 def _run_startup_initialization(*, is_test_env: bool) -> None:
     _assert_required_api_routes()
     if settings.precheck_test_bypass_enabled:
@@ -403,9 +377,6 @@ def _run_startup_initialization(*, is_test_env: bool) -> None:
         return
     _run_alembic_upgrade()
     logger.info("Alembic migrations applied successfully")
-    # Pre-warm detection models in a background thread so the app can start serving immediately
-    import threading
-    threading.Thread(target=_prewarm_detection_models, daemon=True, name="model-prewarm").start()
 
 
 async def _schedule_loop():

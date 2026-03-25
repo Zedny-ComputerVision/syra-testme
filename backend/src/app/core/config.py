@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     MAX_VIDEO_UPLOAD_MB: int = Field(default=512, ge=16, le=4096)
     MEDIA_STORAGE_PROVIDER: str = Field(default="local")
     PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
+    PROCTORING_INFERENCE_MODE: str = Field(default="local")
+    AI_INFERENCE_URL: str = Field(default="http://127.0.0.1:8081")
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_STREAM_SIGNING_KEY: str = Field(default="")
@@ -160,6 +162,22 @@ class Settings(BaseSettings):
         normalized = str(value or "cloudflare").strip().lower()
         if normalized not in {"cloudflare", "supabase"}:
             raise ValueError("PROCTORING_VIDEO_STORAGE_PROVIDER must be 'cloudflare' or 'supabase'")
+        return normalized
+
+    @field_validator("PROCTORING_INFERENCE_MODE")
+    @classmethod
+    def normalize_proctoring_inference_mode(cls, value: str) -> str:
+        normalized = str(value or "local").strip().lower()
+        if normalized not in {"local", "remote"}:
+            raise ValueError("PROCTORING_INFERENCE_MODE must be 'local' or 'remote'")
+        return normalized
+
+    @field_validator("AI_INFERENCE_URL", mode="before")
+    @classmethod
+    def normalize_ai_inference_url(cls, value: str | None) -> str:
+        normalized = str(value or "http://127.0.0.1:8081").strip().rstrip("/")
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("AI_INFERENCE_URL must start with http:// or https://")
         return normalized
 
     @field_validator("CLOUDFLARE_MEDIA_API_BASE_URL", mode="before")

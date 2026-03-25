@@ -23,11 +23,9 @@ from ...core.config import get_settings
 from ...models import Attempt, Notification, ProctoringEvent, SeverityEnum, RoleEnum, AttemptStatus, SystemSettings, User
 from ...services.normalized_relations import exam_proctoring
 from ...schemas import ProctoringEventRead, Message, ProctoringPingResponse
-from ...detection.orchestrator import ProctoringOrchestrator
-from ...detection._yolo_face import get_face_model
-from ...detection.screen_analysis import analyze_screen_bytes
 from ...reporting.report_generator import generate_html_report
 from ...services.integrations import send_proctoring_integration_event
+from ...services.proctoring_inference import get_proctoring_inference_gateway
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
 from ...services.cloudflare_media import (
@@ -102,16 +100,6 @@ async def _broadcast_bytes_to_viewers(attempt_id: str, data: bytes, msg_type: st
             dead.append(ws)
     for ws in dead:
         viewers.discard(ws)
-
-
-def _check_object_model_available() -> bool:
-    """Check if the general YOLOv8 object detection model can be loaded."""
-    try:
-        from ...detection.object_detection import ObjectDetector
-        det = ObjectDetector()
-        return det._get_model() is not None
-    except Exception:
-        return False
 
 
 def _normalize_video_source(value: object) -> str:
@@ -1557,15 +1545,35 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     if getattr(attempt, "face_signature", None):
         exam_cfg["face_signature"] = attempt.face_signature
 
-    orchestrator = ProctoringOrchestrator(exam_cfg)
-
     # Restore violation score from previous events so reconnects don't reset it
+    score_weights = exam_cfg.get("violation_weights") or {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+    historical_violation_score = 0.0
     _prev_events = db.scalars(
         select(ProctoringEvent).where(ProctoringEvent.attempt_id == attempt_id)
     ).all()
     for _prev in _prev_events:
         sev_name = _prev.severity.value if hasattr(_prev.severity, "value") else str(_prev.severity or "LOW")
-        orchestrator.violation_score += orchestrator.score_weights.get(sev_name.upper(), 1)
+        historical_violation_score += score_weights.get(sev_name.upper(), 1)
+    inference_gateway = get_proctoring_inference_gateway()
+    try:
+        session_open = await inference_gateway.open_session(
+            attempt_id,
+            exam_cfg,
+            initial_violation_score=historical_violation_score,
+        )
+    except Exception as exc:
+        logger.exception("Failed to open inference session for attempt %s: %s", attempt_id, exc)
+        with contextlib.suppress(Exception):
+            await websocket.send_json({
+                "type": "error",
+                "detail": "Proctoring inference service is unavailable",
+            })
+            await websocket.close(code=1011)
+        db.close()
+        return
+    session_summary = dict(session_open.summary or {})
+    session_violation_score = float(session_open.violation_score or historical_violation_score)
+    detection_status = dict(session_open.detection_status or {})
     _release_db_session(db)
 
     # ── Register live monitoring session ──────────────────────────────────────
@@ -1584,36 +1592,23 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     # These are deferred so the WS connect handshake isn't blocked by model loading.
     async def _send_detection_status():
         try:
-            face_model_ok = get_face_model() is not None
-            # Check object model via the already-initialised orchestrator's detector
-            obj_model_ok = orchestrator.object_detector._get_model() is not None
-
-            if (exam_cfg.get("face_detection") or exam_cfg.get("multi_face")) and not face_model_ok:
+            if (exam_cfg.get("face_detection") or exam_cfg.get("multi_face")) and not detection_status.get("face_detection", False):
                 logger.error("Face detection model unavailable for attempt %s", attempt_id)
                 await websocket.send_json({
                     "type": "error",
                     "detail": "Face detection model unavailable. Face and multiple-face alerts are disabled until the model is restored.",
                 })
-            if exam_cfg.get("object_detection") and not obj_model_ok:
+            if exam_cfg.get("object_detection") and not detection_status.get("object_detection", False):
                 logger.error("Object detection model unavailable for attempt %s", attempt_id)
                 await websocket.send_json({
                     "type": "error",
                     "detail": "Object detection model unavailable. Forbidden-object alerts (phone, book, etc.) are disabled until the model is restored.",
                 })
-
-            detection_status = {
-                "face_detection": bool(exam_cfg.get("face_detection")) and face_model_ok,
-                "multi_face": bool(exam_cfg.get("multi_face")) and face_model_ok,
-                "object_detection": bool(exam_cfg.get("object_detection")) and obj_model_ok,
-                "eye_tracking": bool(exam_cfg.get("eye_tracking")),
-                "head_pose_detection": bool(exam_cfg.get("head_pose_detection")),
-                "audio_detection": bool(exam_cfg.get("audio_detection")),
-                "mouth_detection": bool(exam_cfg.get("mouth_detection")),
-            }
             await websocket.send_json({"type": "detection_status", **detection_status})
         except Exception as exc:
             logger.debug("Could not send detection_status for attempt %s: %s", attempt_id, exc)
     last_activity = {"monotonic": time.monotonic()}
+    heartbeat_task: asyncio.Task | None = None
 
     async def heartbeat() -> None:
         consecutive_failures = 0
@@ -1773,11 +1768,12 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         logger.warning("Invalid base64 in frame data for attempt %s", attempt_id)
                         continue
                     # Run CPU-heavy detection in thread pool to avoid blocking event loop
-                    loop = asyncio.get_running_loop()
-                    _proc_start = time.monotonic()
-                    alerts = await loop.run_in_executor(None, orchestrator.process_frame, frame_bytes)
+                    frame_result = await inference_gateway.process_frame(attempt_id, frame_bytes)
+                    alerts = frame_result.alerts
+                    session_summary = dict(frame_result.summary or {})
+                    session_violation_score = float(frame_result.violation_score or session_violation_score)
                     _frame_proc_end = time.monotonic()
-                    _proc_ms = (_frame_proc_end - _proc_start) * 1000
+                    _proc_ms = float(frame_result.latency_ms or 0.0)
                     if _proc_ms > 500:
                         logger.warning("Slow frame processing for attempt %s: %.0fms, %d alerts", attempt_id, _proc_ms, len(alerts))
                         # Tell client to slow down frame capture to avoid queue buildup
@@ -1789,7 +1785,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         except Exception:
                             pass
                     else:
-                        logger.debug("Frame processed for attempt %s: %.0fms, %d alerts, score=%d", attempt_id, _proc_ms, len(alerts), orchestrator.violation_score)
+                        logger.debug("Frame processed for attempt %s: %.0fms, %d alerts, score=%d", attempt_id, _proc_ms, len(alerts), int(session_violation_score))
                     if alerts:
                         logger.debug("Alerts: %s", [a.get("event_type") for a in alerts])
                     history_events = _get_cached_events()
@@ -1896,11 +1892,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 "confidence": alert.get("confidence", 0),
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
                             })
-                        if alerts or orchestrator.face_checks % 10 == 0:
+                        if alerts or int(session_summary.get("face_checks") or 0) % 10 == 0:
                             await _broadcast_to_viewers(attempt_id, {
                                 "type": "live_summary",
                                 "attempt_id": attempt_id,
-                                **orchestrator.get_summary(),
+                                **session_summary,
                             })
 
                     # Single commit for all events from this frame
@@ -1923,9 +1919,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             pass
 
                     # Send summary every 5th frame or when alerts fired (reduces WS traffic)
-                    if alerts or orchestrator.face_checks % 5 == 0:
-                        summary = orchestrator.get_summary()
-                        await websocket.send_json({"type": "summary", "precheck_passed": bool(attempt.precheck_passed_at), **summary})
+                    if alerts or int(session_summary.get("face_checks") or 0) % 5 == 0:
+                        await websocket.send_json({"type": "summary", "precheck_passed": bool(attempt.precheck_passed_at), **session_summary})
                     if attempt.status == AttemptStatus.SUBMITTED:
                         break
                     reason = _maybe_auto_submit_from_history(
@@ -1935,7 +1930,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         history_events,
                         occurred_at=datetime.now(timezone.utc),
                         request_ip=get_websocket_ip(websocket),
-                        violation_score=orchestrator.violation_score,
+                        violation_score=session_violation_score,
                     )
                     if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -1953,10 +1948,14 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         continue
                     _sr = data.get("sample_rate")
                     logger.info("WS audio chunk for attempt %s (bytes=%d, sr=%s)", attempt_id, len(audio_bytes), _sr)
-                    _audio_loop = asyncio.get_running_loop()
-                    alerts = await _audio_loop.run_in_executor(
-                        None, lambda: orchestrator.process_audio(audio_bytes, sample_rate=int(_sr) if _sr else None)
+                    audio_result = await inference_gateway.process_audio(
+                        attempt_id,
+                        audio_bytes,
+                        sample_rate=int(_sr) if _sr else None,
                     )
+                    alerts = audio_result.alerts
+                    session_summary = dict(audio_result.summary or {})
+                    session_violation_score = float(audio_result.violation_score or session_violation_score)
                     if alerts:
                         logger.debug("Audio alerts: %s", [a.get("event_type") for a in alerts])
                     history_events = _get_cached_events()
@@ -2025,8 +2024,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     for _evt in _audio_serious:
                         _handle_serious_proctoring_event(db, attempt, _evt)
 
-                    summary = orchestrator.get_summary()
-                    await websocket.send_json({"type": "summary", **summary})
+                    await websocket.send_json({"type": "summary", **session_summary})
                     if attempt.status == AttemptStatus.SUBMITTED:
                         break
                     reason = _maybe_auto_submit_from_history(
@@ -2036,7 +2034,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         history_events,
                         occurred_at=datetime.now(timezone.utc),
                         request_ip=get_websocket_ip(websocket),
-                        violation_score=orchestrator.violation_score,
+                        violation_score=session_violation_score,
                     )
                     if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2056,12 +2054,11 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         await _save_evidence(attempt_id, frame_bytes, "SCREEN")
                     except Exception as ev_err:
                         logger.warning("Screen evidence save failed for attempt %s: %s", attempt_id, ev_err)
-                    # OCR analysis for forbidden content (runs in executor to avoid blocking)
                     try:
-                        import asyncio as _asyncio
-                        screen_alert = await _asyncio.get_running_loop().run_in_executor(
-                            None, analyze_screen_bytes, frame_bytes
-                        )
+                        screen_result = await inference_gateway.process_screen(attempt_id, frame_bytes)
+                        session_summary = dict(screen_result.summary or {})
+                        session_violation_score = float(screen_result.violation_score or session_violation_score)
+                        screen_alert = screen_result.alerts[0] if screen_result.alerts else None
                         if screen_alert:
                             severity = SEVERITY_MAP.get(screen_alert.get("severity", "HIGH"), SeverityEnum.HIGH)
                             event_time = datetime.now(timezone.utc)
@@ -2099,7 +2096,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 screen_history,
                                 occurred_at=event_time,
                                 request_ip=get_websocket_ip(websocket),
-                                violation_score=orchestrator.violation_score,
+                                violation_score=session_violation_score,
                             )
                             if reason:
                                 await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2155,7 +2152,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             history_events,
                             occurred_at=event.occurred_at,
                             request_ip=get_websocket_ip(websocket),
-                            violation_score=orchestrator.violation_score,
+                            violation_score=session_violation_score,
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2206,7 +2203,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             history_events,
                             occurred_at=event.occurred_at,
                             request_ip=get_websocket_ip(websocket),
-                            violation_score=orchestrator.violation_score,
+                            violation_score=session_violation_score,
                         )
                         if reason:
                             await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2286,7 +2283,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         history_events,
                         occurred_at=event_time,
                         request_ip=get_websocket_ip(websocket),
-                        violation_score=orchestrator.violation_score,
+                        violation_score=session_violation_score,
                     )
                     if reason:
                         await websocket.send_json({"type": "forced_submit", "detail": reason})
@@ -2317,9 +2314,10 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         if websocket.application_state == WebSocketState.CONNECTED:
             await websocket.close(code=1011)
     finally:
-        heartbeat_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await heartbeat_task
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
         # Flush any uncommitted events before closing
         try:
             db.commit()
@@ -2337,9 +2335,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
             with contextlib.suppress(Exception):
                 await websocket.send_json({"type": "server_shutdown"})
                 await websocket.close(code=1001)
-        # Shut down the orchestrator's thread pool to avoid leaked threads
+        # Close the inference session so any per-attempt resources are released
         with contextlib.suppress(Exception):
-            orchestrator.close()
+            await inference_gateway.close_session(attempt_id)
         _release_db_session(db)
 
 
