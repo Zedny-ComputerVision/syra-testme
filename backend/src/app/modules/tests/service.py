@@ -25,6 +25,7 @@ from ...services.normalized_relations import (
     exam_security_settings,
     exam_ui_config,
     mutate_exam_admin_meta,
+    normalize_certificate_issue_rule,
     runtime_attempt_policy_conflicts,
     set_exam_runtime_settings,
 )
@@ -32,16 +33,19 @@ from ...services.report_rendering import render_report_template
 from ...services.sanitization import sanitize_html_fragment, sanitize_instructions
 from ...utils.response_cache import TimedSingleFlightCache
 from ...utils.pagination import PaginationParams, build_page_response
-from .enums import ReportContent, ReportDisplayed, TestStatus
+from .enums import ReportContent, ReportDisplayed, TestStatus, TestType
 from .proctoring_requirements import normalize_proctoring_config
-from .repository import TestListQuery, TestRepository
+from .repository import TestListQuery, TestListRow, TestRepository
 from .schemas import TestCreateDTO, TestResponseDTO
 
 
 DEFAULT_UI_CONFIG = {
     "displayed_columns": ["name", "code", "type", "status", "time_limit_minutes", "testing_sessions"],
 }
-_test_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(ttl_seconds=10.0)
+_test_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(
+    ttl_seconds=10.0,
+    wait_timeout_seconds=5.0,
+)
 
 
 @dataclass(slots=True)
@@ -204,6 +208,8 @@ class TestService:
     ) -> TestResponseDTO:
         exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         payload = body.model_dump(exclude_unset=True, exclude_none=True)
+        if "certificate" in getattr(body, "model_fields_set", set()) and body.certificate is None:
+            payload["certificate"] = None
         self._assert_can_mutate(exam, set(payload.keys()))
         next_max_attempts = payload.get("attempts_allowed", exam.max_attempts)
 
@@ -509,11 +515,10 @@ class TestService:
                 )
 
     def _status(self, exam: Exam) -> TestStatus:
-        if exam_archived_at(exam):
-            return TestStatus.ARCHIVED
-        if exam.status == ExamStatus.OPEN:
-            return TestStatus.PUBLISHED
-        return TestStatus.DRAFT
+        return self._status_from_runtime(
+            is_archived=bool(exam_archived_at(exam)),
+            runtime_status=getattr(exam, "status", None),
+        )
 
     def _serialize_detail(self, exam: Exam) -> TestResponseDTO:
         node = exam.node
@@ -524,9 +529,9 @@ class TestService:
                 "code": exam_code(exam),
                 "name": exam.title,
                 "description": exam.description,
-                "type": exam.type.value,
+                "type": self._test_type_value(getattr(exam, "type", None)),
                 "status": self._status(exam).value,
-                "runtime_status": exam.status.value,
+                "runtime_status": self._runtime_status_value(getattr(exam, "status", None)),
                 "node_id": exam.node_id,
                 "node_title": node.title if node else None,
                 "course_id": course.id if course else None,
@@ -552,24 +557,63 @@ class TestService:
             }
         )
 
-    def _serialize_list_item(self, exam: Exam, *, testing_sessions: int, question_count: int) -> dict:
+    def _serialize_list_item(self, exam: TestListRow, *, testing_sessions: int, question_count: int) -> dict:
         category = None
-        if exam.category:
-            category = {"id": exam.category.id, "name": exam.category.name}
+        if exam.category_id and exam.category_name:
+            category = {"id": exam.category_id, "name": exam.category_name}
         return {
             "id": exam.id,
-            "code": exam_code(exam),
-            "name": exam.title,
-            "type": exam.type.value,
-            "status": self._status(exam).value,
+            "code": exam.code,
+            "name": exam.name or "Untitled test",
+            "type": self._test_type_value(exam.raw_type),
+            "status": self._status_from_runtime(
+                is_archived=exam.is_archived,
+                runtime_status=exam.raw_runtime_status,
+            ).value,
             "category": category,
-            "time_limit_minutes": exam.time_limit or 60,
+            "time_limit_minutes": exam.time_limit_minutes or 60,
             "testing_sessions": testing_sessions,
             "question_count": question_count,
-            "certificate": exam_certificate(exam),
+            "certificate": self._serialize_list_certificate(exam),
             "created_at": exam.created_at,
             "updated_at": exam.updated_at,
         }
+
+    def _status_from_runtime(self, *, is_archived: bool, runtime_status) -> TestStatus:
+        if is_archived:
+            return TestStatus.ARCHIVED
+        if self._runtime_status_value(runtime_status) == ExamStatus.OPEN.value:
+            return TestStatus.PUBLISHED
+        return TestStatus.DRAFT
+
+    def _test_type_value(self, raw_type) -> str:
+        normalized = getattr(raw_type, "value", raw_type)
+        try:
+            return TestType(str(normalized or TestType.MCQ.value)).value
+        except ValueError:
+            return TestType.MCQ.value
+
+    def _runtime_status_value(self, raw_status) -> str:
+        normalized = getattr(raw_status, "value", raw_status)
+        try:
+            return ExamStatus(str(normalized or ExamStatus.CLOSED.value)).value
+        except ValueError:
+            return ExamStatus.CLOSED.value
+
+    def _serialize_list_certificate(self, exam: TestListRow) -> dict | None:
+        certificate = deepcopy(exam.certificate) if isinstance(exam.certificate, dict) else {}
+        for key, value in (
+            ("title", exam.certificate_title),
+            ("subtitle", exam.certificate_subtitle),
+            ("issuer", exam.certificate_issuer),
+            ("signer", exam.certificate_signer),
+        ):
+            if value not in {None, ""}:
+                certificate[key] = value
+        if not certificate:
+            return None
+        certificate["issue_rule"] = normalize_certificate_issue_rule(certificate.get("issue_rule"))
+        return {key: value for key, value in certificate.items() if value not in {None, ""}} or None
 
     def _notify_published(self, exam: Exam) -> None:
         seen: set[str] = set()

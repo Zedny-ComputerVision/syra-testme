@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { isTerminalRefreshError, markRefreshError } from '../utils/authRefresh'
 
 const STORAGE_KEY = 'syra_tokens'
 const rawBase = import.meta.env.VITE_API_BASE_URL || '/api/'
@@ -235,27 +236,31 @@ function resolveApiUrl(path) {
 async function refreshAccessToken() {
   const stored = readTokens()
   if (!stored?.refresh_token) {
-    throw new Error('Missing refresh token')
+    throw markRefreshError(new Error('Missing refresh token'), { terminal: true })
   }
   if (!isJwtLike(stored.refresh_token)) {
-    throw new Error('Invalid refresh token')
+    throw markRefreshError(new Error('Invalid refresh token'), { terminal: true })
   }
   const refreshUrl = resolveApiUrl('auth/refresh')
-  const { data } = await axios.post(
-    refreshUrl,
-    { refresh_token: stored.refresh_token },
-    { timeout: 5000 },
-  )
-  if (!data?.access_token) {
-    throw new Error('Missing refreshed access token')
+  try {
+    const { data } = await axios.post(
+      refreshUrl,
+      { refresh_token: stored.refresh_token },
+      { timeout: 5000 },
+    )
+    if (!data?.access_token) {
+      throw markRefreshError(new Error('Missing refreshed access token'), { terminal: false })
+    }
+    const nextTokens = {
+      ...stored,
+      access_token: data.access_token,
+      token_type: data.token_type || stored.token_type || 'bearer',
+    }
+    writeTokens(nextTokens)
+    return nextTokens
+  } catch (error) {
+    throw markRefreshError(error, { terminal: isTerminalRefreshError(error) })
   }
-  const nextTokens = {
-    ...stored,
-    access_token: data.access_token,
-    token_type: data.token_type || stored.token_type || 'bearer',
-  }
-  writeTokens(nextTokens)
-  return nextTokens
 }
 
 api.interceptors.request.use((config) => {
@@ -358,10 +363,20 @@ api.interceptors.response.use(
       original.headers.Authorization = `Bearer ${nextTokens.access_token}`
       return api.request(original)
     } catch (refreshErr) {
-      clearTokens()
-      redirectToLogin()
-      refreshErr.userMessage = normalizeDetailMessage(refreshErr.response?.data?.detail, 'Your session has expired. Please sign in again.')
+      const terminalRefreshError = isTerminalRefreshError(refreshErr)
+      refreshErr.userMessage = terminalRefreshError
+        ? normalizeDetailMessage(refreshErr.response?.data?.detail, 'Your session has expired. Please sign in again.')
+        : normalizeDetailMessage(refreshErr.response?.data?.detail, 'Your session could not be refreshed right now. Please try again.')
       refreshErr.message = refreshErr.userMessage
+      if (terminalRefreshError) {
+        clearTokens()
+        redirectToLogin()
+      } else {
+        emitApiError(refreshErr.userMessage, {
+          code: refreshErr.code || `REFRESH_${status || 'FAILED'}`,
+          url,
+        })
+      }
       return Promise.reject(refreshErr)
     }
   }

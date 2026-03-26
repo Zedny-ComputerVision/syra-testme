@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 
 from ...models import (
@@ -15,6 +16,7 @@ from ...models import (
     CourseStatus,
     Exam,
     ExamAdminConfig,
+    ExamCertificateConfig,
     ExamStatus,
     ExamType,
     Node,
@@ -33,6 +35,11 @@ from ...services.normalized_relations import (
 from .enums import TestStatus, TestType
 
 
+logger = logging.getLogger(__name__)
+_VALID_EXAM_TYPE_VALUES = {item.value for item in ExamType}
+_VALID_EXAM_STATUS_VALUES = {item.value for item in ExamStatus}
+
+
 @dataclass(slots=True)
 class TestListQuery:
     owner_id: uuid.UUID | None = None
@@ -48,35 +55,54 @@ class TestListQuery:
     page_size: int = 20
 
 
+@dataclass(slots=True)
+class TestListRow:
+    id: uuid.UUID
+    name: str | None
+    code: str | None
+    raw_type: str | None
+    raw_runtime_status: str | None
+    is_archived: bool
+    category_id: uuid.UUID | None
+    category_name: str | None
+    time_limit_minutes: int | None
+    certificate: dict | None
+    certificate_title: str | None
+    certificate_subtitle: str | None
+    certificate_issuer: str | None
+    certificate_signer: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
 class TestRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_tests(self, query: TestListQuery) -> tuple[list[Exam], int, dict[uuid.UUID, int], dict[uuid.UUID, int]]:
+    def list_tests(self, query: TestListQuery) -> tuple[list[TestListRow], int, dict[uuid.UUID, int], dict[uuid.UUID, int]]:
         statement = (
-            select(Exam)
-            .outerjoin(Exam.admin_config)
-            .options(
-                load_only(
-                    Exam.id,
-                    Exam.title,
-                    Exam.type,
-                    Exam.status,
-                    Exam.time_limit,
-                    Exam.certificate,
-                    Exam.settings,
-                    Exam.category_id,
-                    Exam.created_at,
-                    Exam.updated_at,
-                ),
-                joinedload(Exam.category).load_only(Category.id, Category.name),
-                joinedload(Exam.admin_config).load_only(
-                    ExamAdminConfig.exam_id,
-                    ExamAdminConfig.code,
-                    ExamAdminConfig.archived_at,
-                ),
-                joinedload(Exam.certificate_config_rel),
+            select(
+                Exam.id.label("id"),
+                Exam.title.label("name"),
+                self._code_expression().label("code"),
+                cast(Exam.type, String).label("raw_type"),
+                cast(Exam.status, String).label("raw_runtime_status"),
+                self._archived_expression().label("is_archived"),
+                Category.id.label("category_id"),
+                Category.name.label("category_name"),
+                Exam.time_limit.label("time_limit_minutes"),
+                Exam.certificate.label("certificate"),
+                ExamCertificateConfig.title.label("certificate_title"),
+                ExamCertificateConfig.subtitle.label("certificate_subtitle"),
+                ExamCertificateConfig.issuer.label("certificate_issuer"),
+                ExamCertificateConfig.signer.label("certificate_signer"),
+                Exam.created_at.label("created_at"),
+                Exam.updated_at.label("updated_at"),
             )
+            .select_from(Exam)
+            .outerjoin(ExamAdminConfig, ExamAdminConfig.exam_id == Exam.id)
+            .outerjoin(Category, Category.id == Exam.category_id)
+            .outerjoin(ExamCertificateConfig, ExamCertificateConfig.exam_id == Exam.id)
         )
         # Filter library/pool exams in SQL (column + legacy JSON) so pagination is accurate.
         legacy_pool = Exam.settings["_pool_library"].as_boolean()
@@ -91,10 +117,32 @@ class TestRepository:
         statement = self._apply_filters(statement, query)
         statement = statement.order_by(self._order_by_column(query.sort, query.order), Exam.created_at.desc())
 
-        total = self.db.scalar(select(func.count()).select_from(statement.subquery())) or 0
-        items = self.db.scalars(
+        total = self.db.scalar(select(func.count()).select_from(statement.order_by(None).subquery())) or 0
+        rows = self.db.execute(
             statement.offset((query.page - 1) * query.page_size).limit(query.page_size)
-        ).all()
+        ).mappings().all()
+        items = [
+            TestListRow(
+                id=row["id"],
+                name=row["name"],
+                code=row["code"],
+                raw_type=row["raw_type"],
+                raw_runtime_status=row["raw_runtime_status"],
+                is_archived=bool(row["is_archived"]),
+                category_id=row["category_id"],
+                category_name=row["category_name"],
+                time_limit_minutes=row["time_limit_minutes"],
+                certificate=row["certificate"],
+                certificate_title=row["certificate_title"],
+                certificate_subtitle=row["certificate_subtitle"],
+                certificate_issuer=row["certificate_issuer"],
+                certificate_signer=row["certificate_signer"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows
+        ]
+        self._repair_invalid_exam_enums(items)
 
         exam_ids = [item.id for item in items]
         if not exam_ids:
@@ -119,7 +167,7 @@ class TestRepository:
         return items, int(total), schedule_counts, question_counts
 
     def get_test(self, test_id: uuid.UUID) -> Exam | None:
-        return self.db.scalar(
+        statement = (
             select(Exam)
             .options(
                 joinedload(Exam.node).joinedload(Node.course),
@@ -133,9 +181,15 @@ class TestRepository:
             )
             .where(Exam.id == test_id)
         )
+        try:
+            return self.db.scalar(statement)
+        except LookupError:
+            if self._repair_invalid_exam_enum_by_id(test_id):
+                return self.db.scalar(statement)
+            raise
 
     def get_test_for_write(self, test_id: uuid.UUID) -> Exam | None:
-        return self.db.scalar(
+        statement = (
             select(Exam)
             .options(
                 joinedload(Exam.node).joinedload(Node.course),
@@ -148,6 +202,12 @@ class TestRepository:
             )
             .where(Exam.id == test_id)
         )
+        try:
+            return self.db.scalar(statement)
+        except LookupError:
+            if self._repair_invalid_exam_enum_by_id(test_id):
+                return self.db.scalar(statement)
+            raise
 
     def ensure_node(self, actor: User, node_id: uuid.UUID | None) -> Node:
         if node_id is not None:
@@ -373,6 +433,54 @@ class TestRepository:
             ExamAdminConfig.code,
             Exam.settings[ADMIN_META_KEY]["code"].as_string(),
         )
+
+    def _repair_invalid_exam_enums(self, items: list[TestListRow]) -> None:
+        repairs = {
+            item.id: repair_values
+            for item in items
+            if (repair_values := self._enum_repair_values(item.raw_type, item.raw_runtime_status))
+        }
+        if not repairs:
+            return
+        self._apply_exam_enum_repairs(repairs)
+
+    def _repair_invalid_exam_enum_by_id(self, test_id: uuid.UUID) -> bool:
+        row = self.db.execute(
+            select(
+                cast(Exam.type, String).label("raw_type"),
+                cast(Exam.status, String).label("raw_runtime_status"),
+            ).where(Exam.id == test_id)
+        ).mappings().first()
+        if not row:
+            return False
+        repair_values = self._enum_repair_values(row["raw_type"], row["raw_runtime_status"])
+        if not repair_values:
+            return False
+        return self._apply_exam_enum_repairs({test_id: repair_values})
+
+    def _enum_repair_values(self, raw_type: str | None, raw_runtime_status: str | None) -> dict[str, str]:
+        repair_values: dict[str, str] = {}
+        if raw_type not in _VALID_EXAM_TYPE_VALUES:
+            repair_values["type"] = ExamType.MCQ.value
+        if raw_runtime_status not in _VALID_EXAM_STATUS_VALUES:
+            repair_values["status"] = ExamStatus.CLOSED.value
+        return repair_values
+
+    def _apply_exam_enum_repairs(self, repairs: dict[uuid.UUID, dict[str, str]]) -> bool:
+        exam_table = Exam.__table__
+        try:
+            for exam_id, repair_values in repairs.items():
+                self.db.execute(
+                    exam_table.update()
+                    .where(exam_table.c.id == exam_id)
+                    .values(**repair_values)
+                )
+            self.db.commit()
+            return True
+        except Exception:
+            self.db.rollback()
+            logger.exception("Failed to normalize invalid exam enum values")
+            return False
 
     def _ensure_owner_id(self, actor: User) -> uuid.UUID:
         actor_id = getattr(actor, "id", None)

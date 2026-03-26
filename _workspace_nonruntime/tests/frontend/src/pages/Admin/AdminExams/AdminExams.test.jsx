@@ -80,6 +80,23 @@ describe('AdminExams', () => {
     await waitFor(() => expect(screen.getByText('No tests created yet.')).toBeTruthy())
   })
 
+  it('sends explicit sort and order params for the default list request', async () => {
+    render(<AdminExams />)
+
+    await waitFor(() => expect(testsMock).toHaveBeenCalled())
+    expect(testsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 1,
+        page_size: 20,
+        sort: 'created_at',
+        order: 'desc',
+      }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }),
+    )
+  })
+
   it('requires explicit confirmation before deleting a test', async () => {
     testsMock
       .mockResolvedValueOnce(baseListResponse)

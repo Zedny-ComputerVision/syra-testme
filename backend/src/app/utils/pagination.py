@@ -49,12 +49,19 @@ def normalize_pagination(
     else:
         resolved_page = max(_coerce_int(page, DEFAULT_PAGE), 1)
 
+    resolved_sort, resolved_order = _resolve_sort_and_order(
+        sort=sort,
+        order=order,
+        default_sort=default_sort,
+        default_order=default_order,
+    )
+
     return PaginationParams(
         page=resolved_page,
         page_size=resolved_page_size,
         search=_coerce_text(search),
-        sort=_coerce_text(sort) or default_sort,
-        order=_normalize_order(_coerce_text(order) or default_order),
+        sort=resolved_sort,
+        order=resolved_order,
     )
 
 
@@ -91,6 +98,27 @@ def clamp_sort_field(value: str, allowed: set[str], default: str) -> str:
 def _normalize_order(value: str) -> str:
     normalized = str(value or "desc").strip().lower()
     return normalized if normalized in {"asc", "desc"} else "desc"
+
+
+def _resolve_sort_and_order(
+    *,
+    sort,
+    order,
+    default_sort: str,
+    default_order: str,
+) -> tuple[str, str]:
+    resolved_sort = _coerce_text(sort)
+    explicit_order = _coerce_text(order)
+    resolved_order = _normalize_order(explicit_order or default_order)
+
+    if not resolved_sort:
+        return default_sort, resolved_order
+
+    field, separator, embedded_order = resolved_sort.partition(":")
+    normalized_field = field.strip() or default_sort
+    if separator and not explicit_order:
+        resolved_order = _normalize_order(embedded_order or default_order)
+    return normalized_field, resolved_order
 
 
 def _coerce_int(value, default: int) -> int:

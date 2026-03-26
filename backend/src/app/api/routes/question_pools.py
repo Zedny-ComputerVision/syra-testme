@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session
+from sqlalchemy import select, func, or_
+from sqlalchemy.orm import Session, joinedload
 
 from ...models import Course, CourseStatus, Exam, ExamStatus, ExamType, Node, Question, QuestionPool, RoleEnum
 from ...schemas import Message, QuestionBase, QuestionPoolCreate, QuestionPoolRead, QuestionRead
@@ -123,6 +123,80 @@ def _find_corrupted_pool_library_exam(db: Session, pool_id) -> Exam | None:
         if not _is_pool_library_exam(candidate, pool_id):
             return candidate
     return None
+
+
+def _list_pool_library_exams(db: Session, pool_id) -> list[Exam]:
+    prefix = f"Pool Library {str(pool_id)[:8]}"
+    candidates = db.scalars(
+        select(Exam)
+        .options(joinedload(Exam.node).joinedload(Node.course))
+        .where(
+            or_(
+                Exam.library_pool_id == pool_id,
+                Exam.title.startswith(prefix),
+            )
+        )
+        .order_by(Exam.created_at.desc())
+    ).unique().all()
+    seen: set[str] = set()
+    matches: list[Exam] = []
+    for candidate in candidates:
+        candidate_id = str(getattr(candidate, "id", ""))
+        if candidate_id in seen:
+            continue
+        if _is_pool_library_exam(candidate, pool_id) or _looks_like_pool_library_exam(candidate, pool_id):
+            matches.append(candidate)
+            seen.add(candidate_id)
+    return matches
+
+
+def _cleanup_pool_library_resources(db: Session, pool_id) -> None:
+    library_exams = _list_pool_library_exams(db, pool_id)
+    if not library_exams:
+        return
+
+    candidate_node_ids = {exam.node_id for exam in library_exams if getattr(exam, "node_id", None) is not None}
+    candidate_course_ids = {
+        exam.node.course_id
+        for exam in library_exams
+        if getattr(exam, "node", None) is not None and getattr(exam.node, "course_id", None) is not None
+    }
+
+    for exam in library_exams:
+        db.delete(exam)
+    db.flush()
+
+    if candidate_node_ids:
+        shared_node_ids = db.scalars(
+            select(Node.id).where(
+                Node.id.in_(candidate_node_ids),
+                Node.title == "Shared Pool Questions",
+            )
+        ).all()
+        for node_id in shared_node_ids:
+            remaining_exam_count = db.scalar(
+                select(func.count()).select_from(Exam).where(Exam.node_id == node_id)
+            ) or 0
+            if remaining_exam_count:
+                continue
+            node = db.get(Node, node_id)
+            if node is None:
+                continue
+            candidate_course_ids.add(node.course_id)
+            db.delete(node)
+        db.flush()
+
+    if candidate_course_ids:
+        for course_id in candidate_course_ids:
+            remaining_node_count = db.scalar(
+                select(func.count()).select_from(Node).where(Node.course_id == course_id)
+            ) or 0
+            if remaining_node_count:
+                continue
+            course = db.get(Course, course_id)
+            if course is not None and course.title == "Question Pool Library":
+                db.delete(course)
+        db.flush()
 
 
 def _load_pool_questions(db: Session, pool_id):
@@ -396,6 +470,7 @@ async def delete_pool(
         raise HTTPException(status_code=403, detail="Not allowed")
     pool_name = pool.name
     pool_pk_str = str(pool.id)
+    _cleanup_pool_library_resources(db, pool.id)
     db.delete(pool)
     db.commit()
     write_audit_log(

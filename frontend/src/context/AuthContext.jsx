@@ -7,6 +7,7 @@ import {
 } from '../utils/permissions';
 import { clearAttemptId } from '../utils/attemptSession';
 import { clearScreenStream } from '../utils/screenShareState';
+import { isTerminalRefreshError, markRefreshError } from '../utils/authRefresh';
 
 export const AuthContext = createContext(null);
 
@@ -95,12 +96,12 @@ function loadStoredTokens() {
  * Decode a JWT access token and extract user fields.
  * Returns null if the token is invalid or expired.
  */
-function decodeUser(accessToken) {
+function decodeUser(accessToken, { allowExpired = false } = {}) {
   try {
     if (!accessToken) return null;
     const decoded = jwtDecode(accessToken);
 
-    if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+    if (!allowExpired && decoded.exp && decoded.exp * 1000 < Date.now()) {
       return null;
     }
 
@@ -120,7 +121,9 @@ export function AuthProvider({ children }) {
   const initialTokens = useMemo(() => loadStoredTokens(), []);
   const [tokens, setTokens] = useState(initialTokens);
   const [user, setUser] = useState(() => {
-    return initialTokens ? decodeUser(initialTokens.access_token) : null;
+    return initialTokens
+      ? decodeUser(initialTokens.access_token, { allowExpired: Boolean(initialTokens.refresh_token) })
+      : null;
   });
   const [permissionRows, setPermissionRows] = useState([]);
   const [permissionsLoading, setPermissionsLoading] = useState(Boolean(initialTokens?.access_token));
@@ -140,35 +143,35 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refreshAccessToken = useCallback(async (currentTokens) => {
-    if (!currentTokens?.refresh_token) return null;
-    if (!isJwtLike(currentTokens.refresh_token)) return null;
+    if (!currentTokens?.refresh_token) {
+      throw markRefreshError(new Error('Missing refresh token'), { terminal: true });
+    }
+    if (!isJwtLike(currentTokens.refresh_token)) {
+      throw markRefreshError(new Error('Invalid refresh token'), { terminal: true });
+    }
     if (!refreshPromiseRef.current) {
       refreshPromiseRef.current = (async () => {
         try {
           const refreshUrl = resolveApiUrl('auth/refresh');
-        const { data } = await axios.post(
-          refreshUrl,
-          { refresh_token: currentTokens.refresh_token },
-          { timeout: 10000 },
-        );
+          const { data } = await axios.post(
+            refreshUrl,
+            { refresh_token: currentTokens.refresh_token },
+            { timeout: 10000 },
+          );
           if (!data?.access_token) return null;
           return {
             ...currentTokens,
             access_token: data.access_token,
             token_type: data.token_type || currentTokens.token_type || 'bearer',
           };
-        } catch {
-          return null;
+        } catch (error) {
+          throw markRefreshError(error, { terminal: isTerminalRefreshError(error) });
         } finally {
           refreshPromiseRef.current = null;
         }
       })();
     }
-    try {
-      return await refreshPromiseRef.current;
-    } catch {
-      return null;
-    }
+    return refreshPromiseRef.current;
   }, []);
 
   // Keep session alive across browser refresh by using refresh token when access token is expired.
@@ -193,19 +196,30 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      const refreshed = await refreshAccessToken(tokens);
-      if (!refreshed) {
-        if (!cancelled) {
-          clearAuthState();
+      try {
+        const refreshed = await refreshAccessToken(tokens);
+        if (!refreshed) {
+          if (!cancelled) {
+            clearAuthState();
+          }
+          return;
         }
-        return;
-      }
 
-      safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
-      if (!cancelled) {
-        setTokens(refreshed);
-        setUser(decodeUser(refreshed.access_token));
+        safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
+        if (!cancelled) {
+          setTokens(refreshed);
+          setUser(decodeUser(refreshed.access_token));
+          setLoading(false);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        if (isTerminalRefreshError(error)) {
+          clearAuthState();
+          return;
+        }
+        setUser(decodeUser(tokens.access_token, { allowExpired: Boolean(tokens.refresh_token) }));
         setLoading(false);
+        return;
       }
     }
 
@@ -334,11 +348,17 @@ export function AuthProvider({ children }) {
       const msUntilExpiry = decoded.exp * 1000 - Date.now();
       const refreshAt = Math.max(msUntilExpiry - 2 * 60 * 1000, 0);
       timer = setTimeout(async () => {
-        const refreshed = await refreshAccessToken(tokens);
-        if (refreshed) {
-          safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
-          setTokens(refreshed);
-          setUser(decodeUser(refreshed.access_token));
+        try {
+          const refreshed = await refreshAccessToken(tokens);
+          if (refreshed) {
+            safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
+            setTokens(refreshed);
+            setUser(decodeUser(refreshed.access_token));
+          }
+        } catch (error) {
+          if (isTerminalRefreshError(error)) {
+            clearAuthState();
+          }
         }
       }, refreshAt);
     } catch {

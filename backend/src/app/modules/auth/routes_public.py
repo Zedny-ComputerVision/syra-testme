@@ -84,7 +84,7 @@ async def login(
     return service.login(body, request_ip=_request_ip(request))
 
 
-@limiter.limit(settings.RATE_LIMIT_LOGIN)
+@limiter.limit(settings.RATE_LIMIT_REFRESH)
 @router.post("/refresh", response_model=TokenRefresh)
 async def refresh(
     request: Request,

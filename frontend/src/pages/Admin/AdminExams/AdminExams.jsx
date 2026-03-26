@@ -25,6 +25,15 @@ const SORT_OPTIONS = [
   { value: 'name:desc', label: 'Name Z-A' },
 ]
 
+function buildSortParams(value) {
+  const normalized = String(value || '').trim()
+  const [sort = 'created_at', order = 'desc'] = normalized.split(':', 2)
+  return {
+    sort: sort || 'created_at',
+    order: order === 'asc' ? 'asc' : 'desc',
+  }
+}
+
 function loadStoredColumns() {
   try {
     const parsed = JSON.parse(localStorage.getItem(COLUMN_STORAGE_KEY) || 'null')
@@ -94,10 +103,11 @@ export default function AdminExams() {
     setLoading(true)
     setError('')
     try {
+      const sortParams = buildSortParams(nextSort)
       const params = {
         page: nextPage,
         page_size: nextPageSize,
-        sort: nextSort,
+        ...sortParams,
       }
       if (nextSearch.trim()) params.search = nextSearch.trim()
       if (nextFilters.status) params.status = nextFilters.status

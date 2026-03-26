@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import AdminUsers from './AdminUsers'
 
 const usersMock = vi.fn()
+const createUserMock = vi.fn()
 const useAuthMock = vi.fn()
 const baseUser = {
   id: 'user-1',
@@ -14,11 +15,15 @@ const baseUser = {
   email: 'learner01@example.com',
   role: 'LEARNER',
   is_active: true,
+  created_at: '2026-03-25T08:00:00.000Z',
+  updated_at: '2026-03-25T08:00:00.000Z',
 }
+let usersData = []
 
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
     users: (...args) => usersMock(...args),
+    createUser: (...args) => createUserMock(...args),
   },
 }))
 
@@ -33,9 +38,14 @@ describe('AdminUsers permission modes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    usersData = [{ ...baseUser }]
     usersMock.mockImplementation((params = {}) => {
-      const matchesSearch = !params.search || baseUser.name.toLowerCase().includes(String(params.search).toLowerCase())
-      const items = matchesSearch ? [baseUser] : []
+      const normalizedSearch = String(params.search || '').toLowerCase()
+      const matchesSearch = (user) => {
+        if (!normalizedSearch) return true
+        return [user.name, user.email, user.user_id].some((value) => String(value || '').toLowerCase().includes(normalizedSearch))
+      }
+      const items = usersData.filter(matchesSearch)
       return Promise.resolve({
         data: {
           items,
@@ -44,6 +54,18 @@ describe('AdminUsers permission modes', () => {
           limit: params.limit ?? 10,
         },
       })
+    })
+    createUserMock.mockImplementation((payload) => {
+      const createdUser = {
+        id: `user-${usersData.length + 1}`,
+        role: 'LEARNER',
+        is_active: true,
+        created_at: '2026-03-26T09:00:00.000Z',
+        updated_at: '2026-03-26T09:00:00.000Z',
+        ...payload,
+      }
+      usersData = [createdUser, ...usersData]
+      return Promise.resolve({ data: createdUser })
     })
   })
 
@@ -110,5 +132,29 @@ describe('AdminUsers permission modes', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' }).at(-1))
 
     await waitFor(() => expect(screen.getAllByText('Learner One').length).toBeGreaterThan(0))
+  })
+
+  it('shows the newly created user immediately in the current newest-first view', async () => {
+    useAuthMock.mockReturnValue({ user: { role: 'ADMIN', id: 'admin-1' } })
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AdminUsers />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getAllByText('Learner One').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New User' }))
+    fireEvent.change(screen.getByLabelText('User ID'), { target: { value: 'fresh-user' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Fresh User' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'fresh@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password123!' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(createUserMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByText('User created.')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText('Fresh User').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('fresh@example.com').length).toBeGreaterThan(0)
   })
 })

@@ -56,6 +56,7 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = Field(default="")
     RATE_LIMIT_LOGIN: str = Field(default="10/minute")
+    RATE_LIMIT_REFRESH: str = Field(default="60/minute")
     RATE_LIMIT_FORGOT: str = Field(default="5/minute")
     E2E_SEED_ENABLED: bool = False
     DEV_LOG_REQUESTS: bool = False

@@ -40,11 +40,24 @@ const LEARNER_ROUTES = [
   '/profile',
 ]
 
-function attachIssueCollectors(page) {
+async function attachIssueCollectors(page) {
+  await page.addInitScript(() => {
+    window.__syraApiErrors = []
+    window.addEventListener('syra:api-error', (event) => {
+      window.__syraApiErrors.push({
+        message: event?.detail?.message || '',
+        code: event?.detail?.code || '',
+        url: window.location.href,
+      })
+    })
+  })
+
   const issues = {
     console: [],
     pageErrors: [],
     responses: [],
+    apiErrors: [],
+    visibleFailures: [],
   }
 
   page.on('console', (msg) => {
@@ -82,6 +95,8 @@ function formatIssues(label, issues) {
     `${label} console issues: ${JSON.stringify(issues.console, null, 2)}`,
     `${label} page errors: ${JSON.stringify(issues.pageErrors, null, 2)}`,
     `${label} failed API responses: ${JSON.stringify(issues.responses, null, 2)}`,
+    `${label} emitted api errors: ${JSON.stringify(issues.apiErrors, null, 2)}`,
+    `${label} visible failure banners: ${JSON.stringify(issues.visibleFailures, null, 2)}`,
   ].join('\n')
 }
 
@@ -92,10 +107,50 @@ async function bootstrapSession(page, token) {
   }, token)
 }
 
-async function visitRoutes(page, routes) {
+async function drainApiErrors(page) {
+  return page.evaluate(() => {
+    const captured = Array.isArray(window.__syraApiErrors) ? [...window.__syraApiErrors] : []
+    window.__syraApiErrors = []
+    return captured
+  })
+}
+
+async function visibleFailureMessages(page) {
+  const messages = []
+  for (const text of [
+    'Internal server error',
+    'The server took too long to respond. Please try again.',
+  ]) {
+    const locator = page.getByText(text, { exact: false })
+    const count = await locator.count()
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index)
+      if (await candidate.isVisible().catch(() => false)) {
+        messages.push(text)
+        break
+      }
+    }
+  }
+  return messages
+}
+
+async function visitRoutes(page, routes, issues) {
   for (const route of routes) {
     await page.goto(route, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(1200)
+    issues.apiErrors.push(
+      ...(await drainApiErrors(page)).map((item) => ({
+        route,
+        ...item,
+      })),
+    )
+    const failureMessages = await visibleFailureMessages(page)
+    if (failureMessages.length > 0) {
+      issues.visibleFailures.push({
+        route,
+        messages: failureMessages,
+      })
+    }
   }
 }
 
@@ -110,21 +165,33 @@ test('primary admin and learner route groups stay free of console, page, and API
   expect(learnerLogin.ok(), `learner login failed: ${learnerLogin.status()} ${JSON.stringify(learnerBody)}`).toBeTruthy()
 
   const learnerPage = await context.newPage()
-  const adminIssues = attachIssueCollectors(page)
-  const learnerIssues = attachIssueCollectors(learnerPage)
+  const adminIssues = await attachIssueCollectors(page)
+  const learnerIssues = await attachIssueCollectors(learnerPage)
 
   await bootstrapSession(page, admin.token)
   await bootstrapSession(learnerPage, learnerBody.access_token)
 
-  await visitRoutes(page, ADMIN_ROUTES)
-  await visitRoutes(learnerPage, LEARNER_ROUTES)
+  await visitRoutes(page, ADMIN_ROUTES, adminIssues)
+  await visitRoutes(learnerPage, LEARNER_ROUTES, learnerIssues)
 
   expect(
-    [...adminIssues.console, ...adminIssues.pageErrors, ...adminIssues.responses],
+    [
+      ...adminIssues.console,
+      ...adminIssues.pageErrors,
+      ...adminIssues.responses,
+      ...adminIssues.apiErrors,
+      ...adminIssues.visibleFailures,
+    ],
     formatIssues('admin', adminIssues),
   ).toEqual([])
   expect(
-    [...learnerIssues.console, ...learnerIssues.pageErrors, ...learnerIssues.responses],
+    [
+      ...learnerIssues.console,
+      ...learnerIssues.pageErrors,
+      ...learnerIssues.responses,
+      ...learnerIssues.apiErrors,
+      ...learnerIssues.visibleFailures,
+    ],
     formatIssues('learner', learnerIssues),
   ).toEqual([])
 
