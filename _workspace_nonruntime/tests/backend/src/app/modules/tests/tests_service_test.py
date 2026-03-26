@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from src.app.api.deps import get_db_dep, get_current_user
+from src.app.api.deps import get_db_dep, get_current_user, invalidate_permission_rows_cache
 from src.app.db.base import Base
 from src.app.modules.tests.routes_admin import router as admin_tests_router
 from src.app.modules.tests.enums import TestStatus, TestType
@@ -14,12 +14,13 @@ from src.app.modules.tests.proctoring_requirements import (
     get_proctoring_requirements,
     normalize_proctoring_config,
 )
-from src.app.models import ExamType, Question, RoleEnum, SystemSettings
+from src.app.models import Exam, ExamType, Question, RoleEnum, SystemSettings, User
 from tests.postgres_test_utils import create_test_engine, drop_postgres_database
 
 
 class DummyUser:
-    def __init__(self, role=RoleEnum.ADMIN):
+    def __init__(self, role=RoleEnum.ADMIN, user_id=None):
+        self.id = user_id or uuid.uuid4()
         self.role = role
 
 
@@ -38,6 +39,24 @@ def create_app_and_db():
 
     Base.metadata.create_all(engine)
 
+    current_user = DummyUser()
+    bootstrap_db = TestingSessionLocal()
+    try:
+        bootstrap_db.add(
+            User(
+                id=current_user.id,
+                email="admin@example.com",
+                name="Admin User",
+                user_id="ADM-001",
+                role=RoleEnum.ADMIN,
+                hashed_password="hashed",
+                is_active=True,
+            )
+        )
+        bootstrap_db.commit()
+    finally:
+        bootstrap_db.close()
+
     def get_db_override():
         db = TestingSessionLocal()
         try:
@@ -49,10 +68,11 @@ def create_app_and_db():
     app = FastAPI()
     app.include_router(admin_tests_router, prefix="/api")
     app.dependency_overrides[get_db_dep] = get_db_override
-    app.dependency_overrides[get_current_user] = lambda: DummyUser()
+    app.dependency_overrides[get_current_user] = lambda: current_user
     app.state.testing_session_local = TestingSessionLocal
     app.state.testing_database_url = getattr(engine, "test_database_url", None)
     app.state.testing_engine = engine
+    app.state.current_test_user = current_user
     return app
 
 
@@ -123,7 +143,7 @@ def test_patch_locked_fields_returns_409(client):
 
 def test_list_filters_and_pagination(client):
     # create several tests
-    t1 = _create_test(client, "Alpha")
+    _create_test(client, "Alpha")
     t2 = _create_test(client, "Beta")
     t3 = _create_test(client, "Gamma")
     _add_question(client, t2["id"])
@@ -148,11 +168,27 @@ def test_list_filters_and_pagination(client):
         assert item["status"] == TestStatus.PUBLISHED.value
 
 
-def test_instructor_with_edit_tests_permission_can_list_admin_tests(client):
-    created = _create_test(client, "Instructor Visible")
+def test_instructor_with_edit_tests_permission_only_lists_owned_tests(client):
+    admin_created = _create_test(client, "Admin Visible")
+    instructor_created = _create_test(client, "Instructor Visible")
+    instructor_id = uuid.uuid4()
 
     db = client.app.state.testing_session_local()
     try:
+        db.add(
+            User(
+                id=instructor_id,
+                email="instructor@example.com",
+                name="Instructor User",
+                user_id="INS-001",
+                role=RoleEnum.INSTRUCTOR,
+                hashed_password="hashed",
+                is_active=True,
+            )
+        )
+        instructor_exam = db.get(Exam, uuid.UUID(instructor_created["id"]))
+        instructor_exam.created_by_id = instructor_id
+        db.add(instructor_exam)
         db.add(
             SystemSettings(
                 key="permissions_config",
@@ -160,15 +196,17 @@ def test_instructor_with_edit_tests_permission_can_list_admin_tests(client):
             )
         )
         db.commit()
+        invalidate_permission_rows_cache(db)
     finally:
         db.close()
 
-    client.app.dependency_overrides[get_current_user] = lambda: DummyUser(RoleEnum.INSTRUCTOR)
+    client.app.dependency_overrides[get_current_user] = lambda: DummyUser(RoleEnum.INSTRUCTOR, instructor_id)
 
     resp = client.get("/api/admin/tests")
     assert resp.status_code == 200
     ids = [item["id"] for item in resp.json()["items"]]
-    assert created["id"] in ids
+    assert instructor_created["id"] in ids
+    assert admin_created["id"] not in ids
 
 
 def test_delete_non_draft_returns_409_forbidden_error(client):
@@ -290,7 +328,7 @@ def test_monitored_proctoring_forces_screen_recording_requirement():
 
     assert requirements["camera_required"] is True
     assert requirements["screen_required"] is True
-    assert requirements["identity_required"] is True
+    assert requirements["identity_required"] is False
 
     normalized = normalize_proctoring_config(
         {
@@ -300,3 +338,27 @@ def test_monitored_proctoring_forces_screen_recording_requirement():
 
     assert normalized["screen_required"] is True
     assert normalized["screen_capture"] is True
+    assert normalized["identity_required"] is False
+
+
+def test_face_verify_aliases_drive_recorded_video_without_forcing_identity_requirement():
+    requirements = get_proctoring_requirements(
+        {
+            "face_verify": True,
+            "face_verify_enabled": True,
+        }
+    )
+
+    assert requirements["identity_required"] is False
+    assert requirements["camera_required"] is True
+    assert requirements["screen_required"] is True
+
+    normalized = normalize_proctoring_config(
+        {
+            "face_verify_enabled": True,
+        }
+    )
+
+    assert normalized["identity_required"] is False
+    assert normalized["camera_required"] is True
+    assert normalized["screen_required"] is True

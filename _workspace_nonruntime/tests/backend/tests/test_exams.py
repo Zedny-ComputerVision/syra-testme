@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from src.app.core.security import create_access_token
 from src.app.models import AccessMode, Course, CourseStatus, Exam, ExamStatus, ExamType, Node, RoleEnum, Schedule, User
 
 
@@ -153,7 +154,7 @@ def test_archive_test_returns_archived_status(client, admin_headers):
     assert body["runtime_status"] == "CLOSED"
 
 
-def test_learner_exam_list_honors_restricted_schedule_rules(client, db, learner_user, learner_headers):
+def test_learner_exam_list_requires_assignment_and_honors_schedule_rules(client, db, learner_user, learner_headers):
     admin = User(
         email="owner@example.com",
         name="Owner",
@@ -247,7 +248,129 @@ def test_learner_exam_list_honors_restricted_schedule_rules(client, db, learner_
 
     assert response.status_code == 200
     titles = {item["title"] for item in response.json()["items"]}
-    assert "Open Access Exam" in titles
+    assert "Open Access Exam" not in titles
     assert "Restricted Ready Now" in titles
     assert "Restricted Other Learner" not in titles
     assert "Restricted Future Slot" not in titles
+
+
+def test_learner_exam_detail_requires_assignment(client, db, learner_user, learner_headers):
+    admin = User(
+        email="owner-detail@example.com",
+        name="Owner Detail",
+        user_id="ADM101",
+        role=RoleEnum.ADMIN,
+        hashed_password="hashed",
+    )
+    db.add(admin)
+    db.flush()
+
+    course = Course(
+        title="Learner Detail Course",
+        description="",
+        status=CourseStatus.PUBLISHED,
+        created_by_id=admin.id,
+    )
+    db.add(course)
+    db.flush()
+
+    node = Node(course_id=course.id, title="Module 1", order=0)
+    db.add(node)
+    db.flush()
+
+    exam = Exam(
+        node_id=node.id,
+        title="Assignment Required Exam",
+        type=ExamType.MCQ,
+        status=ExamStatus.OPEN,
+        max_attempts=1,
+        created_by_id=admin.id,
+    )
+    db.add(exam)
+    db.commit()
+    db.refresh(exam)
+
+    denied_response = client.get(f"/api/exams/{exam.id}", headers=learner_headers)
+    assert denied_response.status_code == 404
+
+    db.add(
+        Schedule(
+            exam_id=exam.id,
+            user_id=learner_user.id,
+            access_mode=AccessMode.OPEN,
+            scheduled_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+        )
+    )
+    db.commit()
+
+    allowed_response = client.get(f"/api/exams/{exam.id}", headers=learner_headers)
+    assert allowed_response.status_code == 200
+    assert allowed_response.json()["id"] == str(exam.id)
+
+
+def test_admin_lists_and_fetches_only_owned_tests(client, db, admin_user, admin_headers, make_user):
+    own_test = _create_admin_test(client, admin_headers, name="Owned By Primary Admin")
+
+    other_admin = make_user(
+        email="other-owner@example.com",
+        name="Other Owner",
+        user_id="ADM102",
+        role=RoleEnum.ADMIN,
+    )
+    other_admin_headers = {
+        "Authorization": f"Bearer {create_access_token(str(other_admin.id), other_admin.user_id, other_admin.role.value, name=other_admin.name, email=other_admin.email)}",
+    }
+    other_test = _create_admin_test(client, other_admin_headers, name="Owned By Other Admin")
+
+    list_response = client.get("/api/admin/tests/", headers=admin_headers)
+    assert list_response.status_code == 200
+    listed_ids = {item["id"] for item in list_response.json()["items"]}
+    assert own_test["id"] in listed_ids
+    assert other_test["id"] not in listed_ids
+
+    get_response = client.get(f"/api/admin/tests/{other_test['id']}", headers=admin_headers)
+    assert get_response.status_code == 404
+
+
+def test_admin_schedule_list_only_shows_owned_exam_schedules(client, admin_headers, db, learner_user, make_user):
+    own_test = _create_admin_test(client, admin_headers, name="Own Scheduled Test")
+    own_schedule_response = client.post(
+        "/api/schedules/",
+        headers=admin_headers,
+        json={
+            "exam_id": own_test["id"],
+            "user_id": str(learner_user.id),
+            "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "access_mode": "OPEN",
+        },
+    )
+    assert own_schedule_response.status_code == 200
+
+    other_admin = make_user(
+        email="schedule-owner@example.com",
+        name="Schedule Owner",
+        user_id="ADM103",
+        role=RoleEnum.ADMIN,
+    )
+    other_admin_headers = {
+        "Authorization": f"Bearer {create_access_token(str(other_admin.id), other_admin.user_id, other_admin.role.value, name=other_admin.name, email=other_admin.email)}",
+    }
+    other_test = _create_admin_test(client, other_admin_headers, name="Other Scheduled Test")
+    other_schedule_response = client.post(
+        "/api/schedules/",
+        headers=other_admin_headers,
+        json={
+            "exam_id": other_test["id"],
+            "user_id": str(learner_user.id),
+            "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat(),
+            "access_mode": "OPEN",
+        },
+    )
+    assert other_schedule_response.status_code == 200
+
+    response = client.get("/api/schedules/", headers=admin_headers)
+
+    assert response.status_code == 200
+    schedule_ids = {item["id"] for item in response.json()}
+    assert own_schedule_response.json()["id"] in schedule_ids
+    assert other_schedule_response.json()["id"] not in schedule_ids

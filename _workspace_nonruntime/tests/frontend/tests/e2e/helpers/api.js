@@ -122,3 +122,58 @@ export async function createCourseAndNode(adminToken) {
   }).then(async r => ({ data: await r.json(), status: r.status() }))
   return { course, node }
 }
+
+export async function assignLearnerToExam(adminToken, learnerUserId, examId, overrides = {}) {
+  const base = await request.newContext({
+    baseURL: API_BASE,
+    extraHTTPHeaders: { Authorization: `Bearer ${adminToken}` },
+  })
+  const usersRes = await base.get('users/', {
+    params: {
+      search: learnerUserId,
+      limit: 200,
+      role: 'LEARNER',
+    },
+  })
+  if (!usersRes.ok()) {
+    throw new Error(`Failed to list learners: ${usersRes.status()} ${await usersRes.text()}`)
+  }
+  const usersBody = await usersRes.json()
+  const users = usersBody.items || usersBody
+  const learner = users.find((user) => String(user.user_id) === String(learnerUserId))
+  if (!learner?.id) {
+    throw new Error(`Learner fixture lookup failed for ${learnerUserId}`)
+  }
+
+  const scheduledAt = overrides.scheduled_at || new Date().toISOString()
+  const accessMode = overrides.access_mode || 'RESTRICTED'
+  const scheduleRes = await base.post('schedules/', {
+    data: {
+      exam_id: examId,
+      user_id: learner.id,
+      scheduled_at: scheduledAt,
+      access_mode: accessMode,
+    },
+  })
+  if (scheduleRes.status() === 409) {
+    const existingRes = await base.get('schedules/', {
+      params: {
+        exam_id: examId,
+      },
+    })
+    if (!existingRes.ok()) {
+      throw new Error(`Failed to read existing schedule after conflict: ${existingRes.status()} ${await existingRes.text()}`)
+    }
+    const existingBody = await existingRes.json()
+    const existingRows = existingBody.items || existingBody
+    const existing = existingRows.find((schedule) => String(schedule.user_id) === String(learner.id))
+    if (!existing) {
+      throw new Error(`Schedule conflict reported but no existing schedule found for learner ${learnerUserId}`)
+    }
+    return existing
+  }
+  if (!scheduleRes.ok()) {
+    throw new Error(`Failed to create schedule: ${scheduleRes.status()} ${await scheduleRes.text()}`)
+  }
+  return scheduleRes.json()
+}

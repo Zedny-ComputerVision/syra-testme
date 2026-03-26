@@ -34,7 +34,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `python -m uvicorn src.app.main:app --host 127.0.0.1 --port ${backendPort}`,
+      command: `python -m alembic upgrade head && python -m uvicorn src.app.main:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: '../backend',
       url: `${backendBaseURL}/api/health`,
       reuseExistingServer,
@@ -43,7 +43,7 @@ export default defineConfig({
         ...process.env,
         JWT_SECRET: process.env.JWT_SECRET || process.env.SECRET_KEY || 'test-secret-key-with-at-least-32-chars',
         DATABASE_URL: process.env.DATABASE_URL || 'postgresql+psycopg://postgres:password@localhost:5432/syra_lms',
-        AUTO_APPLY_MIGRATIONS: process.env.AUTO_APPLY_MIGRATIONS || 'true',
+        AUTO_APPLY_MIGRATIONS: process.env.AUTO_APPLY_MIGRATIONS || 'false',
         BACKEND_BASE_URL: backendBaseURL,
         FRONTEND_BASE_URL: process.env.FRONTEND_BASE_URL || `http://127.0.0.1:${frontendPort}`,
         E2E_SEED_ENABLED: process.env.E2E_SEED_ENABLED || 'true',

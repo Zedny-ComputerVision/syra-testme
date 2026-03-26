@@ -56,9 +56,9 @@ test.describe('Admin CRUD pages', () => {
     await expect(page.getByText('Group created.')).toBeVisible()
     await expect(page.getByText(`Members - ${groupName}`)).toBeVisible()
 
-    const memberSelect = groupsMain.locator('select').first()
-    await memberSelect.selectOption({ label: `${learnerName} (${learnerEmail})` })
-    await page.getByRole('button', { name: 'Add' }).click()
+    await groupsMain.getByPlaceholder('Search learners by name, email, or ID...').fill(learnerEmail)
+    await groupsMain.getByRole('checkbox', { name: `${learnerName} ${learnerEmail}` }).check()
+    await groupsMain.getByRole('button', { name: 'Add 1 selected member' }).click()
     await expect(groupsMain.locator('div').filter({ hasText: learnerEmail }).filter({ has: page.getByRole('button', { name: 'Remove' }) }).first()).toBeVisible()
 
     const memberRow = groupsMain.locator('div').filter({ hasText: learnerEmail }).filter({ has: page.getByRole('button', { name: 'Remove' }) }).first()

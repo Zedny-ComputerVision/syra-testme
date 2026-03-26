@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { expect, request as playwrightRequest, test } from '@playwright/test'
-import { createCourseAndNode, createLearner, ensureAdmin } from './helpers/api'
+import { assignLearnerToExam, createCourseAndNode, createLearner, ensureAdmin } from './helpers/api'
 import { completeSystemCheck, installJourneyMediaMocks, passAttemptScreenShareGateIfPresent } from './helpers/journey'
 
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
@@ -18,11 +18,22 @@ test.use({
 })
 
 async function loadIdentityFixtures() {
-  const selfiePath = path.resolve(process.cwd(), 'tests', 'e2e', 'fixtures', 'ocr-selfie-grace.jpg')
-  const idCardPath = path.resolve(process.cwd(), 'tests', 'e2e', 'fixtures', 'ocr-id-card-grace.png')
-  await fs.access(selfiePath)
-  await fs.access(idCardPath)
-  return { selfiePath, idCardPath }
+  const roots = [
+    path.resolve(process.cwd(), 'tests', 'e2e', 'fixtures'),
+    path.resolve(process.cwd(), '..', '_workspace_nonruntime', 'tests', 'frontend', 'tests', 'e2e', 'fixtures'),
+  ]
+  for (const root of roots) {
+    const selfiePath = path.join(root, 'ocr-selfie-grace.jpg')
+    const idCardPath = path.join(root, 'ocr-id-card-grace.png')
+    try {
+      await fs.access(selfiePath)
+      await fs.access(idCardPath)
+      return { selfiePath, idCardPath }
+    } catch {
+      // Try next fixture root.
+    }
+  }
+  throw new Error('Identity fixtures not found for Playwright journey tests')
 }
 
 async function fetchTestByName(api, name) {
@@ -263,6 +274,7 @@ test.describe('Full proctoring cycle', () => {
 
     const createdTest = await fetchTestByName(adminApi, testTitle)
     if (!createdTest?.id) throw new Error('Created full proctoring test not found')
+    await assignLearnerToExam(adminToken, learner.user_id, createdTest.id)
 
     // Learner journey: instructions -> system check -> identity -> rules -> take test.
     await page.evaluate(() => localStorage.removeItem('syra_tokens'))
@@ -321,7 +333,7 @@ test.describe('Full proctoring cycle', () => {
     }
 
     await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/rules`), { timeout: 20000 })
-    await expect(page.getByText('Rules')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Test Rules' })).toBeVisible()
     await page.getByLabel(/I have read and agree/i).check()
     await page.getByRole('button', { name: /Start Test/i }).click()
 

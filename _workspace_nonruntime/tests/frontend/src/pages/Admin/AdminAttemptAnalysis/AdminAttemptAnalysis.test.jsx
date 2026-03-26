@@ -94,7 +94,9 @@ describe('AdminAttemptAnalysis', () => {
       </MemoryRouter>,
     )
 
-    await waitFor(() => expect(getAttemptMock).toHaveBeenCalledWith('attempt-1'))
+    await waitFor(() => expect(getAttemptMock).toHaveBeenCalledWith('attempt-1', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    })))
     await waitFor(() => expect(screen.getByText('Grace Hopper')).toBeTruthy())
     expect(screen.getAllByText('Integrity').length).toBeGreaterThan(0)
   })

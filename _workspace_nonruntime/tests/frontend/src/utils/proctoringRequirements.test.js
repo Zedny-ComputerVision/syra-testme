@@ -37,14 +37,14 @@ describe('proctoringRequirements', () => {
     expect(normalized.screen_required).toBe(true)
   })
 
-  it('infers camera, mic, lighting, and identity requirements from detection aliases', () => {
+  it('infers camera and mic requirements from detection aliases without forcing identity verification', () => {
     const requirements = getJourneyRequirements({
       face_detection: true,
       audio_detection: 'yes',
       require_lighting_check: '0',
     })
 
-    expect(requirements.identityRequired).toBe(true)
+    expect(requirements.identityRequired).toBe(false)
     expect(requirements.cameraRequired).toBe(true)
     expect(requirements.micRequired).toBe(true)
     expect(requirements.lightingRequired).toBe(false)
@@ -62,7 +62,7 @@ describe('proctoringRequirements', () => {
       mic_required: 1,
     })
 
-    expect(requirements.identityRequired).toBe(true)
+    expect(requirements.identityRequired).toBe(false)
     expect(requirements.cameraRequired).toBe(true)
     expect(requirements.micRequired).toBe(true)
     expect(requirements.lightingRequired).toBe(false)
@@ -86,6 +86,23 @@ describe('proctoringRequirements', () => {
     expect(requirements.identityRequired).toBe(false)
     expect(requirements.screenRequired).toBe(false)
     expect(requirements.systemCheckRequired).toBe(false)
+  })
+
+  it('treats legacy face verification aliases as recorded-video requirements without forcing identity verification', () => {
+    const requirements = getJourneyRequirements({
+      face_verify: true,
+      face_verify_enabled: 'yes',
+    })
+    const normalized = normalizeProctoringConfig({
+      face_verify_enabled: true,
+    })
+
+    expect(requirements.identityRequired).toBe(false)
+    expect(requirements.cameraRequired).toBe(true)
+    expect(requirements.screenRequired).toBe(true)
+    expect(normalized.identity_required).toBe(false)
+    expect(normalized.camera_required).toBe(true)
+    expect(normalized.screen_required).toBe(true)
   })
 
   it('normalizes alert rules and falls back to safe defaults for malformed entries', () => {

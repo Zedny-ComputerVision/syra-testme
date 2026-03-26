@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { expect, request as playwrightRequest, test } from '@playwright/test'
-import { createCourseAndNode, createLearner, ensureAdmin } from './helpers/api'
+import { assignLearnerToExam, createCourseAndNode, createLearner, ensureAdmin } from './helpers/api'
 import { completeSystemCheck, installJourneyMediaMocks, passAttemptScreenShareGateIfPresent } from './helpers/journey'
 
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
@@ -19,11 +19,22 @@ test.use({
 })
 
 async function loadIdentityFixtures() {
-  const selfiePath = path.resolve(process.cwd(), 'tests', 'e2e', 'fixtures', 'ocr-selfie-grace.jpg')
-  const idCardPath = path.resolve(process.cwd(), 'tests', 'e2e', 'fixtures', 'ocr-id-card-grace.png')
-  await fs.access(selfiePath)
-  await fs.access(idCardPath)
-  return { selfiePath, idCardPath }
+  const roots = [
+    path.resolve(process.cwd(), 'tests', 'e2e', 'fixtures'),
+    path.resolve(process.cwd(), '..', '_workspace_nonruntime', 'tests', 'frontend', 'tests', 'e2e', 'fixtures'),
+  ]
+  for (const root of roots) {
+    const selfiePath = path.join(root, 'ocr-selfie-grace.jpg')
+    const idCardPath = path.join(root, 'ocr-id-card-grace.png')
+    try {
+      await fs.access(selfiePath)
+      await fs.access(idCardPath)
+      return { selfiePath, idCardPath }
+    } catch {
+      // Try next fixture root.
+    }
+  }
+  throw new Error('Identity fixtures not found for Playwright journey tests')
 }
 
 async function fetchTestByName(api, name) {
@@ -85,7 +96,7 @@ async function openManageSettingsSection(page, name) {
   const section = SETTINGS_SECTIONS[name]
   if (!section) throw new Error(`Unknown settings section: ${name}`)
   const menuButton = page.getByRole('button', { name, exact: true })
-  await menuButton.evaluate((element) => element.click())
+  await menuButton.click()
   const expectedSearch = section === 'basic' ? '' : `?section=${section}`
   await expect.poll(() => new URL(page.url()).search).toBe(expectedSearch)
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
@@ -120,7 +131,6 @@ test.describe('Core test cycle', () => {
     const examCode = `CORE${String(Date.now()).slice(-6)}`
     const updatedInstructionsHeading = 'Read carefully before you begin'
     const updatedInstructionsBody = 'This core cycle was edited from the manage page and must appear for the learner.'
-    const scheduledAtLocal = formatDateTimeLocal(new Date(Date.now() - (30 * 1000)))
 
     await seedAccessToken(page, adminToken)
     await page.goto('/admin/dashboard')
@@ -184,7 +194,7 @@ test.describe('Core test cycle', () => {
     // Step 7: Sessions
     await expect(page.getByRole('heading', { name: 'Testing Sessions' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
     await page.locator('select').last().selectOption('RESTRICTED')
-    await page.locator('input[type="datetime-local"]').fill(scheduledAtLocal)
+    await page.locator('input[type="datetime-local"]').fill(formatDateTimeLocal(new Date(Date.now() - 30 * 1000)))
     await page.locator('label', { hasText: learner.user_id }).locator('input[type="checkbox"]').check()
     await page.getByRole('button', { name: /Save assignments/i }).click()
     await expect(page.getByText(learner.user_id, { exact: false })).toBeVisible()
@@ -199,14 +209,30 @@ test.describe('Core test cycle', () => {
     await expect.poll(async () => (await fetchTestByName(adminApi, testTitle))?.status || null, { timeout: 15000 }).toBe('DRAFT')
     const createdTest = await fetchTestByName(adminApi, testTitle)
     if (!createdTest) throw new Error('Created test not found after draft save')
+    await expect.poll(async () => {
+      const schedulesRes = await adminApi.get('schedules/')
+      if (!schedulesRes.ok()) {
+        throw new Error(`Fetch schedules failed: ${schedulesRes.status()} ${await schedulesRes.text()}`)
+      }
+      const schedulesBody = await schedulesRes.json()
+      const schedules = schedulesBody.items || schedulesBody
+      return schedules.some((schedule) => (
+        String(schedule.exam_id) === String(createdTest.id)
+        && String(schedule.user_student_id || '') === String(learner.user_id)
+      ))
+    }, { timeout: 15000 }).toBe(true)
 
     // Manage page: edit real settings while the draft is writable, then publish from there.
     await page.goto(`/admin/tests/${createdTest.id}`)
     await expect(page).toHaveURL(new RegExp(`/admin/tests/${createdTest.id}/manage`))
 
     await openManageSettingsSection(page, 'Test instructions dialog settings')
-    await page.locator('label:has-text("Instructions heading") input').fill(updatedInstructionsHeading)
-    await page.locator('label:has-text("Instructions body") textarea').fill(updatedInstructionsBody)
+    const instructionsHeadingInput = page.locator('label:has-text("Instructions heading") input')
+    const instructionsBodyInput = page.locator('label:has-text("Instructions body") textarea')
+    await instructionsHeadingInput.fill(updatedInstructionsHeading)
+    await expect(instructionsHeadingInput).toHaveValue(updatedInstructionsHeading)
+    await instructionsBodyInput.fill(updatedInstructionsBody)
+    await expect(instructionsBodyInput).toHaveValue(updatedInstructionsBody)
 
     await openManageSettingsSection(page, 'Security settings')
     const lightingQualityCheckbox = page.getByRole('checkbox', { name: 'Lighting Quality Check', exact: true })
@@ -226,6 +252,7 @@ test.describe('Core test cycle', () => {
     await page.locator('label:has-text("Retake cooldown (hours)") input[type="number"]').fill('1')
 
     await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Settings saved.')).toBeVisible()
 
     await expect.poll(async () => {
       const detail = await adminApi.get(`admin/tests/${createdTest.id}`)
@@ -258,6 +285,7 @@ test.describe('Core test cycle', () => {
     await openManageSettingsSection(page, 'Basic information')
     await page.getByRole('button', { name: /Publish test|Open \/ Publish/i }).click()
     await expect.poll(async () => (await fetchTestByName(adminApi, testTitle))?.status || null, { timeout: 30000 }).toBe('PUBLISHED')
+    await assignLearnerToExam(adminToken, learner.user_id, createdTest.id)
 
     // Learner login and actual UI journey.
     await page.evaluate(() => localStorage.removeItem('syra_tokens'))
@@ -464,10 +492,27 @@ test.describe('Core test cycle', () => {
     await adminPage.goto(`/attempts/${attemptId}?from=manage-test&testId=${createdTest.id}&tab=candidates`)
     await expect(adminPage).toHaveURL(new RegExp(`/attempts/${attemptId}(\\?|$)`))
     await expect(adminPage.getByText('Manual review workflow')).toBeVisible()
-    await adminPage.getByRole('spinbutton').fill('1')
-    await adminPage.getByRole('button', { name: /Save review/i }).click()
-    await expect(adminPage.getByText(/Awarded points:/i)).toBeVisible()
-    await adminPage.getByRole('button', { name: /Finalize review/i }).click()
+    const manualReviewCard = adminPage
+      .getByText('Explain why the correct answer is 4.')
+      .locator('xpath=ancestor::div[.//button[contains(., "Save review")]][1]')
+    const reviewedWorkflowStat = adminPage.locator('[class*="_reviewWorkflowStat_"]').filter({ hasText: 'Reviewed' })
+    const manualReviewInput = manualReviewCard.getByRole('spinbutton')
+    await manualReviewInput.fill('1')
+    await expect(manualReviewInput).toHaveValue('1')
+    await manualReviewInput.press('Tab')
+    const reviewSaveResponsePromise = adminPage.waitForResponse((response) => (
+      response.url().includes(`/api/attempts/${attemptId}/answers/`)
+      && response.url().includes('/review')
+      && response.request().method() === 'POST'
+    ))
+    await manualReviewCard.getByRole('button', { name: /Save review/i }).click()
+    const reviewSaveResponse = await reviewSaveResponsePromise
+    expect(reviewSaveResponse.ok()).toBeTruthy()
+    await expect(manualReviewCard.getByText(/Awarded points:\s*1\s*\/\s*1/i)).toBeVisible()
+    await expect(reviewedWorkflowStat).toContainText('1 / 1')
+    const finalizeReviewButton = adminPage.getByRole('button', { name: /Finalize review/i })
+    await expect.poll(async () => await finalizeReviewButton.isEnabled(), { timeout: 20000 }).toBe(true)
+    await finalizeReviewButton.click()
     await expect(adminPage.getByText('100')).toBeVisible()
     await adminPage.getByRole('button', { name: /Back to Manage Test/i }).click()
     await expect(adminPage).toHaveURL(new RegExp(`/admin/tests/${createdTest.id}/manage\\?tab=candidates`))

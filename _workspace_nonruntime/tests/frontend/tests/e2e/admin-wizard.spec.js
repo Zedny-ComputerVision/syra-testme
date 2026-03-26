@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { test, expect, request as playwrightRequest } from '@playwright/test'
-import { ensureAdmin, createLearner, createCourseAndNode } from './helpers/api'
+import { ensureAdmin, createLearner, createCourseAndNode, assignLearnerToExam } from './helpers/api'
 import { installJourneyMediaMocks, passAttemptScreenShareGateIfPresent, primeScreenShareBeforeNavigation } from './helpers/journey'
 
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:8000/api/'
@@ -53,6 +53,11 @@ async function loadIdentityFixtureDataUrl() {
   return null
 }
 const STEP_TIMEOUT = 20000
+
+function formatDateTimeLocal(date) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 async function waitForNextButtonReady(page) {
   const nextButton = page.getByRole('button', { name: /^(Next|Continue)$/i })
@@ -117,10 +122,29 @@ test.describe('Admin New Test Wizard end-to-end', () => {
     await page.getByRole('button', { name: /Next/i }).click()
 
     // Complete the wizard through the canonical publish flow.
-    for (let i = 0; i < 4; i += 1) {
-      await page.getByRole('button', { name: /Next/i }).click()
-    }
-    await page.getByLabel('Published').check()
+    await expect(page.getByRole('heading', { name: 'Grading Configuration' })).toBeVisible({ timeout: STEP_TIMEOUT })
+    await waitForNextButtonReady(page)
+    await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
+
+    await expect(page.getByRole('heading', { name: 'Certificates' })).toBeVisible({ timeout: STEP_TIMEOUT })
+    await waitForNextButtonReady(page)
+    await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
+
+    await expect(page.getByRole('heading', { name: 'Review' })).toBeVisible({ timeout: STEP_TIMEOUT })
+    await waitForNextButtonReady(page)
+    await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
+
+    await expect(page.getByRole('heading', { name: 'Testing Sessions' })).toBeVisible({ timeout: STEP_TIMEOUT })
+    await page.locator('select').last().selectOption('RESTRICTED')
+    await page.locator('input[type="datetime-local"]').fill(formatDateTimeLocal(new Date(Date.now() - 30 * 1000)))
+    await page.locator('label', { hasText: learner.user_id }).locator('input[type="checkbox"]').check()
+    await page.getByRole('button', { name: /Save assignments/i }).click()
+    await expect(page.getByText(learner.user_id, { exact: false })).toBeVisible({ timeout: STEP_TIMEOUT })
+    await waitForNextButtonReady(page)
+    await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
+
+    await expect(page.getByRole('heading', { name: 'Save Test' })).toBeVisible({ timeout: STEP_TIMEOUT })
+    await page.getByRole('radio', { name: /Published/i }).check()
     await page.getByRole('button', { name: /Publish Test/i }).click()
     await expect(page).toHaveURL(/\/admin\/tests/)
 
@@ -138,6 +162,7 @@ test.describe('Admin New Test Wizard end-to-end', () => {
     await expect.poll(async () => (await fetchWizardTest())?.status || null, { timeout: 15000 }).toBe('PUBLISHED')
     const exam = await fetchWizardTest()
     if (!exam) throw new Error('Wizard-created test not found in admin/tests')
+    await assignLearnerToExam(adminToken, learner.user_id, exam.id)
 
     // Logout (force clear auth token to avoid flaky navbar selectors).
     await page.evaluate(() => localStorage.removeItem('syra_tokens'))

@@ -432,6 +432,10 @@ def test_list_exams_does_not_apply_learner_schedule_filters_for_admin():
     query_text = str(session.query)
     assert "exams.status = :status_1" not in query_text
     assert "exists (select" not in query_text.lower()
+    assert "exams.created_by_id" in query_text
+    query_text = str(session.query)
+    assert "exams.status = :status_1" not in query_text
+    assert "exists (select" not in query_text.lower()
     assert "exams.library_pool_id IS NULL" in query_text
 
 
@@ -450,6 +454,9 @@ def test_create_attempt_blocks_retake_when_disabled():
         updated_at=datetime.now(timezone.utc) - timedelta(minutes=10),
         created_at=datetime.now(timezone.utc) - timedelta(minutes=15),
     )
+    assigned_schedule = SimpleNamespace(
+        scheduled_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
 
     class DummyScalarResult:
         def __init__(self, rows):
@@ -459,7 +466,13 @@ def test_create_attempt_blocks_retake_when_disabled():
             return self.rows
 
     class DummySession:
+        def __init__(self):
+            self.scalar_calls = 0
+
         def scalar(self, _query):
+            self.scalar_calls += 1
+            if self.scalar_calls == 1:
+                return assigned_schedule
             return 0
 
         def scalars(self, _query):
@@ -489,6 +502,9 @@ def test_create_attempt_blocks_retake_until_cooldown_expires():
         updated_at=datetime.now(timezone.utc) - timedelta(minutes=15),
         created_at=datetime.now(timezone.utc) - timedelta(minutes=20),
     )
+    assigned_schedule = SimpleNamespace(
+        scheduled_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
 
     class DummyScalarResult:
         def __init__(self, rows):
@@ -498,7 +514,13 @@ def test_create_attempt_blocks_retake_until_cooldown_expires():
             return self.rows
 
     class DummySession:
+        def __init__(self):
+            self.scalar_calls = 0
+
         def scalar(self, _query):
+            self.scalar_calls += 1
+            if self.scalar_calls == 1:
+                return assigned_schedule
             return 0
 
         def scalars(self, _query):
@@ -1016,6 +1038,8 @@ def test_list_learners_for_scheduling_allows_instructor_with_assign_schedules(mo
         email="learner01@example.com",
         role=RoleEnum.LEARNER,
         is_active=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
     monkeypatch.setattr(
@@ -1050,7 +1074,10 @@ def test_list_learners_for_scheduling_allows_instructor_with_assign_schedules(mo
         )
     )
 
-    assert out == [learner]
+    assert len(out) == 1
+    assert out[0].id == learner.id
+    assert out[0].user_id == learner.user_id
+    assert out[0].email == learner.email
 
 
 def test_forgot_password_returns_503_when_email_delivery_is_unavailable(monkeypatch):
@@ -1539,11 +1566,8 @@ def test_permissions_config_is_accessible_without_system_settings():
         def __init__(self):
             self.saved = permissions_setting
 
-        def scalar(self, query):
-            text = str(query)
-            if "permissions_config" in text:
-                return self.saved
-            return None
+        def scalar(self, _query):
+            return self.saved
 
         def add(self, obj):
             self.saved = obj

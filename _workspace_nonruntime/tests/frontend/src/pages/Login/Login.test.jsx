@@ -11,6 +11,7 @@ const setupMock = vi.fn()
 const signupStatusMock = vi.fn()
 const authLoginMock = vi.fn()
 const navigateMock = vi.fn()
+let decodedRole = 'LEARNER'
 
 vi.mock('axios', () => ({
   default: {
@@ -21,7 +22,7 @@ vi.mock('axios', () => ({
 }))
 
 vi.mock('jwt-decode', () => ({
-  jwtDecode: () => ({ role: 'LEARNER' }),
+  jwtDecode: () => ({ role: decodedRole }),
 }))
 
 vi.mock('../../services/auth.service', () => ({
@@ -47,6 +48,7 @@ vi.mock('react-router-dom', async () => {
 describe('Login page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    decodedRole = 'LEARNER'
     axios.get.mockReset()
     axios.post.mockReset()
     axios.patch.mockReset()
@@ -128,5 +130,30 @@ describe('Login page', () => {
     expect(loginMock).toHaveBeenCalledWith('learner1@example.com', 'Password123!')
     expect(authLoginMock).toHaveBeenCalledWith(learnerTokens)
     expect(navigateMock).toHaveBeenCalled()
+  })
+
+  it('sends admins to the dashboard after login even when returning from an admin deep link', async () => {
+    decodedRole = 'ADMIN'
+    const adminTokens = { access_token: 'admin-token', refresh_token: 'admin-refresh' }
+
+    loginMock.mockResolvedValueOnce({ data: adminTokens })
+
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/login', state: { from: '/admin/tests' } }]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Login />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'admin@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Admin1234!' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }))
+
+    await waitFor(() => expect(loginMock).toHaveBeenCalledWith('admin@example.com', 'Admin1234!'))
+
+    expect(authLoginMock).toHaveBeenCalledWith(adminTokens)
+    expect(navigateMock).toHaveBeenCalledWith('/admin/dashboard', { replace: true })
   })
 })

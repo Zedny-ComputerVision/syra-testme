@@ -7,7 +7,7 @@ import AttemptResult from './AttemptResult'
 
 const getAttempt = vi.fn()
 const getAttemptAnswers = vi.fn()
-const getAttemptEvents = vi.fn()
+const getAttemptProctoringSummary = vi.fn()
 const reviewAttemptAnswer = vi.fn()
 const finalizeAttemptReview = vi.fn()
 const getTestQuestions = vi.fn()
@@ -16,7 +16,7 @@ const getTest = vi.fn()
 vi.mock('../../services/attempt.service', () => ({
   getAttempt: (...args) => getAttempt(...args),
   getAttemptAnswers: (...args) => getAttemptAnswers(...args),
-  getAttemptEvents: (...args) => getAttemptEvents(...args),
+  getAttemptProctoringSummary: (...args) => getAttemptProctoringSummary(...args),
   reviewAttemptAnswer: (...args) => reviewAttemptAnswer(...args),
   finalizeAttemptReview: (...args) => finalizeAttemptReview(...args),
 }))
@@ -65,7 +65,16 @@ describe('AttemptResult page', () => {
         passing_score: 60,
       },
     })
-    getAttemptEvents.mockResolvedValue({ data: [] })
+    getAttemptProctoringSummary.mockResolvedValue({
+      data: {
+        saved_recordings: 0,
+        expected_recordings: 0,
+        total_events: 0,
+        serious_alerts: 0,
+        risk_score: 0,
+        recent_events: [],
+      },
+    })
     reviewAttemptAnswer.mockResolvedValue({ data: { id: 'answer-1', question_id: 'question-1', answer: 'Detailed response', is_correct: null, points_earned: 4 } })
     finalizeAttemptReview.mockResolvedValue({
       data: {
@@ -125,32 +134,39 @@ describe('AttemptResult page', () => {
   it('loads and shows a proctoring violation summary', async () => {
     getTestQuestions.mockResolvedValue({ data: [] })
     getAttemptAnswers.mockResolvedValue({ data: [] })
-    getAttemptEvents.mockResolvedValue({
-      data: [
-        {
-          id: 'event-1',
-          event_type: 'PHONE_DETECTED',
-          severity: 'HIGH',
-          detail: 'Phone detected near desk',
-          ai_confidence: 0.91,
-          occurred_at: '2026-03-05T10:10:00Z',
-        },
-        {
-          id: 'event-2',
-          event_type: 'LOOKING_AWAY',
-          severity: 'MEDIUM',
-          detail: 'Eyes off screen for too long',
-          ai_confidence: 0.63,
-          occurred_at: '2026-03-05T10:12:00Z',
-        },
-      ],
+    getAttemptProctoringSummary.mockResolvedValue({
+      data: {
+        saved_recordings: 2,
+        expected_recordings: 2,
+        total_events: 2,
+        serious_alerts: 2,
+        risk_score: 5,
+        recent_events: [
+          {
+            id: 'event-1',
+            event_type: 'PHONE_DETECTED',
+            severity: 'HIGH',
+            detail: 'Phone detected near desk',
+            ai_confidence: 0.91,
+            occurred_at: '2026-03-05T10:10:00Z',
+          },
+          {
+            id: 'event-2',
+            event_type: 'LOOKING_AWAY',
+            severity: 'MEDIUM',
+            detail: 'Eyes off screen for too long',
+            ai_confidence: 0.63,
+            occurred_at: '2026-03-05T10:12:00Z',
+          },
+        ],
+      },
     })
 
     renderResult()
 
     await waitFor(() => expect(screen.getAllByText('Proctoring Summary').length).toBeGreaterThan(0))
     expect(screen.getByText('Total Alerts')).toBeTruthy()
-    expect(screen.getByText('High Severity')).toBeTruthy()
+    expect(screen.getByText('Serious Alerts')).toBeTruthy()
     expect(screen.getByText('Phone detected near desk')).toBeTruthy()
     expect(screen.getByText('91% confidence')).toBeTruthy()
   })
