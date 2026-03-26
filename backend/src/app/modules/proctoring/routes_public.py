@@ -7,8 +7,10 @@ import logging
 import tempfile
 import time
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
@@ -65,6 +67,9 @@ SEVERITY_MAP = {
     "LOW": SeverityEnum.LOW,
 }
 settings = get_settings()
+VIDEO_UPLOAD_STATUS_CACHE_TTL_SECONDS = 3.0
+_video_upload_status_cache: dict[str, dict[str, object]] = {}
+_video_upload_status_cache_lock = Lock()
 
 # ── Live monitoring registry ──────────────────────────────────────────────────
 # Maps attempt_id → set of admin WebSocket connections watching that session.
@@ -421,6 +426,27 @@ def _build_attempt_video_upload_summary(
         "status_label": status_label,
         "sources": source_summaries,
     }
+
+
+def _read_cached_exam_video_upload_status(exam_id: str) -> list[dict[str, object]] | None:
+    now = time.monotonic()
+    with _video_upload_status_cache_lock:
+        cached = _video_upload_status_cache.get(exam_id)
+        if not cached:
+            return None
+        expires_at = float(cached.get("expires_at", 0.0) or 0.0)
+        if expires_at <= now:
+            _video_upload_status_cache.pop(exam_id, None)
+            return None
+        return deepcopy(cached.get("rows") or [])
+
+
+def _write_cached_exam_video_upload_status(exam_id: str, rows: list[dict[str, object]]) -> None:
+    with _video_upload_status_cache_lock:
+        _video_upload_status_cache[exam_id] = {
+            "expires_at": time.monotonic() + VIDEO_UPLOAD_STATUS_CACHE_TTL_SECONDS,
+            "rows": deepcopy(rows),
+        }
 
 
 def _find_saved_video_file_info(db: Session, attempt_id: str, session_id: str, source: str) -> dict[str, object] | None:
@@ -1648,6 +1674,10 @@ async def list_exam_video_upload_status(
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
     exam_pk = parse_uuid_param(exam_id, detail="Exam not found")
+    cache_key = str(exam_pk)
+    cached_rows = _read_cached_exam_video_upload_status(cache_key)
+    if cached_rows is not None:
+        return cached_rows
     attempts = list(
         db.scalars(
             select(Attempt)
@@ -1688,7 +1718,7 @@ async def list_exam_video_upload_status(
             source = _normalize_video_source(item.get("source"))
             progress_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
 
-    return [
+    rows = [
         _build_attempt_video_upload_summary(
             attempt,
             saved_by_source=saved_by_attempt.get(str(attempt.id)),
@@ -1696,6 +1726,8 @@ async def list_exam_video_upload_status(
         )
         for attempt in attempts
     ]
+    _write_cached_exam_video_upload_status(cache_key, rows)
+    return rows
 
 
 @router.websocket("/{attempt_id}/ws")

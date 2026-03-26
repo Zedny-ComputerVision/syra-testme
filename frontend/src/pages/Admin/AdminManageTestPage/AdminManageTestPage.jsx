@@ -30,6 +30,10 @@ const TABS = [
   { id: 'reports', label: 'Reports' },
 ]
 
+const VIDEO_UPLOAD_STATUS_POLL_INTERVAL_MS = 15000
+const ACTIVE_VIDEO_UPLOAD_STATUSES = new Set(['queued', 'uploading', 'processing', 'waiting'])
+const VIDEO_UPLOAD_POLL_GRACE_WINDOW_MS = 20 * 60 * 1000
+
 
 const SETTINGS_MENU_GROUPS = [
   {
@@ -387,6 +391,17 @@ function applyVideoUploadStatus(row, rawStatus) {
   }
 }
 
+function shouldPollRowVideoUploadStatus(row) {
+  const status = String(row?.uploadStatus || '').trim().toLowerCase()
+  if (status === 'not_started' || status === 'complete' || status === 'error') return false
+  if (!ACTIVE_VIDEO_UPLOAD_STATUSES.has(status)) return false
+  if (status !== 'waiting') return true
+
+  const submittedAtMs = new Date(row?.submittedAt || row?.startedAt || 0).getTime()
+  if (!Number.isFinite(submittedAtMs) || submittedAtMs <= 0) return false
+  return (Date.now() - submittedAtMs) <= VIDEO_UPLOAD_POLL_GRACE_WINDOW_MS
+}
+
 function safeJsonParse(value, fallback = null) {
   if (value == null || value === '') return fallback
   try { return JSON.parse(value) } catch { return '__INVALID__' }
@@ -741,6 +756,8 @@ export default function AdminManageTestPage() {
   const usersRef = useRef(users)
   const sessionsRef = useRef(sessions)
   const loadAbortRef = useRef(null)
+  const uploadStatusPollAbortRef = useRef(null)
+  const uploadStatusPollBusyRef = useRef(false)
   const setSettingsForm = useCallback((updater) => {
     setSettingsFormState((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater
@@ -972,6 +989,7 @@ export default function AdminManageTestPage() {
 
   useEffect(() => () => {
     if (loadAbortRef.current) loadAbortRef.current.abort()
+    if (uploadStatusPollAbortRef.current) uploadStatusPollAbortRef.current.abort()
   }, [])
 
   const buildAttemptRows = useCallback((attemptItems, userItems, examSessions, uploadStatusMap = new Map()) => {
@@ -1035,6 +1053,10 @@ export default function AdminManageTestPage() {
       return
     }
     if (loadAbortRef.current) loadAbortRef.current.abort()
+    if (uploadStatusPollAbortRef.current) {
+      uploadStatusPollAbortRef.current.abort()
+      uploadStatusPollAbortRef.current = null
+    }
     const controller = new AbortController()
     loadAbortRef.current = controller
     if (showSpinner || !examRef.current) setLoading(true)
@@ -1124,24 +1146,100 @@ export default function AdminManageTestPage() {
     void loadAllRef.current(shouldShowSpinner)
   }, [id, tab, settingsSection])
 
-  const refreshAttemptVideoUploadStatus = useCallback(async () => {
+  const refreshAttemptVideoUploadStatus = useCallback(async ({ signal } = {}) => {
     if (!id || id === 'undefined' || id === 'null') return
+    if (uploadStatusPollBusyRef.current) return
+    uploadStatusPollBusyRef.current = true
     try {
-      const uploadStatusMap = await loadVideoUploadStatusMap()
+      const uploadStatusMap = await loadVideoUploadStatusMap(signal)
+      if (signal?.aborted) return
       setAttemptRows((prev) => prev.map((row) => applyVideoUploadStatus(row, uploadStatusMap.get(String(row.id)))))
     } catch (refreshError) {
-      console.warn('Failed to refresh admin video upload status.', refreshError)
+      if (!isCanceledRequest(refreshError)) {
+        console.warn('Failed to refresh admin video upload status.', refreshError)
+      }
+    } finally {
+      uploadStatusPollBusyRef.current = false
     }
   }, [id, loadVideoUploadStatusMap])
 
+  const shouldPollVideoUploadStatus = useMemo(() => (
+    tab === 'proctoring'
+    && view === 'candidate_monitoring'
+    && attemptRows.some((row) => shouldPollRowVideoUploadStatus(row))
+  ), [attemptRows, tab, view])
+
   useEffect(() => {
-    if (tab !== 'proctoring' || view !== 'candidate_monitoring') return undefined
-    void refreshAttemptVideoUploadStatus()
-    const intervalId = window.setInterval(() => {
-      void refreshAttemptVideoUploadStatus()
-    }, 5000)
-    return () => window.clearInterval(intervalId)
-  }, [refreshAttemptVideoUploadStatus, tab, view])
+    if (!shouldPollVideoUploadStatus) {
+      if (uploadStatusPollAbortRef.current) {
+        uploadStatusPollAbortRef.current.abort()
+        uploadStatusPollAbortRef.current = null
+      }
+      uploadStatusPollBusyRef.current = false
+      return undefined
+    }
+
+    let disposed = false
+    let timeoutId = null
+
+    const abortActivePoll = () => {
+      if (uploadStatusPollAbortRef.current) {
+        uploadStatusPollAbortRef.current.abort()
+        uploadStatusPollAbortRef.current = null
+      }
+    }
+
+    const scheduleNext = () => {
+      if (disposed) return
+      timeoutId = window.setTimeout(() => {
+        void runPoll()
+      }, VIDEO_UPLOAD_STATUS_POLL_INTERVAL_MS)
+    }
+
+    const runPoll = async () => {
+      if (disposed) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        scheduleNext()
+        return
+      }
+
+      abortActivePoll()
+      const controller = new AbortController()
+      uploadStatusPollAbortRef.current = controller
+      await refreshAttemptVideoUploadStatus({ signal: controller.signal })
+      if (uploadStatusPollAbortRef.current === controller) {
+        uploadStatusPollAbortRef.current = null
+      }
+      scheduleNext()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId)
+          timeoutId = null
+        }
+        abortActivePoll()
+        return
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      void runPoll()
+    }
+
+    scheduleNext()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      disposed = true
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      abortActivePoll()
+    }
+  }, [refreshAttemptVideoUploadStatus, shouldPollVideoUploadStatus])
 
   useEffect(() => {
     setGradeDrafts(
