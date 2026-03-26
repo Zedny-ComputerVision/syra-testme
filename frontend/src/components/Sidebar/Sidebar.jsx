@@ -48,13 +48,15 @@ function pathMatches(currentPath, targetPath) {
   return current === target || current.startsWith(`${target}/`)
 }
 
-function NavLink({ to, icon, label, active, onNavigate }) {
+function NavLink({ to, icon, label, active, onNavigate, collapsed = false }) {
   return (
     <Link
       to={to}
-      className={`${styles.link} ${active ? styles.active : ''}`}
+      className={`${styles.link} ${active ? styles.active : ''} ${collapsed ? styles.linkCollapsed : ''}`}
       aria-current={active ? 'page' : undefined}
+      aria-label={collapsed ? label : undefined}
       onClick={onNavigate}
+      title={collapsed ? label : undefined}
     >
       <span className={styles.linkIcon}><Icon d={ICONS[icon] || ICONS.home} /></span>
       <span className={styles.linkLabel}>{label}</span>
@@ -62,7 +64,7 @@ function NavLink({ to, icon, label, active, onNavigate }) {
   )
 }
 
-function Section({ label, children, defaultOpen = false, forceOpen = false }) {
+function Section({ label, children, defaultOpen = false, forceOpen = false, collapsed = false }) {
   const [open, setOpen] = useState(defaultOpen || forceOpen)
 
   useEffect(() => {
@@ -73,37 +75,43 @@ function Section({ label, children, defaultOpen = false, forceOpen = false }) {
 
   return (
     <div className={styles.section}>
-      <button
-        type="button"
-        className={styles.sectionHeader}
-        aria-expanded={open}
-        aria-label={`${open ? 'Collapse' : 'Expand'} ${label} section`}
-        onClick={() => setOpen(o => !o)}
-      >
-        <span className={styles.sectionLabel}>{label}</span>
-        <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}>
-          <Icon d={ICONS.chevron} size={14} />
-        </span>
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="items"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className={styles.sectionItems}
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {!collapsed && (
+        <button
+          type="button"
+          className={styles.sectionHeader}
+          aria-expanded={open}
+          aria-label={`${open ? 'Collapse' : 'Expand'} ${label} section`}
+          onClick={() => setOpen(o => !o)}
+        >
+          <span className={styles.sectionLabel}>{label}</span>
+          <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}>
+            <Icon d={ICONS.chevron} size={14} />
+          </span>
+        </button>
+      )}
+      {collapsed ? (
+        <div className={styles.sectionItems}>{children}</div>
+      ) : (
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="items"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className={styles.sectionItems}
+            >
+              {children}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </div>
   )
 }
 
-export default function Sidebar({ mobileOpen = false, onClose }) {
+export default function Sidebar({ collapsed = false, mobileOpen = false, onClose }) {
   const { user, hasPermission } = useAuth()
   const location = useLocation()
   const role = user?.role
@@ -189,7 +197,7 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
       </AnimatePresence>
 
       <motion.aside
-        className={`${styles.sidebar} glass ${mobileOpen ? styles.open : ''}`}
+        className={`${styles.sidebar} glass ${mobileOpen ? styles.open : ''} ${collapsed ? styles.collapsed : ''}`}
         role="navigation"
         aria-label="Main navigation"
         initial={{ x: -20, opacity: 0 }}
@@ -207,23 +215,23 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
 
         <nav className={styles.nav}>
           {canViewDashboard && (
-            <Section label="Home" forceOpen={isActive(dashboardPath)}>
-              <NavLink to={dashboardPath} icon="home" label="Dashboard" active={isActive(dashboardPath)} onNavigate={handleNavigate} />
+            <Section label="Home" forceOpen={isActive(dashboardPath)} collapsed={collapsed}>
+              <NavLink to={dashboardPath} icon="home" label="Dashboard" active={isActive(dashboardPath)} onNavigate={handleNavigate} collapsed={collapsed} />
             </Section>
           )}
 
-          <Section label="My Learning" forceOpen={learningActive}>
-            {canTakeTests && <NavLink to="/tests" icon="exams" label="My Tests" active={isActive('/tests') || isActive('/exams')} onNavigate={handleNavigate} />}
-            {canViewOwnSchedule && <NavLink to="/schedule" icon="schedule" label="My Schedule" active={isActive('/schedule')} onNavigate={handleNavigate} />}
-            {canViewOwnAttempts && <NavLink to="/attempts" icon="attempts" label="My Attempts" active={isActive('/attempts')} onNavigate={handleNavigate} />}
-            <NavLink to="/profile" icon="profile" label="Profile" active={isActive('/profile')} onNavigate={handleNavigate} />
-            <NavLink to="/training" icon="exams" label="Training" active={isActive('/training')} onNavigate={handleNavigate} />
-            <NavLink to="/surveys" icon="exams" label="Surveys" active={isActive('/surveys')} onNavigate={handleNavigate} />
+          <Section label="My Learning" forceOpen={learningActive} collapsed={collapsed}>
+            {canTakeTests && <NavLink to="/tests" icon="exams" label="My Tests" active={isActive('/tests') || isActive('/exams')} onNavigate={handleNavigate} collapsed={collapsed} />}
+            {canViewOwnSchedule && <NavLink to="/schedule" icon="schedule" label="My Schedule" active={isActive('/schedule')} onNavigate={handleNavigate} collapsed={collapsed} />}
+            {canViewOwnAttempts && <NavLink to="/attempts" icon="attempts" label="My Attempts" active={isActive('/attempts')} onNavigate={handleNavigate} collapsed={collapsed} />}
+            <NavLink to="/profile" icon="profile" label="Profile" active={isActive('/profile')} onNavigate={handleNavigate} collapsed={collapsed} />
+            <NavLink to="/training" icon="exams" label="Training" active={isActive('/training')} onNavigate={handleNavigate} collapsed={collapsed} />
+            <NavLink to="/surveys" icon="exams" label="Surveys" active={isActive('/surveys')} onNavigate={handleNavigate} collapsed={collapsed} />
           </Section>
 
           {(canCreateTests || canManageTests || canEditSupportingTests || canManageCategories || canManageGradingScales || canManageQuestionPools) && (
-            <Section label="Tests" forceOpen={testsActive}>
-              {canCreateTests && <NavLink to="/admin/tests/new" icon="newTest" label="New Test" active={isActive('/admin/tests/new')} onNavigate={handleNavigate} />}
+            <Section label="Tests" forceOpen={testsActive} collapsed={collapsed}>
+              {canCreateTests && <NavLink to="/admin/tests/new" icon="newTest" label="New Test" active={isActive('/admin/tests/new')} onNavigate={handleNavigate} collapsed={collapsed} />}
               {canManageTests && (
                 <NavLink
                   to="/admin/tests"
@@ -231,51 +239,52 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
                   label="Manage Tests"
                   active={isActive('/admin/tests') || isActive('/admin/exams')}
                   onNavigate={handleNavigate}
+                  collapsed={collapsed}
                 />
               )}
-              {canEditSupportingTests && <NavLink to="/admin/templates" icon="templates" label="Test Templates" active={isActive('/admin/templates')} onNavigate={handleNavigate} />}
-              {canManageQuestionPools && <NavLink to="/admin/question-pools" icon="pools" label="Question Pools" active={isActive('/admin/question-pools')} onNavigate={handleNavigate} />}
-              {canManageGradingScales && <NavLink to="/admin/grading-scales" icon="grading" label="Grading Scales" active={isActive('/admin/grading-scales')} onNavigate={handleNavigate} />}
-              {canManageCategories && <NavLink to="/admin/categories" icon="categories" label="Categories" active={isActive('/admin/categories')} onNavigate={handleNavigate} />}
-              {canManageTests && <NavLink to="/admin/certificates" icon="certificates" label="Manage Certificates" active={isActive('/admin/certificates')} onNavigate={handleNavigate} />}
-              {canEditSupportingTests && <NavLink to="/admin/courses" icon="manageTests" label="Courses" active={isActive('/admin/courses')} onNavigate={handleNavigate} />}
-              {canEditSupportingTests && <NavLink to="/admin/surveys" icon="analysis" label="Surveys" active={isActive('/admin/surveys')} onNavigate={handleNavigate} />}
+              {canEditSupportingTests && <NavLink to="/admin/templates" icon="templates" label="Test Templates" active={isActive('/admin/templates')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canManageQuestionPools && <NavLink to="/admin/question-pools" icon="pools" label="Question Pools" active={isActive('/admin/question-pools')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canManageGradingScales && <NavLink to="/admin/grading-scales" icon="grading" label="Grading Scales" active={isActive('/admin/grading-scales')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canManageCategories && <NavLink to="/admin/categories" icon="categories" label="Categories" active={isActive('/admin/categories')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canManageTests && <NavLink to="/admin/certificates" icon="certificates" label="Manage Certificates" active={isActive('/admin/certificates')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canEditSupportingTests && <NavLink to="/admin/courses" icon="manageTests" label="Courses" active={isActive('/admin/courses')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canEditSupportingTests && <NavLink to="/admin/surveys" icon="analysis" label="Surveys" active={isActive('/admin/surveys')} onNavigate={handleNavigate} collapsed={collapsed} />}
             </Section>
           )}
 
           {(canAssignSchedules || canViewAttemptAnalysis) && (
-            <Section label="Testing Center" forceOpen={testingCenterActive}>
-              {canAssignSchedules && <NavLink to="/admin/sessions" icon="sessions" label="Testing Sessions" active={isActive('/admin/sessions')} onNavigate={handleNavigate} />}
-              {canViewAttemptAnalysis && <NavLink to="/admin/candidates" icon="candidates" label="Candidates" active={isActive('/admin/candidates')} onNavigate={handleNavigate} />}
-              {canViewAttemptAnalysis && <NavLink to="/admin/attempt-analysis" icon="analysis" label="Attempt Analysis" active={isActive('/admin/attempt-analysis')} onNavigate={handleNavigate} />}
-              {canViewAttemptAnalysis && <NavLink to="/admin/live-monitor" icon="sessions" label="Live Monitor" active={isActive('/admin/live-monitor')} onNavigate={handleNavigate} />}
+            <Section label="Testing Center" forceOpen={testingCenterActive} collapsed={collapsed}>
+              {canAssignSchedules && <NavLink to="/admin/sessions" icon="sessions" label="Testing Sessions" active={isActive('/admin/sessions')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canViewAttemptAnalysis && <NavLink to="/admin/candidates" icon="candidates" label="Candidates" active={isActive('/admin/candidates')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canViewAttemptAnalysis && <NavLink to="/admin/attempt-analysis" icon="analysis" label="Attempt Analysis" active={isActive('/admin/attempt-analysis')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canViewAttemptAnalysis && <NavLink to="/admin/live-monitor" icon="sessions" label="Live Monitor" active={isActive('/admin/live-monitor')} onNavigate={handleNavigate} collapsed={collapsed} />}
             </Section>
           )}
 
           {(canManageUsers || canManageRoles) && (
-            <Section label="Users" forceOpen={usersActive}>
-              {canManageUsers && <NavLink to="/admin/users" icon="users" label="User Profiles" active={isActive('/admin/users')} onNavigate={handleNavigate} />}
-              {canManageRoles && <NavLink to="/admin/roles" icon="roles" label="Roles & Permissions" active={isActive('/admin/roles')} onNavigate={handleNavigate} />}
-              {isAdmin && canManageUsers && <NavLink to="/admin/user-groups" icon="groups" label="User Groups" active={isActive('/admin/user-groups')} onNavigate={handleNavigate} />}
+            <Section label="Users" forceOpen={usersActive} collapsed={collapsed}>
+              {canManageUsers && <NavLink to="/admin/users" icon="users" label="User Profiles" active={isActive('/admin/users')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canManageRoles && <NavLink to="/admin/roles" icon="roles" label="Roles & Permissions" active={isActive('/admin/roles')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {isAdmin && canManageUsers && <NavLink to="/admin/user-groups" icon="groups" label="User Groups" active={isActive('/admin/user-groups')} onNavigate={handleNavigate} collapsed={collapsed} />}
             </Section>
           )}
 
           {(canViewAttemptAnalysis || canGenerateReports || canSystemSettings) && (
-            <Section label="Reporting" forceOpen={reportingActive}>
-              {canGenerateReports && <NavLink to="/admin/report-builder" icon="reports" label="Report Builder" active={isActive('/admin/report-builder')} onNavigate={handleNavigate} />}
-              {canGenerateReports && <NavLink to="/admin/reports" icon="reports" label="Scheduled Reports" active={isActive('/admin/reports')} onNavigate={handleNavigate} />}
-              {canSystemSettings && <NavLink to="/admin/settings" icon="settings" label="Settings" active={isActive('/admin/settings')} onNavigate={handleNavigate} />}
-              {canGenerateReports && <NavLink to="/admin/predefined-reports" icon="reports" label="Predefined Reports" active={isActive('/admin/predefined-reports')} onNavigate={handleNavigate} />}
-              {canGenerateReports && <NavLink to="/admin/favorite-reports" icon="reports" label="Favorite Reports" active={isActive('/admin/favorite-reports')} onNavigate={handleNavigate} />}
-              {canSystemSettings && <NavLink to="/admin/subscribers" icon="groups" label="Subscribers" active={isActive('/admin/subscribers')} onNavigate={handleNavigate} />}
+            <Section label="Reporting" forceOpen={reportingActive} collapsed={collapsed}>
+              {canGenerateReports && <NavLink to="/admin/report-builder" icon="reports" label="Report Builder" active={isActive('/admin/report-builder')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canGenerateReports && <NavLink to="/admin/reports" icon="reports" label="Scheduled Reports" active={isActive('/admin/reports')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canSystemSettings && <NavLink to="/admin/settings" icon="settings" label="Settings" active={isActive('/admin/settings')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canGenerateReports && <NavLink to="/admin/predefined-reports" icon="reports" label="Predefined Reports" active={isActive('/admin/predefined-reports')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canGenerateReports && <NavLink to="/admin/favorite-reports" icon="reports" label="Favorite Reports" active={isActive('/admin/favorite-reports')} onNavigate={handleNavigate} collapsed={collapsed} />}
+              {canSystemSettings && <NavLink to="/admin/subscribers" icon="groups" label="Subscribers" active={isActive('/admin/subscribers')} onNavigate={handleNavigate} collapsed={collapsed} />}
             </Section>
           )}
 
           {canSystemSettings && (
-            <Section label="System" forceOpen={systemActive}>
-              <NavLink to="/admin/integrations" icon="settings" label="Integrations" active={isActive('/admin/integrations')} onNavigate={handleNavigate} />
-              <NavLink to="/admin/maintenance" icon="settings" label="Maintenance" active={isActive('/admin/maintenance')} onNavigate={handleNavigate} />
-              <NavLink to="/admin/audit-log" icon="auditLog" label="Audit Log" active={isActive('/admin/audit-log')} onNavigate={handleNavigate} />
+            <Section label="System" forceOpen={systemActive} collapsed={collapsed}>
+              <NavLink to="/admin/integrations" icon="settings" label="Integrations" active={isActive('/admin/integrations')} onNavigate={handleNavigate} collapsed={collapsed} />
+              <NavLink to="/admin/maintenance" icon="settings" label="Maintenance" active={isActive('/admin/maintenance')} onNavigate={handleNavigate} collapsed={collapsed} />
+              <NavLink to="/admin/audit-log" icon="auditLog" label="Audit Log" active={isActive('/admin/audit-log')} onNavigate={handleNavigate} collapsed={collapsed} />
             </Section>
           )}
         </nav>

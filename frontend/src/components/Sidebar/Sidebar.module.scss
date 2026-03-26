@@ -3,8 +3,8 @@
    ============================================================ */
 
 .sidebar {
-  width: 248px;
-  min-width: 248px;
+  width: var(--sidebar-width, 248px);
+  min-width: var(--sidebar-width, 248px);
   position: sticky;
   top: 0;
   height: 100vh;
@@ -24,6 +24,57 @@
   [data-theme='dark'] & {
     background: linear-gradient(180deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.55));
     border-right: 1px solid rgba(148, 163, 184, 0.24);
+  }
+}
+
+.collapsed {
+  .brand {
+    padding-inline: 0.75rem;
+  }
+
+  .brandLink {
+    justify-content: center;
+  }
+
+  .brandTextWrap,
+  .sectionHeader,
+  .linkLabel,
+  .footerMeta {
+    display: none;
+  }
+
+  .nav {
+    padding-inline: 0.45rem;
+  }
+
+  .section {
+    padding: 0.35rem 0;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .sectionItems {
+    padding: 0;
+    gap: 0.35rem;
+  }
+
+  .link {
+    justify-content: center;
+    padding: 0.78rem 0.5rem;
+  }
+
+  .linkIcon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .sidebarFooter {
+    align-items: center;
+    padding-inline: 0.5rem;
+  }
+
+  .version {
+    display: none;
   }
 }
 
@@ -212,6 +263,12 @@
   flex: 1;
 }
 
+.linkCollapsed {
+  .linkLabel {
+    display: none;
+  }
+}
+
 /* ---------- Sidebar Footer ---------- */
 .sidebarFooter {
   padding: 0.9rem 1rem 1rem;
@@ -264,6 +321,8 @@
     top: 0;
     left: 0;
     height: 100vh;
+    width: 248px;
+    min-width: 248px;
     transform: translateX(-100%);
     box-shadow: 0 0 60px rgba(0, 0, 0, 0.55);
     z-index: 1000;

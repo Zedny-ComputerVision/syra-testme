@@ -154,6 +154,13 @@ function RequireAccess({ children, roles, permission }) {
 function Shell({ children }) {
   const { user } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem('syra_sidebar_collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
   const [maintenance, setMaintenance] = useState({ mode: 'off', banner: '' })
   const [maintenanceError, setMaintenanceError] = useState('')
   const location = useLocation()
@@ -182,6 +189,14 @@ function Shell({ children }) {
   useEffect(() => {
     setMobileOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('syra_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false')
+    } catch {
+      // ignore storage failures
+    }
+  }, [sidebarCollapsed])
 
   useEffect(() => () => {
     cancelRouteScopedRequests('navigation')
@@ -214,10 +229,25 @@ function Shell({ children }) {
           {maintenance.banner || 'Maintenance in progress'}
         </div>
       )}
-      <div className={`app-shell ${isExamMode ? 'app-shell--exam' : ''}`}>
-        {!isExamMode && <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />}
+      <div
+        className={`app-shell ${isExamMode ? 'app-shell--exam' : ''}`}
+        style={!isExamMode ? { '--sidebar-width': sidebarCollapsed ? '88px' : '248px' } : undefined}
+      >
+        {!isExamMode && (
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            mobileOpen={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+          />
+        )}
         <div className="app-shell__main">
-          {!isExamMode && <Navbar onMenuToggle={() => setMobileOpen((prev) => !prev)} />}
+          {!isExamMode && (
+            <Navbar
+              sidebarCollapsed={sidebarCollapsed}
+              onMenuToggle={() => setMobileOpen((prev) => !prev)}
+              onSidebarToggle={() => setSidebarCollapsed((prev) => !prev)}
+            />
+          )}
           <AnimatePresence mode="wait">
             <motion.main
               key={location.pathname}

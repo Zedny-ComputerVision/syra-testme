@@ -54,8 +54,13 @@
   border-radius: 1px;
 }
 
+.sidebarToggle {
+  display: inline-flex;
+}
+
 @media (max-width: 900px) {
   .hamburger { display: flex; }
+  .sidebarToggle { display: none; }
 }
 
 /* ---------- Search ---------- */
