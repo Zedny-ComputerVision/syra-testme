@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 import uuid
 
 from sqlalchemy import String, cast, create_engine, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app.db.base import Base
@@ -294,3 +296,31 @@ def test_list_tests_recovers_from_invalid_legacy_exam_enums() -> None:
         assert repaired_archived["status"] == ExamStatus.CLOSED.value
     finally:
         db.close()
+
+
+def test_postgres_list_query_uses_safe_json_path_extraction_for_legacy_settings() -> None:
+    fake_db = SimpleNamespace(bind=SimpleNamespace(dialect=SimpleNamespace(name="postgresql")))
+    repository = AdminTestRepository(fake_db)
+
+    archived_sql = str(
+        repository._archived_expression().compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    code_sql = str(
+        repository._code_expression().compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    pool_sql = str(
+        repository._legacy_settings_text("_pool_library").compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "jsonb_extract_path_text" in archived_sql
+    assert "jsonb_extract_path_text" in code_sql
+    assert "jsonb_extract_path_text" in pool_sql

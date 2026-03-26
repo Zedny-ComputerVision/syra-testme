@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import String, and_, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 
 from ...models import (
@@ -105,13 +106,13 @@ class TestRepository:
             .outerjoin(ExamCertificateConfig, ExamCertificateConfig.exam_id == Exam.id)
         )
         # Filter library/pool exams in SQL (column + legacy JSON) so pagination is accurate.
-        legacy_pool = Exam.settings["_pool_library"].as_boolean()
+        legacy_pool = self._legacy_settings_text("_pool_library")
         statement = statement.where(
             Exam.library_pool_id.is_(None),
             or_(
                 Exam.settings.is_(None),
                 legacy_pool.is_(None),
-                legacy_pool == False,  # noqa: E712
+                func.lower(legacy_pool) != "true",
             ),
         )
         statement = self._apply_filters(statement, query)
@@ -422,7 +423,7 @@ class TestRepository:
         return column.asc() if order == "asc" else column.desc()
 
     def _archived_expression(self):
-        legacy_archived_at = Exam.settings[ADMIN_META_KEY]["archived_at"].as_string()
+        legacy_archived_at = self._legacy_admin_meta_text("archived_at")
         return or_(
             ExamAdminConfig.archived_at.is_not(None),
             legacy_archived_at.is_not(None),
@@ -431,8 +432,24 @@ class TestRepository:
     def _code_expression(self):
         return func.coalesce(
             ExamAdminConfig.code,
-            Exam.settings[ADMIN_META_KEY]["code"].as_string(),
+            self._legacy_admin_meta_text("code"),
         )
+
+    def _legacy_admin_meta_text(self, key: str):
+        return self._legacy_settings_text(ADMIN_META_KEY, key)
+
+    def _legacy_settings_text(self, *path: str):
+        if self._dialect_name() == "postgresql":
+            return func.jsonb_extract_path_text(cast(Exam.settings, JSONB), *path)
+        expr = Exam.settings
+        for key in path:
+            expr = expr[key]
+        return expr.as_string()
+
+    def _dialect_name(self) -> str:
+        bind = getattr(self.db, "bind", None)
+        dialect = getattr(bind, "dialect", None)
+        return str(getattr(dialect, "name", "") or "").lower()
 
     def _repair_invalid_exam_enums(self, items: list[TestListRow]) -> None:
         repairs = {
