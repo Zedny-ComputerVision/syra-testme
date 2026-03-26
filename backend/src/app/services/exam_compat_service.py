@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
@@ -14,6 +15,7 @@ from ..models import AccessMode, Course, CourseStatus, Exam, ExamStatus, Node, Q
 from ..modules.tests.proctoring_requirements import normalize_proctoring_config
 from ..schemas import ExamCreate, ExamRead, ExamUpdate, Message
 from ..utils.pagination import build_page_response, clamp_sort_field, normalize_pagination
+from ..utils.response_cache import TimedSingleFlightCache
 from .normalized_relations import (
     apply_runtime_attempt_policy_defaults,
     exam_certificate,
@@ -27,6 +29,7 @@ from .normalized_relations import (
 from .sanitization import sanitize_exam_payload
 
 logger = logging.getLogger(__name__)
+_learner_exam_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(ttl_seconds=15.0)
 
 
 DEFAULT_PROCTORING = {
@@ -120,6 +123,14 @@ def list_tests(
     order_column = getattr(Exam, sort_field)
     order_column = order_column.asc() if pagination.order == "asc" else order_column.desc()
 
+    if current.role == RoleEnum.LEARNER:
+        return _list_learner_tests(
+            db=db,
+            current=current,
+            pagination=pagination,
+            order_column=order_column,
+        )
+
     question_count_sq = (
         select(func.count(Question.id))
         .where(Question.exam_id == Exam.id)
@@ -145,7 +156,33 @@ def list_tests(
             )
         )
 
-    if current.role == RoleEnum.LEARNER:
+    ensure_permission(db, current, "Edit Tests")
+    if current.role == RoleEnum.INSTRUCTOR:
+        query = query.where(Exam.created_by_id == current.id)
+    total = db.scalar(select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())) or 0
+    rows = db.execute(query.offset(pagination.offset).limit(pagination.limit)).all()
+    return build_page_response(
+        items=[serialize_legacy_test(test, qcount=qc) for test, qc in rows],
+        total=total,
+        pagination=pagination,
+        extended=False,
+    )
+
+
+def _list_learner_tests(*, db: Session, current, pagination, order_column) -> dict:
+    cache_key = json.dumps(
+        {
+            "user_id": str(current.id),
+            "page": pagination.page,
+            "page_size": pagination.page_size,
+            "search": pagination.search,
+            "sort": pagination.sort,
+            "order": pagination.order,
+        },
+        sort_keys=True,
+    )
+
+    def _load() -> dict:
         current_time = datetime.now(timezone.utc)
         restricted_schedule_exists = exists(
             select(Schedule.id).where(
@@ -160,30 +197,37 @@ def list_tests(
                 Schedule.scheduled_at <= current_time,
             )
         )
-        query = query.where(
-            Exam.status == ExamStatus.OPEN,
-            or_(~restricted_schedule_exists, learner_schedule_available),
+        query = (
+            select(Exam)
+            .options(joinedload(Exam.node).joinedload(Node.course))
+            .where(
+                Exam.library_pool_id.is_(None),
+                Exam.status == ExamStatus.OPEN,
+                or_(~restricted_schedule_exists, learner_schedule_available),
+            )
+            .order_by(order_column, Exam.created_at.desc())
         )
-        total = db.scalar(select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())) or 0
-        rows = db.execute(query.offset(pagination.offset).limit(pagination.limit)).all()
+        if pagination.search:
+            like = f"%{pagination.search.lower()}%"
+            query = query.where(
+                or_(
+                    func.lower(Exam.title).like(like),
+                    func.lower(func.coalesce(Exam.description, "")).like(like),
+                )
+            )
+
+        total = db.scalar(
+            select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())
+        ) or 0
+        tests = db.scalars(query.offset(pagination.offset).limit(pagination.limit)).all()
         return build_page_response(
-            items=[serialize_legacy_test(test, qcount=qc) for test, qc in rows],
+            items=[serialize_learner_catalog_test(test) for test in tests],
             total=total,
             pagination=pagination,
             extended=False,
         )
 
-    ensure_permission(db, current, "Edit Tests")
-    if current.role == RoleEnum.INSTRUCTOR:
-        query = query.where(Exam.created_by_id == current.id)
-    total = db.scalar(select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())) or 0
-    rows = db.execute(query.offset(pagination.offset).limit(pagination.limit)).all()
-    return build_page_response(
-        items=[serialize_legacy_test(test, qcount=qc) for test, qc in rows],
-        total=total,
-        pagination=pagination,
-        extended=False,
-    )
+    return _learner_exam_list_cache.get_or_compute(cache_key, _load)
 
 
 def create_test(*, db: Session, body: ExamCreate, current) -> ExamRead:
@@ -222,6 +266,7 @@ def create_test(*, db: Session, body: ExamCreate, current) -> ExamRead:
         db.rollback()
         raise HTTPException(status_code=503, detail=f"Database unavailable: {exc.orig}")
     db.refresh(test)
+    _invalidate_learner_exam_list_cache()
     return serialize_legacy_test(test)
 
 
@@ -297,6 +342,7 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
         logger.exception("Failed to update legacy test %s", test_id)
         raise
     db.refresh(test)
+    _invalidate_learner_exam_list_cache()
     return serialize_legacy_test(test)
 
 
@@ -311,6 +357,7 @@ def delete_test(*, db: Session, test_id: str) -> Message:
         db.rollback()
         logger.exception("Failed to delete legacy test %s", test_id)
         raise
+    _invalidate_learner_exam_list_cache()
     return Message(detail="Deleted")
 
 
@@ -342,6 +389,38 @@ def serialize_legacy_test(test: Exam, *, qcount: int | None = None) -> ExamRead:
         updated_at=test.updated_at,
         question_count=qcount if qcount is not None else test.question_count,
     )
+
+
+def serialize_learner_catalog_test(test: Exam) -> ExamRead:
+    node = test.node
+    course = node.course if node else None
+    return ExamRead(
+        id=test.id,
+        node_id=test.node_id,
+        node_title=node.title if node else None,
+        course_id=course.id if course else None,
+        course_title=course.title if course else None,
+        title=test.title,
+        type=test.type,
+        status=test.status,
+        time_limit=test.time_limit,
+        max_attempts=test.max_attempts,
+        passing_score=test.passing_score,
+        proctoring_config=None,
+        description=test.description,
+        settings=None,
+        certificate=None,
+        category_id=test.category_id,
+        grading_scale_id=test.grading_scale_id,
+        category_name=None,
+        created_at=test.created_at,
+        updated_at=test.updated_at,
+        question_count=None,
+    )
+
+
+def _invalidate_learner_exam_list_cache() -> None:
+    _learner_exam_list_cache.invalidate()
 
 
 def assert_has_questions(db: Session, test_id) -> None:
