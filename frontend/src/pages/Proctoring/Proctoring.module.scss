@@ -46,6 +46,35 @@
   border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
 }
 
+.autoSubmitBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-danger-bg) 92%, transparent),
+    color-mix(in srgb, var(--color-warning-bg) 76%, var(--color-surface))
+  );
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--color-danger) 16%, transparent);
+}
+
+.autoSubmitTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--color-danger-text);
+}
+
+.autoSubmitBody {
+  margin-top: 0.3rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
 .retryBtn {
   padding: 0.7rem 1.1rem;
   border: 1px solid var(--color-border);
@@ -521,5 +550,10 @@
 
   .headerMeta {
     align-items: flex-start;
+  }
+
+  .autoSubmitBanner {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

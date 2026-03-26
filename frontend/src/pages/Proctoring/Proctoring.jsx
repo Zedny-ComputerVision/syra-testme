@@ -53,6 +53,7 @@ const VIDEO_UPLOAD_PROGRESS_STEP = 5
 const VIDEO_UPLOAD_PROGRESS_INTERVAL_MS = 1000
 const VIDEO_ANALYSIS_POLL_INTERVAL_MS = 5000
 const VIDEO_ANALYSIS_POLL_ATTEMPTS = 12
+const AUTO_SUBMIT_COUNTDOWN_SECONDS = 10
 
 function clampUploadPercent(value) {
   const numeric = Number(value)
@@ -235,6 +236,7 @@ export default function Proctoring() {
   const [proctorStatus, setProctorStatus] = useState('connecting')
   const [cameraDark, setCameraDark] = useState(false)
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
+  const [autoSubmitState, setAutoSubmitState] = useState(null)
   const wsConnectedRef = useRef(false)
   const screenShareRequestRef = useRef(null)
   const screenShareEstablishedRef = useRef(false)
@@ -540,6 +542,7 @@ export default function Proctoring() {
   }, [handleViolation])
 
   const handleAnswer = (questionId, answer) => {
+    if (submitting || autoSubmitState) return
     setShowSubmitConfirm(false)
     setAnswers(prev => ({ ...prev, [questionId]: answer }))
     save(questionId, answer)
@@ -948,13 +951,34 @@ export default function Proctoring() {
     void startRecordingSession(screenStream, 'screen')
   }, [attemptId, proctorCfg.screen_capture, screenStream, startRecordingSession])
 
+  const startAutoSubmitCountdown = useCallback((detail = 'Your attempt will be submitted automatically.') => {
+    if (submittedRef.current || submittingRef.current) return
+    const normalizedDetail = String(detail || 'Your attempt will be submitted automatically.').trim()
+    setShowSubmitConfirm(false)
+    setSubmitError('')
+    setAutoSubmitState((current) => {
+      if (current) {
+        return {
+          detail: normalizedDetail || current.detail,
+          secondsLeft: current.secondsLeft,
+        }
+      }
+      return {
+        detail: normalizedDetail,
+        secondsLeft: AUTO_SUBMIT_COUNTDOWN_SECONDS,
+      }
+    })
+  }, [])
+
   const handleSubmitRequest = () => {
+    if (submitting || autoSubmitState) return
     setShowSubmitConfirm(true)
   }
 
   const handleSubmit = useCallback(async () => {
     if (submittingRef.current) return
     submittingRef.current = true
+    setAutoSubmitState(null)
     setSubmitting(true)
     setSubmitPhase('Saving your latest answers...')
     setSubmitError('')
@@ -1007,8 +1031,8 @@ export default function Proctoring() {
     if (event) {
       handleViolation(event)
     }
-    void handleSubmit()
-  }, [handleSubmit, handleViolation])
+    startAutoSubmitCountdown(detail)
+  }, [handleViolation, startAutoSubmitCountdown])
 
   const applyPingResponse = useCallback((response) => {
     const payload = response?.data ?? response
@@ -1150,8 +1174,28 @@ export default function Proctoring() {
   useEffect(() => {
     if (timeLeft !== 0 || !timerExpiredRef.current) return
     timerExpiredRef.current = false
+    startAutoSubmitCountdown('Time is up. Your attempt will be submitted automatically.')
+  }, [startAutoSubmitCountdown, timeLeft])
+
+  useEffect(() => {
+    if (!autoSubmitState || autoSubmitState.secondsLeft <= 0 || submittingRef.current) return undefined
+    const timeoutId = window.setTimeout(() => {
+      setAutoSubmitState((current) => {
+        if (!current) return null
+        if (current.secondsLeft <= 1) {
+          return { ...current, secondsLeft: 0 }
+        }
+        return { ...current, secondsLeft: current.secondsLeft - 1 }
+      })
+    }, 1000)
+    return () => window.clearTimeout(timeoutId)
+  }, [autoSubmitState])
+
+  useEffect(() => {
+    if (!autoSubmitState || autoSubmitState.secondsLeft !== 0) return
+    setAutoSubmitState(null)
     void handleSubmit()
-  }, [timeLeft, handleSubmit])
+  }, [autoSubmitState, handleSubmit])
 
   const formatTime = (secs) => {
     if (secs === null) return '--:--'
@@ -1589,6 +1633,7 @@ export default function Proctoring() {
 
   const currentQ = questions[currentIdx]
   const currentQType = currentQ?.question_type || 'TEXT'
+  const interactionLocked = submitting || Boolean(autoSubmitState)
   const answeredCount = questions.filter((question) => hasAnswerValue(answers[question.id])).length
   const unansweredCount = questions.length - answeredCount
   const progressPct = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0
@@ -1732,6 +1777,17 @@ export default function Proctoring() {
 
         {restoreWarning && <div className={styles.warningBanner}>{restoreWarning}</div>}
         {saveError && <div className={styles.warningBanner}>{saveError}</div>}
+        {autoSubmitState && (
+          <div className={styles.autoSubmitBanner} role="alert" aria-live="assertive">
+            <div>
+              <div className={styles.autoSubmitTitle}>Auto-submitting in {formatTime(autoSubmitState.secondsLeft)}</div>
+              <div className={styles.autoSubmitBody}>{autoSubmitState.detail}</div>
+            </div>
+            <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
+              Submit now
+            </button>
+          </div>
+        )}
 
         <div className={styles.progressWrap}>
           <div className={styles.progressHeader}>
@@ -1771,9 +1827,11 @@ export default function Proctoring() {
               type="button"
               className={`${styles.qNum} ${i === currentIdx ? styles.qNumActive : ''} ${hasAnswerValue(answers[q.id]) ? styles.qNumAnswered : ''}`}
               onClick={() => {
+                if (interactionLocked) return
                 setShowSubmitConfirm(false)
                 setCurrentIdx(i)
               }}
+              disabled={interactionLocked}
               aria-label={String(i + 1)}
               title={questionNavLabel(q, i)}
               aria-current={i === currentIdx ? 'step' : undefined}
@@ -1816,6 +1874,7 @@ export default function Proctoring() {
                         type="radio"
                         name={`q-${currentQ.id}`}
                         checked={selected}
+                        disabled={interactionLocked}
                         readOnly
                       />
                       <span>{letter}. {opt}</span>
@@ -1840,6 +1899,7 @@ export default function Proctoring() {
                         type="checkbox"
                         name={`q-${currentQ.id}-${oi}`}
                         checked={selected}
+                        disabled={interactionLocked}
                         onChange={(e) => {
                           const next = new Set(current)
                           if (e.target.checked) next.add(letter); else next.delete(letter)
@@ -1856,6 +1916,7 @@ export default function Proctoring() {
                 className={styles.textAnswer}
                 placeholder="Type your answer here..."
                 value={answers[currentQ.id] || ''}
+                disabled={interactionLocked}
                 onChange={e => handleAnswer(currentQ.id, e.target.value)}
               />
             )}
@@ -1895,8 +1956,9 @@ export default function Proctoring() {
               <motion.button
                 type="button"
                 className={styles.btnNav}
-                disabled={currentIdx === 0}
+                disabled={currentIdx === 0 || interactionLocked}
                 onClick={() => {
+                  if (interactionLocked) return
                   setShowSubmitConfirm(false)
                   setCurrentIdx(i => i - 1)
                 }}
@@ -1909,9 +1971,11 @@ export default function Proctoring() {
                   type="button"
                   className={styles.btnNav}
                   onClick={() => {
+                    if (interactionLocked) return
                     setShowSubmitConfirm(false)
                     setCurrentIdx(i => i + 1)
                   }}
+                  disabled={interactionLocked}
                   whileTap={{ scale: 0.97 }}
                 >
                   Next question
@@ -1921,11 +1985,11 @@ export default function Proctoring() {
                   type="button"
                   className={styles.btnSubmit}
                   onClick={handleSubmitRequest}
-                  disabled={submitting}
+                  disabled={interactionLocked}
                   aria-label={showSubmitConfirm ? 'Review submission summary' : 'Review and submit test'}
                   whileTap={{ scale: submitting ? 1 : 0.97 }}
                 >
-                  {submitting ? 'Submitting...' : showSubmitConfirm ? 'Review Submission' : 'Submit Test'}
+                  {submitting ? 'Submitting...' : autoSubmitState ? 'Auto-submitting...' : showSubmitConfirm ? 'Review Submission' : 'Submit Test'}
                 </motion.button>
               )}
             </div>

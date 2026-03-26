@@ -1,5 +1,5 @@
 import React from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
@@ -12,6 +12,7 @@ const submitAttemptMock = vi.fn()
 const getTestQuestionsMock = vi.fn()
 const getTestMock = vi.fn()
 const consumeScreenStreamMock = vi.fn()
+const proctoringPingMock = vi.fn()
 
 function MotionDiv({ children, initial, animate, exit, transition, whileHover, whileTap, ...props }) {
   return <div {...props}>{children}</div>
@@ -41,10 +42,17 @@ vi.mock('../../hooks/useAuth', () => ({
 }))
 
 vi.mock('../../components/ProctorOverlay/ProctorOverlay', () => ({
-  default: () => <div>Proctor Overlay</div>,
+  default: ({ onForcedSubmit }) => (
+    <div>
+      <div>Proctor Overlay</div>
+      <button type="button" onClick={() => onForcedSubmit?.('Attempt was force-submitted by an administrator.')}>
+        Trigger forced submit
+      </button>
+    </div>
+  ),
 }))
 
-vi.mock('../../components/ViolationToast', () => ({
+vi.mock('../../components/ViolationToast/ViolationToast', () => ({
   default: () => <div>Violation Toast</div>,
 }))
 
@@ -61,8 +69,10 @@ vi.mock('../../services/test.service', () => ({
 }))
 
 vi.mock('../../services/proctoring.service', () => ({
+  getProctoringVideoJobStatus: vi.fn(),
+  reportProctoringVideoUploadProgress: vi.fn(),
   uploadProctoringVideo: vi.fn(),
-  proctoringPing: vi.fn(),
+  proctoringPing: (...args) => proctoringPingMock(...args),
 }))
 
 vi.mock('../../utils/screenShareState', () => ({
@@ -80,10 +90,31 @@ function renderPage() {
   )
 }
 
+async function advance(ms) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms)
+  })
+}
+
+async function flushPromises() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
 describe('Proctoring page', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     consumeScreenStreamMock.mockReturnValue(null)
+    proctoringPingMock.mockResolvedValue({
+      data: {
+        alerts: [],
+        forced_submit: false,
+        submit_reason: null,
+      },
+    })
     getAttemptMock.mockResolvedValue({
       data: {
         id: 'attempt-1',
@@ -111,6 +142,7 @@ describe('Proctoring page', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     cleanup()
   })
 
@@ -201,5 +233,72 @@ describe('Proctoring page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm Submit' }))
 
     await waitFor(() => expect(submitAttemptMock).toHaveBeenCalledWith('attempt-1'))
+  })
+
+  it('shows a 10-second countdown before auto-submitting when time runs out', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-07T10:00:00Z'))
+    submitAttemptMock.mockResolvedValue({ data: { status: 'SUBMITTED' } })
+    getAttemptMock.mockResolvedValueOnce({
+      data: {
+        id: 'attempt-1',
+        exam_id: 'exam-1',
+        started_at: '2026-03-07T09:59:01Z',
+      },
+    })
+    getTestMock.mockResolvedValueOnce({
+      data: {
+        id: 'exam-1',
+        title: 'Physics Final',
+        time_limit_minutes: 1,
+        proctoring_config: {},
+      },
+    })
+
+    renderPage()
+
+    await flushPromises()
+    expect(screen.getByText('Physics Final')).toBeTruthy()
+    await advance(1000)
+    await flushPromises()
+
+    expect(screen.getByText('Auto-submitting in 00:10')).toBeTruthy()
+
+    for (let tick = 0; tick < 10; tick += 1) {
+      await advance(1000)
+    }
+    await flushPromises()
+
+    expect(submitAttemptMock).toHaveBeenCalledWith('attempt-1')
+  })
+
+  it('shows a 10-second countdown before finalizing a forced submit', async () => {
+    vi.useFakeTimers()
+    submitAttemptMock.mockResolvedValue({ data: { status: 'SUBMITTED' } })
+    getTestMock.mockResolvedValueOnce({
+      data: {
+        id: 'exam-1',
+        title: 'Physics Final',
+        proctoring_config: {
+          tab_switch_detect: true,
+        },
+      },
+    })
+
+    renderPage()
+
+    await flushPromises()
+    expect(screen.getByText('Physics Final')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Trigger forced submit' }))
+    await flushPromises()
+
+    expect(screen.getByText('Auto-submitting in 00:10')).toBeTruthy()
+
+    for (let tick = 0; tick < 10; tick += 1) {
+      await advance(1000)
+    }
+    await flushPromises()
+
+    expect(submitAttemptMock).toHaveBeenCalledWith('attempt-1')
   })
 })
