@@ -87,6 +87,14 @@ function createRecordingController(source) {
   }
 }
 
+function buildRecordingStream(stream, source) {
+  if (!stream) return null
+  if (source !== 'camera') return stream
+  const videoTracks = stream.getVideoTracks?.() || []
+  if (!videoTracks.length) return stream
+  return new MediaStream(videoTracks)
+}
+
 function createVideoSessionId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID().replace(/-/g, '')
@@ -614,7 +622,8 @@ export default function Proctoring() {
     const recording = source === 'screen' ? screenRecordingRef.current : cameraRecordingRef.current
     if (recording.recorder || recording.sessionId || recording.finalizing) return
     try {
-      const mimeType = pickRecorderMimeType(stream)
+      const recordingStream = buildRecordingStream(stream, source)
+      const mimeType = pickRecorderMimeType(recordingStream)
       recording.mimeType = mimeType
       recording.finalized = false
       recording.sessionId = createVideoSessionId()
@@ -622,7 +631,7 @@ export default function Proctoring() {
       recording.stoppedAt = null
       recording.chunks = []
       recording.bytesRecorded = 0
-      const recorder = new MediaRecorder(stream, { mimeType })
+      const recorder = new MediaRecorder(recordingStream, { mimeType })
       recorder.ondataavailable = (event) => {
         if (!recording.sessionId || !event.data || event.data.size === 0) return
         recording.chunks.push(event.data)
@@ -816,6 +825,7 @@ export default function Proctoring() {
         await reportProctoringVideoUploadProgress(uploadAttemptId, {
           session_id: sessionId,
           source,
+          filename,
           uploaded_bytes: Math.max(0, Math.round(Number(uploadedBytes || 0))),
           total_bytes: totalBytes,
           progress_percent: normalizedPercent,

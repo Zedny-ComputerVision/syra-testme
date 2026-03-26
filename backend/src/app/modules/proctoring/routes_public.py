@@ -41,6 +41,7 @@ from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
 from ...services.cloudflare_media import (
     cloudflare_video_storage_enabled,
+    get_cloudflare_video_details,
     infer_cloudflare_ready_to_stream,
     sign_cloudflare_playback_url,
     upload_video_to_cloudflare,
@@ -261,6 +262,19 @@ def _saved_video_events(db: Session, attempt_id: str) -> list[ProctoringEvent]:
     )
 
 
+def _video_upload_progress_events(db: Session, attempt_id: str) -> list[ProctoringEvent]:
+    return list(
+        db.scalars(
+            select(ProctoringEvent)
+            .where(
+                ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+                ProctoringEvent.event_type == "VIDEO_UPLOAD_PROGRESS",
+            )
+            .order_by(ProctoringEvent.occurred_at.desc())
+        )
+    )
+
+
 def _coerce_non_negative_int(value: object) -> int:
     try:
         numeric = int(float(value))
@@ -445,6 +459,116 @@ def _find_saved_video_file_info(db: Session, attempt_id: str, session_id: str, s
         if str(info.get("session_id") or "") == session_id and _normalize_video_source(info.get("source")) == normalized_source:
             return info
     return None
+
+
+def _candidate_recovery_filenames(attempt_id: str, session_id: str, source: str, preferred_filename: str | None = None) -> list[str]:
+    candidates: list[str] = []
+    normalized_preferred = Path(str(preferred_filename or "").strip()).name
+    if normalized_preferred:
+        candidates.append(normalized_preferred)
+    for extension in ("webm", "mp4"):
+        candidate = _video_filename(attempt_id, session_id, source, extension)
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+async def _recover_missing_cloudflare_videos(db: Session, attempt_id: str) -> None:
+    provider = str(settings.PROCTORING_VIDEO_STORAGE_PROVIDER or "").strip().lower()
+    if provider != "cloudflare" or not cloudflare_video_storage_enabled():
+        return
+
+    saved_keys = {
+        (
+            str(item.get("session_id") or ""),
+            _normalize_video_source(item.get("source")),
+        )
+        for item in (
+            _normalize_saved_video_meta(event.meta, event.occurred_at)
+            for event in _saved_video_events(db, attempt_id)
+        )
+        if item
+    }
+    progress_events = _video_upload_progress_events(db, attempt_id)
+    latest_progress_by_key: dict[tuple[str, str], dict[str, object]] = {}
+    for event in progress_events:
+        item = _normalize_video_upload_progress_meta(event.meta, event.occurred_at)
+        if not item:
+            continue
+        session_id = str(item.get("session_id") or "").strip()
+        if not session_id:
+            continue
+        source = _normalize_video_source(item.get("source"))
+        key = (session_id, source)
+        if key in latest_progress_by_key:
+            continue
+        latest_progress_by_key[key] = item
+
+    recovered_any = False
+    for (session_id, source), progress_item in latest_progress_by_key.items():
+        if (session_id, source) in saved_keys:
+            continue
+
+        status = _normalize_video_upload_status(progress_item.get("status"))
+        progress_percent = _clamp_progress_percent(progress_item.get("progress_percent"), default=0)
+        if status not in {"processing", "error", "complete"} and progress_percent < 90:
+            continue
+
+        filename = str(progress_item.get("filename") or "").strip()
+        total_bytes = _coerce_non_negative_int(progress_item.get("total_bytes"))
+        recovered_info: dict[str, object] | None = None
+        for candidate_filename in _candidate_recovery_filenames(attempt_id, session_id, source, filename):
+            try:
+                remote_info = await get_cloudflare_video_details(
+                    filename=candidate_filename,
+                    source=source,
+                    fallback_size=total_bytes,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to reconcile Cloudflare video for attempt %s source %s filename %s: %s",
+                    attempt_id,
+                    source,
+                    candidate_filename,
+                    exc,
+                )
+                continue
+
+            if not remote_info or not str(remote_info.get("url") or "").strip():
+                continue
+
+            recovered_payload = {
+                **remote_info,
+                "provider": "cloudflare",
+                "session_id": session_id,
+                "source": source,
+                "size": int(remote_info.get("size") or total_bytes or 0),
+            }
+            recovered_info = _build_registered_video_info(
+                attempt_id,
+                recovered_payload,
+                session_id=session_id,
+                source=source,
+            )
+            break
+
+        if not recovered_info:
+            continue
+
+        event = ProctoringEvent(
+            attempt_id=attempt_id,
+            event_type="VIDEO_SAVED",
+            severity=SeverityEnum.LOW,
+            detail=f"Proctoring {source} video recovered",
+            meta=recovered_info,
+            occurred_at=datetime.now(timezone.utc),
+        )
+        db.add(event)
+        saved_keys.add((session_id, source))
+        recovered_any = True
+
+    if recovered_any:
+        db.commit()
 
 
 _VIDEO_BATCH_EVENT_TYPES = (
@@ -1535,6 +1659,7 @@ async def report_video_upload_progress(
     if progress_percent in (None, "") and total_bytes > 0:
         progress_percent = (uploaded_bytes / total_bytes) * 100
     normalized_percent = _clamp_progress_percent(progress_percent, default=0)
+    filename = Path(str(payload.get("filename") or "").strip()).name
 
     if status == "complete":
         normalized_percent = 100
@@ -1555,6 +1680,7 @@ async def report_video_upload_progress(
             "progress_percent": normalized_percent,
             "status": status,
             "created_at": occurred_at.isoformat(),
+            **({"filename": filename} if filename else {}),
         },
         occurred_at=occurred_at,
     )
@@ -1651,6 +1777,7 @@ async def list_videos(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
+    await _recover_missing_cloudflare_videos(db, attempt_id)
     result: list[dict[str, object]] = []
     seen_keys: set[tuple[str, str]] = set()
 
