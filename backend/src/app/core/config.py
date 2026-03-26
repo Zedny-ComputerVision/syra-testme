@@ -249,14 +249,14 @@ class Settings(BaseSettings):
 
     @property
     def db_disable_pooling(self) -> bool:
-        if self.DB_DISABLE_POOLING is not None:
-            return bool(self.DB_DISABLE_POOLING)
         # When the app is already talking to Supabase's pooler, layering
         # SQLAlchemy's own QueuePool on top can starve request handling under
         # bursty navigation and long-lived sessions. Prefer one connection per
         # request and let Supabase own the pooling.
         if ".pooler.supabase.com:" in self.DATABASE_URL:
             return True
+        if self.DB_DISABLE_POOLING is not None:
+            return bool(self.DB_DISABLE_POOLING)
         return False
 
     @property

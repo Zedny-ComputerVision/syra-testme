@@ -1076,6 +1076,26 @@ def _load_attempt_events(db: Session, attempt_id) -> list[ProctoringEvent]:
     ).all()
 
 
+def _load_attempt_events_since(
+    db: Session,
+    attempt_id,
+    *,
+    since: datetime,
+    event_types: set[str] | None = None,
+) -> list[ProctoringEvent]:
+    query = (
+        select(ProctoringEvent)
+        .where(
+            ProctoringEvent.attempt_id == attempt_id,
+            ProctoringEvent.occurred_at >= since,
+        )
+        .order_by(ProctoringEvent.occurred_at)
+    )
+    if event_types:
+        query = query.where(ProctoringEvent.event_type.in_(sorted(event_types)))
+    return db.scalars(query).all()
+
+
 def _is_summary_alert_event(event_type: str | None) -> bool:
     normalized = str(event_type or "").strip().upper()
     if not normalized:
@@ -1383,8 +1403,25 @@ async def proctoring_ping(
     if camera_dark and camera_monitoring_enabled:
         events.append(("CAMERA_COVERED", SeverityEnum.HIGH))
 
+    if not events:
+        return {
+            "detail": "ok",
+            "alerts": [],
+            "forced_submit": False,
+            "submit_reason": None,
+        }
+
     now = datetime.now(timezone.utc)
-    history_events = _load_attempt_events(db, attempt.id)
+    has_alert_rules = isinstance(exam_cfg.get("alert_rules"), list) and len(exam_cfg.get("alert_rules")) > 0
+    if has_alert_rules:
+        history_events = _load_attempt_events(db, attempt.id)
+    else:
+        history_events = _load_attempt_events_since(
+            db,
+            attempt.id,
+            since=now - timedelta(seconds=35),
+            event_types={"FOCUS_LOSS", "FULLSCREEN_EXIT", "CAMERA_COVERED"},
+        )
     response_alerts: list[dict[str, object]] = []
     created_events: list[ProctoringEvent] = []
     forced_submit = False
