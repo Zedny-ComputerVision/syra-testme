@@ -13,7 +13,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.websockets import WebSocketState
 from sqlalchemy import select
@@ -1670,21 +1670,41 @@ async def list_videos(
 @router.get("/exam/{exam_id}/video-upload-status")
 async def list_exam_video_upload_status(
     exam_id: str,
+    attempt_ids: list[str] | None = Query(default=None),
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
     exam_pk = parse_uuid_param(exam_id, detail="Exam not found")
+    filtered_attempt_pks: list[object] = []
+    seen_attempt_ids: set[str] = set()
+    for raw_attempt_ids in attempt_ids or []:
+        for raw_attempt_id in str(raw_attempt_ids or "").split(","):
+            normalized_attempt_id = raw_attempt_id.strip()
+            if not normalized_attempt_id or normalized_attempt_id in seen_attempt_ids:
+                continue
+            seen_attempt_ids.add(normalized_attempt_id)
+            filtered_attempt_pks.append(
+                parse_uuid_param(
+                    normalized_attempt_id,
+                    detail="Invalid attempt id",
+                    status_code=400,
+                )
+            )
+
     cache_key = str(exam_pk)
+    if filtered_attempt_pks:
+        cache_key = f"{cache_key}:{','.join(sorted(str(attempt_pk) for attempt_pk in filtered_attempt_pks))}"
     cached_rows = _read_cached_exam_video_upload_status(cache_key)
     if cached_rows is not None:
         return cached_rows
-    attempts = list(
-        db.scalars(
-            select(Attempt)
-            .where(Attempt.exam_id == exam_pk)
-            .order_by(Attempt.created_at.desc())
-        )
+    attempts_query = (
+        select(Attempt)
+        .where(Attempt.exam_id == exam_pk)
+        .order_by(Attempt.created_at.desc())
     )
+    if filtered_attempt_pks:
+        attempts_query = attempts_query.where(Attempt.id.in_(filtered_attempt_pks))
+    attempts = list(db.scalars(attempts_query))
     if not attempts:
         return []
 

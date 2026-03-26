@@ -95,7 +95,16 @@ export const adminApi = {
   pauseAttempt: (attemptId) => api.post(`proctoring/${attemptId}/pause`),
   resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
   listAttemptVideos: (attemptId, opts) => api.get(`proctoring/${attemptId}/videos`, opts),
-  listExamVideoUploadStatus: (examId, opts = {}) => api.get(`proctoring/exam/${examId}/video-upload-status`, opts),
+  listExamVideoUploadStatus: (examId, attemptIds = [], opts = {}) => {
+    const params = { ...(opts.params || {}) }
+    if (Array.isArray(attemptIds) && attemptIds.length > 0) {
+      params.attempt_ids = attemptIds.join(',')
+    }
+    return api.get(`proctoring/exam/${examId}/video-upload-status`, {
+      ...opts,
+      ...(Object.keys(params).length > 0 ? { params } : {}),
+    })
+  },
   getAttemptAnswers: (attemptId, opts) => api.get(`attempts/${attemptId}/answers`, opts),
   reviewAttemptCertificate: (attemptId, decision) => api.post(`attempts/${attemptId}/certificate-review`, { decision }),
   testReportCsv: (testId) => api.get(`reports/test/${testId}`, { responseType: 'blob' }),

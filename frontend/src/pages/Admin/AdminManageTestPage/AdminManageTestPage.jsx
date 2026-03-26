@@ -402,6 +402,17 @@ function shouldPollRowVideoUploadStatus(row) {
   return (Date.now() - submittedAtMs) <= VIDEO_UPLOAD_POLL_GRACE_WINDOW_MS
 }
 
+function shouldBootstrapRowVideoUploadStatus(row) {
+  if (shouldPollRowVideoUploadStatus(row)) return true
+
+  const attemptStatus = String(row?.status || '').trim().toUpperCase()
+  if (!['IN_PROGRESS', 'SUBMITTED', 'GRADED'].includes(attemptStatus)) return false
+
+  const referenceMs = new Date(row?.submittedAt || row?.startedAt || 0).getTime()
+  if (!Number.isFinite(referenceMs) || referenceMs <= 0) return attemptStatus === 'IN_PROGRESS'
+  return (Date.now() - referenceMs) <= VIDEO_UPLOAD_POLL_GRACE_WINDOW_MS
+}
+
 function safeJsonParse(value, fallback = null) {
   if (value == null || value === '') return fallback
   try { return JSON.parse(value) } catch { return '__INVALID__' }
@@ -1036,9 +1047,19 @@ export default function AdminManageTestPage() {
     })
   }, [])
 
-  const loadVideoUploadStatusMap = useCallback(async (signal) => {
+  const loadVideoUploadStatusMap = useCallback(async (signal, attemptIds = []) => {
     if (!id || id === 'undefined' || id === 'null') return new Map()
-    const { data } = await adminApi.listExamVideoUploadStatus(id, signal ? { signal } : {})
+    const normalizedAttemptIds = Array.from(new Set(
+      (Array.isArray(attemptIds) ? attemptIds : [])
+        .map((attemptId) => String(attemptId || '').trim())
+        .filter(Boolean),
+    ))
+    if (normalizedAttemptIds.length === 0) return new Map()
+    const { data } = await adminApi.listExamVideoUploadStatus(
+      id,
+      normalizedAttemptIds,
+      signal ? { signal } : {},
+    )
     const items = Array.isArray(data) ? data : []
     return new Map(
       items.map((item) => [String(item.attempt_id), normalizeVideoUploadStatus(item)]),
@@ -1076,15 +1097,12 @@ export default function AdminManageTestPage() {
       const needsSessions = tab === 'sessions' || tab === 'proctoring'
       const needsUsers = tab === 'sessions' || tab === 'candidates' || tab === 'proctoring'
       const needsAttempts = tab === 'candidates' || tab === 'proctoring' || tab === 'administration' || tab === 'reports'
-      const needsUploadStatus = tab === 'proctoring'
-
       const tasks = []
       if (needsCategories) tasks.push(['categories', adminApi.categories(requestOptions)])
       if (needsQuestions) tasks.push(['questions', adminApi.getQuestions(id, requestOptions)])
       if (needsSessions) tasks.push(['sessions', adminApi.schedules(requestOptions)])
       if (needsUsers) tasks.push(['users', adminApi.users({ role: 'LEARNER', skip: 0, limit: 200 }, requestOptions)])
       if (needsAttempts) tasks.push(['attempts', adminApi.attempts({ exam_id: id, skip: 0, limit: 200 }, requestOptions)])
-      if (needsUploadStatus) tasks.push(['uploadStatus', loadVideoUploadStatusMap(controller.signal)])
 
       if (tasks.length === 0) return
 
@@ -1115,10 +1133,7 @@ export default function AdminManageTestPage() {
 
       if (needsAttempts) {
         const resolvedAttempts = payloads.attempts != null ? readPaginatedItems(payloads.attempts) : []
-        const uploadStatusMap = payloads.uploadStatus instanceof Map ? payloads.uploadStatus : new Map()
-        setAttemptRows(buildAttemptRows(resolvedAttempts, resolvedUsers, resolvedSessions, uploadStatusMap))
-      } else if (needsUploadStatus && payloads.uploadStatus instanceof Map) {
-        setAttemptRows((prev) => prev.map((row) => applyVideoUploadStatus(row, payloads.uploadStatus.get(String(row.id)))))
+        setAttemptRows(buildAttemptRows(resolvedAttempts, resolvedUsers, resolvedSessions))
       }
 
       if (failures.length > 0) {
@@ -1134,7 +1149,7 @@ export default function AdminManageTestPage() {
         setLoading(false)
       }
     }
-  }, [id, location.pathname, navigate, hydrateSettingsForm, loadVideoUploadStatusMap, tab, settingsSection, buildAttemptRows])
+  }, [id, location.pathname, navigate, hydrateSettingsForm, tab, settingsSection, buildAttemptRows])
 
   const loadAllRef = useRef(loadAll)
   useEffect(() => {
@@ -1146,12 +1161,24 @@ export default function AdminManageTestPage() {
     void loadAllRef.current(shouldShowSpinner)
   }, [id, tab, settingsSection])
 
-  const refreshAttemptVideoUploadStatus = useCallback(async ({ signal } = {}) => {
+  const videoUploadStatusTargetAttemptIds = useMemo(() => (
+    attemptRows
+      .filter((row) => shouldBootstrapRowVideoUploadStatus(row))
+      .map((row) => String(row.id))
+  ), [attemptRows])
+
+  const refreshAttemptVideoUploadStatus = useCallback(async ({ signal, attemptIds = [] } = {}) => {
     if (!id || id === 'undefined' || id === 'null') return
     if (uploadStatusPollBusyRef.current) return
+    const normalizedAttemptIds = Array.from(new Set(
+      (Array.isArray(attemptIds) ? attemptIds : videoUploadStatusTargetAttemptIds)
+        .map((attemptId) => String(attemptId || '').trim())
+        .filter(Boolean),
+    ))
+    if (normalizedAttemptIds.length === 0) return
     uploadStatusPollBusyRef.current = true
     try {
-      const uploadStatusMap = await loadVideoUploadStatusMap(signal)
+      const uploadStatusMap = await loadVideoUploadStatusMap(signal, normalizedAttemptIds)
       if (signal?.aborted) return
       setAttemptRows((prev) => prev.map((row) => applyVideoUploadStatus(row, uploadStatusMap.get(String(row.id)))))
     } catch (refreshError) {
@@ -1161,7 +1188,13 @@ export default function AdminManageTestPage() {
     } finally {
       uploadStatusPollBusyRef.current = false
     }
-  }, [id, loadVideoUploadStatusMap])
+  }, [id, loadVideoUploadStatusMap, videoUploadStatusTargetAttemptIds])
+
+  const shouldBootstrapVideoUploadStatus = useMemo(() => (
+    tab === 'proctoring'
+    && view === 'candidate_monitoring'
+    && videoUploadStatusTargetAttemptIds.length > 0
+  ), [tab, videoUploadStatusTargetAttemptIds.length, view])
 
   const shouldPollVideoUploadStatus = useMemo(() => (
     tab === 'proctoring'
@@ -1170,7 +1203,7 @@ export default function AdminManageTestPage() {
   ), [attemptRows, tab, view])
 
   useEffect(() => {
-    if (!shouldPollVideoUploadStatus) {
+    if (!shouldPollVideoUploadStatus && !shouldBootstrapVideoUploadStatus) {
       if (uploadStatusPollAbortRef.current) {
         uploadStatusPollAbortRef.current.abort()
         uploadStatusPollAbortRef.current = null
@@ -1206,7 +1239,10 @@ export default function AdminManageTestPage() {
       abortActivePoll()
       const controller = new AbortController()
       uploadStatusPollAbortRef.current = controller
-      await refreshAttemptVideoUploadStatus({ signal: controller.signal })
+      await refreshAttemptVideoUploadStatus({
+        signal: controller.signal,
+        attemptIds: videoUploadStatusTargetAttemptIds,
+      })
       if (uploadStatusPollAbortRef.current === controller) {
         uploadStatusPollAbortRef.current = null
       }
@@ -1229,7 +1265,11 @@ export default function AdminManageTestPage() {
       void runPoll()
     }
 
-    scheduleNext()
+    if (shouldBootstrapVideoUploadStatus) {
+      void runPoll()
+    } else {
+      scheduleNext()
+    }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       disposed = true
@@ -1239,7 +1279,7 @@ export default function AdminManageTestPage() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       abortActivePoll()
     }
-  }, [refreshAttemptVideoUploadStatus, shouldPollVideoUploadStatus])
+  }, [refreshAttemptVideoUploadStatus, shouldBootstrapVideoUploadStatus, shouldPollVideoUploadStatus, videoUploadStatusTargetAttemptIds])
 
   useEffect(() => {
     setGradeDrafts(
