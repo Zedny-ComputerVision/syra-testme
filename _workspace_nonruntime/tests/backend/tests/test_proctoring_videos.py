@@ -29,6 +29,7 @@ def test_build_registered_video_info_marks_processing_cloudflare_videos_unplayab
     file_info = _build_registered_video_info(
         "37d0acab-29f7-46d6-944a-e5bbeef8dbb5",
         {
+            "provider": "cloudflare",
             "playback_url": "https://example.com/video.m3u8",
             "status": "processing",
             "ready_to_stream": True,
