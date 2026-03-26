@@ -3,16 +3,16 @@ import asyncio
 import contextlib
 import json
 import logging
-
 import tempfile
 import time
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.websockets import WebSocketState
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, load_only
@@ -30,7 +30,7 @@ from ...schemas import (
     ProctoringVideoUploadResponse,
     ProctoringJobStatusResponse,
 )
-from ...reporting.report_generator import generate_html_report
+from ...reporting.report_generator import generate_html_report, generate_pdf_report
 from ...services.integrations import send_proctoring_integration_event
 from ...services.proctoring_inference import get_proctoring_inference_gateway
 from ...services.proctoring_video_batch import (
@@ -2905,11 +2905,19 @@ async def generate_report(
     attempt_id: str,
     output_format: str = "html",
     db: Session = Depends(get_db_dep),
-    current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
+    current=Depends(get_current_user),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
-    attempt = db.get(Attempt, attempt_pk)
-    if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+    attempt = _attempt_or_forbidden(attempt_id, db, current)
+    normalized_format = str(output_format or "html").strip().lower()
+    filename_stub = f"proctoring-report-{str(attempt.id)[:8]}"
+    if normalized_format == "pdf":
+        pdf_content = generate_pdf_report(db, attempt)
+        return StreamingResponse(
+            BytesIO(pdf_content),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename_stub}.pdf"'},
+        )
+    if normalized_format != "html":
+        raise HTTPException(status_code=400, detail="Unsupported report format")
     html_content = generate_html_report(db, attempt)
     return HTMLResponse(content=html_content, media_type="text/html")

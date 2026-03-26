@@ -91,7 +91,11 @@ export const adminApi = {
   getAttempt: (id, opts) => api.get(`attempts/${id}`, opts),
   importAttempts: (rows) => api.post('attempts/import', rows),
   getAttemptEvents: (attemptId, opts) => api.get(`proctoring/${attemptId}/events`, opts),
-  generateReport: (attemptId) => api.post(`proctoring/${attemptId}/generate-report`, null, { responseType: 'text' }),
+  generateReport: (attemptId, { outputFormat = 'html', responseType } = {}) =>
+    api.post(`proctoring/${attemptId}/generate-report`, null, {
+      params: { output_format: outputFormat },
+      responseType: responseType || (outputFormat === 'pdf' ? 'blob' : 'text'),
+    }),
   pauseAttempt: (attemptId) => api.post(`proctoring/${attemptId}/pause`),
   resumeAttempt: (attemptId) => api.post(`proctoring/${attemptId}/resume`),
   listAttemptVideos: (attemptId, opts) => api.get(`proctoring/${attemptId}/videos`, opts),

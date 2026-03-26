@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { finalizeAttemptReview, getAttempt, getAttemptAnswers, getAttemptProctoringSummary, reviewAttemptAnswer } from '../../services/attempt.service'
+import {
+  finalizeAttemptReview,
+  generateAttemptReport,
+  getAttempt,
+  getAttemptAnswers,
+  getAttemptProctoringSummary,
+  reviewAttemptAnswer,
+} from '../../services/attempt.service'
 import { getTestQuestions, getTest } from '../../services/test.service'
 import api from '../../services/api'
 import { normalizeAttempt, normalizeTest } from '../../utils/assessmentAdapters'
@@ -67,8 +74,10 @@ export default function AttemptResult() {
   const [detailWarning, setDetailWarning] = useState('')
   const [proctoringSummaryError, setProctoringSummaryError] = useState('')
   const [certError, setCertError] = useState('')
+  const [reportError, setReportError] = useState('')
   const [exam, setExam] = useState(null)
   const [downloading, setDownloading] = useState(false)
+  const [reportBusy, setReportBusy] = useState('')
   const [reviewDrafts, setReviewDrafts] = useState({})
   const [reviewBusy, setReviewBusy] = useState({})
   const [reviewError, setReviewError] = useState('')
@@ -82,6 +91,7 @@ export default function AttemptResult() {
     setProctoringSummaryError('')
     setReviewError('')
     setReviewNotice('')
+    setReportError('')
     if (!id) {
       setAttempt(null)
       setQuestions([])
@@ -296,6 +306,57 @@ export default function AttemptResult() {
     }
   }
 
+  const openReportBlob = (blob) => {
+    const url = window.URL.createObjectURL(blob)
+    const reportWindow = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!reportWindow) {
+      window.URL.revokeObjectURL(url)
+      throw new Error('Unable to open the report in a new tab.')
+    }
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60000)
+  }
+
+  const downloadReportBlob = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  const handleOpenExamReport = async () => {
+    setReportBusy('html')
+    setReportError('')
+    try {
+      const res = await generateAttemptReport(id, 'html')
+      openReportBlob(new Blob([res.data], { type: 'text/html' }))
+    } catch (e) {
+      const fallback = e?.message === 'Unable to open the report in a new tab.'
+        ? e.message
+        : 'Unable to open the exam report.'
+      setReportError(await readBlobErrorMessage(e, fallback))
+    } finally {
+      setReportBusy('')
+    }
+  }
+
+  const handleDownloadPdfReport = async () => {
+    setReportBusy('pdf')
+    setReportError('')
+    try {
+      const res = await generateAttemptReport(id, 'pdf')
+      const pdfBlob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: 'application/pdf' })
+      downloadReportBlob(pdfBlob, `exam-report_${id}.pdf`)
+    } catch (e) {
+      setReportError(await readBlobErrorMessage(e, 'Unable to download the PDF report.'))
+    } finally {
+      setReportBusy('')
+    }
+  }
+
   const handleSaveManualReview = async (question, answerRow) => {
     const draft = `${reviewDrafts[answerRow.id] ?? ''}`.trim()
     const maxPoints = Number(question.points || 0)
@@ -348,9 +409,24 @@ export default function AttemptResult() {
             Submitted {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : ''}
           </p>
         </div>
-        <button type="button" className={styles.printBtn} onClick={() => window.print()}>
-          Print or export result
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.reportSecondaryBtn}
+            onClick={() => void handleOpenExamReport()}
+            disabled={reportBusy !== ''}
+          >
+            {reportBusy === 'html' ? 'Opening report...' : 'Open exam report'}
+          </button>
+          <button
+            type="button"
+            className={styles.reportPrimaryBtn}
+            onClick={() => void handleDownloadPdfReport()}
+            disabled={reportBusy !== ''}
+          >
+            {reportBusy === 'pdf' ? 'Preparing PDF...' : 'Download PDF report'}
+          </button>
+        </div>
       </div>
 
       {openedFromManageTest && returnTestId && (
@@ -368,6 +444,7 @@ export default function AttemptResult() {
           </button>
         </div>
       )}
+      {reportError && <div className={styles.errorBanner}>{reportError}</div>}
       {reviewError && <div className={styles.errorBanner}>{reviewError}</div>}
       {reviewNotice && <div className={styles.contextBanner}><div className={styles.contextText}>{reviewNotice}</div></div>}
 

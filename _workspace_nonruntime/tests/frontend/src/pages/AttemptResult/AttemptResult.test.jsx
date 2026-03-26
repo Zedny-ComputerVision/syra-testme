@@ -8,6 +8,7 @@ import AttemptResult from './AttemptResult'
 const getAttempt = vi.fn()
 const getAttemptAnswers = vi.fn()
 const getAttemptProctoringSummary = vi.fn()
+const generateAttemptReport = vi.fn()
 const reviewAttemptAnswer = vi.fn()
 const finalizeAttemptReview = vi.fn()
 const getTestQuestions = vi.fn()
@@ -17,6 +18,7 @@ vi.mock('../../services/attempt.service', () => ({
   getAttempt: (...args) => getAttempt(...args),
   getAttemptAnswers: (...args) => getAttemptAnswers(...args),
   getAttemptProctoringSummary: (...args) => getAttemptProctoringSummary(...args),
+  generateAttemptReport: (...args) => generateAttemptReport(...args),
   reviewAttemptAnswer: (...args) => reviewAttemptAnswer(...args),
   finalizeAttemptReview: (...args) => finalizeAttemptReview(...args),
 }))
@@ -46,6 +48,9 @@ function renderResult(initialEntry = '/attempts/attempt-1') {
 describe('AttemptResult page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.open = vi.fn(() => ({}))
+    window.URL.createObjectURL = vi.fn(() => 'blob:report')
+    window.URL.revokeObjectURL = vi.fn()
     getAttempt.mockResolvedValue({
       data: {
         id: 'attempt-1',
@@ -169,6 +174,30 @@ describe('AttemptResult page', () => {
     expect(screen.getByText('Serious Alerts')).toBeTruthy()
     expect(screen.getByText('Phone detected near desk')).toBeTruthy()
     expect(screen.getByText('91% confidence')).toBeTruthy()
+  })
+
+  it('opens the dedicated exam report and downloads the PDF version', async () => {
+    getTestQuestions.mockResolvedValue({ data: [] })
+    getAttemptAnswers.mockResolvedValue({ data: [] })
+    generateAttemptReport.mockImplementation((attemptId, outputFormat) => {
+      expect(attemptId).toBe('attempt-1')
+      if (outputFormat === 'pdf') {
+        return Promise.resolve({ data: new Blob(['pdf'], { type: 'application/pdf' }) })
+      }
+      return Promise.resolve({ data: '<html><body>Report</body></html>' })
+    })
+
+    renderResult()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Open exam report/i })).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: /Open exam report/i }))
+    await waitFor(() => expect(generateAttemptReport).toHaveBeenCalledWith('attempt-1', 'html'))
+    expect(window.open).toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Download PDF report/i }))
+    await waitFor(() => expect(generateAttemptReport).toHaveBeenCalledWith('attempt-1', 'pdf'))
+    expect(window.URL.createObjectURL).toHaveBeenCalled()
   })
 
   it('shows an awaiting manual review state when the attempt has no final score yet', async () => {

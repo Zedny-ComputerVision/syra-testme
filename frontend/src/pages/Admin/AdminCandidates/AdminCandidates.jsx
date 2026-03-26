@@ -425,12 +425,12 @@ export default function AdminCandidates() {
     setDownloadMsg('')
     setDownloadBusyId(String(attemptId))
     try {
-      const { data } = await adminApi.generateReport(attemptId)
-      const blob = new Blob([data], { type: 'text/html' })
+      const { data } = await adminApi.generateReport(attemptId, { outputFormat: 'pdf' })
+      const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `proctoring-report-${String(attemptId).slice(0, 8)}.html`
+      anchor.download = `proctoring-report-${String(attemptId).slice(0, 8)}.pdf`
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
@@ -836,6 +836,5 @@ export default function AdminCandidates() {
     </div>
   )
 }
-
 
 

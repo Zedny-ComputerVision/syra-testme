@@ -22,7 +22,9 @@ class AudioDetectionTest(unittest.TestCase):
             speech_baseline_multiplier=1.2,
         )
         quiet = np.zeros(16000, dtype=np.float32)
-        speech = 0.08 * np.sin(2 * np.pi * 220 * np.linspace(0, 1, 16000, endpoint=False)).astype(np.float32)
+        # Keep the synthetic signal inside the fallback detector's speech band
+        # so the test remains deterministic when WebRTC VAD is unavailable.
+        speech = 0.08 * np.sin(2 * np.pi * 440 * np.linspace(0, 1, 16000, endpoint=False)).astype(np.float32)
 
         self.assertIsNone(monitor.process(pcm_bytes(quiet)))
         self.assertIsNone(monitor.process(pcm_bytes(speech)))
