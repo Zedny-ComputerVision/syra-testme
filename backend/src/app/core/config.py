@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     DEV_LOG_REQUESTS: bool = False
     PRECHECK_ALLOW_TEST_BYPASS: bool = False
     AUTO_APPLY_MIGRATIONS: bool = False
+    WEB_REPORT_SCHEDULER_ENABLED: bool = True
     IDENTITY_RETENTION_DAYS: int = Field(default=7, ge=1)
     PROCTORING_VIDEO_RETENTION_DAYS: int = Field(default=90, ge=1)
     PROCTORING_EVIDENCE_RETENTION_DAYS: int = Field(default=90, ge=1)

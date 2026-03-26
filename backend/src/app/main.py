@@ -572,11 +572,16 @@ async def lifespan(_: FastAPI):
     background_tasks = []
     if not is_test_env and is_leader:
         logger.info("This worker is the background-task leader (PID %s)", os.getpid())
-        background_tasks = [
-            asyncio.create_task(_schedule_loop()),
-            asyncio.create_task(_retention_cleanup_loop()),
-            asyncio.create_task(_stale_attempt_cleanup_loop()),
-        ]
+        if settings.WEB_REPORT_SCHEDULER_ENABLED:
+            background_tasks.append(asyncio.create_task(_schedule_loop()))
+        else:
+            logger.info("In-process report scheduler is disabled for this worker.")
+        background_tasks.extend(
+            [
+                asyncio.create_task(_retention_cleanup_loop()),
+                asyncio.create_task(_stale_attempt_cleanup_loop()),
+            ]
+        )
     elif not is_test_env:
         logger.info("This worker defers background tasks to the leader (PID %s)", os.getpid())
     try:
