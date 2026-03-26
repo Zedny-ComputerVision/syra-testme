@@ -250,7 +250,12 @@ class Settings(BaseSettings):
     def db_disable_pooling(self) -> bool:
         if self.DB_DISABLE_POOLING is not None:
             return bool(self.DB_DISABLE_POOLING)
-        return ".pooler.supabase.com" in self.DATABASE_URL
+        # Supabase session mode (:5432) is much more sensitive to client-side
+        # pooling. Transaction mode (:6543) benefits from a small app pool so
+        # we don't pay a fresh TCP/TLS connection cost on every request.
+        if ".pooler.supabase.com:5432" in self.DATABASE_URL:
+            return True
+        return False
 
     @property
     def database_migration_url(self) -> str:
