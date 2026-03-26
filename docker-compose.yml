@@ -54,11 +54,11 @@ services:
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
     depends_on:
       ai-inference:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/health"]
+      test: [ "CMD", "curl", "-f", "http://127.0.0.1:8000/api/health" ]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -86,9 +86,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: [ "redis-server", "--save", "", "--appendonly", "no" ]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -110,9 +110,9 @@ services:
     restart: unless-stopped
     env_file:
       - backend/.env.docker
-    command: ["uvicorn", "src.app.ai_inference.main:app", "--host", "0.0.0.0", "--port", "8081"]
+    command: [ "uvicorn", "src.app.ai_inference.main:app", "--host", "0.0.0.0", "--port", "8081" ]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8081/ready"]
+      test: [ "CMD", "curl", "-f", "http://127.0.0.1:8081/ready" ]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -141,7 +141,7 @@ services:
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
       PROCTORING_BATCH_ANALYSIS_ENABLED: "true"
-    command: ["celery", "-A", "src.app.core.celery_app.celery_app", "worker", "--loglevel=info", "--queues=proctoring-batch", "--concurrency=1"]
+    command: [ "celery", "-A", "src.app.core.celery_app.celery_app", "worker", "--loglevel=info", "--queues=proctoring-batch", "--concurrency=1" ]
     depends_on:
       redis:
         condition: service_healthy
@@ -170,7 +170,7 @@ services:
       backend:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1" ]
       interval: 15s
       timeout: 5s
       retries: 5
