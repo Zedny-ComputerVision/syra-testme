@@ -369,8 +369,15 @@ api.interceptors.response.use(
 
 const originalGet = api.get.bind(api)
 
+function shouldBypassGetDeduping(config = {}) {
+  if (config.disableRequestDeduping || config.signal) {
+    return true
+  }
+  return shouldTrackRouteScopedRequest(config)
+}
+
 api.get = (url, config = {}) => {
-  if (config.disableRequestDeduping) {
+  if (shouldBypassGetDeduping(config)) {
     return originalGet(url, config)
   }
 
