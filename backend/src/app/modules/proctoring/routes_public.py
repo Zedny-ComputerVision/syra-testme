@@ -730,7 +730,23 @@ async def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -
 
 def _attempt_or_forbidden(attempt_id: str, db: Session, current):
     attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
-    attempt = db.get(Attempt, attempt_pk)
+    attempt = db.scalars(
+        select(Attempt)
+        .options(
+            load_only(
+                Attempt.id,
+                Attempt.exam_id,
+                Attempt.user_id,
+                Attempt.status,
+                Attempt.started_at,
+                Attempt.precheck_passed_at,
+                Attempt.face_signature,
+            ),
+            joinedload(Attempt.user).load_only(User.id, User.name),
+            joinedload(Attempt.exam).load_only(Exam.id, Exam.title, Exam.proctoring_config),
+        )
+        .where(Attempt.id == attempt_pk)
+    ).unique().first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
@@ -1780,7 +1796,23 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         await websocket.close(code=4404)
         db.close()
         return
-    attempt = db.get(Attempt, attempt_pk)
+    attempt = db.scalars(
+        select(Attempt)
+        .options(
+            load_only(
+                Attempt.id,
+                Attempt.exam_id,
+                Attempt.user_id,
+                Attempt.status,
+                Attempt.started_at,
+                Attempt.precheck_passed_at,
+                Attempt.face_signature,
+            ),
+            joinedload(Attempt.user).load_only(User.id, User.name),
+            joinedload(Attempt.exam).load_only(Exam.id, Exam.title, Exam.proctoring_config),
+        )
+        .where(Attempt.id == attempt_pk)
+    ).unique().first()
     if not attempt:
         await websocket.close(code=4404)
         db.close()
@@ -1851,10 +1883,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     session_summary = dict(session_open.summary or {})
     session_violation_score = float(session_open.violation_score or historical_violation_score)
     detection_status = dict(session_open.detection_status or {})
-    _release_db_session(db)
-
-    # ── Register live monitoring session ──────────────────────────────────────
-    _live_session_info[attempt_id] = {
+    live_session_info = {
         "attempt_id": attempt_id,
         "user_name": attempt.user.name if attempt.user else None,
         "user_id": str(attempt.user_id),
@@ -1862,6 +1891,10 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         "exam_id": str(attempt.exam_id),
         "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
     }
+    _release_db_session(db)
+
+    # ── Register live monitoring session ──────────────────────────────────────
+    _live_session_info[attempt_id] = live_session_info
     if attempt_id not in _live_viewers:
         _live_viewers[attempt_id] = set()
 
