@@ -247,11 +247,26 @@ require_http_200() {
   local url="$1"
   local label="$2"
   local timeout_seconds="${3:-30}"
-  local status
+  local max_attempts="${4:-1}"
+  local retry_delay_seconds="${5:-5}"
+  local status=""
+  local attempt=1
 
-  status="$(curl --silent --show-error --location --max-time "$timeout_seconds" --output /dev/null --write-out '%{http_code}' "$url" || true)"
-  [[ "$status" == "200" ]] || die "${label} check failed for ${url} (status ${status:-unreachable})."
-  log "${label} check passed (${url})."
+  while (( attempt <= max_attempts )); do
+    status="$(curl --silent --show-error --location --max-time "$timeout_seconds" --output /dev/null --write-out '%{http_code}' "$url" || true)"
+    if [[ "$status" == "200" ]]; then
+      log "${label} check passed (${url})."
+      return 0
+    fi
+
+    if (( attempt < max_attempts )); then
+      log "${label} check attempt ${attempt}/${max_attempts} failed for ${url} (status ${status:-unreachable}); retrying in ${retry_delay_seconds}s."
+      sleep "$retry_delay_seconds"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  die "${label} check failed for ${url} (status ${status:-unreachable})."
 }
 
 seed_demo_data() {
@@ -517,10 +532,8 @@ if [[ "$RUN_LOCAL_DB" == "0" ]]; then
 fi
 
 DB_DISABLE_POOLING_VALUE=""
-if [[ "$DATABASE_URL" == *".pooler.supabase.com:5432"* ]]; then
+if [[ "$DATABASE_URL" == *".pooler.supabase.com:"* ]]; then
   DB_DISABLE_POOLING_VALUE="true"
-elif [[ "$DATABASE_URL" == *".pooler.supabase.com:6543"* ]]; then
-  DB_DISABLE_POOLING_VALUE="false"
 fi
 
 DB_POOL_SIZE_VALUE="$(first_non_empty "${SYRA_DB_POOL_SIZE:-}" "$(read_env_value "$BACKEND_ENV" "DB_POOL_SIZE")" "$(read_env_value "$ROOT_ENV" "DB_POOL_SIZE")" "")"
@@ -793,8 +806,10 @@ DB_HEALTH_URL="${API_HEALTH_URL%/health}/health/db"
 LOGIN_URL="${FRONTEND_URL%/}/login"
 
 require_http_200 "$FRONTEND_URL" "Frontend"
-require_http_200 "$API_HEALTH_URL" "API health"
-require_http_200 "$DB_HEALTH_URL" "API DB health"
+require_http_200 "http://127.0.0.1:8000/api/health" "Local API health" 10 6 5
+require_http_200 "http://127.0.0.1:8000/api/health/db" "Local API DB health" 15 6 5
+require_http_200 "$API_HEALTH_URL" "API health" 30 6 5
+require_http_200 "$DB_HEALTH_URL" "API DB health" 30 6 5
 
 log "Stack started."
 (
