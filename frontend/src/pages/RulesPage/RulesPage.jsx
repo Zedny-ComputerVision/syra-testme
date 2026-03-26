@@ -6,9 +6,10 @@ import { setAttemptId } from '../../utils/attemptSession'
 import { resolveAttempt } from '../../utils/journeyAttempt'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
+import { readTestAccessError } from '../../utils/testAccessError'
 import styles from './RulesPage.module.scss'
 
-const FALLBACK_RULES = [
+const DEFAULT_RULES = [
   'Do not use any external resources, books, or notes during the test.',
   'Do not communicate with others during the test.',
   'Keep your face visible in the camera at all times.',
@@ -39,7 +40,7 @@ export default function RulesPage() {
   const [configLoading, setConfigLoading] = useState(true)
   const [configError, setConfigError] = useState('')
   const [error, setError] = useState('')
-  const [rules, setRules] = useState(FALLBACK_RULES)
+  const [rules, setRules] = useState([])
   const [requirements, setRequirements] = useState(getJourneyRequirements({}))
   const precheckFlags = useMemo(() => {
     try {
@@ -107,7 +108,7 @@ export default function RulesPage() {
     setConfigError('')
     setError('')
     if (!testId) {
-      setRules(FALLBACK_RULES)
+      setRules([])
       setRequirements(getJourneyRequirements({}))
       setConfigError('Invalid test link. Return to the available tests list and try again.')
       setConfigLoading(false)
@@ -116,12 +117,12 @@ export default function RulesPage() {
     try {
       const { data } = await getTest(testId)
       const configRules = data?.settings?.rules
-      setRules(Array.isArray(configRules) && configRules.length > 0 ? configRules : FALLBACK_RULES)
+      setRules(Array.isArray(configRules) && configRules.length > 0 ? configRules : DEFAULT_RULES)
       setRequirements(getJourneyRequirements(data?.proctoring_config || {}))
-    } catch {
-      setRules(FALLBACK_RULES)
+    } catch (loadError) {
+      setRules([])
       setRequirements(getJourneyRequirements({}))
-      setConfigError('Failed to load the test rules and requirements. Retry before starting.')
+      setConfigError(readTestAccessError(loadError, 'Failed to load the test rules and requirements. Retry before starting.'))
     } finally {
       setConfigLoading(false)
     }
@@ -241,12 +242,18 @@ export default function RulesPage() {
         )}
 
         <div className={styles.rulesList}>
-          {rules.map((rule, i) => (
-            <div key={i} className={styles.ruleItem}>
-              <span className={styles.ruleIcon}>&#10007;</span>
-              <span>{rule}</span>
+          {rules.length > 0 ? (
+            rules.map((rule, i) => (
+              <div key={i} className={styles.ruleItem}>
+                <span className={styles.ruleIcon}>&#10007;</span>
+                <span>{rule}</span>
+              </div>
+            ))
+          ) : (
+            <div className={styles.prereqWarning}>
+              Rules are unavailable until the test configuration is loaded successfully.
             </div>
-          ))}
+          )}
         </div>
 
         <div className={styles.agree}>

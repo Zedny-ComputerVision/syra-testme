@@ -115,7 +115,7 @@ class UserService:
         cache_key = json.dumps(
             {
                 "role": getattr(current.role, "value", current.role),
-                "user_id": str(current.id),
+                "user_id": str(getattr(current, "id", "")),
                 "search": search,
                 "is_active": is_active,
             },

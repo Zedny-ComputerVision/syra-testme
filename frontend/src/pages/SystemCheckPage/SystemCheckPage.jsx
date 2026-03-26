@@ -5,6 +5,7 @@ import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyS
 import { getTest } from '../../services/test.service'
 import { normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
+import { readTestAccessError } from '../../utils/testAccessError'
 import { ENTIRE_SCREEN_REQUIRED, requestEntireScreenShare } from '../../utils/screenCapture'
 import { clearScreenStream, peekScreenStream, storeScreenStream } from '../../utils/screenShareState'
 
@@ -227,8 +228,8 @@ export default function SystemCheckPage() {
       const cfg = normalized?.proctoring_config || {}
       setProctorCfg(cfg)
       setRequirements(getJourneyRequirements(cfg))
-    } catch {
-      setConfigError('Failed to load test configuration. Please refresh and try again.')
+    } catch (error) {
+      setConfigError(readTestAccessError(error, 'Failed to load test configuration. Please refresh and try again.'))
       setProctorCfg({})
       setRequirements(getJourneyRequirements({}))
     } finally {

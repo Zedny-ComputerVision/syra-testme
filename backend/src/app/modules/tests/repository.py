@@ -35,6 +35,7 @@ from .enums import TestStatus, TestType
 
 @dataclass(slots=True)
 class TestListQuery:
+    owner_id: uuid.UUID | None = None
     search: str | None = None
     status: tuple[TestStatus, ...] | None = None
     type: TestType | None = None
@@ -333,6 +334,8 @@ class TestRepository:
 
         if query.type is not None:
             statement = statement.where(Exam.type == ExamType(query.type.value))
+        if query.owner_id is not None:
+            statement = statement.where(Exam.created_by_id == query.owner_id)
         if query.category_id is not None:
             statement = statement.where(Exam.category_id == query.category_id)
         if query.created_from is not None:

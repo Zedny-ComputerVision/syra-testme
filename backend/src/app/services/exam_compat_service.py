@@ -10,8 +10,8 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, joinedload
 
-from ..api.deps import ensure_permission, learner_can_access_exam
-from ..models import AccessMode, Course, CourseStatus, Exam, ExamStatus, Node, Question, RoleEnum, Schedule
+from ..api.deps import ensure_exam_owner, ensure_permission, learner_can_access_exam
+from ..models import Course, CourseStatus, Exam, ExamStatus, Node, Question, RoleEnum, Schedule
 from ..modules.tests.proctoring_requirements import normalize_proctoring_config
 from ..schemas import ExamCreate, ExamRead, ExamUpdate, Message
 from ..utils.pagination import build_page_response, clamp_sort_field, normalize_pagination
@@ -96,6 +96,31 @@ def _assert_runtime_attempt_policy(settings: dict | None, max_attempts: int | No
         raise HTTPException(status_code=422, detail="Enable retakes or reduce max attempts to 1.")
 
 
+def _scalars_all(db: Session, query):
+    if hasattr(db, "scalars"):
+        result = db.scalars(query)
+        if hasattr(result, "all"):
+            return result.all()
+        return list(result)
+
+    result = db.execute(query)
+    rows = result.all() if hasattr(result, "all") else list(result)
+    items = []
+    for row in rows:
+        if isinstance(row, tuple):
+            items.append(row[0] if row else row)
+            continue
+        if hasattr(row, "_mapping"):
+            values = list(row._mapping.values())
+            items.append(values[0] if len(values) == 1 else row)
+            continue
+        try:
+            items.append(row[0])
+        except Exception:
+            items.append(row)
+    return items
+
+
 def list_tests(
     *,
     db: Session,
@@ -157,7 +182,7 @@ def list_tests(
         )
 
     ensure_permission(db, current, "Edit Tests")
-    if current.role == RoleEnum.INSTRUCTOR:
+    if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
         query = query.where(Exam.created_by_id == current.id)
     total = db.scalar(select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())) or 0
     rows = db.execute(query.offset(pagination.offset).limit(pagination.limit)).all()
@@ -184,12 +209,6 @@ def _list_learner_tests(*, db: Session, current, pagination, order_column) -> di
 
     def _load() -> dict:
         current_time = datetime.now(timezone.utc)
-        restricted_schedule_exists = exists(
-            select(Schedule.id).where(
-                Schedule.exam_id == Exam.id,
-                Schedule.access_mode == AccessMode.RESTRICTED,
-            )
-        )
         learner_schedule_available = exists(
             select(Schedule.id).where(
                 Schedule.exam_id == Exam.id,
@@ -203,7 +222,7 @@ def _list_learner_tests(*, db: Session, current, pagination, order_column) -> di
             .where(
                 Exam.library_pool_id.is_(None),
                 Exam.status == ExamStatus.OPEN,
-                or_(~restricted_schedule_exists, learner_schedule_available),
+                learner_schedule_available,
             )
             .order_by(order_column, Exam.created_at.desc())
         )
@@ -219,7 +238,7 @@ def _list_learner_tests(*, db: Session, current, pagination, order_column) -> di
         total = db.scalar(
             select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())
         ) or 0
-        tests = db.scalars(query.offset(pagination.offset).limit(pagination.limit)).all()
+        tests = _scalars_all(db, query.offset(pagination.offset).limit(pagination.limit))
         return build_page_response(
             items=[serialize_learner_catalog_test(test) for test in tests],
             total=total,
@@ -279,6 +298,7 @@ def get_test(*, db: Session, test_id: str, current) -> ExamRead:
             raise HTTPException(status_code=404, detail="Test not found")
     else:
         ensure_permission(db, current, "Edit Tests")
+        ensure_exam_owner(test, current)
     return serialize_legacy_test(test)
 
 
@@ -286,8 +306,8 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
     test = db.get(Exam, parse_test_id(test_id))
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
-    if current.role == RoleEnum.INSTRUCTOR and test.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+    if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
+        ensure_exam_owner(test, current, detail="Not allowed", status_code=403)
 
     data = sanitize_exam_payload(body.model_dump(exclude_unset=True))
     if not data:
@@ -346,10 +366,11 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
     return serialize_legacy_test(test)
 
 
-def delete_test(*, db: Session, test_id: str) -> Message:
+def delete_test(*, db: Session, test_id: str, current) -> Message:
     test = db.get(Exam, parse_test_id(test_id))
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    ensure_exam_owner(test, current, detail="Not allowed", status_code=403)
     try:
         db.delete(test)
         db.commit()

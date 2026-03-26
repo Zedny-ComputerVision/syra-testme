@@ -24,7 +24,7 @@ from sqlalchemy import func, case, and_
 from starlette.websockets import WebSocketState
 from sqlalchemy.orm import Session, subqueryload
 
-from ...api.deps import get_current_user, get_db_dep, require_permission
+from ...api.deps import ensure_exam_owner, get_current_user, get_db_dep, require_permission
 from ...models import (
     Attempt,
     AttemptStatus,
@@ -36,6 +36,7 @@ from ...models import (
 )
 from ...schemas import PaginatedResponse, ProctoringEventRead
 from ...utils.pagination import MAX_PAGE_SIZE, normalize_pagination
+from .routes_public import _build_attempt_proctoring_summary, _is_summary_alert_event
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -44,6 +45,14 @@ logger = logging.getLogger(__name__)
 class ProctoringSessionSummary:
     """Lightweight DTO built manually (not a Pydantic response_model)."""
     pass
+
+
+def _owned_exam_or_404(db: Session, exam_id: UUID | str, current: User) -> Exam:
+    exam = db.get(Exam, exam_id)
+    if not exam:
+        raise HTTPException(status_code=404, detail="Test not found")
+    ensure_exam_owner(exam, current)
+    return exam
 
 
 @router.get("/admin/sessions")
@@ -69,6 +78,7 @@ async def list_proctoring_sessions(
         subqueryload(Attempt.user),
         subqueryload(Attempt.exam),
     )
+    q = q.join(Attempt.exam).filter(Exam.created_by_id == current.id)
 
     if exam_id:
         q = q.filter(Attempt.exam_id == exam_id)
@@ -177,6 +187,7 @@ async def get_session_summary(
     attempt = db.get(Attempt, pk)
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
+    _owned_exam_or_404(db, attempt.exam_id, current)
 
     events = (
         db.query(ProctoringEvent)
@@ -184,16 +195,16 @@ async def get_session_summary(
         .order_by(ProctoringEvent.occurred_at.asc())
         .all()
     )
+    filtered_events = [event for event in events if _is_summary_alert_event(event.event_type)]
+    summary = _build_attempt_proctoring_summary(attempt, events)
 
     # Build summary
     event_type_counts: dict[str, int] = {}
-    severity_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
     timeline = []
-    for ev in events:
+    for ev in filtered_events:
         et = ev.event_type or "UNKNOWN"
         event_type_counts[et] = event_type_counts.get(et, 0) + 1
         sev = ev.severity.value if ev.severity else "LOW"
-        severity_counts[sev] = severity_counts.get(sev, 0) + 1
         timeline.append({
             "id": str(ev.id),
             "event_type": et,
@@ -203,8 +214,6 @@ async def get_session_summary(
             "occurred_at": ev.occurred_at.isoformat() if ev.occurred_at else None,
             "meta": ev.meta,
         })
-
-    risk_score = severity_counts["HIGH"] * 3 + severity_counts["MEDIUM"] * 2 + severity_counts["LOW"]
 
     # Duration
     duration_sec = None
@@ -219,10 +228,12 @@ async def get_session_summary(
         "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
         "duration_seconds": duration_sec,
         "identity_verified": attempt.identity_verified,
-        "total_events": len(events),
-        "severity_counts": severity_counts,
+        "total_events": summary["total_events"],
+        "severity_counts": summary["severity_counts"],
         "event_type_counts": event_type_counts,
-        "risk_score": risk_score,
+        "risk_score": summary["risk_score"],
+        "saved_recordings": summary["saved_recordings"],
+        "expected_recordings": summary["expected_recordings"],
         "timeline": timeline,
     }
 
@@ -239,6 +250,7 @@ async def export_session_events(
     attempt = db.get(Attempt, pk)
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
+    _owned_exam_or_404(db, attempt.exam_id, current)
 
     events = (
         db.query(ProctoringEvent)
@@ -278,6 +290,7 @@ async def get_exam_proctoring_stats(
     """Get aggregate proctoring statistics for all attempts of a given exam."""
     from ...api.deps import parse_uuid_param
     exam_pk = parse_uuid_param(exam_id)
+    _owned_exam_or_404(db, exam_pk, current)
 
     # All attempts for this exam
     attempts = (
@@ -356,6 +369,7 @@ async def get_proctoring_config_history(
     from ...api.deps import parse_uuid_param
     from ...models import AuditLog
     pk = parse_uuid_param(exam_id)
+    _owned_exam_or_404(db, pk, current)
 
     logs = (
         db.query(AuditLog)
@@ -400,12 +414,7 @@ async def force_submit_attempt(
     attempt = db.get(Attempt, pk)
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
-
-    # Instructor can only force-submit attempts for exams they created
-    if current.role == RoleEnum.INSTRUCTOR:
-        exam = db.get(Exam, attempt.exam_id)
-        if not exam or exam.created_by_id != current.id:
-            raise HTTPException(status_code=403, detail="Not allowed")
+    _owned_exam_or_404(db, attempt.exam_id, current)
 
     if attempt.status == AttemptStatus.SUBMITTED:
         raise HTTPException(status_code=409, detail="Attempt already submitted")
@@ -432,12 +441,19 @@ async def force_submit_attempt(
 @router.get("/admin/live")
 async def list_active_sessions(
     current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
+    db: Session = Depends(get_db_dep),
 ):
     """List all currently active proctoring sessions (learners with an open WS)."""
     from .routes_public import _live_session_info, _live_viewers
 
     sessions = []
     for attempt_id, info in _live_session_info.items():
+        exam_id = info.get("exam_id")
+        if not exam_id:
+            continue
+        exam = db.get(Exam, exam_id)
+        if not exam or exam.created_by_id != current.id:
+            continue
         viewers_count = len(_live_viewers.get(attempt_id, set()))
         sessions.append({
             **info,
@@ -467,23 +483,21 @@ async def live_monitor_ws(websocket: WebSocket, attempt_id: str, token: str):
         await websocket.close(code=4403)
         return
 
-    # Instructor ownership check: only allow viewing sessions for their own exams
-    if payload.get("role") == "INSTRUCTOR":
-        session_info_check = _live_session_info.get(attempt_id)
-        if session_info_check:
-            from ...db.session import get_db
-            db_gen = get_db()
-            db = next(db_gen)
+    session_info_check = _live_session_info.get(attempt_id)
+    if session_info_check:
+        from ...db.session import get_db
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            exam = db.get(Exam, session_info_check.get("exam_id"))
+            if not exam or str(exam.created_by_id) != payload.get("sub"):
+                await websocket.close(code=4403)
+                return
+        finally:
             try:
-                exam = db.get(Exam, session_info_check.get("exam_id"))
-                if not exam or str(exam.created_by_id) != payload.get("sub"):
-                    await websocket.close(code=4403)
-                    return
-            finally:
-                try:
-                    next(db_gen)
-                except StopIteration:
-                    pass
+                next(db_gen)
+            except StopIteration:
+                pass
 
     await websocket.accept()
 

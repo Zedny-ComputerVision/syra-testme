@@ -57,7 +57,6 @@ async def list_tests(
     current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: TestService = Depends(_service_from_db),
 ):
-    del current
     try:
         pagination = normalize_pagination(
             page=page,
@@ -80,6 +79,7 @@ async def list_tests(
                     continue
             status_filter = tuple(parsed) if parsed else None
         return service.list_tests(
+            actor=_actor_from_current(current),
             pagination=pagination,
             status=status_filter,
             test_type=type,
@@ -110,9 +110,8 @@ async def get_test(
     current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: TestService = Depends(_service_from_db),
 ):
-    del current
     try:
-        return service.get_test(test_id)
+        return service.get_test(test_id, actor=_actor_from_current(current))
     except TestServiceError as exc:
         return _json_error(exc)
 
@@ -213,8 +212,10 @@ async def download_report(
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: TestService = Depends(_service_from_db),
 ):
-    del current
     try:
-        return HTMLResponse(content=service.render_report(test_id), media_type="text/html")
+        return HTMLResponse(
+            content=service.render_report(test_id, actor=_actor_from_current(current)),
+            media_type="text/html",
+        )
     except TestServiceError as exc:
         return _json_error(exc)

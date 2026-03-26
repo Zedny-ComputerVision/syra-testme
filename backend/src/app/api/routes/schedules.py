@@ -38,8 +38,7 @@ async def list_schedulable_tests(
     db=Depends(get_db_dep),
     current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    del current
-    return list_schedulable_tests_service(db=db)
+    return list_schedulable_tests_service(db=db, current=current)
 
 
 @router.get("/", response_model=list[ScheduleRead])

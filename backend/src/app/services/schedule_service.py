@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, load_only
 
-from ..api.deps import ensure_permission, normalize_utc_datetime, parse_uuid_param
+from ..api.deps import ensure_exam_owner, ensure_permission, normalize_utc_datetime, parse_uuid_param
 from ..models import Attempt, AttemptStatus, Category, Course, Exam, Node, Question, RoleEnum, Schedule, User
 from ..schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
 from ..utils.response_cache import TimedSingleFlightCache
@@ -103,6 +103,8 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     exam = db.get(Exam, exam_id) if exam_id else None
     if exam_id and not exam:
         raise HTTPException(status_code=404, detail="Test not found")
+    if exam is not None:
+        ensure_exam_owner(exam, actor)
     ensure_exam_schedulable(exam)
     existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.exam_id == exam_id))
     if existing:
@@ -133,7 +135,7 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     return serialize_schedule(schedule)
 
 
-def list_schedulable_tests(*, db: Session) -> list[ExamRead]:
+def list_schedulable_tests(*, db: Session, current) -> list[ExamRead]:
     def _load_tests() -> list[ExamRead]:
         question_count_sq = (
             select(func.count())
@@ -168,6 +170,7 @@ def list_schedulable_tests(*, db: Session) -> list[ExamRead]:
                 joinedload(Exam.category).load_only(Category.id, Category.name),
             )
             .where(Exam.library_pool_id.is_(None))
+            .where(Exam.created_by_id == current.id)
             .order_by(Exam.created_at.desc())
         ).all()
         items: list[ExamRead] = []
@@ -176,7 +179,11 @@ def list_schedulable_tests(*, db: Session) -> list[ExamRead]:
             items.append(serialize_schedulable_test(exam))
         return items
 
-    return _schedulable_tests_cache.get_or_compute("schedulable-tests", _load_tests)
+    cache_key = json.dumps(
+        {"user_id": str(getattr(current, "id", "")), "role": getattr(current.role, "value", current.role)},
+        sort_keys=True,
+    )
+    return _schedulable_tests_cache.get_or_compute(cache_key, _load_tests)
 
 
 def list_schedules(*, db: Session, current, exam_id: str | None = None) -> list[ScheduleRead]:
@@ -222,6 +229,7 @@ def list_schedules(*, db: Session, current, exam_id: str | None = None) -> list[
             query = query.where(Schedule.user_id == current.id)
         else:
             ensure_permission(db, current, "Assign Schedules")
+            query = query.join(Schedule.exam).where(Exam.created_by_id == current.id)
         if resolved_exam_id is not None:
             query = query.where(Schedule.exam_id == resolved_exam_id)
         schedules = db.execute(query).unique().scalars().all()
@@ -241,6 +249,8 @@ def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, acto
     target_exam = db.get(Exam, target_exam_id) if target_exam_id else None
     if new_exam_id and not target_exam:
         raise HTTPException(status_code=404, detail="Test not found")
+    if target_exam is not None:
+        ensure_exam_owner(target_exam, actor)
     ensure_exam_schedulable(target_exam)
     previous_scheduled_at = schedule.scheduled_at
     for field, value in payload.items():
@@ -280,6 +290,10 @@ def delete_schedule(*, db: Session, schedule_id: str, actor) -> Message:
     schedule = db.get(Schedule, schedule_pk)
     if not schedule:
         raise HTTPException(status_code=404, detail="Not found")
+    if schedule.exam_id:
+        exam = db.get(Exam, schedule.exam_id)
+        if exam is not None:
+            ensure_exam_owner(exam, actor)
     active_attempt = db.scalar(
         select(Attempt.id)
         .where(

@@ -33,8 +33,6 @@ const LEARNER_ROUTE_PATTERNS = [
   /^\/exam(?:\/|$)/i,
 ]
 
-const ADMIN_ROUTE_PATTERNS = [/^\/admin(?:\/|$)/i]
-
 const BLOCKED_ROUTE_PATTERNS = [
   /^\/login(?:\/|$)/i,
   /^\/signup(?:\/|$)/i,
@@ -74,7 +72,7 @@ export function canReusePostLoginPath(role, requestedPath) {
 
   switch (role) {
     case 'ADMIN':
-      return ADMIN_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname))
+      return false
     case 'INSTRUCTOR':
       return INSTRUCTOR_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname))
     case 'LEARNER':
@@ -85,6 +83,10 @@ export function canReusePostLoginPath(role, requestedPath) {
 }
 
 export function resolvePostLoginPath(role, requestedPath) {
+  if (role === 'ADMIN') {
+    return DEFAULT_PATHS.ADMIN
+  }
+
   if (canReusePostLoginPath(role, requestedPath)) {
     return requestedPath
   }

@@ -109,8 +109,6 @@ export function getJourneyRequirements(rawConfig) {
     'id_verification_required',
     'require_identity_verification',
     'require_id_verification',
-    'face_verify',
-    'face_verify_enabled',
     'require_id_document',
     'id_document_required',
   ])
@@ -119,7 +117,7 @@ export function getJourneyRequirements(rawConfig) {
   if (micRequired === null) micRequired = Boolean(audioDetection)
   if (fullscreenRequired === null) fullscreenRequired = false
   if (lightingRequired === null) lightingRequired = false
-  if (identityRequired === null) identityRequired = Boolean(faceDetection)
+  if (identityRequired === null) identityRequired = false
 
   if (hasRecordedVideoJourney(cfg)) {
     cameraRequired = true

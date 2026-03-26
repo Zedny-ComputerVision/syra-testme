@@ -31,7 +31,7 @@ export const DEFAULT_PERMISSION_ROWS = [
 ]
 
 export function canonicalizePermissionRows(rows) {
-  const source = Array.isArray(rows) && rows.length > 0 ? rows : DEFAULT_PERMISSION_ROWS
+  const source = Array.isArray(rows) ? rows : []
   const merged = new Map()
   source.forEach((row) => {
     if (!row || !row.feature) return

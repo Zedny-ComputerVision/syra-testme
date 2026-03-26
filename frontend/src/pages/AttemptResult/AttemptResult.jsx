@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { finalizeAttemptReview, getAttempt, getAttemptAnswers, getAttemptEvents, reviewAttemptAnswer } from '../../services/attempt.service'
+import { finalizeAttemptReview, getAttempt, getAttemptAnswers, getAttemptProctoringSummary, reviewAttemptAnswer } from '../../services/attempt.service'
 import { getTestQuestions, getTest } from '../../services/test.service'
 import api from '../../services/api'
 import { normalizeAttempt, normalizeTest } from '../../utils/assessmentAdapters'
@@ -61,10 +61,11 @@ export default function AttemptResult() {
   const [attempt, setAttempt] = useState(null)
   const [questions, setQuestions] = useState([])
   const [answers, setAnswers] = useState([])
-  const [events, setEvents] = useState([])
+  const [proctoringSummary, setProctoringSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [detailWarning, setDetailWarning] = useState('')
+  const [proctoringSummaryError, setProctoringSummaryError] = useState('')
   const [certError, setCertError] = useState('')
   const [exam, setExam] = useState(null)
   const [downloading, setDownloading] = useState(false)
@@ -78,11 +79,14 @@ export default function AttemptResult() {
     setLoading(true)
     setLoadError('')
     setDetailWarning('')
+    setProctoringSummaryError('')
+    setReviewError('')
+    setReviewNotice('')
     if (!id) {
       setAttempt(null)
       setQuestions([])
       setAnswers([])
-      setEvents([])
+      setProctoringSummary(null)
       setExam(null)
       setLoadError('Invalid attempt link. Return to your attempts list and try again.')
       setLoading(false)
@@ -92,11 +96,16 @@ export default function AttemptResult() {
       const attRes = await getAttempt(id)
       const att = normalizeAttempt(attRes.data)
       setAttempt(att)
+      setQuestions([])
+      setAnswers([])
+      setProctoringSummary(null)
+      setExam(null)
+      setLoading(false)
       const [qRes, aRes, exRes, eventsRes] = await Promise.allSettled([
         getTestQuestions(att.exam_id),
         getAttemptAnswers(id),
         getTest(att.exam_id),
-        getAttemptEvents(id),
+        getAttemptProctoringSummary(id),
       ])
       const failed = []
 
@@ -122,9 +131,11 @@ export default function AttemptResult() {
       }
 
       if (eventsRes?.status === 'fulfilled') {
-        setEvents(eventsRes.value.data || [])
+        setProctoringSummary(eventsRes.value.data || null)
+        setProctoringSummaryError('')
       } else {
-        setEvents([])
+        setProctoringSummary(null)
+        setProctoringSummaryError('Proctoring summary could not be loaded. Retry to restore it.')
         failed.push('proctoring')
       }
 
@@ -135,7 +146,7 @@ export default function AttemptResult() {
       setAttempt(null)
       setQuestions([])
       setAnswers([])
-      setEvents([])
+      setProctoringSummary(null)
       setExam(null)
       setLoadError(e.response?.data?.detail || 'Failed to load result. Please try again.')
     } finally {
@@ -188,12 +199,13 @@ export default function AttemptResult() {
   const openedFromManageTest = searchParams.get('from') === 'manage-test'
   const returnTestId = searchParams.get('testId')
   const returnTab = searchParams.get('tab') || 'candidates'
-  const highViolations = events.filter((event) => event.severity === 'HIGH')
-  const mediumViolations = events.filter((event) => event.severity === 'MEDIUM')
-  const lowViolations = events.filter((event) => event.severity === 'LOW')
-  const recentViolations = [...events]
-    .sort((left, right) => new Date(right.occurred_at) - new Date(left.occurred_at))
-    .slice(0, 5)
+  const savedRecordings = Number(proctoringSummary?.saved_recordings || 0)
+  const expectedRecordings = Number(proctoringSummary?.expected_recordings || 0)
+  const totalAlerts = Number(proctoringSummary?.total_events || 0)
+  const seriousAlerts = Number(proctoringSummary?.serious_alerts || 0)
+  const riskScore = Number(proctoringSummary?.risk_score || 0)
+  const recentViolations = Array.isArray(proctoringSummary?.recent_events) ? proctoringSummary.recent_events : []
+  const hasProctoringData = savedRecordings > 0 || totalAlerts > 0
   const answeredCount = answers.filter((answer) => hasAnswerValue(answer.answer)).length
 
   const formatDuration = () => {
@@ -469,43 +481,56 @@ export default function AttemptResult() {
 
       <div className={styles.proctoringSection}>
         <h3 className={styles.sectionTitle}>Proctoring Summary</h3>
-        {events.length === 0 ? (
-          <div className={styles.emptyReview}>No proctoring violations were recorded for this attempt.</div>
+        {proctoringSummaryError ? (
+          <div className={styles.errorRow}>
+            <div className={styles.errorBanner}>{proctoringSummaryError}</div>
+            <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>
+              Retry proctoring summary
+            </button>
+          </div>
+        ) : !hasProctoringData ? (
+          <div className={styles.emptyReview}>No proctoring data was recorded for this attempt.</div>
         ) : (
           <>
             <div className={styles.proctoringGrid}>
               <div className={styles.proctoringCard}>
-                <div className={styles.proctoringValue}>{events.length}</div>
+                <div className={styles.proctoringValue}>
+                  {expectedRecordings > 0 ? `${savedRecordings}/${expectedRecordings}` : savedRecordings}
+                </div>
+                <div className={styles.proctoringLabel}>Saved Recordings</div>
+              </div>
+              <div className={styles.proctoringCard}>
+                <div className={styles.proctoringValue}>{totalAlerts}</div>
                 <div className={styles.proctoringLabel}>Total Alerts</div>
               </div>
               <div className={styles.proctoringCard}>
-                <div className={`${styles.proctoringValue} ${styles.proctoringHigh}`}>{highViolations.length}</div>
-                <div className={styles.proctoringLabel}>High Severity</div>
+                <div className={`${styles.proctoringValue} ${styles.proctoringMedium}`}>{seriousAlerts}</div>
+                <div className={styles.proctoringLabel}>Serious Alerts</div>
               </div>
               <div className={styles.proctoringCard}>
-                <div className={`${styles.proctoringValue} ${styles.proctoringMedium}`}>{mediumViolations.length}</div>
-                <div className={styles.proctoringLabel}>Medium Severity</div>
-              </div>
-              <div className={styles.proctoringCard}>
-                <div className={`${styles.proctoringValue} ${styles.proctoringLow}`}>{lowViolations.length}</div>
-                <div className={styles.proctoringLabel}>Low Severity</div>
+                <div className={`${styles.proctoringValue} ${styles.proctoringHigh}`}>{riskScore}</div>
+                <div className={styles.proctoringLabel}>Risk Score</div>
               </div>
             </div>
-            <div className={styles.proctoringList}>
-              {recentViolations.map((event, index) => (
-                <div key={event.id || `${event.event_type}-${index}`} className={styles.proctoringEvent}>
-                  <div className={styles.proctoringEventHeader}>
-                    <span className={styles.proctoringEventType}>{event.event_type?.replace(/_/g, ' ')}</span>
-                    <span className={`${styles.severityBadge} ${getSeverityClass(event.severity)}`}>{event.severity}</span>
+            {recentViolations.length > 0 ? (
+              <div className={styles.proctoringList}>
+                {recentViolations.map((event, index) => (
+                  <div key={event.id || `${event.event_type}-${index}`} className={styles.proctoringEvent}>
+                    <div className={styles.proctoringEventHeader}>
+                      <span className={styles.proctoringEventType}>{event.event_type?.replace(/_/g, ' ')}</span>
+                      <span className={`${styles.severityBadge} ${getSeverityClass(event.severity)}`}>{event.severity}</span>
+                    </div>
+                    <div className={styles.proctoringEventDetail}>{event.detail || 'Automatic proctoring alert recorded.'}</div>
+                    <div className={styles.proctoringEventMeta}>
+                      <span>{formatConfidence(event.ai_confidence)}</span>
+                      <span>{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : '-'}</span>
+                    </div>
                   </div>
-                  <div className={styles.proctoringEventDetail}>{event.detail || 'Automatic proctoring alert recorded.'}</div>
-                  <div className={styles.proctoringEventMeta}>
-                    <span>{formatConfidence(event.ai_confidence)}</span>
-                    <span>{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : '-'}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.emptyReview}>No alert events were recorded for this attempt.</div>
+            )}
           </>
         )}
       </div>

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import case, exists, func, or_, select
+from sqlalchemy import case, exists, func, select
 from sqlalchemy.orm import Session, joinedload, load_only
 
 from ..api.deps import ensure_permission
-from ..models import AccessMode, Attempt, AttemptStatus, Exam, ExamStatus, RoleEnum, Schedule, User
+from ..models import Attempt, AttemptStatus, Exam, ExamStatus, RoleEnum, Schedule, User
 from ..schemas import DashboardRead, ScheduleRead
 
 PRIVILEGED_UPCOMING_PREVIEW_LIMIT = 10
@@ -30,12 +30,6 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
         best_score = attempts_metrics[2]
         average_score = attempts_metrics[3]
 
-        restricted_schedule_exists = exists(
-            select(Schedule.id).where(
-                Schedule.exam_id == Exam.id,
-                Schedule.access_mode == AccessMode.RESTRICTED,
-            )
-        )
         learner_schedule_available = exists(
             select(Schedule.id).where(
                 Schedule.exam_id == Exam.id,
@@ -48,7 +42,7 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
                 select(func.count(Exam.id)).where(
                     Exam.library_pool_id.is_(None),
                     Exam.status == ExamStatus.OPEN,
-                    or_(~restricted_schedule_exists, learner_schedule_available),
+                    learner_schedule_available,
                 )
             )
             or 0
@@ -101,15 +95,46 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
         )
 
     # Batch all scalar metrics into a single query to avoid multiple DB round-trips.
+    owner_filter = Exam.created_by_id == current.id
     agg_columns = [
-        # Attempt metrics
-        func.count(Attempt.id).label("att_total"),
-        func.sum(case((Attempt.status == AttemptStatus.IN_PROGRESS, 1), else_=0)).label("att_ip"),
-        func.max(Attempt.score).label("att_best"),
-        func.avg(Attempt.score).label("att_avg"),
-        # Test metrics (scalar subqueries)
-        select(func.count(Exam.id)).where(Exam.library_pool_id.is_(None)).correlate(None).scalar_subquery().label("total_tests"),
-        select(func.count(Exam.id)).where(Exam.library_pool_id.is_(None), Exam.status == ExamStatus.OPEN).correlate(None).scalar_subquery().label("published_tests"),
+        select(func.count(Attempt.id))
+        .select_from(Attempt)
+        .join(Exam, Attempt.exam_id == Exam.id)
+        .where(owner_filter)
+        .correlate(None)
+        .scalar_subquery()
+        .label("att_total"),
+        select(func.sum(case((Attempt.status == AttemptStatus.IN_PROGRESS, 1), else_=0)))
+        .select_from(Attempt)
+        .join(Exam, Attempt.exam_id == Exam.id)
+        .where(owner_filter)
+        .correlate(None)
+        .scalar_subquery()
+        .label("att_ip"),
+        select(func.max(Attempt.score))
+        .select_from(Attempt)
+        .join(Exam, Attempt.exam_id == Exam.id)
+        .where(owner_filter)
+        .correlate(None)
+        .scalar_subquery()
+        .label("att_best"),
+        select(func.avg(Attempt.score))
+        .select_from(Attempt)
+        .join(Exam, Attempt.exam_id == Exam.id)
+        .where(owner_filter)
+        .correlate(None)
+        .scalar_subquery()
+        .label("att_avg"),
+        select(func.count(Exam.id))
+        .where(Exam.library_pool_id.is_(None), owner_filter)
+        .correlate(None)
+        .scalar_subquery()
+        .label("total_tests"),
+        select(func.count(Exam.id))
+        .where(Exam.library_pool_id.is_(None), Exam.status == ExamStatus.OPEN, owner_filter)
+        .correlate(None)
+        .scalar_subquery()
+        .label("published_tests"),
     ]
     if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
         agg_columns.extend([
@@ -131,7 +156,9 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
 
     upcoming_count = int(
         db.scalar(
-            select(func.count(Schedule.id)).where(Schedule.scheduled_at >= now)
+            select(func.count(Schedule.id))
+            .join(Exam, Schedule.exam_id == Exam.id)
+            .where(Schedule.scheduled_at >= now, owner_filter)
         )
         or 0
     )
@@ -160,7 +187,8 @@ def build_dashboard(*, db: Session, current) -> DashboardRead:
                 User.user_id,
             ),
         )
-        .where(Schedule.scheduled_at >= now)
+        .join(Schedule.exam)
+        .where(Schedule.scheduled_at >= now, owner_filter)
         .order_by(Schedule.scheduled_at.asc())
         .limit(PRIVILEGED_UPCOMING_PREVIEW_LIMIT)
     ).all()

@@ -23,6 +23,7 @@ from ...core.config import get_settings
 from ...models import Attempt, AttemptStatus, Exam, Notification, ProctoringEvent, RoleEnum, SeverityEnum, SystemSettings, User
 from ...services.normalized_relations import exam_proctoring
 from ...schemas import (
+    AttemptProctoringSummaryRead,
     ProctoringEventRead,
     Message,
     ProctoringPingResponse,
@@ -576,6 +577,14 @@ _VIDEO_BATCH_EVENT_TYPES = (
     "VIDEO_BATCH_ANALYSIS_COMPLETED",
     "VIDEO_BATCH_ANALYSIS_FAILED",
 )
+_PROCTORING_SUMMARY_EXCLUDED_EVENT_TYPES = {
+    "ATTEMPT_PAUSED",
+    "ATTEMPT_RESUMED",
+    "CERTIFICATE_REVIEW_APPROVED",
+    "CERTIFICATE_REVIEW_REJECTED",
+    "FACE_REAPPEARED",
+    "FACE_MATCH_RECOVERED",
+}
 
 
 def _build_video_batch_status_url(attempt_id: str, job_id: str) -> str:
@@ -1065,6 +1074,56 @@ def _load_attempt_events(db: Session, attempt_id) -> list[ProctoringEvent]:
         .where(ProctoringEvent.attempt_id == attempt_id)
         .order_by(ProctoringEvent.occurred_at)
     ).all()
+
+
+def _is_summary_alert_event(event_type: str | None) -> bool:
+    normalized = str(event_type or "").strip().upper()
+    if not normalized:
+        return False
+    if normalized.startswith("VIDEO_"):
+        return False
+    return normalized not in _PROCTORING_SUMMARY_EXCLUDED_EVENT_TYPES
+
+
+def _saved_recordings_by_source(events: list[ProctoringEvent]) -> dict[str, ProctoringEvent]:
+    saved: dict[str, ProctoringEvent] = {}
+    for event in sorted(events, key=lambda item: item.occurred_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True):
+        if str(event.event_type or "").strip().upper() != "VIDEO_SAVED":
+            continue
+        source = _normalize_video_source((event.meta or {}).get("source"))
+        if source not in saved:
+            saved[source] = event
+    return saved
+
+
+def _build_attempt_proctoring_summary(attempt: Attempt, events: list[ProctoringEvent]) -> dict[str, object]:
+    filtered_events = [event for event in events if _is_summary_alert_event(event.event_type)]
+    severity_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    for event in filtered_events:
+        severity = getattr(event.severity, "value", str(event.severity or "LOW"))
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+
+    saved_recordings = _saved_recordings_by_source(events)
+    recent_events = sorted(
+        filtered_events,
+        key=lambda item: item.occurred_at or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )[:5]
+    expected_recordings = len(_expected_video_sources(attempt))
+
+    return {
+        "total_events": len(filtered_events),
+        "severity_counts": severity_counts,
+        "serious_alerts": int(severity_counts.get("HIGH", 0) + severity_counts.get("MEDIUM", 0)),
+        "risk_score": int(
+            severity_counts.get("HIGH", 0) * 3
+            + severity_counts.get("MEDIUM", 0) * 2
+            + severity_counts.get("LOW", 0)
+        ),
+        "saved_recordings": len(saved_recordings),
+        "expected_recordings": expected_recordings,
+        "recent_events": recent_events,
+    }
 
 
 AUTO_SUBMIT_EXCLUDED_EVENT_TYPES = {
@@ -2791,6 +2850,17 @@ async def list_events(
         .order_by(ProctoringEvent.occurred_at)
     ).all()
     return events
+
+
+@router.get("/{attempt_id}/summary", response_model=AttemptProctoringSummaryRead)
+async def get_attempt_summary(
+    attempt_id: str,
+    db: Session = Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    attempt = _attempt_or_forbidden(attempt_id, db, current)
+    events = _load_attempt_events(db, attempt.id)
+    return _build_attempt_proctoring_summary(attempt, events)
 
 
 @router.post("/{attempt_id}/generate-report")

@@ -37,7 +37,10 @@ async def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_
             if not _is_pool_library_exam(exam) and learner_can_access_exam(db, exam, current)
         ]
     elif can_edit_tests:
-        exam_query = select(Exam).where(Exam.title.ilike(like_pattern))
+        exam_query = select(Exam).where(
+            Exam.title.ilike(like_pattern),
+            Exam.created_by_id == current.id,
+        )
         exams = [exam for exam in db.scalars(exam_query).all() if not _is_pool_library_exam(exam)]
 
     attempts = []
@@ -54,6 +57,7 @@ async def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_
         )
     )
     if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and can_view_attempt_analysis:
+        attempt_query = attempt_query.where(Exam.created_by_id == current.id)
         attempts = db.execute(attempt_query).unique().scalars().all()
     else:
         attempt_query = attempt_query.where(Attempt.user_id == current.id)

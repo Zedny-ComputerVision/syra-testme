@@ -51,7 +51,7 @@ from ...schemas import (
     AttemptAnswerReviewUpdate,
     Message,
 )
-from ...api.deps import ensure_permission, get_current_user, get_db_dep, require_permission, require_role, parse_uuid_param, normalize_utc_datetime
+from ...api.deps import ensure_exam_owner, ensure_permission, get_current_user, get_db_dep, require_permission, require_role, parse_uuid_param, normalize_utc_datetime
 from ...detection.face_verification import compute_face_signature
 from ...services.crypto_utils import encrypt_bytes
 from ...services.notifications import notify_user
@@ -67,6 +67,10 @@ CERTIFICATE_REVIEW_APPROVED = "CERTIFICATE_REVIEW_APPROVED"
 CERTIFICATE_REVIEW_REJECTED = "CERTIFICATE_REVIEW_REJECTED"
 ATTEMPT_LIST_CACHE_TTL_SECONDS = 8.0
 _attempt_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(ttl_seconds=ATTEMPT_LIST_CACHE_TTL_SECONDS)
+
+
+def _invalidate_attempt_list_cache() -> None:
+    _attempt_list_cache.invalidate()
 
 
 def _get_mediapipe():
@@ -648,24 +652,14 @@ def _exam_schedule_for_user(db: Session, exam_id, user_id):
 
 def _enforce_attempt_access(db: Session, exam: Exam, current: User):
     if current.role != RoleEnum.LEARNER:
+        ensure_exam_owner(exam, current, detail="Not allowed", status_code=status.HTTP_403_FORBIDDEN)
         return None
     if exam.status != ExamStatus.OPEN:
         raise HTTPException(status_code=404, detail="Test not found")
 
     now = normalize_utc_datetime(datetime.now(timezone.utc))
     user_schedule = _exam_schedule_for_user(db, exam.id, current.id)
-    restricted_schedule_exists = (
-        db.scalar(
-            select(func.count())
-            .select_from(Schedule)
-            .where(
-                Schedule.exam_id == exam.id,
-                Schedule.access_mode == AccessMode.RESTRICTED,
-            )
-        )
-        or 0
-    ) > 0
-    if restricted_schedule_exists and not user_schedule:
+    if not user_schedule:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not assigned to this test",
@@ -685,6 +679,8 @@ def _ensure_attempt_access(db: Session, attempt: Attempt, current: User):
             raise HTTPException(status_code=403, detail="Not allowed")
         return
     ensure_permission(db, current, "View Attempt Analysis")
+    exam = attempt.exam or db.get(Exam, attempt.exam_id)
+    ensure_exam_owner(exam, current, detail="Not allowed", status_code=status.HTTP_403_FORBIDDEN)
 
 
 def _evaluate_answer(question: Question, submitted_answer):
@@ -1160,6 +1156,7 @@ async def list_attempts(
             base_query = base_query.where(Attempt.user_id == current.id)
         else:
             ensure_permission(db, current, "View Attempt Analysis")
+            base_query = base_query.where(Attempt.exam_id.in_(select(Exam.id).where(Exam.created_by_id == current.id)))
             if user_id:
                 try:
                     from uuid import UUID
@@ -1335,6 +1332,7 @@ async def submit_answer(
         ans.answer = persisted_answer
         db.add(ans)
         db.commit()
+    _invalidate_attempt_list_cache()
     db.refresh(ans)
     if getattr(ans, "id", None) is None:
         ans.id = uuid4()
@@ -1386,6 +1384,7 @@ async def submit_attempt(
                 attempt.grade = score_result.get("grade")
                 db.add(attempt)
                 db.commit()
+                _invalidate_attempt_list_cache()
                 db.refresh(attempt)
         return _build_attempt_read(attempt, db=db)
     if attempt.status != AttemptStatus.IN_PROGRESS:
@@ -1410,6 +1409,7 @@ async def submit_attempt(
         score = None  # learners cannot grade
     elif score is not None:
         graded = _apply_admin_grade(attempt, score=score, db=db, graded_by=current)
+        _invalidate_attempt_list_cache()
         _notify_attempt_result(db, graded, result_kind="graded")
         return _build_attempt_read(graded, db=db)
 
@@ -1427,6 +1427,7 @@ async def submit_attempt(
     attempt.grade = score_result.get("grade") if attempt.score is not None else None
     db.add(attempt)
     db.commit()
+    _invalidate_attempt_list_cache()
     db.refresh(attempt)
     if attempt.score is not None and not pending_manual_review:
         _notify_attempt_result(db, attempt, result_kind="scored")
@@ -1449,6 +1450,7 @@ async def grade_attempt(
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     graded = _apply_admin_grade(attempt, score=score, db=db, graded_by=current)
+    _invalidate_attempt_list_cache()
     _notify_attempt_result(db, graded, result_kind="graded")
     return _build_attempt_read(graded, db=db, pending_manual_review=False)
 
@@ -1493,6 +1495,7 @@ async def review_attempt_answer(
     answer.is_correct = None
     db.add(answer)
     db.commit()
+    _invalidate_attempt_list_cache()
     db.refresh(answer)
     answer.question_text = answer.question.text if answer.question else None
     return answer
@@ -1524,6 +1527,7 @@ async def finalize_attempt_review(
         attempt.submitted_at = datetime.now(timezone.utc)
     db.add(attempt)
     db.commit()
+    _invalidate_attempt_list_cache()
     db.refresh(attempt)
     _notify_attempt_result(db, attempt, result_kind="graded")
     return _build_attempt_read(attempt, db=db, pending_manual_review=False)
@@ -1574,6 +1578,7 @@ async def review_attempt_certificate(
         )
     )
     db.commit()
+    _invalidate_attempt_list_cache()
     db.refresh(attempt)
     return _build_attempt_read(attempt, db=db, pending_manual_review=False)
 

@@ -75,6 +75,7 @@ class TestService:
     def list_tests(
         self,
         *,
+        actor: ServiceActor,
         pagination: PaginationParams,
         status: tuple[TestStatus, ...] | None = None,
         test_type=None,
@@ -94,12 +95,15 @@ class TestService:
                 "order": pagination.order,
                 "page": pagination.page,
                 "page_size": pagination.page_size,
+                "actor_id": str(actor.id) if actor.id else None,
+                "actor_role": getattr(actor.role, "value", actor.role),
             },
             sort_keys=True,
         )
 
         def _load_tests() -> dict:
             query = TestListQuery(
+                owner_id=actor.id if actor.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} else None,
                 search=pagination.search,
                 status=status,
                 type=test_type,
@@ -186,8 +190,8 @@ class TestService:
         )
         return self._serialize_detail(exam)
 
-    def get_test(self, test_id: str) -> TestResponseDTO:
-        exam = self._get_test_or_raise(test_id)
+    def get_test(self, test_id: str, *, actor: ServiceActor) -> TestResponseDTO:
+        exam = self._get_test_or_raise(test_id, actor=actor)
         return self._serialize_detail(exam)
 
     def update_test(
@@ -198,7 +202,7 @@ class TestService:
         actor: ServiceActor,
         request_ip: str | None,
     ) -> TestResponseDTO:
-        exam = self._get_test_for_write_or_raise(test_id)
+        exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         payload = body.model_dump(exclude_unset=True, exclude_none=True)
         self._assert_can_mutate(exam, set(payload.keys()))
         next_max_attempts = payload.get("attempts_allowed", exam.max_attempts)
@@ -296,7 +300,7 @@ class TestService:
             )
 
     def publish_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
-        exam = self._get_test_for_write_or_raise(test_id)
+        exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         if not exam.title or not exam.title.strip():
             self._raise("VALIDATION_ERROR", "Name is required before publishing", status_code=400)
         if self.repository.question_count(exam.id) <= 0:
@@ -330,7 +334,7 @@ class TestService:
         actor: ServiceActor,
         request_ip: str | None,
     ) -> TestResponseDTO:
-        exam = self._get_test_for_write_or_raise(test_id)
+        exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         duplicate = self.repository.duplicate_test(exam, actor.id)
         mutate_exam_admin_meta(duplicate, code=None, published_at=None, archived_at=None)
         duplicate.updated_at = duplicate.created_at
@@ -347,7 +351,7 @@ class TestService:
         return self._serialize_detail(duplicate)
 
     def archive_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
-        exam = self._get_test_for_write_or_raise(test_id)
+        exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         previous_status = self._status(exam)
         if previous_status == TestStatus.ARCHIVED:
             return self._serialize_detail(exam)
@@ -378,7 +382,7 @@ class TestService:
         return self._serialize_detail(exam)
 
     def unarchive_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
-        exam = self._get_test_for_write_or_raise(test_id)
+        exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         now = datetime.now(timezone.utc)
         exam.status = ExamStatus.OPEN
         exam.updated_at = now
@@ -407,7 +411,7 @@ class TestService:
         actor: ServiceActor,
         request_ip: str | None,
     ) -> None:
-        exam = self._get_test_for_write_or_raise(test_id)
+        exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         if self._status(exam) != TestStatus.DRAFT:
             self._raise("FORBIDDEN", "Only draft tests can be deleted", status_code=409)
         if self.repository.attempt_count(exam.id) > 0:
@@ -434,8 +438,8 @@ class TestService:
             request_ip=request_ip,
         )
 
-    def render_report(self, test_id: str) -> str:
-        exam = self._get_test_or_raise(test_id)
+    def render_report(self, test_id: str, *, actor: ServiceActor) -> str:
+        exam = self._get_test_or_raise(test_id, actor=actor)
         attempts = self.repository.list_report_attempts(exam.id)
         return render_report_template(
             "test_report.html",
@@ -452,17 +456,23 @@ class TestService:
             ],
         )
 
-    def _get_test_or_raise(self, test_id: str) -> Exam:
+    def _get_test_or_raise(self, test_id: str, *, actor: ServiceActor) -> Exam:
         exam = self.repository.get_test(self._parse_test_id(test_id))
         if exam is None:
             self._raise("NOT_FOUND", "Test not found", status_code=404)
+        self._ensure_actor_can_access_exam(exam, actor)
         return exam
 
-    def _get_test_for_write_or_raise(self, test_id: str) -> Exam:
+    def _get_test_for_write_or_raise(self, test_id: str, *, actor: ServiceActor) -> Exam:
         exam = self.repository.get_test_for_write(self._parse_test_id(test_id))
         if exam is None:
             self._raise("NOT_FOUND", "Test not found", status_code=404)
+        self._ensure_actor_can_access_exam(exam, actor)
         return exam
+
+    def _ensure_actor_can_access_exam(self, exam: Exam, actor: ServiceActor) -> None:
+        if actor.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and exam.created_by_id != actor.id:
+            self._raise("NOT_FOUND", "Test not found", status_code=404)
 
     def _ensure_node(self, actor: ServiceActor, node_id: uuid.UUID | None):
         actor_proxy = type(

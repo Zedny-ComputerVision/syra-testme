@@ -7,6 +7,7 @@ import { getTest } from '../../services/test.service'
 import { normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import { setAttemptId } from '../../utils/attemptSession'
+import { readTestAccessError } from '../../utils/testAccessError'
 import styles from './VerifyIdentityPage.module.scss'
 
 const REASON_MESSAGES = {
@@ -163,9 +164,9 @@ export default function VerifyIdentityPage() {
         return
       }
       await startCamera()
-    } catch {
+    } catch (error) {
       setRequirements(getJourneyRequirements({ identity_required: true, camera_required: true, lighting_required: true }))
-      setError('Failed to load test verification requirements. Please refresh and try again.')
+      setError(readTestAccessError(error, 'Failed to load test verification requirements. Please refresh and try again.'))
     } finally {
       setLoadingConfig(false)
     }

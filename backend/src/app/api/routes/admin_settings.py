@@ -18,6 +18,7 @@ from ..deps import (
     invalidate_permission_rows_cache,
     load_permission_rows,
     normalize_feature,
+    permission_defaults_enabled,
     permission_allowed,
 )
 
@@ -47,7 +48,7 @@ def _ensure_admin_permission_floor(rows: list[dict]) -> None:
 
 def _normalize_permissions_config(raw_value: str | None) -> str:
     try:
-        parsed = DEFAULT_PERMISSION_ROWS if not raw_value else json.loads(raw_value)
+        parsed = [] if not raw_value else json.loads(raw_value)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON for permissions_config")
     if not isinstance(parsed, list):
@@ -69,9 +70,9 @@ def _normalize_permissions_config(raw_value: str | None) -> str:
 
 def _role_permission_sets(raw_value: str | None) -> dict[str, set[str]]:
     try:
-        parsed = DEFAULT_PERMISSION_ROWS if not raw_value else json.loads(raw_value)
+        parsed = [] if not raw_value else json.loads(raw_value)
     except Exception:
-        parsed = DEFAULT_PERMISSION_ROWS
+        parsed = []
     normalized = canonicalize_permission_rows(parsed)
     role_map = {
         RoleEnum.ADMIN.value: set(),
@@ -126,6 +127,8 @@ def _get_or_create_permissions_setting(db: Session):
     setting = db.scalar(select(SystemSettings).where(SystemSettings.key == PERMISSIONS_CONFIG_KEY))
     if setting:
         return setting
+    if not permission_defaults_enabled():
+        raise HTTPException(status_code=503, detail="Permissions configuration unavailable")
     setting = SystemSettings(key=PERMISSIONS_CONFIG_KEY, value=json.dumps(DEFAULT_PERMISSION_ROWS))
     db.add(setting)
     db.commit()
@@ -246,6 +249,8 @@ async def maintenance_public(db: Session = Depends(get_db_dep)):
     def _load_maintenance_payload() -> dict[str, str]:
         mode = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
         banner = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_banner"))
+        if not mode and not permission_defaults_enabled():
+            raise HTTPException(status_code=503, detail="Maintenance configuration unavailable")
         return {
             "mode": mode.value if mode else "off",
             "banner": banner.value if banner else "",

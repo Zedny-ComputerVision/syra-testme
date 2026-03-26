@@ -5,6 +5,7 @@ import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyS
 import Loader from '../../components/common/Loader/Loader'
 import { normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
+import { readTestAccessError } from '../../utils/testAccessError'
 import styles from './ExamInstructions.module.scss'
 
 export default function ExamInstructions() {
@@ -30,7 +31,7 @@ export default function ExamInstructions() {
           setError('Failed to parse test data. The test may be misconfigured.')
         }
       })
-      .catch((err) => setError(err.response?.data?.detail || err.message || 'Failed to load test details'))
+      .catch((err) => setError(readTestAccessError(err, 'Failed to load test details.')))
       .finally(() => setLoading(false))
   }
 

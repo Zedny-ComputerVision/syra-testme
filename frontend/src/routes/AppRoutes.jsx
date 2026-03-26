@@ -77,7 +77,7 @@ const Maintenance = lazyPage(() => import('../pages/Maintenance/Maintenance'), {
 
 const MAINTENANCE_CACHE_TTL_MS = 120000
 let maintenanceCache = {
-  data: { mode: 'off', banner: '' },
+  data: null,
   fetchedAt: 0,
   inflight: null,
 }
@@ -93,9 +93,12 @@ async function readMaintenanceStatus() {
 
   maintenanceCache.inflight = api.get('admin-settings/maintenance/public')
     .then(({ data }) => {
+      if (!data || typeof data.mode !== 'string') {
+        throw new Error('Maintenance status unavailable')
+      }
       maintenanceCache.data = {
-        mode: data?.mode || 'off',
-        banner: data?.banner || '',
+        mode: data.mode,
+        banner: typeof data.banner === 'string' ? data.banner : '',
       }
       maintenanceCache.fetchedAt = Date.now()
       return maintenanceCache.data
@@ -125,10 +128,22 @@ function RequireLogin({ children }) {
 }
 
 function RequireAccess({ children, roles, permission }) {
-  const { user, hasPermission } = useAuth()
+  const { user, hasPermission, permissionsLoading, permissionsError } = useAuth()
 
   if (roles && roles.length > 0 && !roles.includes(user.role)) {
     return <Navigate to="/access-denied" replace />
+  }
+  if (permission && permissionsLoading) {
+    return <Loader fullPage label="Loading access..." />
+  }
+  if (permission && permissionsError) {
+    return (
+      <div className="maintenance-page">
+        <h2>Permissions unavailable</h2>
+        <p>{permissionsError}</p>
+        <button type="button" onClick={() => window.location.reload()}>Retry</button>
+      </div>
+    )
   }
   if (permission && !hasPermission(permission)) {
     return <Navigate to="/access-denied" replace />
@@ -140,6 +155,7 @@ function Shell({ children }) {
   const { user } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [maintenance, setMaintenance] = useState({ mode: 'off', banner: '' })
+  const [maintenanceError, setMaintenanceError] = useState('')
   const location = useLocation()
   const isAttemptTakeMode = /^\/attempts\/[^/]+\/take$/.test(location.pathname)
   const isLegacyExamMode = ['/exam/', '/system-check/', '/verify-identity/', '/rules/']
@@ -152,8 +168,9 @@ function Shell({ children }) {
       try {
         const data = await readMaintenanceStatus()
         setMaintenance(data)
+        setMaintenanceError('')
       } catch {
-        // ignore
+        setMaintenanceError('Maintenance status could not be loaded.')
       }
     }
 
@@ -187,6 +204,11 @@ function Shell({ children }) {
       <a href="#app-main-content" className="skip-link">Skip to content</a>
       <ScrollRestoration />
       {!isExamMode && <ScrollProgress />}
+      {maintenanceError && (
+        <div className="maintenance-banner">
+          {maintenanceError}
+        </div>
+      )}
       {maintenance.mode !== 'off' && (
         <div className="maintenance-banner">
           {maintenance.banner || 'Maintenance in progress'}
@@ -324,6 +346,7 @@ const router = createBrowserRouter(
     { path: '/admin/exams/:id/manage', element: <LegacyTestDetailRedirect /> },
     { path: '/admin/exams/new', element: <Navigate to="/admin/tests/new" replace /> },
     { path: '/admin/exams/:id/edit', element: <LegacyTestEditRedirect /> },
+    { path: '/admin/tests/:id', element: <LegacyTestDetailRedirect /> },
     { path: '/admin/new', element: <Navigate to="/admin/tests/new" replace /> },
     { path: '/admin/schedules', element: <Navigate to="/admin/sessions" replace /> },
     { path: '/admin/roles-permissions', element: <Navigate to="/admin/roles" replace /> },
@@ -352,6 +375,7 @@ const router = createBrowserRouter(
         { path: '/admin', element: withAccess(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
         { path: '/admin/dashboard', element: withAccess(<AdminDashboard />, ADMIN_ROLES, 'View Dashboard') },
         { path: '/admin/tests', element: withAccess(<AdminExams />, ADMIN_ROLES, 'Edit Tests') },
+        { path: '/admin/tests/:id', element: <LegacyTestDetailRedirect /> },
         { path: '/admin/tests/:id/manage', element: withAccess(<AdminManageTestPage />, ADMIN_ROLES, 'Edit Tests') },
         { path: '/admin/tests/new', element: withAccess(<AdminNewTestWizard />, ADMIN_ROLES, 'Create Tests') },
         { path: '/admin/tests/:id/edit', element: withAccess(<AdminNewTestWizard />, ADMIN_ROLES, 'Edit Tests') },

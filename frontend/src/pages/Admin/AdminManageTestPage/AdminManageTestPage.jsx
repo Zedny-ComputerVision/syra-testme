@@ -279,9 +279,6 @@ function isCanceledRequest(error) {
 function readRequestError(error, fallback) {
   const detail = error?.response?.data?.detail
   if (typeof detail === 'string' && detail.trim()) return detail.trim()
-  if (typeof error?.message === 'string' && error.message.trim() && !isCanceledRequest(error)) {
-    return error.message.trim()
-  }
   return fallback
 }
 
@@ -766,6 +763,7 @@ export default function AdminManageTestPage() {
   const examRef = useRef(exam)
   const usersRef = useRef(users)
   const sessionsRef = useRef(sessions)
+  const categoriesRef = useRef(categories)
   const loadAbortRef = useRef(null)
   const uploadStatusPollAbortRef = useRef(null)
   const uploadStatusPollBusyRef = useRef(false)
@@ -845,6 +843,10 @@ export default function AdminManageTestPage() {
   useEffect(() => {
     sessionsRef.current = sessions
   }, [sessions])
+
+  useEffect(() => {
+    categoriesRef.current = categories
+  }, [categories])
 
   const handleTabChange = useCallback((nextTab, nextSection = settingsSection) => {
     if (!TABS.some((item) => item.id === nextTab)) return
@@ -1094,8 +1096,8 @@ export default function AdminManageTestPage() {
 
       const needsCategories = tab === 'settings' && settingsSection === 'categories'
       const needsQuestions = tab === 'sections'
-      const needsSessions = tab === 'sessions' || tab === 'proctoring'
-      const needsUsers = tab === 'sessions' || tab === 'candidates' || (tab === 'proctoring' && view === 'special_accommodations')
+      const needsSessions = tab === 'sessions' || tab === 'proctoring' || tab === 'candidates' || tab === 'reports'
+      const needsUsers = tab === 'sessions' || tab === 'candidates' || tab === 'proctoring'
       const needsAttempts = tab === 'candidates' || tab === 'proctoring' || tab === 'administration' || tab === 'reports'
       const tasks = []
       if (needsCategories) tasks.push(['categories', adminApi.categories(requestOptions)])
@@ -1120,7 +1122,10 @@ export default function AdminManageTestPage() {
         }
       })
 
-      if (needsCategories) setCategories(payloads.categories || [])
+      if (needsCategories) {
+        const nextCategories = Array.isArray(payloads.categories) ? payloads.categories : []
+        setCategories((current) => (nextCategories.length === 0 && current.length > 0 ? current : nextCategories))
+      }
       if (needsQuestions) setQuestions(payloads.questions || [])
 
       const resolvedUsers = payloads.users != null ? readPaginatedItems(payloads.users) : usersRef.current
@@ -1159,7 +1164,13 @@ export default function AdminManageTestPage() {
   useEffect(() => {
     const shouldShowSpinner = !examRef.current || String(examRef.current.id) !== String(id)
     void loadAllRef.current(shouldShowSpinner)
-  }, [id, tab, settingsSection])
+  }, [id, tab])
+
+  useEffect(() => {
+    if (tab !== 'settings' || settingsSection !== 'categories') return
+    if (categoriesRef.current.length > 0) return
+    void loadAllRef.current(false)
+  }, [tab, settingsSection])
 
   const videoUploadStatusTargetAttemptIds = useMemo(() => (
     attemptRows
@@ -2412,10 +2423,13 @@ export default function AdminManageTestPage() {
     try {
       const { data: created } = await adminApi.createCategory(payload)
       const { data: categoryRows } = await adminApi.categories()
-      const nextCategories = categoryRows || []
+      const nextCategories = Array.isArray(categoryRows) ? [...categoryRows] : []
       const resolvedCategory = created?.id
         ? created
         : nextCategories.find((category) => String(category.name || '').toLowerCase() === payload.name.toLowerCase())
+      if (resolvedCategory?.id && !nextCategories.some((category) => String(category.id) === String(resolvedCategory.id))) {
+        nextCategories.unshift(resolvedCategory)
+      }
       setCategories(nextCategories)
       setSettingsForm((prev) => ({ ...prev, category_id: String(resolvedCategory?.id || '') }))
       setShowCategoryPicker(true)

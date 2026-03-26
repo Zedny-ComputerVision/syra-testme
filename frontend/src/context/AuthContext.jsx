@@ -2,7 +2,6 @@ import React, { createContext, useEffect, useState, useCallback, useMemo, useRef
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 import {
-  DEFAULT_PERMISSION_ROWS,
   canonicalizePermissionRows,
   hasPermission as checkPermission,
 } from '../utils/permissions';
@@ -123,7 +122,9 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     return initialTokens ? decodeUser(initialTokens.access_token) : null;
   });
-  const [permissionRows, setPermissionRows] = useState(DEFAULT_PERMISSION_ROWS);
+  const [permissionRows, setPermissionRows] = useState([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(Boolean(initialTokens?.access_token));
+  const [permissionsError, setPermissionsError] = useState('');
   const [loading, setLoading] = useState(true);
   const refreshPromiseRef = useRef(null);
 
@@ -132,7 +133,9 @@ export function AuthProvider({ children }) {
     clearSessionArtifacts();
     setTokens(null);
     setUser(null);
-    setPermissionRows(DEFAULT_PERMISSION_ROWS);
+    setPermissionRows([]);
+    setPermissionsLoading(false);
+    setPermissionsError('');
     setLoading(false);
   }, []);
 
@@ -218,9 +221,15 @@ export function AuthProvider({ children }) {
     async function loadPermissions() {
       if (!user || !tokens?.access_token) {
         if (!cancelled) {
-          setPermissionRows(DEFAULT_PERMISSION_ROWS);
+          setPermissionRows([]);
+          setPermissionsLoading(false);
+          setPermissionsError('');
         }
         return;
+      }
+      if (!cancelled) {
+        setPermissionsLoading(true);
+        setPermissionsError('');
       }
       try {
         const permissionsUrl = resolveApiUrl('admin-settings/permissions/public');
@@ -228,12 +237,18 @@ export function AuthProvider({ children }) {
           headers: { Authorization: `Bearer ${tokens.access_token}` },
           timeout: 10000,
         });
-        if (!cancelled && Array.isArray(data?.permissions) && data.permissions.length > 0) {
-          setPermissionRows(canonicalizePermissionRows(data.permissions));
+        if (!cancelled) {
+          setPermissionRows(canonicalizePermissionRows(data?.permissions));
+          setPermissionsError('');
         }
       } catch {
         if (!cancelled) {
-          setPermissionRows(DEFAULT_PERMISSION_ROWS);
+          setPermissionRows([]);
+          setPermissionsError('Permissions could not be loaded.');
+        }
+      } finally {
+        if (!cancelled) {
+          setPermissionsLoading(false);
         }
       }
     }
@@ -257,7 +272,9 @@ export function AuthProvider({ children }) {
     setUser(decodeUser(payload.access_token));
     setLoading(false);
     setTokens(payload);
-    setPermissionRows(DEFAULT_PERMISSION_ROWS);
+    setPermissionRows([]);
+    setPermissionsLoading(true);
+    setPermissionsError('');
   }, []);
 
   /**
@@ -340,6 +357,7 @@ export function AuthProvider({ children }) {
       }
       setTokens(nextTokens);
       setUser(decodeUser(nextTokens.access_token));
+      setPermissionsLoading(true);
       setLoading(false);
     };
 
@@ -355,6 +373,8 @@ export function AuthProvider({ children }) {
       setUser,
       tokens,
       loading,
+      permissionsLoading,
+      permissionsError,
       isAuthenticated,
       login,
       logout,

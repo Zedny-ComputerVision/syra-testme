@@ -573,6 +573,16 @@ class ProctoringPingResponse(BaseModel):
     submit_reason: Optional[str] = None
 
 
+class AttemptProctoringSummaryRead(BaseModel):
+    total_events: int = 0
+    severity_counts: dict[str, int] = Field(default_factory=dict)
+    serious_alerts: int = 0
+    risk_score: int = 0
+    saved_recordings: int = 0
+    expected_recordings: int = 0
+    recent_events: list[ProctoringEventRead] = Field(default_factory=list)
+
+
 class DashboardRead(BaseModel):
     total_exams: int
     total_tests: int = 0

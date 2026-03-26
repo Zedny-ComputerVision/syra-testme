@@ -1,5 +1,6 @@
 import uuid
 import json
+import os
 import time
 from threading import Lock
 from datetime import datetime, timezone
@@ -9,9 +10,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, load_only
 
+from ..core.config import get_settings
 from ..core.security import token_issued_at, verify_token
 from ..db.session import get_db
-from ..models import AccessMode, Exam, ExamStatus, RoleEnum, Schedule, SystemSettings, User
+from ..models import Exam, ExamStatus, RoleEnum, Schedule, SystemSettings, User
 
 security = HTTPBearer()
 FEATURE_ALIASES = {
@@ -132,8 +134,20 @@ def normalize_feature(feature: str | None) -> str:
     return FEATURE_ALIASES.get(value, value)
 
 
+def permission_defaults_enabled() -> bool:
+    settings = get_settings()
+    return bool(getattr(settings, "E2E_SEED_ENABLED", False) or os.getenv("PYTEST_CURRENT_TEST"))
+
+
+def _permissions_config_unavailable() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Permissions configuration unavailable",
+    )
+
+
 def canonicalize_permission_rows(rows):
-    source = rows if isinstance(rows, list) and rows else DEFAULT_PERMISSION_ROWS
+    source = rows if isinstance(rows, list) else []
     merged: dict[str, dict] = {}
     for row in source:
         if not isinstance(row, dict) or not row.get("feature"):
@@ -146,13 +160,16 @@ def canonicalize_permission_rows(rows):
             "instructor": existing["instructor"] or row.get("instructor") is True,
             "learner": existing["learner"] or row.get("learner") is True,
         }
-    return list(merged.values()) or DEFAULT_PERMISSION_ROWS
+    return list(merged.values())
 
 
 def load_permission_rows(db: Session):
     scalar = getattr(db, "scalar", None)
+    allow_defaults = permission_defaults_enabled()
     if not callable(scalar):
-        return DEFAULT_PERMISSION_ROWS
+        if allow_defaults:
+            return DEFAULT_PERMISSION_ROWS
+        _permissions_config_unavailable()
 
     cache_key = _permission_rows_cache_key(db)
     now = time.monotonic()
@@ -162,16 +179,26 @@ def load_permission_rows(db: Session):
 
     setting = scalar(select(SystemSettings).where(SystemSettings.key == "permissions_config"))
     if not setting or not setting.value:
-        rows = DEFAULT_PERMISSION_ROWS
-        _write_permission_rows_cache(cache_key, rows, now=now)
-        return _clone_permission_rows(rows)
+        if allow_defaults:
+            rows = DEFAULT_PERMISSION_ROWS
+            _write_permission_rows_cache(cache_key, rows, now=now)
+            return _clone_permission_rows(rows)
+        _permissions_config_unavailable()
     try:
         parsed = json.loads(setting.value)
     except Exception:
-        rows = DEFAULT_PERMISSION_ROWS
-        _write_permission_rows_cache(cache_key, rows, now=now)
-        return _clone_permission_rows(rows)
+        if allow_defaults:
+            rows = DEFAULT_PERMISSION_ROWS
+            _write_permission_rows_cache(cache_key, rows, now=now)
+            return _clone_permission_rows(rows)
+        _permissions_config_unavailable()
     rows = canonicalize_permission_rows(parsed)
+    if not rows:
+        if allow_defaults:
+            rows = DEFAULT_PERMISSION_ROWS
+            _write_permission_rows_cache(cache_key, rows, now=now)
+            return _clone_permission_rows(rows)
+        _permissions_config_unavailable()
     _write_permission_rows_cache(cache_key, rows, now=now)
     return _clone_permission_rows(rows)
 
@@ -203,6 +230,23 @@ def ensure_permission(db: Session, user: User, feature: str):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
 
+def exam_owned_by_user(exam: Exam | None, user: User | None) -> bool:
+    if not exam or not user or user.role not in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
+        return False
+    return getattr(exam, "created_by_id", None) == getattr(user, "id", None)
+
+
+def ensure_exam_owner(
+    exam: Exam | None,
+    user: User,
+    *,
+    detail: str = "Test not found",
+    status_code: int = status.HTTP_404_NOT_FOUND,
+) -> None:
+    if user.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and not exam_owned_by_user(exam, user):
+        raise HTTPException(status_code=status_code, detail=detail)
+
+
 def learner_can_access_exam(db: Session, exam: Exam | None, user: User, *, now: datetime | None = None) -> bool:
     if not exam or user.role != RoleEnum.LEARNER:
         return bool(exam)
@@ -215,18 +259,7 @@ def learner_can_access_exam(db: Session, exam: Exam | None, user: User, *, now: 
             Schedule.user_id == user.id,
         )
     )
-    restricted_exists = (
-        db.scalar(
-            select(func.count())
-            .select_from(Schedule)
-            .where(
-                Schedule.exam_id == exam.id,
-                Schedule.access_mode == AccessMode.RESTRICTED,
-            )
-        )
-        or 0
-    ) > 0
-    if restricted_exists and not schedule:
+    if not schedule:
         return False
     scheduled_at = normalize_utc_datetime(getattr(schedule, "scheduled_at", None))
     if scheduled_at and current_time and scheduled_at > current_time:
@@ -258,7 +291,15 @@ def _permission_rows_cache_key(db: Session) -> str:
             return str(engine.url)
     except Exception:
         pass
-    return f"session:{id(db)}"
+    cache_key = getattr(db, "__permission_rows_cache_key__", None)
+    if cache_key:
+        return cache_key
+    cache_key = f"session:{id(db)}:{time.monotonic_ns()}"
+    try:
+        setattr(db, "__permission_rows_cache_key__", cache_key)
+    except Exception:
+        pass
+    return cache_key
 
 
 def _clone_permission_rows(rows) -> list[dict]:

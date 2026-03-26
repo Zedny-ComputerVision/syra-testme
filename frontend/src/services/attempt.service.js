@@ -14,6 +14,7 @@ export const reviewAttemptAnswer = (attemptId, answerId, points_earned) =>
 export const finalizeAttemptReview = (attemptId) =>
   api.post(`attempts/${attemptId}/finalize-review`)
 export const getAttemptEvents = (attemptId) => api.get(`proctoring/${attemptId}/events`)
+export const getAttemptProctoringSummary = (attemptId) => api.get(`proctoring/${attemptId}/summary`)
 export const verifyIdentity = (attemptId, photo_base64) =>
   api.post(`attempts/${attemptId}/verify-identity`, { photo_base64 })
 export const precheckAttempt = (attemptId, payload) =>

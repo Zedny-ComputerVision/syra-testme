@@ -75,8 +75,7 @@ async def delete_exam(
     db=Depends(get_db_dep),
     current=Depends(require_permission("Delete Tests", RoleEnum.ADMIN)),
 ):
-    del current
-    return delete_test_service(db=db, test_id=exam_id)
+    return delete_test_service(db=db, test_id=exam_id, current=current)
 
 
 __all__ = [
