@@ -54,7 +54,7 @@ services:
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
     depends_on:
       ai-inference:
-        condition: service_healthy
+        condition: service_started
       redis:
         condition: service_healthy
     healthcheck:
