@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { adminApi } from '../../../services/admin.service'
 import useAuth from '../../../hooks/useAuth'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
@@ -54,6 +55,7 @@ export default function AdminTestingSessions() {
   const PAGE_SIZE = 20
   const canAssignSchedules = hasPermission?.('Assign Schedules')
   const canCreateSession = canAssignSchedules && sessionsReady && testsReady && usersReady
+  const modalRoot = typeof document !== 'undefined' ? document.body : null
 
   const load = useCallback(async () => {
     if (abortRef.current) abortRef.current.abort()
@@ -540,7 +542,7 @@ export default function AdminTestingSessions() {
         </div>
       )}
 
-      {editModal && (
+      {modalRoot && editModal && createPortal(
         <div className={styles.modalOverlay} onClick={() => { if (!editSaving) { setEditModal(false); setEditError('') } }}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="edit-session-dialog-title" onClick={(event) => event.stopPropagation()}>
             <h3 id="edit-session-dialog-title" className={styles.modalTitle}>Edit Session</h3>
@@ -568,10 +570,11 @@ export default function AdminTestingSessions() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        modalRoot,
       )}
 
-      {modal && (
+      {modalRoot && modal && createPortal(
         <div className={styles.modalOverlay} onClick={() => { if (!saving) { setModal(false); setModalError('') } }}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="create-session-dialog-title" onClick={(event) => event.stopPropagation()}>
             <h3 id="create-session-dialog-title" className={styles.modalTitle}>New Testing Session</h3>
@@ -628,7 +631,8 @@ export default function AdminTestingSessions() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        modalRoot,
       )}
     </div>
   )
