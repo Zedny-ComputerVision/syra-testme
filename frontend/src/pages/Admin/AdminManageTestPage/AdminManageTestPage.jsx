@@ -1095,12 +1095,12 @@ export default function AdminManageTestPage() {
       const needsCategories = tab === 'settings' && settingsSection === 'categories'
       const needsQuestions = tab === 'sections'
       const needsSessions = tab === 'sessions' || tab === 'proctoring'
-      const needsUsers = tab === 'sessions' || tab === 'candidates' || tab === 'proctoring'
+      const needsUsers = tab === 'sessions' || tab === 'candidates' || (tab === 'proctoring' && view === 'special_accommodations')
       const needsAttempts = tab === 'candidates' || tab === 'proctoring' || tab === 'administration' || tab === 'reports'
       const tasks = []
       if (needsCategories) tasks.push(['categories', adminApi.categories(requestOptions)])
       if (needsQuestions) tasks.push(['questions', adminApi.getQuestions(id, requestOptions)])
-      if (needsSessions) tasks.push(['sessions', adminApi.schedules(requestOptions)])
+      if (needsSessions) tasks.push(['sessions', adminApi.schedules({ ...requestOptions, params: { exam_id: id } })])
       if (needsUsers) tasks.push(['users', adminApi.users({ role: 'LEARNER', skip: 0, limit: 200 }, requestOptions)])
       if (needsAttempts) tasks.push(['attempts', adminApi.attempts({ exam_id: id, skip: 0, limit: 200 }, requestOptions)])
 
@@ -1127,7 +1127,7 @@ export default function AdminManageTestPage() {
       if (needsUsers) setUsers(resolvedUsers)
 
       const resolvedSessions = payloads.sessions != null
-        ? (payloads.sessions || []).filter((session) => String(session.exam_id) === String(id))
+        ? (payloads.sessions || [])
         : sessionsRef.current
       if (needsSessions) setSessions(resolvedSessions)
 

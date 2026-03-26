@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from ...models import RoleEnum
 from ...models import Schedule
@@ -17,7 +17,11 @@ from ..deps import get_current_user, get_db_dep, require_permission
 router = APIRouter()
 
 
-_schedule_service.write_audit_log = lambda *args, **kwargs: write_audit_log(*args, **kwargs)
+def _write_schedule_audit_log(*args, **kwargs):
+    return write_audit_log(*args, **kwargs)
+
+
+_schedule_service.write_audit_log = _write_schedule_audit_log
 
 
 @router.post("/", response_model=ScheduleRead)
@@ -39,8 +43,12 @@ async def list_schedulable_tests(
 
 
 @router.get("/", response_model=list[ScheduleRead])
-async def list_schedules(db=Depends(get_db_dep), current=Depends(get_current_user)):
-    return list_schedules_service(db=db, current=current)
+async def list_schedules(
+    exam_id: str | None = Query(None),
+    db=Depends(get_db_dep),
+    current=Depends(get_current_user),
+):
+    return list_schedules_service(db=db, current=current, exam_id=exam_id)
 
 
 @router.put("/{schedule_id}", response_model=ScheduleRead)

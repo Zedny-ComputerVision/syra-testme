@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from ..core.security import token_issued_at, verify_token
 from ..db.session import get_db
@@ -78,7 +78,21 @@ def get_current_user(
     except (ValueError, TypeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    user = db.get(User, user_pk)
+    user = db.scalar(
+        select(User)
+        .options(
+            load_only(
+                User.id,
+                User.user_id,
+                User.email,
+                User.name,
+                User.role,
+                User.is_active,
+                User.token_invalid_before,
+            )
+        )
+        .where(User.id == user_pk)
+    )
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not user.is_active:

@@ -18,7 +18,11 @@ def load_permission_rows(db):
     return _load_permission_rows(db)
 
 
-_service_impl.load_permission_rows = lambda db: load_permission_rows(db)
+def _load_permission_rows_proxy(db):
+    return load_permission_rows(db)
+
+
+_service_impl.load_permission_rows = _load_permission_rows_proxy
 
 
 def _service_from_db(db) -> UserService:

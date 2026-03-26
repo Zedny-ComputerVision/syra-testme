@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -16,12 +17,17 @@ from ...schemas import (
     UserCreate,
     UserPreferenceRead,
     UserPreferenceUpdate,
+    UserRead,
     UserSelfUpdate,
     UserUpdate,
 )
 from ...services.audit import write_audit_log
+from ...utils.response_cache import TimedSingleFlightCache
 from ...utils.pagination import PaginationParams, build_page_response, clamp_sort_field
 from .repository import UserRepository
+
+_user_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(ttl_seconds=10.0)
+_learners_cache: TimedSingleFlightCache[list[UserRead]] = TimedSingleFlightCache(ttl_seconds=15.0)
 
 
 class UserService:
@@ -36,30 +42,63 @@ class UserService:
         is_active: bool | None,
     ) -> dict:
         resolved_sort = clamp_sort_field(pagination.sort, {"name", "email", "role", "created_at"}, "created_at")
-        query = select(User)
-        if role:
-            try:
-                query = query.where(User.role == RoleEnum(role))
-            except ValueError:
-                pass
-        if is_active is not None:
-            query = query.where(User.is_active == is_active)
-        if pagination.search:
-            like = f"%{pagination.search.lower()}%"
-            query = query.where(
-                or_(
-                    func.lower(User.name).like(like),
-                    func.lower(User.email).like(like),
-                    func.lower(User.user_id).like(like),
+        cache_key = json.dumps(
+            {
+                "page": pagination.page,
+                "page_size": pagination.page_size,
+                "search": pagination.search,
+                "sort": pagination.sort,
+                "order": pagination.order,
+                "role": role,
+                "is_active": is_active,
+            },
+            sort_keys=True,
+            default=str,
+        )
+
+        def _load_users() -> dict:
+            query = select(User).options(
+                load_only(
+                    User.id,
+                    User.user_id,
+                    User.email,
+                    User.name,
+                    User.role,
+                    User.is_active,
+                    User.created_at,
+                    User.updated_at,
                 )
             )
-        total = self.repository.count_users(query)
-        users = self.repository.list_users(
-            self._sort_user_query(query, resolved_sort, pagination.order)
-            .offset(pagination.offset)
-            .limit(pagination.limit)
-        ).all()
-        return build_page_response(items=users, total=total, pagination=pagination, extended=False)
+            if role:
+                try:
+                    query = query.where(User.role == RoleEnum(role))
+                except ValueError:
+                    pass
+            if is_active is not None:
+                query = query.where(User.is_active == is_active)
+            if pagination.search:
+                like = f"%{pagination.search.lower()}%"
+                query = query.where(
+                    or_(
+                        func.lower(User.name).like(like),
+                        func.lower(User.email).like(like),
+                        func.lower(User.user_id).like(like),
+                    )
+                )
+            total = self.repository.count_users(query)
+            users = self.repository.list_users(
+                self._sort_user_query(query, resolved_sort, pagination.order)
+                .offset(pagination.offset)
+                .limit(pagination.limit)
+            ).all()
+            return build_page_response(
+                items=[self._serialize_user_read(user) for user in users],
+                total=total,
+                pagination=pagination,
+                extended=False,
+            )
+
+        return _user_list_cache.get_or_compute(cache_key, _load_users)
 
     def list_learners_for_scheduling(
         self,
@@ -67,43 +106,55 @@ class UserService:
         current: User,
         search: str | None,
         is_active: bool | None,
-    ) -> list[User]:
+    ) -> list[UserRead]:
         rows = load_permission_rows(self.repository.db)
         can_schedule = permission_allowed(rows, current.role, "Assign Schedules")
         can_manage_users = permission_allowed(rows, current.role, "Manage Users")
         if current.role not in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} or not (can_schedule or can_manage_users):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
-
-        query = (
-            select(User)
-            .options(
-                load_only(
-                    User.id,
-                    User.email,
-                    User.name,
-                    User.user_id,
-                    User.role,
-                    User.is_active,
-                    User.created_at,
-                    User.updated_at,
-                )
-            )
-            .where(User.role == RoleEnum.LEARNER)
+        cache_key = json.dumps(
+            {
+                "role": getattr(current.role, "value", current.role),
+                "user_id": str(current.id),
+                "search": search,
+                "is_active": is_active,
+            },
+            sort_keys=True,
+            default=str,
         )
-        if is_active is not None:
-            query = query.where(User.is_active == is_active)
-        if search:
-            q = search.strip().lower()
-            like = f"%{q}%"
-            query = query.where(
-                or_(
-                    func.lower(User.name).like(like),
-                    func.lower(User.email).like(like),
-                    func.lower(User.user_id).like(like),
+
+        def _load_learners() -> list[UserRead]:
+            query = (
+                select(User)
+                .options(
+                    load_only(
+                        User.id,
+                        User.email,
+                        User.name,
+                        User.user_id,
+                        User.role,
+                        User.is_active,
+                        User.created_at,
+                        User.updated_at,
+                    )
                 )
+                .where(User.role == RoleEnum.LEARNER)
             )
-        learners = self.repository.list_users(query.order_by(User.created_at.desc())).all()
-        return learners
+            if is_active is not None:
+                query = query.where(User.is_active == is_active)
+            if search:
+                q = search.strip().lower()
+                like = f"%{q}%"
+                query = query.where(
+                    or_(
+                        func.lower(User.name).like(like),
+                        func.lower(User.email).like(like),
+                        func.lower(User.user_id).like(like),
+                    )
+                )
+            return [self._serialize_user_read(user) for user in self.repository.list_users(query.order_by(User.created_at.desc())).all()]
+
+        return _learners_cache.get_or_compute(cache_key, _load_learners)
 
     def create_user(self, *, body: UserCreate) -> User:
         payload = self._normalize_user_payload(body.model_dump(exclude={"password"}), partial=False)
@@ -127,6 +178,7 @@ class UserService:
             self.repository.db.rollback()
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or User ID already exists")
         self.repository.refresh(user)
+        self._invalidate_user_caches()
         return user
 
     def get_user(self, user_id: str) -> User:
@@ -170,6 +222,7 @@ class UserService:
         self.repository.add(current)
         self.repository.commit()
         self.repository.refresh(current)
+        self._invalidate_user_caches()
         return current
 
     def get_my_preference(self, *, key: str, current: User) -> UserPreferenceRead | UserPreference:
@@ -200,6 +253,7 @@ class UserService:
         user.updated_at = now
         self.repository.add(user)
         self.repository.commit()
+        self._invalidate_user_caches()
         write_audit_log(
             self.repository.db,
             current.id,
@@ -225,6 +279,7 @@ class UserService:
             )
         self.repository.delete(user)
         self.repository.commit()
+        self._invalidate_user_caches()
         return Message(detail="Deleted")
 
     def _clean_required_text(self, value: str | None, field_name: str) -> str:
@@ -294,6 +349,7 @@ class UserService:
         self.repository.add(user)
         self.repository.commit()
         self.repository.refresh(user)
+        self._invalidate_user_caches()
 
         if "role" in changed_fields and previous_role != user.role:
             write_audit_log(
@@ -314,3 +370,10 @@ class UserService:
             detail=f"Updated fields: {', '.join(changed_fields)}",
         )
         return user
+
+    def _invalidate_user_caches(self) -> None:
+        _user_list_cache.invalidate()
+        _learners_cache.invalidate()
+
+    def _serialize_user_read(self, user: User) -> UserRead:
+        return UserRead.model_validate(user)

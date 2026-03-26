@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import secrets
 import string
 import uuid
@@ -29,6 +30,7 @@ from ...services.normalized_relations import (
 )
 from ...services.report_rendering import render_report_template
 from ...services.sanitization import sanitize_html_fragment, sanitize_instructions
+from ...utils.response_cache import TimedSingleFlightCache
 from ...utils.pagination import PaginationParams, build_page_response
 from .enums import ReportContent, ReportDisplayed, TestStatus
 from .proctoring_requirements import normalize_proctoring_config
@@ -39,6 +41,7 @@ from .schemas import TestCreateDTO, TestResponseDTO
 DEFAULT_UI_CONFIG = {
     "displayed_columns": ["name", "code", "type", "status", "time_limit_minutes", "testing_sessions"],
 }
+_test_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(ttl_seconds=10.0)
 
 
 @dataclass(slots=True)
@@ -79,28 +82,47 @@ class TestService:
         created_from: datetime | None = None,
         created_to: datetime | None = None,
     ) -> dict:
-        query = TestListQuery(
-            search=pagination.search,
-            status=status,
-            type=test_type,
-            category_id=category_id,
-            created_from=created_from,
-            created_to=created_to,
-            sort=pagination.sort,
-            order=pagination.order,
-            page=pagination.page,
-            page_size=pagination.page_size,
+        cache_key = json.dumps(
+            {
+                "search": pagination.search,
+                "status": [item.value for item in status] if status else None,
+                "type": getattr(test_type, "value", test_type),
+                "category_id": str(category_id) if category_id else None,
+                "created_from": created_from.isoformat() if created_from else None,
+                "created_to": created_to.isoformat() if created_to else None,
+                "sort": pagination.sort,
+                "order": pagination.order,
+                "page": pagination.page,
+                "page_size": pagination.page_size,
+            },
+            sort_keys=True,
         )
-        items, total, schedule_counts, question_counts = self.repository.list_tests(query)
-        payload = [
-            self._serialize_list_item(
-                exam,
-                testing_sessions=schedule_counts.get(exam.id, 0),
-                question_count=question_counts.get(exam.id, 0),
+
+        def _load_tests() -> dict:
+            query = TestListQuery(
+                search=pagination.search,
+                status=status,
+                type=test_type,
+                category_id=category_id,
+                created_from=created_from,
+                created_to=created_to,
+                sort=pagination.sort,
+                order=pagination.order,
+                page=pagination.page,
+                page_size=pagination.page_size,
             )
-            for exam in items
-        ]
-        return build_page_response(items=payload, total=total, pagination=pagination)
+            items, total, schedule_counts, question_counts = self.repository.list_tests(query)
+            payload = [
+                self._serialize_list_item(
+                    exam,
+                    testing_sessions=schedule_counts.get(exam.id, 0),
+                    question_count=question_counts.get(exam.id, 0),
+                )
+                for exam in items
+            ]
+            return build_page_response(items=payload, total=total, pagination=pagination)
+
+        return _test_list_cache.get_or_compute(cache_key, _load_tests)
 
     def create_test(
         self,
@@ -154,6 +176,7 @@ class TestService:
         )
         self.repository.commit()
         self.repository.refresh(exam)
+        self._invalidate_test_list_cache()
         self._write_audit_log(
             actor=actor,
             action="TEST_CREATED",
@@ -254,6 +277,7 @@ class TestService:
         self.repository.save(exam)
         self.repository.commit()
         self.repository.refresh(exam)
+        self._invalidate_test_list_cache()
         self._write_audit_log(
             actor=actor,
             action="TEST_UPDATED",
@@ -288,6 +312,7 @@ class TestService:
             self.repository.save(exam)
             self.repository.commit()
             self.repository.refresh(exam)
+            self._invalidate_test_list_cache()
             self._write_audit_log(
                 actor=actor,
                 action="TEST_PUBLISHED",
@@ -311,6 +336,7 @@ class TestService:
         duplicate.updated_at = duplicate.created_at
         self.repository.commit()
         self.repository.refresh(duplicate)
+        self._invalidate_test_list_cache()
         self._write_audit_log(
             actor=actor,
             action="TEST_DUPLICATED",
@@ -333,6 +359,7 @@ class TestService:
         self.repository.save(exam)
         self.repository.commit()
         self.repository.refresh(exam)
+        self._invalidate_test_list_cache()
         if previous_status == TestStatus.PUBLISHED:
             self._write_audit_log(
                 actor=actor,
@@ -363,6 +390,7 @@ class TestService:
         self.repository.save(exam)
         self.repository.commit()
         self.repository.refresh(exam)
+        self._invalidate_test_list_cache()
         self._write_audit_log(
             actor=actor,
             action="TEST_UNARCHIVED",
@@ -397,6 +425,7 @@ class TestService:
         exam_title = exam.title
         self.repository.delete(exam)
         self.repository.commit()
+        self._invalidate_test_list_cache()
         self._write_audit_log(
             actor=actor,
             action="TEST_DELETED",
@@ -574,3 +603,6 @@ class TestService:
 
     def _raise(self, code: str, message: str, *, status_code: int, details: dict | None = None) -> None:
         raise TestServiceError(code=code, message=message, status_code=status_code, details=details)
+
+    def _invalidate_test_list_cache(self) -> None:
+        _test_list_cache.invalidate()

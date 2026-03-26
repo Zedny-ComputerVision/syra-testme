@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 
 from ...models import (
     Attempt,
+    Category,
     Course,
     CourseStatus,
     Exam,
@@ -55,8 +56,25 @@ class TestRepository:
             select(Exam)
             .outerjoin(Exam.admin_config)
             .options(
-                joinedload(Exam.node).joinedload(Node.course),
-                joinedload(Exam.category),
+                load_only(
+                    Exam.id,
+                    Exam.title,
+                    Exam.type,
+                    Exam.status,
+                    Exam.time_limit,
+                    Exam.certificate,
+                    Exam.settings,
+                    Exam.category_id,
+                    Exam.created_at,
+                    Exam.updated_at,
+                ),
+                joinedload(Exam.category).load_only(Category.id, Category.name),
+                joinedload(Exam.admin_config).load_only(
+                    ExamAdminConfig.exam_id,
+                    ExamAdminConfig.code,
+                    ExamAdminConfig.archived_at,
+                ),
+                joinedload(Exam.certificate_config_rel),
             )
         )
         # Filter library/pool exams in SQL (column + legacy JSON) so pagination is accurate.

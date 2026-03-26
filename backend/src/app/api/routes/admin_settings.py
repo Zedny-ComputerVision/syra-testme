@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ...models import SystemSettings, RoleEnum
 from ...schemas import SystemSettingRead, SystemSettingUpdate, Message
 from ...services.audit import write_audit_log
+from ...utils.response_cache import TimedSingleFlightCache
 from ..deps import (
     DEFAULT_PERMISSION_ROWS,
     canonicalize_permission_rows,
@@ -24,6 +25,7 @@ router = APIRouter()
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MAINTENANCE_MODES = {"off", "read-only", "down"}
 PERMISSIONS_CONFIG_KEY = "permissions_config"
+_maintenance_public_cache: TimedSingleFlightCache[dict[str, str]] = TimedSingleFlightCache(ttl_seconds=30.0)
 
 
 def _allowed_features(rows, role: RoleEnum):
@@ -232,6 +234,8 @@ async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depe
     db.refresh(setting)
     if key == PERMISSIONS_CONFIG_KEY:
         invalidate_permission_rows_cache(db)
+    if key in {"maintenance_mode", "maintenance_banner"}:
+        _maintenance_public_cache.invalidate()
     if key == PERMISSIONS_CONFIG_KEY and previous_value != setting.value:
         _write_role_permission_audit_logs(db, current, previous_value, setting.value)
     return setting
@@ -239,12 +243,15 @@ async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depe
 
 @router.get("/maintenance/public")
 async def maintenance_public(db: Session = Depends(get_db_dep)):
-    mode = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
-    banner = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_banner"))
-    return {
-        "mode": mode.value if mode else "off",
-        "banner": banner.value if banner else "",
-    }
+    def _load_maintenance_payload() -> dict[str, str]:
+        mode = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
+        banner = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_banner"))
+        return {
+            "mode": mode.value if mode else "off",
+            "banner": banner.value if banner else "",
+        }
+
+    return _maintenance_public_cache.get_or_compute("maintenance-public", _load_maintenance_payload)
 
 
 @router.get("/permissions/public")

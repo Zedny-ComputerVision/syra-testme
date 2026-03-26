@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 from ...models import Notification
 from ...schemas import NotificationRead, Message
 from ..deps import get_current_user, get_db_dep, parse_uuid_param
+from ...utils.response_cache import TimedSingleFlightCache
 
 router = APIRouter()
+_unread_count_cache: TimedSingleFlightCache[dict[str, int]] = TimedSingleFlightCache(ttl_seconds=15.0)
 
 
 @router.get("/", response_model=list[NotificationRead])
@@ -24,6 +26,7 @@ async def mark_read(notification_id: str, db: Session = Depends(get_db_dep), cur
     notif.is_read = True
     db.add(notif)
     db.commit()
+    _unread_count_cache.invalidate(str(current.id))
     return Message(detail="Marked as read")
 
 
@@ -35,12 +38,18 @@ async def mark_all_read(db: Session = Depends(get_db_dep), current=Depends(get_c
         .values(is_read=True)
     )
     db.commit()
+    _unread_count_cache.invalidate(str(current.id))
     return Message(detail="All marked as read")
 
 
 @router.get("/unread-count")
 async def unread_count(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    count = db.scalar(
-        select(func.count(Notification.id)).where(Notification.user_id == current.id, Notification.is_read.is_(False))
-    ) or 0
-    return {"count": count}
+    cache_key = str(current.id)
+
+    def _load_count() -> dict[str, int]:
+        count = db.scalar(
+            select(func.count(Notification.id)).where(Notification.user_id == current.id, Notification.is_read.is_(False))
+        ) or 0
+        return {"count": int(count)}
+
+    return _unread_count_cache.get_or_compute(cache_key, _load_count)

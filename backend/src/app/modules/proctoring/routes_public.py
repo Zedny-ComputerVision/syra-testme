@@ -7,22 +7,20 @@ import logging
 import tempfile
 import time
 from collections.abc import Mapping
-from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from threading import Lock
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.websockets import WebSocketState
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, load_only
 
 from ...api.deps import ensure_permission, get_current_user, get_db_dep, require_permission, parse_uuid_param
 from ...core.security import verify_token
 from ...core.config import get_settings
-from ...models import Attempt, Notification, ProctoringEvent, SeverityEnum, RoleEnum, AttemptStatus, SystemSettings, User
+from ...models import Attempt, AttemptStatus, Exam, Notification, ProctoringEvent, RoleEnum, SeverityEnum, SystemSettings, User
 from ...services.normalized_relations import exam_proctoring
 from ...schemas import (
     ProctoringEventRead,
@@ -50,6 +48,7 @@ from ...services.cloudflare_media import (
 from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from ...utils.request_ip import get_request_ip, get_websocket_ip
+from ...utils.response_cache import TimedSingleFlightCache
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 
 router = APIRouter()
@@ -68,8 +67,9 @@ SEVERITY_MAP = {
 }
 settings = get_settings()
 VIDEO_UPLOAD_STATUS_CACHE_TTL_SECONDS = 3.0
-_video_upload_status_cache: dict[str, dict[str, object]] = {}
-_video_upload_status_cache_lock = Lock()
+_video_upload_status_cache: TimedSingleFlightCache[list[dict[str, object]]] = TimedSingleFlightCache(
+    ttl_seconds=VIDEO_UPLOAD_STATUS_CACHE_TTL_SECONDS
+)
 
 # ── Live monitoring registry ──────────────────────────────────────────────────
 # Maps attempt_id → set of admin WebSocket connections watching that session.
@@ -429,24 +429,11 @@ def _build_attempt_video_upload_summary(
 
 
 def _read_cached_exam_video_upload_status(exam_id: str) -> list[dict[str, object]] | None:
-    now = time.monotonic()
-    with _video_upload_status_cache_lock:
-        cached = _video_upload_status_cache.get(exam_id)
-        if not cached:
-            return None
-        expires_at = float(cached.get("expires_at", 0.0) or 0.0)
-        if expires_at <= now:
-            _video_upload_status_cache.pop(exam_id, None)
-            return None
-        return deepcopy(cached.get("rows") or [])
+    return _video_upload_status_cache.read(exam_id)
 
 
 def _write_cached_exam_video_upload_status(exam_id: str, rows: list[dict[str, object]]) -> None:
-    with _video_upload_status_cache_lock:
-        _video_upload_status_cache[exam_id] = {
-            "expires_at": time.monotonic() + VIDEO_UPLOAD_STATUS_CACHE_TTL_SECONDS,
-            "rows": deepcopy(rows),
-        }
+    _video_upload_status_cache.write(exam_id, rows)
 
 
 def _find_saved_video_file_info(db: Session, attempt_id: str, session_id: str, source: str) -> dict[str, object] | None:
@@ -1694,60 +1681,81 @@ async def list_exam_video_upload_status(
     cache_key = str(exam_pk)
     if filtered_attempt_pks:
         cache_key = f"{cache_key}:{','.join(sorted(str(attempt_pk) for attempt_pk in filtered_attempt_pks))}"
-    cached_rows = _read_cached_exam_video_upload_status(cache_key)
-    if cached_rows is not None:
-        return cached_rows
-    attempts_query = (
-        select(Attempt)
-        .where(Attempt.exam_id == exam_pk)
-        .order_by(Attempt.created_at.desc())
-    )
-    if filtered_attempt_pks:
-        attempts_query = attempts_query.where(Attempt.id.in_(filtered_attempt_pks))
-    attempts = list(db.scalars(attempts_query))
-    if not attempts:
-        return []
 
-    attempt_ids = [attempt.id for attempt in attempts]
-    relevant_events = list(
-        db.scalars(
-            select(ProctoringEvent)
-            .where(
-                ProctoringEvent.attempt_id.in_(attempt_ids),
-                ProctoringEvent.event_type.in_(("VIDEO_SAVED", "VIDEO_UPLOAD_PROGRESS")),
+    def _load_rows() -> list[dict[str, object]]:
+        attempts_query = (
+            select(Attempt)
+            .options(
+                load_only(
+                    Attempt.id,
+                    Attempt.exam_id,
+                    Attempt.status,
+                    Attempt.created_at,
+                    Attempt.submitted_at,
+                ),
+                joinedload(Attempt.exam).load_only(
+                    Exam.id,
+                    Exam.proctoring_config,
+                ),
             )
-            .order_by(ProctoringEvent.occurred_at.desc())
+            .where(Attempt.exam_id == exam_pk)
+            .order_by(Attempt.created_at.desc())
         )
-    )
+        if filtered_attempt_pks:
+            attempts_query = attempts_query.where(Attempt.id.in_(filtered_attempt_pks))
+        attempts = list(db.scalars(attempts_query).unique())
+        if not attempts:
+            return []
 
-    saved_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
-    progress_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
-    for event in relevant_events:
-        attempt_key = str(event.attempt_id)
-        if event.event_type == "VIDEO_SAVED":
-            item = _normalize_saved_video_meta(event.meta, event.occurred_at)
-            if not item:
-                continue
-            source = _normalize_video_source(item.get("source"))
-            saved_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
-            continue
-        if event.event_type == "VIDEO_UPLOAD_PROGRESS":
-            item = _normalize_video_upload_progress_meta(event.meta, event.occurred_at)
-            if not item:
-                continue
-            source = _normalize_video_source(item.get("source"))
-            progress_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
-
-    rows = [
-        _build_attempt_video_upload_summary(
-            attempt,
-            saved_by_source=saved_by_attempt.get(str(attempt.id)),
-            progress_by_source=progress_by_attempt.get(str(attempt.id)),
+        attempt_ids = [attempt.id for attempt in attempts]
+        relevant_events = list(
+            db.scalars(
+                select(ProctoringEvent)
+                .options(
+                    load_only(
+                        ProctoringEvent.attempt_id,
+                        ProctoringEvent.event_type,
+                        ProctoringEvent.meta,
+                        ProctoringEvent.occurred_at,
+                    )
+                )
+                .where(
+                    ProctoringEvent.attempt_id.in_(attempt_ids),
+                    ProctoringEvent.event_type.in_(("VIDEO_SAVED", "VIDEO_UPLOAD_PROGRESS")),
+                )
+                .order_by(ProctoringEvent.occurred_at.desc())
+            )
         )
-        for attempt in attempts
-    ]
-    _write_cached_exam_video_upload_status(cache_key, rows)
-    return rows
+
+        saved_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
+        progress_by_attempt: dict[str, dict[str, dict[str, object]]] = {}
+        for event in relevant_events:
+            attempt_key = str(event.attempt_id)
+            if event.event_type == "VIDEO_SAVED":
+                item = _normalize_saved_video_meta(event.meta, event.occurred_at)
+                if not item:
+                    continue
+                source = _normalize_video_source(item.get("source"))
+                saved_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
+                continue
+            if event.event_type == "VIDEO_UPLOAD_PROGRESS":
+                item = _normalize_video_upload_progress_meta(event.meta, event.occurred_at)
+                if not item:
+                    continue
+                source = _normalize_video_source(item.get("source"))
+                progress_by_attempt.setdefault(attempt_key, {}).setdefault(source, item)
+
+        rows = [
+            _build_attempt_video_upload_summary(
+                attempt,
+                saved_by_source=saved_by_attempt.get(str(attempt.id)),
+                progress_by_source=progress_by_attempt.get(str(attempt.id)),
+            )
+            for attempt in attempts
+        ]
+        return rows
+
+    return _video_upload_status_cache.get_or_compute(cache_key, _load_rows)
 
 
 @router.websocket("/{attempt_id}/ws")

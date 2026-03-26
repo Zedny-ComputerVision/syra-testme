@@ -14,7 +14,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, load_only
 
 from ...models import (
     Attempt,
@@ -57,6 +57,7 @@ from ...services.crypto_utils import encrypt_bytes
 from ...services.notifications import notify_user
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
+from ...utils.response_cache import TimedSingleFlightCache
 from ...utils.pagination import MAX_PAGE_SIZE, build_page_response, clamp_sort_field, normalize_pagination
 
 router = APIRouter()
@@ -64,6 +65,8 @@ settings = get_settings()
 
 CERTIFICATE_REVIEW_APPROVED = "CERTIFICATE_REVIEW_APPROVED"
 CERTIFICATE_REVIEW_REJECTED = "CERTIFICATE_REVIEW_REJECTED"
+ATTEMPT_LIST_CACHE_TTL_SECONDS = 8.0
+_attempt_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(ttl_seconds=ATTEMPT_LIST_CACHE_TTL_SECONDS)
 
 
 def _get_mediapipe():
@@ -846,7 +849,18 @@ def _pending_manual_review_attempt_ids(db: Session, attempt_ids: list) -> set:
         return set()
     answers = db.scalars(
         select(AttemptAnswer)
-        .options(joinedload(AttemptAnswer.question))
+        .options(
+            load_only(
+                AttemptAnswer.attempt_id,
+                AttemptAnswer.answer,
+                AttemptAnswer.points_earned,
+            ),
+            joinedload(AttemptAnswer.question).load_only(
+                Question.id,
+                Question.type,
+                Question.correct_answer,
+            ),
+        )
         .where(
             AttemptAnswer.attempt_id.in_(attempt_ids),
             AttemptAnswer.points_earned.is_(None),
@@ -857,6 +871,34 @@ def _pending_manual_review_attempt_ids(db: Session, attempt_ids: list) -> set:
         if answer.question and _question_requires_manual_review(answer.question, answer.answer):
             pending_ids.add(answer.attempt_id)
     return pending_ids
+
+
+def _attempt_list_cache_key(
+    *,
+    exam_id: str | None,
+    user_id: str | None,
+    status: str | None,
+    pagination,
+    current,
+) -> str:
+    return json.dumps(
+        {
+            "exam_id": exam_id,
+            "user_id": user_id,
+            "status": status,
+            "pagination": {
+                "page": pagination.page,
+                "page_size": pagination.page_size,
+                "search": pagination.search,
+                "sort": pagination.sort,
+                "order": pagination.order,
+            },
+            "current_role": getattr(current.role, "value", current.role),
+            "current_user_id": str(getattr(current, "id", "")),
+        },
+        sort_keys=True,
+        default=str,
+    )
 
 
 def _apply_admin_grade(attempt: Attempt, *, score: float, db: Session, graded_by=None) -> Attempt:
@@ -1104,77 +1146,118 @@ async def list_attempts(
     resolved_sort = clamp_sort_field(pagination.sort, {"created_at", "updated_at", "submitted_at", "score"}, "created_at")
     order_column = getattr(Attempt, resolved_sort)
     order_column = order_column.asc() if pagination.order == "asc" else order_column.desc()
+    cache_key = _attempt_list_cache_key(
+        exam_id=exam_id,
+        user_id=user_id,
+        status=status,
+        pagination=pagination,
+        current=current,
+    )
 
-    base_query = select(Attempt)
-    if current.role == RoleEnum.LEARNER:
-        base_query = base_query.where(Attempt.user_id == current.id)
-    else:
-        ensure_permission(db, current, "View Attempt Analysis")
-        if user_id:
+    def _load_attempts() -> dict:
+        base_query = select(Attempt)
+        if current.role == RoleEnum.LEARNER:
+            base_query = base_query.where(Attempt.user_id == current.id)
+        else:
+            ensure_permission(db, current, "View Attempt Analysis")
+            if user_id:
+                try:
+                    from uuid import UUID
+
+                    base_query = base_query.where(Attempt.user_id == str(UUID(user_id)))
+                except (ValueError, TypeError):
+                    pass
+        if exam_id:
             try:
                 from uuid import UUID
-                base_query = base_query.where(Attempt.user_id == str(UUID(user_id)))
+
+                base_query = base_query.where(Attempt.exam_id == str(UUID(exam_id)))
             except (ValueError, TypeError):
                 pass
-    if exam_id:
-        try:
-            from uuid import UUID
-            base_query = base_query.where(Attempt.exam_id == str(UUID(exam_id)))
-        except (ValueError, TypeError):
-            pass
-    if status:
-        try:
-            base_query = base_query.where(Attempt.status == AttemptStatus(status))
-        except ValueError:
-            pass
-    if pagination.search:
-        like = f"%{pagination.search.lower()}%"
-        base_query = (
-            base_query.join(Attempt.exam, isouter=True)
-            .join(Attempt.user, isouter=True)
-            .where(
-                or_(
-                    func.lower(func.coalesce(Exam.title, "")).like(like),
-                    func.lower(func.coalesce(User.name, "")).like(like),
-                    func.lower(func.coalesce(User.user_id, "")).like(like),
+        if status:
+            try:
+                base_query = base_query.where(Attempt.status == AttemptStatus(status))
+            except ValueError:
+                pass
+        if pagination.search:
+            like = f"%{pagination.search.lower()}%"
+            base_query = (
+                base_query.join(Attempt.exam, isouter=True)
+                .join(Attempt.user, isouter=True)
+                .where(
+                    or_(
+                        func.lower(func.coalesce(Exam.title, "")).like(like),
+                        func.lower(func.coalesce(User.name, "")).like(like),
+                        func.lower(func.coalesce(User.user_id, "")).like(like),
+                    )
                 )
             )
-        )
-    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
-    query = (
-        base_query
-        .options(joinedload(Attempt.exam), joinedload(Attempt.user))
-        .order_by(order_column, Attempt.created_at.desc())
-        .offset(pagination.offset)
-        .limit(pagination.limit)
-    )
-    attempts = db.scalars(query).all()
-    attempt_ids = [attempt.id for attempt in attempts]
-    pending_ids = _pending_manual_review_attempt_ids(db, attempt_ids)
-    violation_counts = _violation_counts_by_attempt(db, attempt_ids)
-    paused_ids = _paused_attempt_ids(db, attempt_ids)
-    certificate_decisions = _certificate_decisions_by_attempt(
-        attempts,
-        db=db,
-        pending_manual_review_ids=pending_ids,
-    )
-    return build_page_response(
-        items=[
-            _build_attempt_read(
-                a,
-                db=db,
-                pending_manual_review=a.id in pending_ids,
-                high_violations=violation_counts.get(str(a.id), {}).get("high_violations", 0),
-                med_violations=violation_counts.get(str(a.id), {}).get("med_violations", 0),
-                paused=a.id in paused_ids,
-                certificate=certificate_decisions.get(a.id),
+        total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+        query = (
+            base_query
+            .options(
+                load_only(
+                    Attempt.id,
+                    Attempt.exam_id,
+                    Attempt.user_id,
+                    Attempt.status,
+                    Attempt.score,
+                    Attempt.grade,
+                    Attempt.started_at,
+                    Attempt.submitted_at,
+                    Attempt.identity_verified,
+                    Attempt.created_at,
+                    Attempt.updated_at,
+                ),
+                joinedload(Attempt.exam).load_only(
+                    Exam.id,
+                    Exam.node_id,
+                    Exam.title,
+                    Exam.type,
+                    Exam.time_limit,
+                    Exam.passing_score,
+                    Exam.certificate,
+                ),
+                joinedload(Attempt.exam).joinedload(Exam.certificate_config_rel),
+                joinedload(Attempt.user).load_only(
+                    User.id,
+                    User.name,
+                    User.user_id,
+                ),
             )
-            for a in attempts
-        ],
-        total=total,
-        pagination=pagination,
-        extended=False,
-    )
+            .order_by(order_column, Attempt.created_at.desc())
+            .offset(pagination.offset)
+            .limit(pagination.limit)
+        )
+        attempts = db.scalars(query).unique().all()
+        attempt_ids = [attempt.id for attempt in attempts]
+        pending_ids = _pending_manual_review_attempt_ids(db, attempt_ids)
+        violation_counts = _violation_counts_by_attempt(db, attempt_ids)
+        paused_ids = _paused_attempt_ids(db, attempt_ids)
+        certificate_decisions = _certificate_decisions_by_attempt(
+            attempts,
+            db=db,
+            pending_manual_review_ids=pending_ids,
+        )
+        return build_page_response(
+            items=[
+                _build_attempt_read(
+                    a,
+                    db=None,
+                    pending_manual_review=a.id in pending_ids,
+                    high_violations=violation_counts.get(str(a.id), {}).get("high_violations", 0),
+                    med_violations=violation_counts.get(str(a.id), {}).get("med_violations", 0),
+                    paused=a.id in paused_ids,
+                    certificate=certificate_decisions.get(a.id),
+                )
+                for a in attempts
+            ],
+            total=total,
+            pagination=pagination,
+            extended=False,
+        )
+
+    return _attempt_list_cache.get_or_compute(cache_key, _load_attempts)
 
 
 @router.get("/{attempt_id}", response_model=AttemptRead)
