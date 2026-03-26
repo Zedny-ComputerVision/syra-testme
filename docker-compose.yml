@@ -46,15 +46,17 @@ services:
       - backend/.env.docker
     environment:
       AUTO_APPLY_MIGRATIONS: "${AUTO_APPLY_MIGRATIONS:-false}"
-      PROCTORING_INFERENCE_MODE: "remote"
-      AI_INFERENCE_URL: "http://ai-inference:8081"
+      PROCTORING_INFERENCE_MODE: "celery"
+      PROCTORING_INFERENCE_QUEUE: "proctoring-inference"
+      PROCTORING_INFERENCE_OPEN_TIMEOUT_SECONDS: "180"
+      PROCTORING_INFERENCE_TASK_TIMEOUT_SECONDS: "30"
       PROCTORING_BATCH_ANALYSIS_ENABLED: "true"
       REDIS_URL: "redis://redis:6379/0"
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
     depends_on:
-      ai-inference:
-        condition: service_healthy
+      ai-worker:
+        condition: service_started
       redis:
         condition: service_healthy
     healthcheck:
@@ -102,7 +104,7 @@ services:
         max-file: "3"
 
   # â”€â”€ Dedicated AI inference service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  ai-inference:
+  ai-worker:
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -110,15 +112,19 @@ services:
     restart: unless-stopped
     env_file:
       - backend/.env.docker
-    command: [ "uvicorn", "src.app.ai_inference.main:app", "--host", "0.0.0.0", "--port", "8081" ]
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      PROCTORING_INFERENCE_QUEUE: "proctoring-inference"
+      PROCTORING_INFERENCE_OPEN_TIMEOUT_SECONDS: "180"
+      PROCTORING_INFERENCE_TASK_TIMEOUT_SECONDS: "30"
+    command: [ "celery", "-A", "src.app.core.celery_app.celery_app", "worker", "--loglevel=info", "--queues=proctoring-inference", "--concurrency=1" ]
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://127.0.0.1:8081/ready" ]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 180s
-    expose:
-      - "8081"
+      disable: true
     networks:
       - internal
     logging:

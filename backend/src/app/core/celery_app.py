@@ -28,5 +28,6 @@ celery_app.conf.update(
 
 try:
     from ..tasks import proctoring_video  # noqa: F401
+    from ..tasks import proctoring_inference  # noqa: F401
 except Exception as exc:
     logger.debug("Celery task import deferred or unavailable: %s", exc)

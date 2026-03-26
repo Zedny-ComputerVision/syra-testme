@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import logging
 import threading
@@ -11,6 +12,7 @@ from functools import lru_cache
 from typing import Any
 
 import httpx
+from celery.exceptions import TimeoutError as CeleryTimeoutError
 from pydantic import BaseModel, Field
 
 from ..core.config import get_settings
@@ -344,6 +346,105 @@ class RemoteProctoringInferenceGateway(ProctoringInferenceGateway):
             response.raise_for_status()
 
 
+class CeleryProctoringInferenceGateway(ProctoringInferenceGateway):
+    def __init__(
+        self,
+        *,
+        queue_name: str,
+        task_timeout_seconds: int,
+        open_session_timeout_seconds: int | None = None,
+    ) -> None:
+        self._queue_name = str(queue_name).strip() or "proctoring-inference"
+        self._task_timeout_seconds = max(int(task_timeout_seconds or 30), 5)
+        self._open_session_timeout_seconds = max(
+            int(open_session_timeout_seconds or self._task_timeout_seconds),
+            self._task_timeout_seconds,
+        )
+
+    @staticmethod
+    def _encode_payload(payload: bytes) -> str:
+        return base64.b64encode(payload).decode("ascii")
+
+    async def _wait_for_result(self, task_name: str, *, timeout_seconds: int | None = None, **kwargs: Any) -> dict[str, Any]:
+        from ..core.celery_app import celery_app
+
+        async_result = celery_app.send_task(
+            task_name,
+            kwargs=kwargs,
+            queue=self._queue_name,
+        )
+        timeout = max(int(timeout_seconds or self._task_timeout_seconds), 5)
+        try:
+            payload = await asyncio.to_thread(
+                async_result.get,
+                timeout=timeout,
+                propagate=True,
+                interval=0.2,
+            )
+        except CeleryTimeoutError as exc:
+            raise TimeoutError(f"Timed out waiting for Celery task {task_name}") from exc
+        if not isinstance(payload, Mapping):
+            raise RuntimeError(f"Celery task {task_name} returned an invalid payload")
+        return dict(payload)
+
+    async def open_session(
+        self,
+        attempt_id: str,
+        exam_cfg: Mapping[str, Any] | None = None,
+        *,
+        initial_violation_score: float = 0.0,
+    ) -> SessionOpenResponse:
+        payload = await self._wait_for_result(
+            "proctoring.open_session",
+            timeout_seconds=self._open_session_timeout_seconds,
+            attempt_id=str(attempt_id),
+            exam_cfg=dict(exam_cfg or {}),
+            initial_violation_score=float(initial_violation_score or 0.0),
+        )
+        return SessionOpenResponse.model_validate(payload)
+
+    async def process_frame(self, attempt_id: str, frame_bytes: bytes) -> InferenceResult:
+        payload = await self._wait_for_result(
+            "proctoring.process_frame",
+            attempt_id=str(attempt_id),
+            frame_b64=self._encode_payload(frame_bytes),
+        )
+        return InferenceResult.model_validate(payload)
+
+    async def process_audio(self, attempt_id: str, audio_bytes: bytes, *, sample_rate: int | None = None) -> InferenceResult:
+        payload = await self._wait_for_result(
+            "proctoring.process_audio",
+            attempt_id=str(attempt_id),
+            audio_b64=self._encode_payload(audio_bytes),
+            sample_rate=int(sample_rate) if sample_rate is not None else None,
+        )
+        return InferenceResult.model_validate(payload)
+
+    async def process_screen(self, attempt_id: str, frame_bytes: bytes) -> InferenceResult:
+        payload = await self._wait_for_result(
+            "proctoring.process_screen",
+            attempt_id=str(attempt_id),
+            frame_b64=self._encode_payload(frame_bytes),
+        )
+        return InferenceResult.model_validate(payload)
+
+    async def close_session(self, attempt_id: str) -> None:
+        from ..core.celery_app import celery_app
+
+        async_result = celery_app.send_task(
+            "proctoring.close_session",
+            kwargs={"attempt_id": str(attempt_id)},
+            queue=self._queue_name,
+        )
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(
+                async_result.get,
+                timeout=max(5, min(self._task_timeout_seconds, 10)),
+                propagate=True,
+                interval=0.2,
+            )
+
+
 class SessionOpenRequest(BaseModel):
     attempt_id: str
     exam_cfg: dict[str, Any] = Field(default_factory=dict)
@@ -361,5 +462,12 @@ def get_proctoring_inference_gateway() -> ProctoringInferenceGateway:
     if settings.PROCTORING_INFERENCE_MODE == "remote":
         logger.info("Using remote proctoring inference gateway at %s", settings.AI_INFERENCE_URL)
         return RemoteProctoringInferenceGateway(settings.AI_INFERENCE_URL)
+    if settings.PROCTORING_INFERENCE_MODE == "celery":
+        logger.info("Using Celery proctoring inference gateway on queue %s", settings.PROCTORING_INFERENCE_QUEUE)
+        return CeleryProctoringInferenceGateway(
+            queue_name=settings.PROCTORING_INFERENCE_QUEUE,
+            task_timeout_seconds=settings.PROCTORING_INFERENCE_TASK_TIMEOUT_SECONDS,
+            open_session_timeout_seconds=settings.PROCTORING_INFERENCE_OPEN_TIMEOUT_SECONDS,
+        )
     logger.info("Using local proctoring inference gateway")
     return LocalProctoringInferenceGateway(get_proctoring_inference_store())

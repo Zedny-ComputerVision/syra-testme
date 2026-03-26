@@ -1,5 +1,36 @@
 # Architecture Upgrade Plan: Asynchronous AI Proctoring
 
+## Implementation Status
+Status updated on March 27, 2026.
+
+- [x] Step 1 complete: Redis and a dedicated Celery inference worker are part of the Docker stack, with queue settings exposed through env vars.
+- [x] Step 2 complete: Celery is initialized in `backend/src/app/core/celery_app.py`.
+- [x] Step 3 complete: the main FastAPI app no longer owns AI model warmup; the Celery inference worker now warms models on worker boot. The legacy `ai_inference` service remains available only as an optional fallback for `PROCTORING_INFERENCE_MODE=remote`.
+- [x] Step 4 complete: live frame, audio, and screen inference now support a Celery-backed execution path through dedicated worker tasks and a `celery` inference gateway mode.
+- [x] Step 5 complete: proctoring video upload/register endpoints can persist the upload, enqueue background analysis, and return HTTP `202 Accepted` with `job_id`.
+- [x] Step 6 complete: polling endpoint exists for queued proctoring analysis jobs.
+- [x] Step 7 complete: the frontend already handles async upload responses and polls job status, while the live proctoring WebSocket continues to emit alerts after worker-side inference completes.
+
+## Verified Implementation
+
+### Backend Runtime
+- `backend/src/app/services/proctoring_inference.py` now supports `PROCTORING_INFERENCE_MODE=celery` in addition to `local` and `remote`.
+- `backend/src/app/tasks/proctoring_inference.py` owns Celery tasks for:
+  - opening inference sessions
+  - processing frame chunks
+  - processing audio chunks
+  - processing screen chunks
+  - closing inference sessions
+- The Celery worker warms YOLO and MediaPipe models on worker process startup, keeping heavy model initialization outside the FastAPI web process.
+
+### Async Video Analysis
+- `backend/src/app/modules/proctoring/routes_public.py` already returns `202` plus `job_id` and `analysis_status_url` when uploaded proctoring videos are queued for background analysis.
+- `backend/src/app/services/proctoring_video_batch.py` provides queueing and job status lookup.
+
+### Frontend
+- `frontend/src/services/proctoring.service.js` exposes the job-status polling call.
+- `frontend/src/pages/Proctoring/Proctoring.jsx` already handles `job_id` responses for uploaded recordings and polls the analysis status endpoint until completion or timeout.
+
 ## Current Problem
 The SYRA LMS tightly couples the FastAPI web server with heavy AI machine learning models (YOLO Face, YOLO Object, and MediaPipe). Every time the web server restarts or scales horizontally, it forces the AI models to load directly into the synchronous web worker processes.
 

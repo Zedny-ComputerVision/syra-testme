@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     PROCTORING_VIDEO_STORAGE_PROVIDER: str = Field(default="cloudflare")
     PROCTORING_INFERENCE_MODE: str = Field(default="local")
     AI_INFERENCE_URL: str = Field(default="http://127.0.0.1:8081")
+    PROCTORING_INFERENCE_QUEUE: str = Field(default="proctoring-inference")
+    PROCTORING_INFERENCE_OPEN_TIMEOUT_SECONDS: int = Field(default=180, ge=5)
+    PROCTORING_INFERENCE_TASK_TIMEOUT_SECONDS: int = Field(default=30, ge=5)
     PROCTORING_BATCH_ANALYSIS_ENABLED: bool = False
     REDIS_URL: str | None = None
     CELERY_BROKER_URL: str | None = None
@@ -174,8 +177,8 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_proctoring_inference_mode(cls, value: str) -> str:
         normalized = str(value or "local").strip().lower()
-        if normalized not in {"local", "remote"}:
-            raise ValueError("PROCTORING_INFERENCE_MODE must be 'local' or 'remote'")
+        if normalized not in {"local", "remote", "celery"}:
+            raise ValueError("PROCTORING_INFERENCE_MODE must be 'local', 'remote', or 'celery'")
         return normalized
 
     @field_validator("AI_INFERENCE_URL", mode="before")
@@ -184,6 +187,14 @@ class Settings(BaseSettings):
         normalized = str(value or "http://127.0.0.1:8081").strip().rstrip("/")
         if not normalized.startswith(("http://", "https://")):
             raise ValueError("AI_INFERENCE_URL must start with http:// or https://")
+        return normalized
+
+    @field_validator("PROCTORING_INFERENCE_QUEUE")
+    @classmethod
+    def normalize_proctoring_inference_queue(cls, value: str) -> str:
+        normalized = str(value or "proctoring-inference").strip()
+        if not normalized:
+            raise ValueError("PROCTORING_INFERENCE_QUEUE is required")
         return normalized
 
     @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", mode="before")
