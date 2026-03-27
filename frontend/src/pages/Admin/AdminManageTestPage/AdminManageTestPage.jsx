@@ -1967,7 +1967,7 @@ export default function AdminManageTestPage() {
 
   useUnsavedChanges(tab === 'settings' && settingsDirty && !savingSettings)
 
-  if (loading) return <div className={styles.page}>Loading...</div>
+  if (loading && !exam) return <div className={styles.page}>Loading...</div>
   if (!exam) {
     return (
       <div className={styles.page}>

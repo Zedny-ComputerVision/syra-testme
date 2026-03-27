@@ -38,7 +38,7 @@ class Settings(BaseSettings):
 
     BREVO_API_KEY: str | None = None
     BREVO_BASE_URL: str = "https://api.brevo.com/v3"
-    BREVO_SENDER_EMAIL: str | None = None
+    BREVO_SENDER_EMAIL: str | None = "lms@zedny.ai"
     BREVO_SENDER_NAME: str | None = None
     BREVO_SANDBOX: bool = False
 

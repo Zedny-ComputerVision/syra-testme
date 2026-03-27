@@ -121,7 +121,7 @@ async def change_password(
     return response
 
 
-@limiter.limit(settings.RATE_LIMIT_LOGIN)
+@limiter.limit(settings.RATE_LIMIT_FORGOT)
 @router.post("/forgot-password", status_code=202, response_model=Message)
 async def forgot_password(
     request: Request,

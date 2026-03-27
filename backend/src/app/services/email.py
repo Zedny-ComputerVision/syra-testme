@@ -11,6 +11,7 @@ from ..core.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 HTML_TAG_RE = re.compile(r"<[a-zA-Z][^>]*>")
+DEFAULT_BREVO_SENDER_EMAIL = "lms@zedny.ai"
 
 _BASE_STYLE = """
   body{margin:0;padding:0;background:#f4f6fb;font-family:'Segoe UI',Arial,sans-serif}
@@ -56,12 +57,19 @@ def _brevo_available():
 
 
 def _brevo_sender_email() -> str:
-    sender_email = (settings.BREVO_SENDER_EMAIL or settings.SMTP_FROM or "").strip()
-    if not sender_email:
-        raise RuntimeError("Brevo sender email is not configured. Set BREVO_SENDER_EMAIL (or SMTP_FROM).")
-    if sender_email.lower() == "noreply@yourdomain.com":
-        raise RuntimeError("BREVO_SENDER_EMAIL is still the placeholder value. Set a verified sender email.")
-    return sender_email
+    configured_sender = (settings.BREVO_SENDER_EMAIL or settings.SMTP_FROM or "").strip()
+    sender_candidates = [configured_sender, DEFAULT_BREVO_SENDER_EMAIL]
+
+    for candidate in sender_candidates:
+        sender_email = str(candidate or "").strip()
+        if not sender_email:
+            continue
+        normalized = sender_email.lower()
+        if normalized in {"noreply@yourdomain.com", "noreply@example.com", "noreply@localhost"}:
+            continue
+        return sender_email
+
+    raise RuntimeError("Brevo sender email is not configured. Set BREVO_SENDER_EMAIL (or SMTP_FROM) to a verified sender.")
 
 
 def get_email_delivery_status() -> tuple[bool, str | None]:

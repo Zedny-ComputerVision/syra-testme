@@ -18,6 +18,8 @@ const DEFAULT_COLUMNS = {
 }
 const DEFAULT_PAGE_SIZE = 20
 const PAGE_SIZE_OPTIONS = [10, 20, 50]
+const STATUS_REFLECTION_TIMEOUT_MS = 10000
+const STATUS_REFLECTION_POLL_MS = 500
 const SORT_OPTIONS = [
   { value: 'created_at:desc', label: 'Newest first' },
   { value: 'updated_at:desc', label: 'Recently updated' },
@@ -193,6 +195,53 @@ export default function AdminExams() {
       setBusyId('')
       setBusyAction('')
     }
+  }
+
+  const waitForListStatus = async (test, expectedStatus) => {
+    const deadline = Date.now() + STATUS_REFLECTION_TIMEOUT_MS
+    const sortParams = buildSortParams(sort)
+    const searchTerm = String(test?.name || test?.code || '').trim()
+    if (!searchTerm) return false
+
+    while (Date.now() < deadline) {
+      try {
+        const { data } = await adminApi.tests({
+          page: 1,
+          page_size: Math.max(pageSize, DEFAULT_PAGE_SIZE),
+          search: searchTerm,
+          status: expectedStatus,
+          ...sortParams,
+        }, {
+          persistentRequest: true,
+          disableNavigationAbort: true,
+        })
+        const items = (data?.items || []).map(normalizeAdminTest)
+        if (items.some((item) => String(item.id) === String(test.id) && item.status === expectedStatus)) {
+          return true
+        }
+      } catch {
+        // Ignore transient polling failures and retry within the timeout window.
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, STATUS_REFLECTION_POLL_MS))
+    }
+    return false
+  }
+
+  const runStatusAction = async (test, actionName, expectedStatus, request, successMessage) => {
+    const result = await withBusy(test.id, actionName, async () => {
+      const response = await request()
+      setTests((current) => current.map((item) => (
+        String(item.id) === String(test.id)
+          ? { ...item, status: expectedStatus }
+          : item
+      )))
+      await waitForListStatus(test, expectedStatus)
+      return response
+    }, successMessage)
+    if (result) {
+      setOpenMenuId('')
+    }
+    return result
   }
 
   const handleDelete = async (test) => {
@@ -497,17 +546,17 @@ export default function AdminExams() {
                               {reportBusyId === test.id ? 'Opening report...' : 'Open report'}
                             </button>
                             {test.status === 'DRAFT' && (
-                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { setOpenMenuId(''); withBusy(test.id, 'publish', () => adminApi.publishTest(test.id), 'Test published.') }}>
+                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'publish', 'PUBLISHED', () => adminApi.publishTest(test.id), 'Test published.') }}>
                                 {busyId === test.id && busyAction === 'publish' ? 'Publishing...' : 'Publish'}
                               </button>
                             )}
                             {test.status === 'PUBLISHED' && (
-                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { setOpenMenuId(''); withBusy(test.id, 'archive', () => adminApi.archiveTest(test.id), 'Test archived.') }}>
+                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'archive', 'ARCHIVED', () => adminApi.archiveTest(test.id), 'Test archived.') }}>
                                 {busyId === test.id && busyAction === 'archive' ? 'Archiving...' : 'Archive'}
                               </button>
                             )}
                             {test.status === 'ARCHIVED' && (
-                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { setOpenMenuId(''); withBusy(test.id, 'unarchive', () => adminApi.unarchiveTest(test.id), 'Test unarchived.') }}>
+                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'unarchive', 'PUBLISHED', () => adminApi.unarchiveTest(test.id), 'Test unarchived.') }}>
                                 {busyId === test.id && busyAction === 'unarchive' ? 'Unarchiving...' : 'Unarchive'}
                               </button>
                             )}

@@ -54,6 +54,11 @@ Environment overrides:
 - SYRA_BACKEND_URL
 - SYRA_CORS_ORIGINS
 - SYRA_FRONTEND_DEV_API_BASE_URL
+- SYRA_BREVO_API_KEY
+- SYRA_BREVO_SENDER_EMAIL
+- SYRA_BREVO_SENDER_NAME
+- SYRA_BREVO_BASE_URL
+- SYRA_BREVO_SANDBOX
 - SYRA_MEDIA_STORAGE_PROVIDER=local|supabase
 - SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER=cloudflare|supabase
 - SYRA_CLOUDFLARE_MEDIA_API_BASE_URL
@@ -449,6 +454,11 @@ existing_jwt_secret="$(read_env_value "$BACKEND_ENV" "JWT_SECRET")"
 existing_frontend_url="$(read_env_value "$BACKEND_ENV" "FRONTEND_BASE_URL")"
 existing_backend_url="$(read_env_value "$BACKEND_ENV" "BACKEND_BASE_URL")"
 existing_cors_origins="$(read_env_value "$BACKEND_ENV" "CORS_ORIGINS")"
+existing_brevo_api_key="$(read_env_value "$BACKEND_ENV" "BREVO_API_KEY")"
+existing_brevo_base_url="$(read_env_value "$BACKEND_ENV" "BREVO_BASE_URL")"
+existing_brevo_sender_email="$(read_env_value "$BACKEND_ENV" "BREVO_SENDER_EMAIL")"
+existing_brevo_sender_name="$(read_env_value "$BACKEND_ENV" "BREVO_SENDER_NAME")"
+existing_brevo_sandbox="$(read_env_value "$BACKEND_ENV" "BREVO_SANDBOX")"
 existing_media_storage_provider="$(read_env_value "$BACKEND_ENV" "MEDIA_STORAGE_PROVIDER")"
 existing_video_storage_provider="$(read_env_value "$BACKEND_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER")"
 existing_cloudflare_media_api_base_url="$(read_env_value "$BACKEND_ENV" "CLOUDFLARE_MEDIA_API_BASE_URL")"
@@ -475,6 +485,11 @@ JWT_SECRET="${SYRA_JWT_SECRET:-$(first_non_empty "$existing_jwt_secret" "$existi
 FRONTEND_URL="${SYRA_FRONTEND_URL:-$(first_non_empty "$existing_frontend_url" "$existing_root_public_frontend_url" "http://localhost")}"
 BACKEND_URL="${SYRA_BACKEND_URL:-$(first_non_empty "$existing_backend_url" "$existing_root_public_backend_url" "${FRONTEND_URL%/}/api")}"
 CORS_ORIGINS="${SYRA_CORS_ORIGINS:-$(first_non_empty "$existing_cors_origins" "$existing_root_cors_origins" "$FRONTEND_URL")}"
+BREVO_API_KEY="${SYRA_BREVO_API_KEY:-$existing_brevo_api_key}"
+BREVO_BASE_URL="${SYRA_BREVO_BASE_URL:-$(first_non_empty "$existing_brevo_base_url" "https://api.brevo.com/v3")}"
+BREVO_SENDER_EMAIL="${SYRA_BREVO_SENDER_EMAIL:-$(first_non_empty "$existing_brevo_sender_email" "lms@zedny.ai")}"
+BREVO_SENDER_NAME="${SYRA_BREVO_SENDER_NAME:-$(first_non_empty "$existing_brevo_sender_name" "Zedny Learning Management System")}"
+BREVO_SANDBOX="${SYRA_BREVO_SANDBOX:-$(first_non_empty "$existing_brevo_sandbox" "false")}"
 MEDIA_STORAGE_PROVIDER="${SYRA_MEDIA_STORAGE_PROVIDER:-$(first_non_empty "$existing_media_storage_provider" "$existing_root_media_storage_provider" "local")}"
 NGINX_CLIENT_MAX_BODY_SIZE="${SYRA_NGINX_CLIENT_MAX_BODY_SIZE:-$(first_non_empty "$existing_nginx_client_max_body_size" "$existing_root_nginx_client_max_body_size" "512m")}"
 CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-$(first_non_empty "$existing_cloudflare_media_api_base_url" "$existing_root_cloudflare_media_api_base_url" "")}"
@@ -682,6 +697,10 @@ set_env_value "$ROOT_ENV" "BACKEND_BASE_URL" "$APP_BACKEND_URL"
 set_env_value "$ROOT_ENV" "PUBLIC_FRONTEND_BASE_URL" "$FRONTEND_URL"
 set_env_value "$ROOT_ENV" "PUBLIC_BACKEND_BASE_URL" "$BACKEND_URL"
 set_env_value "$ROOT_ENV" "CORS_ORIGINS" "$APP_CORS_ORIGINS"
+set_env_value "$ROOT_ENV" "BREVO_BASE_URL" "$BREVO_BASE_URL"
+set_env_value "$ROOT_ENV" "BREVO_SENDER_EMAIL" "$BREVO_SENDER_EMAIL"
+set_env_value "$ROOT_ENV" "BREVO_SENDER_NAME" "$BREVO_SENDER_NAME"
+set_env_value "$ROOT_ENV" "BREVO_SANDBOX" "$BREVO_SANDBOX"
 set_env_value "$ROOT_ENV" "VITE_API_BASE_URL" "$FRONTEND_DEV_API_BASE_URL"
 set_env_value "$ROOT_ENV" "MAX_VIDEO_UPLOAD_MB" "512"
 set_env_value "$ROOT_ENV" "NGINX_CLIENT_MAX_BODY_SIZE" "$NGINX_CLIENT_MAX_BODY_SIZE"
@@ -735,6 +754,11 @@ set_env_value "$BACKEND_ENV" "JWT_SECRET" "$JWT_SECRET"
 set_env_value "$BACKEND_ENV" "FRONTEND_BASE_URL" "$FRONTEND_URL"
 set_env_value "$BACKEND_ENV" "BACKEND_BASE_URL" "$BACKEND_URL"
 set_env_value "$BACKEND_ENV" "CORS_ORIGINS" "$CORS_ORIGINS"
+set_env_value "$BACKEND_ENV" "BREVO_API_KEY" "$BREVO_API_KEY"
+set_env_value "$BACKEND_ENV" "BREVO_BASE_URL" "$BREVO_BASE_URL"
+set_env_value "$BACKEND_ENV" "BREVO_SENDER_EMAIL" "$BREVO_SENDER_EMAIL"
+set_env_value "$BACKEND_ENV" "BREVO_SENDER_NAME" "$BREVO_SENDER_NAME"
+set_env_value "$BACKEND_ENV" "BREVO_SANDBOX" "$BREVO_SANDBOX"
 set_env_value "$BACKEND_ENV" "AUTO_APPLY_MIGRATIONS" "$AUTO_APPLY_MIGRATIONS_VALUE"
 set_env_value "$BACKEND_ENV" "MEDIA_STORAGE_PROVIDER" "$MEDIA_STORAGE_PROVIDER"
 set_env_value "$BACKEND_ENV" "PROCTORING_VIDEO_STORAGE_PROVIDER" "$PROCTORING_VIDEO_STORAGE_PROVIDER"

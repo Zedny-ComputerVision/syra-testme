@@ -116,4 +116,55 @@ describe('AdminExams', () => {
     await waitFor(() => expect(deleteTestMock).toHaveBeenCalledWith('test-1'))
     await waitFor(() => expect(screen.getByText('Test deleted.')).toBeTruthy())
   })
+
+  it('waits for the published test to appear in the published list before refreshing', async () => {
+    testsMock
+      .mockResolvedValueOnce(baseListResponse)
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              ...baseListResponse.data.items[0],
+              status: 'PUBLISHED',
+            },
+          ],
+          total: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [
+            {
+              ...baseListResponse.data.items[0],
+              status: 'PUBLISHED',
+            },
+          ],
+          total: 1,
+        },
+      })
+
+    render(<AdminExams />)
+
+    await waitFor(() => expect(screen.getByText('Midterm')).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Midterm' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+
+    await waitFor(() => expect(publishTestMock).toHaveBeenCalledWith('test-1'))
+    await waitFor(() => expect(testsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 1,
+        page_size: 20,
+        search: 'Midterm',
+        status: 'PUBLISHED',
+        sort: 'created_at',
+        order: 'desc',
+      }),
+      expect.objectContaining({
+        disableNavigationAbort: true,
+        persistentRequest: true,
+      }),
+    ))
+    await waitFor(() => expect(screen.getByText('Test published.')).toBeTruthy())
+  })
 })
