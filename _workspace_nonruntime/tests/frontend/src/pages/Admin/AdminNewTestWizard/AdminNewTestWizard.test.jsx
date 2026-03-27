@@ -20,6 +20,9 @@ const getQuestionsMock = vi.fn()
 const seedExamFromPoolMock = vi.fn()
 const attemptsMock = vi.fn()
 const schedulesMock = vi.fn()
+const createScheduleMock = vi.fn()
+const updateScheduleMock = vi.fn()
+const deleteScheduleMock = vi.fn()
 const pauseAttemptMock = vi.fn()
 const resumeAttemptMock = vi.fn()
 
@@ -40,6 +43,9 @@ vi.mock('../../../services/admin.service', () => ({
     seedExamFromPool: (...args) => seedExamFromPoolMock(...args),
     attempts: (...args) => attemptsMock(...args),
     schedules: (...args) => schedulesMock(...args),
+    createSchedule: (...args) => createScheduleMock(...args),
+    updateSchedule: (...args) => updateScheduleMock(...args),
+    deleteSchedule: (...args) => deleteScheduleMock(...args),
     pauseAttempt: (...args) => pauseAttemptMock(...args),
     resumeAttempt: (...args) => resumeAttemptMock(...args),
   },
@@ -85,6 +91,9 @@ describe('AdminNewTestWizard', () => {
     seedExamFromPoolMock.mockResolvedValue({ data: {} })
     attemptsMock.mockResolvedValue({ data: [] })
     schedulesMock.mockResolvedValue({ data: [] })
+    createScheduleMock.mockResolvedValue({ data: { id: 'schedule-1' } })
+    updateScheduleMock.mockResolvedValue({ data: {} })
+    deleteScheduleMock.mockResolvedValue({ data: {} })
     pauseAttemptMock.mockResolvedValue({ data: {} })
     resumeAttemptMock.mockResolvedValue({ data: {} })
   })
@@ -260,4 +269,5 @@ describe('AdminNewTestWizard', () => {
     await waitFor(() => expect(screen.getByText('Matched 2 learners.')).toBeTruthy())
     expect(screen.getByText('Selected: 2')).toBeTruthy()
   }, 10000)
+
 })

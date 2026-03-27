@@ -118,9 +118,14 @@ test.describe('Admin CRUD pages', () => {
     await surveyForm.getByRole('button', { name: 'Save Survey' }).click()
     await expect(page.getByText('Survey created.')).toBeVisible()
 
-    const surveyRow = surveysMain.locator('div').filter({ hasText: surveyTitle }).filter({ has: page.getByRole('button', { name: 'Deactivate' }) }).first()
+    const deactivateButtonName = `Deactivate survey ${surveyTitle}`
+    const surveyRow = surveysMain
+      .locator('div')
+      .filter({ hasText: surveyTitle })
+      .filter({ has: page.getByRole('button', { name: deactivateButtonName }) })
+      .first()
     await expect(surveyRow).toBeVisible()
-    await surveyRow.getByRole('button', { name: 'Deactivate' }).click()
+    await surveyRow.getByRole('button', { name: deactivateButtonName }).click()
     await expect(page.getByText('Survey deactivated.')).toBeVisible()
   })
 })

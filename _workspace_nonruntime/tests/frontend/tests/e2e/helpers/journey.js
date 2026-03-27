@@ -47,11 +47,13 @@ export async function installJourneyMediaMocks(page) {
       }
       return stream
     }
+    let primedScreenStream = null
+
     window.__syraCreateFakeScreenStream = createFakeScreenStream
 
     window.__syraPrimeScreenShare = async () => {
-      const { storeScreenStream } = await import('/src/utils/screenShareState.js')
-      storeScreenStream(createFakeScreenStream())
+      primedScreenStream = primedScreenStream || createFakeScreenStream()
+      return primedScreenStream
     }
 
     if (!navigator.mediaDevices) {
@@ -61,7 +63,11 @@ export async function installJourneyMediaMocks(page) {
       })
     }
 
-    navigator.mediaDevices.getDisplayMedia = async () => createFakeScreenStream()
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const stream = primedScreenStream || createFakeScreenStream()
+      primedScreenStream = null
+      return stream
+    }
 
     let fullscreenElement = null
     Object.defineProperty(document, 'fullscreenEnabled', {
@@ -94,9 +100,14 @@ export async function installJourneyMediaMocks(page) {
 }
 
 export async function completeSystemCheck(page, timeout = 20000) {
-  await page.evaluate(async () => {
-    await window.__syraPrimeScreenShare?.()
-  })
+  const shareButton = page.getByRole('button', { name: /share entire screen/i })
+  if (await shareButton.isVisible().catch(() => false)) {
+    await shareButton.click()
+  } else {
+    await page.evaluate(async () => {
+      await window.__syraPrimeScreenShare?.()
+    })
+  }
   const rerunButton = page.getByRole('button', { name: /re-run checks/i })
   if (await rerunButton.isVisible().catch(() => false)) {
     await rerunButton.click()

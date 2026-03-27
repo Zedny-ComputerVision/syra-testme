@@ -168,6 +168,15 @@ const PROCTORING_CONTROL_GROUPS = [
   },
 ]
 
+const normalizeScheduleComparisonValue = (value) => {
+  if (!value) return ''
+  try {
+    return new Date(value).toISOString()
+  } catch {
+    return String(value)
+  }
+}
+
 const PROCTORING_LABELS = Object.fromEntries([
   ...DETECTORS.map((detector) => [detector.key, detector.label]),
   ...PROCTORING_REQUIREMENTS.map((control) => [control.key, control.label]),
@@ -1293,6 +1302,37 @@ export default function AdminNewTestWizard() {
   const allLearnersSelected = totalLearners > 0 && users.every((user) => selectedLearnerKeys.has(String(user.id)))
   const allVisibleLearnersSelected = filteredUsers.length > 0 && filteredUsers.every((user) => selectedLearnerKeys.has(String(user.id)))
   const sessionRequiresSchedule = accessMode === 'RESTRICTED'
+  const selectedSessionUserIds = useMemo(
+    () => [...selectedUsers].map((id) => String(id)).sort(),
+    [selectedUsers],
+  )
+  const assignedSessionUserIds = useMemo(
+    () => assignedSessions.map((session) => String(session.userId)).sort(),
+    [assignedSessions],
+  )
+  const normalizedScheduledAt = useMemo(
+    () => normalizeScheduleComparisonValue(scheduledAt),
+    [scheduledAt],
+  )
+  const hasPendingSessionChanges = useMemo(() => {
+    if (selectedSessionUserIds.length !== assignedSessionUserIds.length) return true
+    if (selectedSessionUserIds.some((id, index) => id !== assignedSessionUserIds[index])) return true
+    if (selectedSessionUserIds.length === 0) return false
+    return assignedSessions.some((session) => {
+      if (!selectedLearnerKeys.has(String(session.userId))) return true
+      if (String(session.mode || 'OPEN') !== String(accessMode || 'OPEN')) return true
+      if (!sessionRequiresSchedule) return false
+      return normalizeScheduleComparisonValue(session.at) !== normalizedScheduledAt
+    })
+  }, [
+    accessMode,
+    assignedSessionUserIds,
+    assignedSessions,
+    normalizedScheduledAt,
+    selectedLearnerKeys,
+    selectedSessionUserIds,
+    sessionRequiresSchedule,
+  ])
   const canSaveAssignments = !sessionBusy
     && (selectedUsers.length > 0 || assignedSessions.length > 0)
     && (!sessionRequiresSchedule || Boolean(scheduledAt))
@@ -1339,6 +1379,9 @@ export default function AdminNewTestWizard() {
     if (targetStep === 7 && accessMode === 'RESTRICTED' && selectedUsers.length > 0 && !scheduledAt) {
       return 'Restricted assignments require a scheduled date and time.'
     }
+    if (targetStep === 7 && hasPendingSessionChanges) {
+      return 'Save learner assignment changes before continuing.'
+    }
     if (forPublish && questions.length === 0) {
       return 'Add at least one question before publishing.'
     }
@@ -1359,6 +1402,10 @@ export default function AdminNewTestWizard() {
   )
   const certificatesReady = !certEnabled || Boolean(certTitle.trim() && certSigner.trim())
   const currentStepValidation = validateStep(step)
+  const nextDisabled = (step === 0 && !title.trim())
+    || saving
+    || editorLocked
+    || (step === 7 && (sessionBusy || Boolean(currentStepValidation)))
   const cycleOverviewCards = [
     {
       label: 'Current step',
@@ -2642,6 +2689,9 @@ export default function AdminNewTestWizard() {
               {sessionRequiresSchedule && !scheduledAt && (
                 <div className={styles.sessionWarning}>Restricted access requires a scheduled date and time before assignments can be saved.</div>
               )}
+              {hasPendingSessionChanges && (
+                <div className={styles.sessionWarning}>Save assignments to persist the current learner selection before continuing.</div>
+              )}
 
               <label className={`${styles.label} ${styles.sectionLabel}`}>Select Learners</label>
               <div className={styles.helper}>Existing assigned learners are preselected. Save assignments to update their access mode or scheduled time.</div>
@@ -2828,7 +2878,7 @@ export default function AdminNewTestWizard() {
           Back
         </button>
         {step < STEPS.length - 1 ? (
-          <button className={styles.btnNext} onClick={handleNext} disabled={(step === 0 && !title.trim()) || saving || editorLocked}>
+          <button className={styles.btnNext} onClick={handleNext} disabled={nextDisabled}>
             {saving ? 'Saving...' : 'Next'}
           </button>
         ) : (
