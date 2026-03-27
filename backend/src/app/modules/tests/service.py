@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import secrets
 import string
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+from sqlalchemy.exc import IntegrityError
 
 from ...models import Exam, ExamStatus, ExamType, RoleEnum
 from ...services.audit import write_audit_log
@@ -40,6 +43,9 @@ from .schemas import TestCreateDTO, TestResponseDTO
 DEFAULT_UI_CONFIG = {
     "displayed_columns": ["name", "code", "type", "status", "time_limit_minutes", "testing_sessions"],
 }
+
+logger = logging.getLogger(__name__)
+
 @dataclass(slots=True)
 class ServiceActor:
     id: uuid.UUID | None
@@ -182,6 +188,13 @@ class TestService:
         if "certificate" in getattr(body, "model_fields_set", set()) and body.certificate is None:
             payload["certificate"] = None
         self._assert_can_mutate(exam, set(payload.keys()))
+        return self._update_test_with_retry(
+            test_id=test_id,
+            exam=exam,
+            payload=payload,
+            actor=actor,
+            request_ip=request_ip,
+        )
         next_max_attempts = payload.get("attempts_allowed", exam.max_attempts)
 
         if "code" in payload:
@@ -267,6 +280,149 @@ class TestService:
             request_ip=request_ip,
         )
         return self._serialize_detail(exam)
+
+    def _update_test_with_retry(
+        self,
+        *,
+        test_id: str,
+        exam: Exam,
+        payload: dict,
+        actor: ServiceActor,
+        request_ip: str | None,
+    ) -> TestResponseDTO:
+        for attempt in range(2):
+            try:
+                self._apply_test_update_payload(
+                    exam=exam,
+                    payload=payload,
+                    actor=actor,
+                    request_ip=request_ip,
+                )
+                self.repository.save(exam)
+                self.repository.commit()
+                self.repository.refresh(exam)
+                self._invalidate_test_list_cache()
+                self._write_audit_log(
+                    actor=actor,
+                    action="TEST_UPDATED",
+                    resource_id=str(exam.id),
+                    detail=f"Updated test: {exam.title}",
+                    request_ip=request_ip,
+                )
+                return self._serialize_detail(exam)
+            except IntegrityError as exc:
+                self.repository.rollback()
+                if attempt >= 1 or not self._is_retryable_test_update_conflict(exc):
+                    raise
+                logger.warning(
+                    "Retrying concurrent test update after config insert conflict",
+                    extra={"test_id": test_id, "actor_id": str(actor.id) if actor.id else None},
+                )
+                exam = self._get_test_for_write_or_raise(test_id, actor=actor)
+        return self._serialize_detail(exam)
+
+    def _apply_test_update_payload(
+        self,
+        *,
+        exam: Exam,
+        payload: dict,
+        actor: ServiceActor,
+        request_ip: str | None,
+    ) -> None:
+        next_max_attempts = payload.get("attempts_allowed", exam.max_attempts)
+
+        if "code" in payload:
+            next_code = payload["code"].strip() if payload["code"] else None
+            if next_code and self.repository.code_exists(next_code, exclude_exam_id=exam.id):
+                self._raise("VALIDATION_ERROR", "Code already exists", status_code=400)
+            mutate_exam_admin_meta(exam, code=next_code)
+        if "name" in payload:
+            exam.title = payload["name"].strip()
+        if "description" in payload:
+            exam.description = sanitize_html_fragment(payload["description"])
+        if "type" in payload:
+            exam.type = ExamType(payload["type"])
+        if "node_id" in payload:
+            exam.node_id = self._ensure_node(actor, payload["node_id"]).id
+        if "category_id" in payload:
+            exam.category_id = payload["category_id"]
+        if "grading_scale_id" in payload:
+            exam.grading_scale_id = payload["grading_scale_id"]
+        if "time_limit_minutes" in payload:
+            exam.time_limit = payload["time_limit_minutes"]
+        if "attempts_allowed" in payload:
+            exam.max_attempts = payload["attempts_allowed"]
+        if "passing_score" in payload:
+            exam.passing_score = payload["passing_score"]
+        if "runtime_settings" in payload:
+            sanitized_runtime = apply_runtime_attempt_policy_defaults(
+                sanitize_instructions(
+                    deepcopy(payload["runtime_settings"]) if isinstance(payload["runtime_settings"], dict) else {}
+                ),
+                next_max_attempts,
+            )
+            self._assert_runtime_attempt_policy(sanitized_runtime, next_max_attempts)
+            set_exam_runtime_settings(exam, sanitized_runtime)
+        elif "attempts_allowed" in payload and next_max_attempts > 1:
+            current_runtime = exam_runtime_settings(exam)
+            if current_runtime.get("allow_retake") is False:
+                set_exam_runtime_settings(exam, {**current_runtime, "allow_retake": True})
+        if "proctoring_config" in payload:
+            from ...services.normalized_relations import set_exam_proctoring, exam_proctoring
+
+            old_config = exam_proctoring(exam) or {}
+            new_config = normalize_proctoring_config(payload["proctoring_config"] or {})
+            set_exam_proctoring(exam, new_config)
+            changed_keys = [
+                key for key in set(list(old_config.keys()) + list(new_config.keys()))
+                if old_config.get(key) != new_config.get(key)
+            ]
+            if changed_keys:
+                diff_parts = []
+                for key in sorted(changed_keys)[:20]:
+                    diff_parts.append(f"{key}: {old_config.get(key)!r} â†’ {new_config.get(key)!r}")
+                self._write_audit_log(
+                    actor=actor,
+                    action="PROCTORING_CONFIG_UPDATED",
+                    resource_id=str(exam.id),
+                    detail=f"Proctoring config changed on '{exam.title}': {'; '.join(diff_parts)}",
+                    request_ip=request_ip,
+                )
+        if "certificate" in payload:
+            from ...services.normalized_relations import set_exam_certificate
+
+            set_exam_certificate(exam, payload["certificate"])
+
+        admin_updates = {}
+        for field in ("randomize_questions", "report_displayed", "report_content", "ui_config", "settings"):
+            if field in payload:
+                admin_updates[field] = payload[field]
+        if admin_updates:
+            mutate_exam_admin_meta(exam, **admin_updates)
+
+        exam.updated_at = datetime.now(timezone.utc)
+
+    def _is_retryable_test_update_conflict(self, exc: IntegrityError) -> bool:
+        detail = " ".join(
+            str(part)
+            for part in (
+                getattr(exc, "orig", None),
+                getattr(exc, "statement", None),
+                exc,
+            )
+            if part
+        ).lower()
+        retryable_markers = (
+            "exam_certificate_configs",
+            "exam_certificate_configs_pkey",
+            "exam_runtime_configs",
+            "exam_runtime_instruction_items",
+            "exam_runtime_translations",
+            "exam_runtime_extra_settings",
+            "exam_proctoring_configs",
+            "exam_proctoring_alert_rules",
+        )
+        return any(marker in detail for marker in retryable_markers)
 
     def _assert_runtime_attempt_policy(self, runtime_settings: dict | None, max_attempts: int | None) -> None:
         if runtime_attempt_policy_conflicts(runtime_settings, max_attempts):

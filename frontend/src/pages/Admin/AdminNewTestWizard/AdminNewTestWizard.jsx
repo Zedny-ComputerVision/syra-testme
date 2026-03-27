@@ -267,8 +267,11 @@ export default function AdminNewTestWizard() {
   const { id: paramId } = useParams()
   const editId = searchParams.get('edit') || paramId
   const autosaveTimerRef = useRef(null)
+  const autosaveGenerationRef = useRef(0)
   const autosavingRef = useRef(false)
   const saveExamRef = useRef(null)
+  const saveExamInFlightRef = useRef(null)
+  const savingRef = useRef(false)
   const prefersReducedMotion = useReducedMotion()
   const stepTransitionDuration = prefersReducedMotion || import.meta.env.MODE === 'test' ? 0 : 0.25
 
@@ -409,6 +412,10 @@ export default function AdminNewTestWizard() {
       clearTimeout(autosaveTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    savingRef.current = saving
+  }, [saving])
 
   const goToStep = (nextStep) => {
     startTransition(() => {
@@ -857,21 +864,37 @@ export default function AdminNewTestWizard() {
   }, [wizardReady, wizardBaselineVersion, wizardSnapshot])
 
   const saveExam = useCallback(async () => {
+    autosaveGenerationRef.current += 1
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
     }
-    const data = testPayload
-    let id = examId
-    if (examId) {
-      await adminApi.updateTest(examId, data)
-    } else {
-      const res = await adminApi.createTest(data)
-      setExamId(res.data.id)
-      id = res.data.id
+    if (saveExamInFlightRef.current) {
+      return saveExamInFlightRef.current
     }
-    setWizardBaselineVersion((current) => current + 1)
-    return id
+
+    const nextSave = (async () => {
+      const data = testPayload
+      let id = examId
+      if (examId) {
+        await adminApi.updateTest(examId, data)
+      } else {
+        const res = await adminApi.createTest(data)
+        setExamId(res.data.id)
+        id = res.data.id
+      }
+      setWizardBaselineVersion((current) => current + 1)
+      return id
+    })()
+
+    saveExamInFlightRef.current = nextSave
+    try {
+      return await nextSave
+    } finally {
+      if (saveExamInFlightRef.current === nextSave) {
+        saveExamInFlightRef.current = null
+      }
+    }
   }, [examId, testPayload])
 
   useEffect(() => {
@@ -906,8 +929,11 @@ export default function AdminNewTestWizard() {
   const autoPersist = async () => {
     if (!examId || editorLocked) return
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+    const autosaveGeneration = ++autosaveGenerationRef.current
     autosaveTimerRef.current = setTimeout(async () => {
-      if (autosavingRef.current) return
+      autosaveTimerRef.current = null
+      if (autosaveGeneration !== autosaveGenerationRef.current) return
+      if (autosavingRef.current || saveExamInFlightRef.current || savingRef.current) return
       autosavingRef.current = true
       try {
         await saveExamRef.current?.()

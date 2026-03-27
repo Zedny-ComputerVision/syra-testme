@@ -7,6 +7,7 @@ import uuid
 
 from sqlalchemy import String, cast, create_engine, select
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.base import Base
@@ -199,6 +200,57 @@ def test_update_test_allows_explicit_certificate_clear() -> None:
         assert response.certificate is None
         assert exam.certificate is None
         assert exam.certificate_config_rel is None
+    finally:
+        db.close()
+
+
+def test_update_test_retries_transient_certificate_insert_conflict() -> None:
+    db = _new_session()
+    try:
+        admin = _create_admin(db)
+        exam = _create_exam(db, owner=admin)
+        db.commit()
+
+        class FlakyRepository(AdminTestRepository):
+            def __init__(self, session: Session):
+                super().__init__(session)
+                self.commit_calls = 0
+
+            def commit(self) -> None:
+                self.commit_calls += 1
+                if self.commit_calls == 1:
+                    raise IntegrityError(
+                        "insert into exam_certificate_configs",
+                        params=None,
+                        orig=Exception('duplicate key value violates unique constraint "exam_certificate_configs_pkey"'),
+                    )
+                return super().commit()
+
+        repository = FlakyRepository(db)
+        service = AdminTestService(repository)
+
+        response = service.update_test(
+            test_id=str(exam.id),
+            body=AdminTestUpdateDTO(
+                certificate={
+                    "template": "Classic",
+                    "orientation": "landscape",
+                    "title": "Certificate of Completion",
+                    "signer": "Admin",
+                    "description": "Completed successfully.",
+                    "issue_rule": "ON_PASS",
+                }
+            ),
+            actor=ServiceActor(id=admin.id, role=RoleEnum.ADMIN),
+            request_ip=None,
+        )
+
+        db.refresh(exam)
+        assert repository.commit_calls == 2
+        assert response.certificate is not None
+        assert response.certificate["title"] == "Certificate of Completion"
+        assert exam.certificate is not None
+        assert exam.certificate["title"] == "Certificate of Completion"
     finally:
         db.close()
 
