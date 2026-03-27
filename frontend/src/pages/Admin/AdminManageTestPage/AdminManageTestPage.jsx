@@ -268,6 +268,10 @@ function normalizeSettingsSectionParam(search) {
   return SETTINGS_SECTION_IDS.includes(raw) ? raw : DEFAULT_SETTINGS_SECTION
 }
 
+function readRefreshAttemptParam(search) {
+  return new URLSearchParams(search).get('refreshAttempt') || ''
+}
+
 function isManageRoutePath(pathname) {
   return /^\/admin\/tests\/[^/]+\/manage$/.test(pathname || '')
 }
@@ -633,6 +637,7 @@ export default function AdminManageTestPage() {
 
   const [tab, setTab] = useState(() => normalizeTabParam(location.search))
   const [settingsSection, setSettingsSection] = useState(() => normalizeSettingsSectionParam(location.search))
+  const refreshAttemptId = readRefreshAttemptParam(location.search)
   const [view, setView] = useState('candidate_monitoring')
   const [showFilters, setShowFilters] = useState(true)
 
@@ -763,6 +768,7 @@ export default function AdminManageTestPage() {
   const examRef = useRef(exam)
   const usersRef = useRef(users)
   const sessionsRef = useRef(sessions)
+  const attemptRowsRef = useRef(attemptRows)
   const categoriesRef = useRef(categories)
   const loadAbortRef = useRef(null)
   const uploadStatusPollAbortRef = useRef(null)
@@ -843,6 +849,10 @@ export default function AdminManageTestPage() {
   useEffect(() => {
     sessionsRef.current = sessions
   }, [sessions])
+
+  useEffect(() => {
+    attemptRowsRef.current = attemptRows
+  }, [attemptRows])
 
   useEffect(() => {
     categoriesRef.current = categories
@@ -1171,6 +1181,51 @@ export default function AdminManageTestPage() {
     if (categoriesRef.current.length > 0) return
     void loadAllRef.current(false)
   }, [tab, settingsSection])
+
+  useEffect(() => {
+    if (tab !== 'candidates' || !refreshAttemptId) return undefined
+
+    let cancelled = false
+    const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+    const clearRefreshParam = () => {
+      const params = new URLSearchParams(location.search)
+      if (!params.has('refreshAttempt')) return
+      params.delete('refreshAttempt')
+      const search = params.toString()
+      navigate(
+        {
+          pathname: location.pathname,
+          search: search ? `?${search}` : '',
+        },
+        { replace: true },
+      )
+    }
+
+    const refreshReviewedAttempt = async () => {
+      for (let index = 0; index < 5; index += 1) {
+        if (cancelled) return
+        await loadAllRef.current(false)
+        if (cancelled) return
+        const refreshedAttempt = attemptRowsRef.current.find((row) => String(row.id) === String(refreshAttemptId))
+        if (refreshedAttempt && (refreshedAttempt.status === 'GRADED' || refreshedAttempt.reviewState === 'Finalized')) {
+          clearRefreshParam()
+          return
+        }
+        if (index < 4) {
+          await sleep(2500)
+        }
+      }
+      if (!cancelled) {
+        clearRefreshParam()
+      }
+    }
+
+    void refreshReviewedAttempt()
+    return () => {
+      cancelled = true
+    }
+  }, [location.pathname, location.search, navigate, refreshAttemptId, tab])
 
   const videoUploadStatusTargetAttemptIds = useMemo(() => (
     attemptRows

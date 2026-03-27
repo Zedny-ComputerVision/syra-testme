@@ -253,7 +253,9 @@ export default function AttemptResult() {
 
   const handleBack = () => {
     if (openedFromManageTest && returnTestId) {
-      navigate(`/admin/tests/${returnTestId}/manage?tab=${encodeURIComponent(returnTab)}`)
+      const params = new URLSearchParams({ tab: returnTab })
+      params.set('refreshAttempt', id)
+      navigate(`/admin/tests/${returnTestId}/manage?${params.toString()}`)
       return
     }
     navigate('/attempts')

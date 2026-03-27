@@ -1027,7 +1027,7 @@ export default function AdminNewTestWizard() {
       let serverSchedules = []
       try {
         const { data: allSchedules } = await adminApi.schedules()
-        serverSchedules = (allSchedules || []).filter((s) => String(s.exam_id) === String(examId))
+        serverSchedules = readPaginatedItems(allSchedules).filter((schedule) => String(schedule.exam_id) === String(examId))
       } catch {
         // Fall back to local state if the list call fails
         serverSchedules = []
@@ -1040,7 +1040,13 @@ export default function AdminNewTestWizard() {
         ? serverSchedules.filter((s) => !selectedSet.has(String(s.user_id)))
         : assignedSessions.filter((session) => !selectedSet.has(String(session.userId)))
       for (const stale of staleEntries) {
-        await adminApi.deleteSchedule(stale.id)
+        try {
+          await adminApi.deleteSchedule(stale.id)
+        } catch (deleteErr) {
+          if (deleteErr?.response?.status !== 404) {
+            throw deleteErr
+          }
+        }
       }
       for (const uid of selectedUsers) {
         const existing = existingByUser.get(String(uid))
@@ -1050,7 +1056,19 @@ export default function AdminNewTestWizard() {
           notes: null,
         }
         if (existing?.id) {
-          await adminApi.updateSchedule(existing.id, payload)
+          try {
+            await adminApi.updateSchedule(existing.id, payload)
+          } catch (updateErr) {
+            if (updateErr?.response?.status === 404) {
+              await adminApi.createSchedule({
+                user_id: uid,
+                exam_id: examId,
+                ...payload,
+              })
+            } else {
+              throw updateErr
+            }
+          }
         } else {
           try {
             await adminApi.createSchedule({
@@ -1062,7 +1080,9 @@ export default function AdminNewTestWizard() {
             // If 409 conflict, the schedule already exists — try to update it
             if (createErr.response?.status === 409) {
               const { data: refreshed } = await adminApi.schedules()
-              const match = (refreshed || []).find((s) => String(s.user_id) === String(uid) && String(s.exam_id) === String(examId))
+              const match = readPaginatedItems(refreshed).find((schedule) => (
+                String(schedule.user_id) === String(uid) && String(schedule.exam_id) === String(examId)
+              ))
               if (match) {
                 await adminApi.updateSchedule(match.id, payload)
               }
