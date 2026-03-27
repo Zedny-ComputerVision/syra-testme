@@ -48,7 +48,15 @@ function renderResult(initialEntry = '/attempts/attempt-1') {
 describe('AttemptResult page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    window.open = vi.fn(() => ({}))
+    window.open = vi.fn(() => ({
+      closed: false,
+      document: {
+        open: vi.fn(),
+        write: vi.fn(),
+        close: vi.fn(),
+      },
+      close: vi.fn(),
+    }))
     window.URL.createObjectURL = vi.fn(() => 'blob:report')
     window.URL.revokeObjectURL = vi.fn()
     HTMLAnchorElement.prototype.click = vi.fn()
@@ -195,6 +203,7 @@ describe('AttemptResult page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open exam report/i }))
     await waitFor(() => expect(generateAttemptReport).toHaveBeenCalledWith('attempt-1', 'html'))
     expect(window.open).toHaveBeenCalled()
+    expect(window.open.mock.results[0].value.document.write).toHaveBeenCalledWith('<html><body>Report</body></html>')
 
     fireEvent.click(screen.getByRole('button', { name: /Download PDF report/i }))
     await waitFor(() => expect(generateAttemptReport).toHaveBeenCalledWith('attempt-1', 'pdf'))
@@ -202,8 +211,18 @@ describe('AttemptResult page', () => {
   })
 
   it('reuses a placeholder tab for the HTML report instead of surfacing a false popup error', async () => {
-    const replaceMock = vi.fn()
-    window.open = vi.fn(() => ({ closed: false, location: { replace: replaceMock } }))
+    const openMock = vi.fn()
+    const writeMock = vi.fn()
+    const closeMock = vi.fn()
+    window.open = vi.fn(() => ({
+      closed: false,
+      document: {
+        open: openMock,
+        write: writeMock,
+        close: closeMock,
+      },
+      close: vi.fn(),
+    }))
     getTestQuestions.mockResolvedValue({ data: [] })
     getAttemptAnswers.mockResolvedValue({ data: [] })
     generateAttemptReport.mockResolvedValue({ data: '<html><body>Report</body></html>' })
@@ -214,7 +233,9 @@ describe('AttemptResult page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Open exam report/i }))
 
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('blob:report'))
+    await waitFor(() => expect(writeMock).toHaveBeenCalledWith('<html><body>Report</body></html>'))
+    expect(openMock).toHaveBeenCalled()
+    expect(closeMock).toHaveBeenCalled()
     expect(screen.queryByText('Unable to open the report in a new tab.')).toBeNull()
   })
 

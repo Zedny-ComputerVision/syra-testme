@@ -306,19 +306,41 @@ export default function AttemptResult() {
     }
   }
 
-  const openReportBlob = (blob, reportWindow = null) => {
-    const url = window.URL.createObjectURL(blob)
+  const normalizeReportHtml = async (payload) => {
+    if (typeof payload === 'string') return payload
+    if (payload instanceof Blob) return payload.text()
+    if (payload == null) return ''
+    return String(payload)
+  }
+
+  const openReportHtml = (html, reportWindow = null) => {
+    const nextWindow = reportWindow || window.open('', '_blank')
+    if (!nextWindow || nextWindow.closed) {
+      throw new Error('Unable to open the report in a new tab.')
+    }
+
+    const nextDocument = nextWindow.document
     if (
-      reportWindow
-      && !reportWindow.closed
-      && typeof reportWindow.location?.replace === 'function'
+      nextDocument
+      && typeof nextDocument.open === 'function'
+      && typeof nextDocument.write === 'function'
+      && typeof nextDocument.close === 'function'
     ) {
-      reportWindow.location.replace(url)
+      nextDocument.open()
+      nextDocument.write(html)
+      nextDocument.close()
+      return
+    }
+
+    const url = window.URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+    if (typeof nextWindow.location?.replace === 'function') {
+      nextWindow.location.replace(url)
       window.setTimeout(() => window.URL.revokeObjectURL(url), 60000)
       return
     }
-    const nextWindow = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!nextWindow) {
+
+    const fallbackWindow = window.open(url, '_blank')
+    if (!fallbackWindow) {
       window.URL.revokeObjectURL(url)
       throw new Error('Unable to open the report in a new tab.')
     }
@@ -339,10 +361,10 @@ export default function AttemptResult() {
   const handleOpenExamReport = async () => {
     setReportBusy('html')
     setReportError('')
-    const reportWindow = window.open('', '_blank', 'noopener,noreferrer')
+    const reportWindow = window.open('', '_blank')
     try {
       const res = await generateAttemptReport(id, 'html')
-      openReportBlob(new Blob([res.data], { type: 'text/html' }), reportWindow)
+      openReportHtml(await normalizeReportHtml(res.data), reportWindow)
     } catch (e) {
       if (
         reportWindow
