@@ -5,8 +5,6 @@ const SHARED_ROUTE_PATTERNS = [
   /^\/schedule\/?$/i,
   /^\/attempts(?:\/[^/]+)?\/?$/i,
   /^\/attempt-result(?:\/[^/]+)?\/?$/i,
-  /^\/training\/?$/i,
-  /^\/surveys\/?$/i,
 ]
 
 const INSTRUCTOR_ROUTE_PATTERNS = [
@@ -31,6 +29,8 @@ const LEARNER_ROUTE_PATTERNS = [
   /^\/verify-identity(?:\/|$)/i,
   /^\/rules(?:\/|$)/i,
   /^\/exam(?:\/|$)/i,
+  /^\/training\/?$/i,
+  /^\/surveys\/?$/i,
 ]
 
 const BLOCKED_ROUTE_PATTERNS = [
@@ -43,7 +43,7 @@ const BLOCKED_ROUTE_PATTERNS = [
 
 const DEFAULT_PATHS = {
   ADMIN: '/admin/dashboard',
-  INSTRUCTOR: '/',
+  INSTRUCTOR: '/profile',
   LEARNER: '/',
 }
 

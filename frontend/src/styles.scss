@@ -203,13 +203,24 @@ body::before {
 }
 
 :where(.glass-card, [class*="_card_"]):hover:not(:disabled) {
+  box-shadow: var(--card-shadow);
+  border-color: var(--card-border);
+  background: var(--card-bg);
+}
+
+:where(.glass-card, [class*="_card_"]):active:not(:disabled) {
+  transform: none;
+  box-shadow: var(--card-shadow);
+}
+
+:where(.glass-card--interactive, [data-card-interactive='true']):hover:not(:disabled) {
   transform: translateY(-2px) scale(1.01);
   box-shadow: var(--card-shadow-hover);
   border-color: color-mix(in srgb, var(--color-primary) 35%, var(--card-border));
   background: var(--card-bg-strong);
 }
 
-:where(.glass-card, [class*="_card_"]):active:not(:disabled) {
+:where(.glass-card--interactive, [data-card-interactive='true']):active:not(:disabled) {
   transform: translateY(0) scale(0.995);
   box-shadow: var(--card-shadow);
 }

@@ -19,7 +19,15 @@ describe('postLoginRedirect', () => {
   it('preserves learner and instructor post-login routes', () => {
     expect(resolvePostLoginPath('LEARNER', '/tests')).toBe('/tests')
     expect(resolvePostLoginPath('LEARNER', '/attempts/attempt-1')).toBe('/attempts/attempt-1')
+    expect(resolvePostLoginPath('LEARNER', '/training')).toBe('/training')
     expect(resolvePostLoginPath('INSTRUCTOR', '/admin/categories')).toBe('/admin/categories')
     expect(resolvePostLoginPath('INSTRUCTOR', '/profile')).toBe('/profile')
+  })
+
+  it('does not reuse learner-only routes for instructors after login', () => {
+    expect(canReusePostLoginPath('INSTRUCTOR', '/training')).toBe(false)
+    expect(canReusePostLoginPath('INSTRUCTOR', '/surveys')).toBe(false)
+    expect(resolvePostLoginPath('INSTRUCTOR', '/training')).toBe('/profile')
+    expect(resolvePostLoginPath('INSTRUCTOR', '')).toBe('/profile')
   })
 })

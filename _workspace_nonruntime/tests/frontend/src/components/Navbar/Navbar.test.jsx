@@ -94,4 +94,27 @@ describe('Navbar search', () => {
     fireEvent.click(screen.getByText('Search failed'))
     expect(navigateMock).not.toHaveBeenCalled()
   })
+
+  it('navigates when a search result is selected', async () => {
+    searchAllMock.mockResolvedValue({
+      data: {
+        exams: [{ id: 'exam-1', title: 'Physics Final', status: 'PUBLISHED' }],
+        attempts: [],
+        users: [],
+      },
+    })
+
+    renderNavbar()
+    fireEvent.change(screen.getByPlaceholderText('Search tests, attempts, users...'), { target: { value: 'physics' } })
+
+    await act(async () => {
+      vi.advanceTimersByTime(350)
+      await Promise.resolve()
+    })
+
+    const result = screen.getByRole('button', { name: /Physics Final/i })
+    fireEvent.mouseDown(result)
+
+    expect(navigateMock).toHaveBeenCalledWith('/admin/tests/exam-1/manage')
+  })
 })

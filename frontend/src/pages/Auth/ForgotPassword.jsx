@@ -22,6 +22,17 @@ export default function ForgotPassword() {
     } finally { setLoading(false) }
   }
 
+  const requestFormSubmit = (event) => {
+    if (loading) return
+    const form = event.currentTarget.form
+    if (!form) return
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit()
+      return
+    }
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  }
+
   return (
     <div className={styles.page}>
       <form className={styles.card} onSubmit={submit}>
@@ -30,7 +41,7 @@ export default function ForgotPassword() {
         {success && <div className={styles.info}>{success}</div>}
         {error && <div className={styles.error}>{error}</div>}
         <input className={styles.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required disabled={loading} />
-        <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Sending...' : 'Send Reset Link'}</button>
+        <button className={styles.btn} type="button" disabled={loading} onClick={requestFormSubmit}>{loading ? 'Sending...' : 'Send Reset Link'}</button>
         <p className={styles.loginLink}>Back to <Link className={styles.link} to="/login">login</Link></p>
       </form>
     </div>

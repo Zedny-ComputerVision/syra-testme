@@ -326,10 +326,14 @@
     transform: translateX(-100%);
     box-shadow: 0 0 60px rgba(0, 0, 0, 0.55);
     z-index: 1000;
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .open {
     transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .overlay {

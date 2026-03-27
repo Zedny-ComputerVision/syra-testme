@@ -1,11 +1,12 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import AdminCandidates from './AdminCandidates'
 
 const attemptsMock = vi.fn()
+const allTestsMock = vi.fn()
 const getAttemptEventsMock = vi.fn()
 const schedulesMock = vi.fn()
 const updateScheduleMock = vi.fn()
@@ -16,6 +17,7 @@ const generateReportMock = vi.fn()
 vi.mock('../../../services/admin.service', () => ({
   adminApi: {
     attempts: (...args) => attemptsMock(...args),
+    allTests: (...args) => allTestsMock(...args),
     getAttemptEvents: (...args) => getAttemptEventsMock(...args),
     schedules: (...args) => schedulesMock(...args),
     updateSchedule: (...args) => updateScheduleMock(...args),
@@ -35,6 +37,7 @@ describe('AdminCandidates', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     attemptsMock.mockResolvedValue({ data: [] })
+    allTestsMock.mockResolvedValue({ data: { items: [] } })
     getAttemptEventsMock.mockResolvedValue({ data: [] })
     schedulesMock.mockResolvedValue({ data: [] })
     updateScheduleMock.mockResolvedValue({ data: {} })
@@ -64,6 +67,22 @@ describe('AdminCandidates', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     await waitFor(() => expect(attemptsMock).toHaveBeenCalledTimes(2))
+  })
+
+  it('redirects to access denied when supporting admin test data is forbidden', async () => {
+    attemptsMock.mockResolvedValue({ data: [] })
+    allTestsMock.mockRejectedValue({ response: { status: 403 } })
+
+    render(
+      <MemoryRouter initialEntries={['/admin/candidates']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/admin/candidates" element={<AdminCandidates />} />
+          <Route path="/access-denied" element={<div>Access denied route</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Access denied route')).toBeTruthy())
   })
 
   it('keeps reschedule confirmation disabled until a date is selected', async () => {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import useAuth from '../../../hooks/useAuth'
 import api from '../../../services/api'
 import styles from './AdminLiveMonitor.module.scss'
@@ -207,6 +207,7 @@ export default function AdminLiveMonitor() {
   const [searchParams] = useSearchParams()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [watchingAttemptId, setWatchingAttemptId] = useState(searchParams.get('attempt') || null)
   const pollRef = useRef(null)
 
@@ -214,8 +215,12 @@ export default function AdminLiveMonitor() {
     try {
       const res = await api.get('/proctoring/admin/live')
       setSessions(res.data?.active_sessions || [])
-    } catch {
-      // silent
+      setAccessDenied(false)
+    } catch (error) {
+      if (Number(error?.response?.status) === 403) {
+        setAccessDenied(true)
+        setSessions([])
+      }
     } finally {
       setLoading(false)
     }
@@ -227,6 +232,10 @@ export default function AdminLiveMonitor() {
     pollRef.current = setInterval(fetchSessions, 5000)
     return () => clearInterval(pollRef.current)
   }, [fetchSessions, watchingAttemptId])
+
+  if (accessDenied) {
+    return <Navigate to="/access-denied" replace />
+  }
 
   if (watchingAttemptId) {
     return (

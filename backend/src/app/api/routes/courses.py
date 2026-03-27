@@ -9,6 +9,8 @@ from ...schemas import CourseCreate, CourseRead, CourseBase, Message
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
+INTERNAL_POOL_LIBRARY_TITLE = "Question Pool Library"
+INTERNAL_POOL_LIBRARY_DESCRIPTION = "Hidden library course for question pool storage"
 
 
 def _query_first(db: Session, statement):
@@ -60,11 +62,22 @@ def _normalize_course_payload(body: CourseBase) -> dict:
     }
 
 
+def _exclude_internal_library_courses(statement):
+    return statement.where(
+        ~(
+            (Course.title == INTERNAL_POOL_LIBRARY_TITLE)
+            & (Course.description == INTERNAL_POOL_LIBRARY_DESCRIPTION)
+        )
+    )
+
+
 @router.get("/", response_model=list[CourseRead])
 async def list_courses(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Course)
     if current.role == RoleEnum.LEARNER:
-        query = query.where(Course.status == CourseStatus.PUBLISHED)
+        query = _exclude_internal_library_courses(
+            query.where(Course.status == CourseStatus.PUBLISHED)
+        )
     else:
         ensure_permission(db, current, "Edit Tests")
     courses = db.scalars(query.order_by(Course.created_at.desc())).all()

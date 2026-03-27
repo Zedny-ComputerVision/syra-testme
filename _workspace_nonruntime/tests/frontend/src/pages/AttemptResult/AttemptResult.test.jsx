@@ -51,6 +51,7 @@ describe('AttemptResult page', () => {
     window.open = vi.fn(() => ({}))
     window.URL.createObjectURL = vi.fn(() => 'blob:report')
     window.URL.revokeObjectURL = vi.fn()
+    HTMLAnchorElement.prototype.click = vi.fn()
     getAttempt.mockResolvedValue({
       data: {
         id: 'attempt-1',
@@ -198,6 +199,23 @@ describe('AttemptResult page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Download PDF report/i }))
     await waitFor(() => expect(generateAttemptReport).toHaveBeenCalledWith('attempt-1', 'pdf'))
     expect(window.URL.createObjectURL).toHaveBeenCalled()
+  })
+
+  it('reuses a placeholder tab for the HTML report instead of surfacing a false popup error', async () => {
+    const replaceMock = vi.fn()
+    window.open = vi.fn(() => ({ closed: false, location: { replace: replaceMock } }))
+    getTestQuestions.mockResolvedValue({ data: [] })
+    getAttemptAnswers.mockResolvedValue({ data: [] })
+    generateAttemptReport.mockResolvedValue({ data: '<html><body>Report</body></html>' })
+
+    renderResult()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Open exam report/i })).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: /Open exam report/i }))
+
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('blob:report'))
+    expect(screen.queryByText('Unable to open the report in a new tab.')).toBeNull()
   })
 
   it('shows an awaiting manual review state when the attempt has no final score yet', async () => {

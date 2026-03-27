@@ -79,6 +79,17 @@ export default function SignUp() {
     } finally { setLoading(false) }
   }
 
+  const requestFormSubmit = (event) => {
+    if (loading || statusLoading || !signupAllowed || statusError) return
+    const form = event.currentTarget.form
+    if (!form) return
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit()
+      return
+    }
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  }
+
   return (
     <div className={styles.page}>
       <form className={`${styles.card} ${styles.signupCard}`} onSubmit={submit}>
@@ -129,7 +140,7 @@ export default function SignUp() {
           <div className={styles.helperTitle}>Before you continue</div>
           <div className={styles.helperText}>Use the email and learner ID your institution expects. Passwords must be at least 8 characters.</div>
         </div>
-        <button className={styles.btn} type="submit" disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)}>{loading ? 'Creating...' : 'Sign Up'}</button>
+        <button className={styles.btn} type="button" disabled={loading || !signupAllowed || statusLoading || Boolean(statusError)} onClick={requestFormSubmit}>{loading ? 'Creating...' : 'Sign Up'}</button>
         {(statusError || !signupAllowed) && (
           <button className={styles.secondaryBtn} type="button" onClick={() => void loadSignupStatus()} disabled={statusLoading || loading}>
             {statusLoading ? 'Checking...' : 'Retry availability check'}

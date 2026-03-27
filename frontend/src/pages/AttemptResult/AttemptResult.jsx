@@ -306,10 +306,19 @@ export default function AttemptResult() {
     }
   }
 
-  const openReportBlob = (blob) => {
+  const openReportBlob = (blob, reportWindow = null) => {
     const url = window.URL.createObjectURL(blob)
-    const reportWindow = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!reportWindow) {
+    if (
+      reportWindow
+      && !reportWindow.closed
+      && typeof reportWindow.location?.replace === 'function'
+    ) {
+      reportWindow.location.replace(url)
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60000)
+      return
+    }
+    const nextWindow = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!nextWindow) {
       window.URL.revokeObjectURL(url)
       throw new Error('Unable to open the report in a new tab.')
     }
@@ -330,10 +339,18 @@ export default function AttemptResult() {
   const handleOpenExamReport = async () => {
     setReportBusy('html')
     setReportError('')
+    const reportWindow = window.open('', '_blank', 'noopener,noreferrer')
     try {
       const res = await generateAttemptReport(id, 'html')
-      openReportBlob(new Blob([res.data], { type: 'text/html' }))
+      openReportBlob(new Blob([res.data], { type: 'text/html' }), reportWindow)
     } catch (e) {
+      if (
+        reportWindow
+        && !reportWindow.closed
+        && typeof reportWindow.close === 'function'
+      ) {
+        reportWindow.close()
+      }
       const fallback = e?.message === 'Unable to open the report in a new tab.'
         ? e.message
         : 'Unable to open the exam report.'

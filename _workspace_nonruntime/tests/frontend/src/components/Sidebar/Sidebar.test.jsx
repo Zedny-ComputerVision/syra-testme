@@ -42,6 +42,8 @@ describe('Sidebar role visibility', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Expand Users section' }))
     await waitFor(() => expect(screen.getByText('Testing Sessions')).toBeTruthy())
     await waitFor(() => expect(screen.getByText('User Profiles')).toBeTruthy())
+    expect(screen.queryByRole('link', { name: 'Training' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Surveys' })).toBeNull()
     expect(screen.queryByText('Manage Tests')).toBeNull()
   })
 

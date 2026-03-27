@@ -125,4 +125,32 @@ describe('TrainingCourses page', () => {
     await waitFor(() => expect(screen.getByText('Biology 101')).toBeTruthy())
     expect(screen.getByText('Showing 2 courses across 2 available.')).toBeTruthy()
   })
+
+  it('hides the internal question-pool library course from learner training', async () => {
+    apiGetMock.mockImplementation((path) => {
+      if (path === 'courses/') {
+        return Promise.resolve({
+          data: [
+            { id: 'course-1', title: 'Biology 101', description: 'Core biology fundamentals' },
+            { id: 'course-2', title: 'Question Pool Library', description: 'Hidden library course for question pool storage' },
+          ],
+        })
+      }
+      if (path === 'nodes/') {
+        return Promise.resolve({ data: [] })
+      }
+      throw new Error(`Unexpected path ${path}`)
+    })
+    listTestsMock.mockResolvedValue({ data: [] })
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <TrainingCourses />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Biology 101')).toBeTruthy())
+    expect(screen.queryByText('Question Pool Library')).toBeNull()
+    expect(screen.getByText('Showing 1 course across 1 available.')).toBeTruthy()
+  })
 })

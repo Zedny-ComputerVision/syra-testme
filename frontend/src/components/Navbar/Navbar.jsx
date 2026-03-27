@@ -314,6 +314,12 @@ export default function Navbar({ onMenuToggle, onSidebarToggle, sidebarCollapsed
     performSearch(searchQuery)
   }
 
+  const handleSearchResultNavigate = (event, target) => {
+    event.preventDefault()
+    setSearchOpen(false)
+    navigate(target)
+  }
+
   const handleNotificationClick = (notification) => {
     if (!notification?.link) return
     setNotifOpen(false)
@@ -408,7 +414,8 @@ export default function Navbar({ onMenuToggle, onSidebarToggle, sidebarCollapsed
                     key={i}
                     type="button"
                     className={styles.resultRow}
-                    onClick={() => { setSearchOpen(false); navigate(r.to) }}
+                    onMouseDown={(event) => handleSearchResultNavigate(event, r.to)}
+                    onClick={(event) => handleSearchResultNavigate(event, r.to)}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.02 }}

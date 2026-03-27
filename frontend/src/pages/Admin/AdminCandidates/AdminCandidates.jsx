@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import useAuth from '../../../hooks/useAuth'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
@@ -11,6 +11,10 @@ import styles from './AdminCandidates.module.scss'
 const BASE_TABS = ['Test Attempts', 'Proctoring', 'Imported Results']
 const STATUS_FILTERS = ['All', 'Attempted', 'Passed', 'Failed', 'Not Graded']
 const REQUIRED_IMPORT_COLUMNS = ['user_id', 'score']
+
+function isForbiddenError(error) {
+  return Number(error?.response?.status) === 403
+}
 
 function parseCSV(text) {
   const rows = []
@@ -148,6 +152,7 @@ export default function AdminCandidates() {
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [accessDenied, setAccessDenied] = useState(false)
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -163,6 +168,7 @@ export default function AdminCandidates() {
   const load = async () => {
     setLoading(true)
     setLoadError('')
+    setAccessDenied(false)
     try {
       const { data } = await adminApi.attempts({ skip: 0, limit: 200 })
       const enriched = readPaginatedItems(data).map((attempt) => ({
@@ -188,11 +194,22 @@ export default function AdminCandidates() {
         ;(testsData?.items || []).forEach((t) => {
           if (t.id && t.passing_score != null) scoreMap[t.id] = t.passing_score
         })
-      } catch { /* non-critical */ }
+      } catch (error) {
+        if (isForbiddenError(error)) {
+          throw error
+        }
+      }
       setAttempts(enriched)
       setTests(Array.from(uniqueTests.values()))
       setPassingScoreMap(scoreMap)
     } catch (error) {
+      if (isForbiddenError(error)) {
+        setAccessDenied(true)
+        setAttempts([])
+        setTests([])
+        setPassingScoreMap({})
+        return
+      }
       setAttempts([])
       setTests([])
       setPassingScoreMap({})
@@ -441,6 +458,10 @@ export default function AdminCandidates() {
     } finally {
       setDownloadBusyId('')
     }
+  }
+
+  if (accessDenied) {
+    return <Navigate to="/access-denied" replace />
   }
 
   return (
@@ -836,5 +857,4 @@ export default function AdminCandidates() {
     </div>
   )
 }
-
 

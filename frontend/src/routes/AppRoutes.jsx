@@ -282,6 +282,7 @@ const ADMIN_ROLES = ['ADMIN']
 const SUPER_ADMIN = ['ADMIN']
 const ANALYSIS_ROLES = ['ADMIN', 'INSTRUCTOR']
 const ADMIN_OR_INSTRUCTOR_ROLES = ['ADMIN', 'INSTRUCTOR']
+const LEARNER_ROLES = ['LEARNER']
 const withAccess = (element, roles, permission) => (
   <RequireAccess roles={roles} permission={permission}>
     {element}
@@ -355,6 +356,9 @@ function HomeRoute() {
   if (user?.role === 'ADMIN') {
     return <Navigate to="/admin/dashboard" replace />
   }
+  if (user?.role === 'INSTRUCTOR') {
+    return <Navigate to="/profile" replace />
+  }
   return <Home />
 }
 
@@ -390,8 +394,8 @@ const router = createBrowserRouter(
         { path: '/', element: withAccess(<HomeRoute />, undefined, 'View Dashboard') },
         { path: '/tests', element: withAccess(<Exams />, undefined, 'Take Tests') },
         { path: '/tests/:testId', element: <ExamInstructions /> },
-        { path: '/training', element: <TrainingCourses /> },
-        { path: '/surveys', element: <MySurveys /> },
+        { path: '/training', element: withAccess(<TrainingCourses />, LEARNER_ROLES) },
+        { path: '/surveys', element: withAccess(<MySurveys />, LEARNER_ROLES) },
         { path: '/tests/:testId/system-check', element: <SystemCheckPage /> },
         { path: '/tests/:testId/verify-identity', element: <VerifyIdentityPage /> },
         { path: '/tests/:testId/rules', element: <RulesPage /> },

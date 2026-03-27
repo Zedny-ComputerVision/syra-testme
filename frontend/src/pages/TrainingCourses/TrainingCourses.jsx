@@ -6,6 +6,18 @@ import { normalizeTest } from '../../utils/assessmentAdapters'
 import { readPaginatedItems } from '../../utils/pagination'
 import styles from './TrainingCourses.module.scss'
 
+const INTERNAL_POOL_LIBRARY_TITLE = 'Question Pool Library'
+const INTERNAL_POOL_LIBRARY_DESCRIPTION = 'Hidden library course for question pool storage'
+
+function isVisibleTrainingCourse(course) {
+  const title = String(course?.title || '').trim()
+  const description = String(course?.description || '').trim()
+  return !(
+    title === INTERNAL_POOL_LIBRARY_TITLE
+    && description === INTERNAL_POOL_LIBRARY_DESCRIPTION
+  )
+}
+
 export default function TrainingCourses() {
   const [courses, setCourses] = useState([])
   const [nodes, setNodes] = useState({})
@@ -31,7 +43,7 @@ export default function TrainingCourses() {
         throw new Error('Failed to load training courses.')
       }
 
-      const nextCourses = courseRes.value.data || []
+      const nextCourses = (courseRes.value.data || []).filter(isVisibleTrainingCourse)
       let nextTests = []
       let nextNodes = []
       const partialFailures = []

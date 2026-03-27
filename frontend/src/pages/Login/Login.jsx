@@ -264,6 +264,17 @@ export default function Login() {
     }
   }
 
+  const requestFormSubmit = (event) => {
+    if (loading) return
+    const form = event.currentTarget.form
+    if (!form) return
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit()
+      return
+    }
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  }
+
   const handleAdminLogin = async () => {
     setError('')
     const adminUser = devUsers.admin
@@ -387,7 +398,7 @@ export default function Login() {
           </div>
         </div>
 
-        <button type="submit" className={styles.btn} disabled={loading}>
+        <button type="button" className={styles.btn} disabled={loading} onClick={requestFormSubmit}>
           {loading ? 'Logging in...' : 'Sign In'}
         </button>
 

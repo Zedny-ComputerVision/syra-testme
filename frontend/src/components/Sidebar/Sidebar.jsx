@@ -117,6 +117,7 @@ export default function Sidebar({ collapsed = false, mobileOpen = false, onClose
   const role = user?.role
   const isAdmin = role === 'ADMIN'
   const isInstructor = role === 'INSTRUCTOR'
+  const isLearner = role === 'LEARNER'
   const isSuperAdmin = role === 'ADMIN'
   const dashboardPath = isAdmin ? '/admin/dashboard' : '/'
   const canViewDashboard = hasPermission?.('View Dashboard')
@@ -200,9 +201,9 @@ export default function Sidebar({ collapsed = false, mobileOpen = false, onClose
         className={`${styles.sidebar} glass ${mobileOpen ? styles.open : ''} ${collapsed ? styles.collapsed : ''}`}
         role="navigation"
         aria-label="Main navigation"
-        initial={{ x: -20, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 120, damping: 14 }}
+        initial={false}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
       >
         <div className={styles.brand}>
           <Link to={dashboardPath} className={styles.brandLink} onClick={handleNavigate}>
@@ -225,8 +226,8 @@ export default function Sidebar({ collapsed = false, mobileOpen = false, onClose
             {canViewOwnSchedule && <NavLink to="/schedule" icon="schedule" label="My Schedule" active={isActive('/schedule')} onNavigate={handleNavigate} collapsed={collapsed} />}
             {canViewOwnAttempts && <NavLink to="/attempts" icon="attempts" label="My Attempts" active={isActive('/attempts')} onNavigate={handleNavigate} collapsed={collapsed} />}
             <NavLink to="/profile" icon="profile" label="Profile" active={isActive('/profile')} onNavigate={handleNavigate} collapsed={collapsed} />
-            <NavLink to="/training" icon="exams" label="Training" active={isActive('/training')} onNavigate={handleNavigate} collapsed={collapsed} />
-            <NavLink to="/surveys" icon="exams" label="Surveys" active={isActive('/surveys')} onNavigate={handleNavigate} collapsed={collapsed} />
+            {isLearner && <NavLink to="/training" icon="exams" label="Training" active={isActive('/training')} onNavigate={handleNavigate} collapsed={collapsed} />}
+            {isLearner && <NavLink to="/surveys" icon="exams" label="Surveys" active={isActive('/surveys')} onNavigate={handleNavigate} collapsed={collapsed} />}
           </Section>
 
           {(canCreateTests || canManageTests || canEditSupportingTests || canManageCategories || canManageGradingScales || canManageQuestionPools) && (

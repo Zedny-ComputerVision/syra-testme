@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 import uuid
@@ -28,6 +29,7 @@ from app.modules.tests.service import ServiceActor, TestService as AdminTestServ
 from app.services.normalized_relations import set_exam_certificate
 from app.utils.pagination import PaginationParams
 from app.api.routes.question_pools import _cleanup_pool_library_resources, _ensure_pool_library_exam
+from app.api.routes.courses import list_courses
 
 
 def _now() -> datetime:
@@ -52,6 +54,20 @@ def _create_admin(db: Session) -> User:
     db.add(admin)
     db.flush()
     return admin
+
+
+def _create_learner(db: Session) -> User:
+    learner = User(
+        user_id=f"learner-{uuid.uuid4().hex[:8]}",
+        email=f"learner-{uuid.uuid4().hex[:8]}@example.com",
+        name="Learner",
+        hashed_password="hashed",
+        role=RoleEnum.LEARNER,
+        is_active=True,
+    )
+    db.add(learner)
+    db.flush()
+    return learner
 
 
 def _create_exam(db: Session, *, owner: User) -> Exam:
@@ -324,3 +340,36 @@ def test_postgres_list_query_uses_safe_json_path_extraction_for_legacy_settings(
     assert "jsonb_extract_path_text" in archived_sql
     assert "jsonb_extract_path_text" in code_sql
     assert "jsonb_extract_path_text" in pool_sql
+
+
+def test_list_courses_hides_internal_pool_library_from_learners() -> None:
+    db = _new_session()
+    try:
+        admin = _create_admin(db)
+        learner = _create_learner(db)
+        now = _now()
+        db.add_all([
+            Course(
+                title="Visible Biology",
+                description="Core learner training",
+                status=CourseStatus.PUBLISHED,
+                created_by_id=admin.id,
+                created_at=now,
+                updated_at=now,
+            ),
+            Course(
+                title="Question Pool Library",
+                description="Hidden library course for question pool storage",
+                status=CourseStatus.PUBLISHED,
+                created_by_id=admin.id,
+                created_at=now,
+                updated_at=now,
+            ),
+        ])
+        db.commit()
+
+        courses = asyncio.run(list_courses(db=db, current=learner))
+
+        assert [course.title for course in courses] == ["Visible Biology"]
+    finally:
+        db.close()
