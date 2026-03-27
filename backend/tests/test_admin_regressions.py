@@ -23,7 +23,7 @@ from app.models import (
     User,
 )
 from app.modules.tests.enums import TestStatus
-from app.modules.tests.repository import TestRepository as AdminTestRepository
+from app.modules.tests.repository import TestListRow as AdminTestListRow, TestRepository as AdminTestRepository
 from app.modules.tests.schemas import TestUpdateDTO as AdminTestUpdateDTO
 from app.modules.tests.service import ServiceActor, TestService as AdminTestService
 from app.services.normalized_relations import set_exam_certificate
@@ -312,6 +312,49 @@ def test_list_tests_recovers_from_invalid_legacy_exam_enums() -> None:
         assert repaired_archived["status"] == ExamStatus.CLOSED.value
     finally:
         db.close()
+
+
+def test_list_tests_reads_fresh_status_on_back_to_back_requests() -> None:
+    exam_id = uuid.uuid4()
+
+    class FlippingRepository:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def list_tests(self, query):
+            self.calls += 1
+            runtime_status = ExamStatus.CLOSED.value if self.calls == 1 else ExamStatus.OPEN.value
+            row = AdminTestListRow(
+                id=exam_id,
+                name="Fresh Status Exam",
+                code="FRESH1",
+                raw_type=ExamType.MCQ.value,
+                raw_runtime_status=runtime_status,
+                is_archived=False,
+                category_id=None,
+                category_name=None,
+                time_limit_minutes=60,
+                certificate=None,
+                certificate_title=None,
+                certificate_subtitle=None,
+                certificate_issuer=None,
+                certificate_signer=None,
+                created_at=_now(),
+                updated_at=_now(),
+            )
+            return [row], 1, {exam_id: 0}, {exam_id: 1}
+
+    repository = FlippingRepository()
+    service = AdminTestService(repository)
+    actor = ServiceActor(id=uuid.uuid4(), role=RoleEnum.ADMIN)
+    pagination = PaginationParams(page=1, page_size=20, sort="created_at", order="desc")
+
+    first_payload = service.list_tests(actor=actor, pagination=pagination)
+    second_payload = service.list_tests(actor=actor, pagination=pagination)
+
+    assert first_payload["items"][0]["status"] == TestStatus.DRAFT.value
+    assert second_payload["items"][0]["status"] == TestStatus.PUBLISHED.value
+    assert repository.calls == 2
 
 
 def test_postgres_list_query_uses_safe_json_path_extraction_for_legacy_settings() -> None:

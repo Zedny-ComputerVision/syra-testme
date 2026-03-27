@@ -101,6 +101,9 @@ test.describe('Admin Manage Tests page', () => {
       return body.status || null
     }, { timeout: 15000 }).toBe('PUBLISHED')
 
+    await page.goto('/admin/tests')
+    await page.fill('input[placeholder="Search by name or code..."]', publishName)
+    await expect(publishRow).toBeVisible()
     await openRowMenu(publishRow)
     await publishRow.getByRole('button', { name: 'Archive', exact: true }).click()
 
