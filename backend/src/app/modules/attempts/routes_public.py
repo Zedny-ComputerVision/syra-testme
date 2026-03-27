@@ -760,6 +760,16 @@ def _apply_attempt_grade(attempt: Attempt, score: float | None, db: Session) -> 
     return attempt.grade
 
 
+def _load_attempt_for_update(db: Session, attempt_id) -> Attempt | None:
+    if not hasattr(db, "execute"):
+        return db.get(Attempt, attempt_id)
+    return db.scalar(
+        select(Attempt)
+        .where(Attempt.id == attempt_id)
+        .with_for_update()
+    )
+
+
 def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
     answers = db.scalars(
         select(AttemptAnswer).where(AttemptAnswer.attempt_id == attempt.id)
@@ -831,6 +841,59 @@ def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
         "grade": _grade_label_for_score(attempt.exam, score, db),
         "pending_manual_review": False,
     }
+
+
+def _backfill_auto_graded_answers(attempt: Attempt, db: Session) -> bool:
+    answers = db.scalars(
+        select(AttemptAnswer)
+        .options(joinedload(AttemptAnswer.question))
+        .where(AttemptAnswer.attempt_id == attempt.id, AttemptAnswer.points_earned.is_(None))
+    ).all()
+    if not answers:
+        return False
+
+    exam_settings = exam_runtime_settings(attempt.exam) if attempt.exam else {}
+    negative_marking = bool((exam_settings or {}).get("negative_marking"))
+    neg_mark_value = float((exam_settings or {}).get("neg_mark_value") or 0)
+    neg_mark_type = str((exam_settings or {}).get("neg_mark_type") or "points").lower()
+    changed = False
+
+    for answer in answers:
+        question = answer.question
+        if not question or question.exam_id != attempt.exam_id:
+            continue
+        if _question_requires_manual_review(question, answer.answer):
+            continue
+
+        has_content = _answer_has_content(answer.answer)
+        if not has_content:
+            answer.is_correct = None
+            answer.points_earned = 0.0
+            db.add(answer)
+            changed = True
+            continue
+
+        is_correct, points_earned = _evaluate_answer(question, answer.answer)
+        if (
+            points_earned == 0.0
+            and negative_marking
+            and neg_mark_value > 0
+            and has_content
+        ):
+            if neg_mark_type == "points":
+                points_earned = -min(neg_mark_value, float(question.points or 0))
+            else:
+                points_earned = -(float(question.points or 0) * neg_mark_value)
+        answer.is_correct = is_correct
+        answer.points_earned = points_earned
+        db.add(answer)
+        changed = True
+
+    if changed:
+        db.commit()
+        _invalidate_attempt_list_cache()
+        db.refresh(attempt)
+    return changed
 
 
 def _pending_manual_review_for_attempt(attempt: Attempt, db: Session) -> bool:
@@ -1286,7 +1349,7 @@ async def submit_answer(
     current=Depends(get_current_user),
 ):
     attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
-    attempt = db.get(Attempt, attempt_pk)
+    attempt = _load_attempt_for_update(db, attempt_pk)
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     _ensure_attempt_access(db, attempt, current)
@@ -1371,7 +1434,7 @@ async def submit_attempt(
     current=Depends(get_current_user),
 ):
     attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
-    attempt = db.get(Attempt, attempt_pk)
+    attempt = _load_attempt_for_update(db, attempt_pk)
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
     _ensure_attempt_access(db, attempt, current)
@@ -1514,6 +1577,7 @@ async def finalize_attempt_review(
     if attempt.status == AttemptStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Attempt must be submitted before review")
 
+    _backfill_auto_graded_answers(attempt, db)
     progress = _calculate_attempt_review_progress(attempt, db)
     if progress["manual_total"] > 0 and progress["pending_manual_review"]:
         raise HTTPException(status_code=409, detail="Review all manual answers before finalizing")

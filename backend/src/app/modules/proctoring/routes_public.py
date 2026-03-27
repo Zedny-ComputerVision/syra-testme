@@ -1032,40 +1032,76 @@ def _auto_submit_attempt(
     request_ip: str | None = None,
 ) -> None:
     timestamp = occurred_at or datetime.now(timezone.utc)
-    if attempt.status != AttemptStatus.SUBMITTED:
-        attempt.status = AttemptStatus.SUBMITTED
-        attempt.submitted_at = timestamp
-        # Auto-score so the learner sees results immediately
-        try:
-            from ..attempts.routes_public import _auto_score_attempt
-            score_result = _auto_score_attempt(attempt, db)
-            if score_result.get("score") is not None:
-                attempt.score = score_result["score"]
-                attempt.grade = score_result.get("grade")
-        except Exception as score_err:
-            logger.warning("Auto-score failed during forced submit for attempt %s: %s", attempt.id, score_err)
-        db.add(attempt)
-        db.commit()
+    from ...db.session import SessionLocal
+    from ..attempts.routes_public import _auto_score_attempt, _invalidate_attempt_list_cache
+
+    should_notify = False
     exam_title = attempt.exam.title if attempt.exam else "Exam"
-    notify_user(
-        db,
-        attempt.user_id,
-        "Exam Auto-Submitted",
-        f"Your attempt for '{exam_title}' was auto-submitted due to multiple proctoring violations.",
-        f"/attempts/{attempt.id}",
-    )
-    try:
-        write_audit_log(
-            db,
-            actor_user_id,
-            "ATTEMPT_AUTO_SUBMITTED",
-            "attempt",
-            str(attempt.id),
-            f"Auto-submitted due to {violation_count} violations. {reason}".strip(),
-            request_ip,
+
+    with SessionLocal() as submit_db:
+        fresh_attempt = submit_db.scalar(
+            select(Attempt)
+            .where(Attempt.id == attempt.id)
+            .with_for_update()
         )
-    except Exception as exc:
-        logger.warning("Failed to write auto-submit audit log for attempt %s: %s", attempt.id, exc)
+        if not fresh_attempt:
+            return
+
+        should_notify = fresh_attempt.status not in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}
+        should_score = should_notify or (
+            fresh_attempt.status == AttemptStatus.SUBMITTED and fresh_attempt.score is None
+        )
+
+        if should_notify:
+            fresh_attempt.status = AttemptStatus.SUBMITTED
+            fresh_attempt.submitted_at = timestamp
+        elif fresh_attempt.submitted_at is None and fresh_attempt.status == AttemptStatus.SUBMITTED:
+            fresh_attempt.submitted_at = timestamp
+
+        if should_score:
+            try:
+                score_result = _auto_score_attempt(fresh_attempt, submit_db)
+                if score_result.get("score") is not None:
+                    fresh_attempt.score = score_result["score"]
+                    fresh_attempt.grade = score_result.get("grade")
+            except Exception as score_err:
+                logger.warning("Auto-score failed during forced submit for attempt %s: %s", fresh_attempt.id, score_err)
+
+        if should_notify or should_score:
+            submit_db.add(fresh_attempt)
+            submit_db.commit()
+            submit_db.refresh(fresh_attempt)
+            _invalidate_attempt_list_cache()
+
+        attempt.status = fresh_attempt.status
+        attempt.submitted_at = fresh_attempt.submitted_at
+        attempt.score = fresh_attempt.score
+        attempt.grade = fresh_attempt.grade
+        if fresh_attempt.exam and fresh_attempt.exam.title:
+            exam_title = fresh_attempt.exam.title
+
+        if not should_notify:
+            return
+
+        notify_user(
+            submit_db,
+            fresh_attempt.user_id,
+            "Exam Auto-Submitted",
+            f"Your attempt for '{exam_title}' was auto-submitted due to multiple proctoring violations.",
+            f"/attempts/{fresh_attempt.id}",
+        )
+        try:
+            write_audit_log(
+                submit_db,
+                actor_user_id,
+                "ATTEMPT_AUTO_SUBMITTED",
+                "attempt",
+                str(fresh_attempt.id),
+                f"Auto-submitted due to {violation_count} violations. {reason}".strip(),
+                request_ip,
+            )
+        except Exception as exc:
+            logger.warning("Failed to write auto-submit audit log for attempt %s: %s", fresh_attempt.id, exc)
 
 
 def _load_attempt_events(db: Session, attempt_id) -> list[ProctoringEvent]:

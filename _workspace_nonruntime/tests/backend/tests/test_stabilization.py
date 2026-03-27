@@ -920,6 +920,8 @@ def test_review_attempt_answer_and_finalize_review_publish_score():
             if self.calls == 1:
                 return DummyScalarResult([text_answer, mcq_answer])
             if self.calls == 2:
+                return DummyScalarResult([text_answer, mcq_answer])
+            if self.calls == 3:
                 return DummyScalarResult([text_question, mcq_question])
             return DummyScalarResult([])
 
@@ -997,6 +999,8 @@ def test_finalize_attempt_review_requires_all_manual_answers_to_be_scored():
         def scalars(self, _query):
             self.calls += 1
             if self.calls == 1:
+                return DummyScalarResult([text_answer])
+            if self.calls == 2:
                 return DummyScalarResult([text_answer])
             return DummyScalarResult([text_question])
 

@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta, timezone
+from threading import Event, Thread
+import time
 
+from sqlalchemy import select
+
+import src.app.modules.proctoring.routes_public as proctoring_routes
 from src.app.core.security import create_access_token
-from src.app.models import GradingScale, RoleEnum, Schedule, User
+from src.app.models import Attempt, AttemptAnswer, GradingScale, Question, RoleEnum, Schedule, User
 
 
 def _assign_exam_to_learner(client, admin_headers, exam_id, learner_id, db):
@@ -252,6 +257,267 @@ def test_manual_review_finalize_sets_graded_status(client, admin_headers, learne
     body = finalize_response.json()
     assert body["status"] == "GRADED"
     assert body["score"] == 100.0
+
+
+def test_auto_submit_waits_for_inflight_answer_commit_and_scores_it(
+    client,
+    admin_headers,
+    learner_headers,
+    learner_user,
+    db,
+    session_factory,
+):
+    exam_response = client.post(
+        "/api/exams/",
+        headers=admin_headers,
+        json={
+            "title": "Auto Submit Race Test",
+            "exam_type": "TEXT",
+            "status": "CLOSED",
+            "time_limit_minutes": 30,
+            "max_attempts": 2,
+            "passing_score": 50,
+        },
+    )
+    assert exam_response.status_code == 200
+    exam_id = exam_response.json()["id"]
+
+    essay_question_response = client.post(
+        "/api/questions/",
+        headers=admin_headers,
+        json={
+            "exam_id": exam_id,
+            "question_type": "TEXT",
+            "text": "Explain event bubbling.",
+            "points": 1,
+            "order": 0,
+        },
+    )
+    assert essay_question_response.status_code == 200
+    essay_question_id = essay_question_response.json()["id"]
+
+    mcq_question_response = client.post(
+        "/api/questions/",
+        headers=admin_headers,
+        json={
+            "exam_id": exam_id,
+            "question_type": "MCQ",
+            "text": "What is 2 + 2?",
+            "options": ["3", "4"],
+            "correct_answer": "B",
+            "points": 1,
+            "order": 1,
+        },
+    )
+    assert mcq_question_response.status_code == 200
+    mcq_question_id = mcq_question_response.json()["id"]
+
+    open_response = client.put(
+        f"/api/exams/{exam_id}",
+        headers=admin_headers,
+        json={"status": "OPEN"},
+    )
+    assert open_response.status_code == 200
+    _assign_exam_to_learner(client, admin_headers, exam_id, learner_user.id, db)
+
+    attempt_response = client.post(
+        "/api/attempts/",
+        headers=learner_headers,
+        json={"exam_id": exam_id},
+    )
+    assert attempt_response.status_code == 200
+    attempt_id = attempt_response.json()["id"]
+
+    essay_answer_response = client.post(
+        f"/api/attempts/{attempt_id}/answers",
+        headers=learner_headers,
+        json={"question_id": essay_question_id, "answer": "It propagates to ancestor elements."},
+    )
+    assert essay_answer_response.status_code == 200
+
+    stale_db = session_factory()
+    attempt_pk = stale_db.get(Attempt, attempt_id).id
+    stale_attempt = stale_db.get(Attempt, attempt_pk)
+
+    lock_ready = Event()
+
+    def _commit_mcq_answer():
+        worker_db = session_factory()
+        try:
+            locked_attempt = worker_db.scalar(
+                select(Attempt).where(Attempt.id == attempt_pk).with_for_update()
+            )
+            assert locked_attempt is not None
+            worker_db.add(
+                AttemptAnswer(
+                    attempt_id=locked_attempt.id,
+                    question_id=mcq_question_id,
+                    answer="B",
+                )
+            )
+            lock_ready.set()
+            time.sleep(0.3)
+            worker_db.commit()
+        finally:
+            worker_db.close()
+
+    writer = Thread(target=_commit_mcq_answer)
+    writer.start()
+    assert lock_ready.wait(timeout=5)
+
+    proctoring_routes._auto_submit_attempt(
+        stale_db,
+        stale_attempt,
+        violation_count=3,
+        reason="Auto-submitted during proctoring test",
+    )
+    writer.join(timeout=5)
+    assert not writer.is_alive()
+
+    verify_db = session_factory()
+    try:
+        persisted_attempt = verify_db.get(Attempt, attempt_pk)
+        assert persisted_attempt is not None
+        assert persisted_attempt.status.value == "SUBMITTED"
+        assert persisted_attempt.score == 50.0
+
+        answers = verify_db.scalars(
+            select(AttemptAnswer)
+            .where(AttemptAnswer.attempt_id == attempt_pk)
+            .order_by(AttemptAnswer.question_id)
+        ).all()
+        assert len(answers) == 2
+        mcq_answer = next(answer for answer in answers if str(answer.question_id) == mcq_question_id)
+        essay_answer = next(answer for answer in answers if str(answer.question_id) == essay_question_id)
+        assert mcq_answer.points_earned == 1.0
+        assert essay_answer.points_earned is None
+    finally:
+        verify_db.close()
+        stale_db.close()
+
+
+def test_finalize_attempt_review_backfills_missing_auto_scores(
+    client,
+    admin_headers,
+    learner_headers,
+    learner_user,
+    db,
+):
+    exam_response = client.post(
+        "/api/exams/",
+        headers=admin_headers,
+        json={
+            "title": "Manual Review Backfill Test",
+            "exam_type": "TEXT",
+            "status": "CLOSED",
+            "time_limit_minutes": 30,
+            "max_attempts": 2,
+            "passing_score": 50,
+        },
+    )
+    assert exam_response.status_code == 200
+    exam_id = exam_response.json()["id"]
+
+    essay_question_response = client.post(
+        "/api/questions/",
+        headers=admin_headers,
+        json={
+            "exam_id": exam_id,
+            "question_type": "TEXT",
+            "text": "Explain event bubbling.",
+            "points": 1,
+            "order": 0,
+        },
+    )
+    assert essay_question_response.status_code == 200
+    essay_question_id = essay_question_response.json()["id"]
+
+    mcq_question_response = client.post(
+        "/api/questions/",
+        headers=admin_headers,
+        json={
+            "exam_id": exam_id,
+            "question_type": "MCQ",
+            "text": "What is 2 + 2?",
+            "options": ["3", "4"],
+            "correct_answer": "B",
+            "points": 1,
+            "order": 1,
+        },
+    )
+    assert mcq_question_response.status_code == 200
+    mcq_question_id = mcq_question_response.json()["id"]
+
+    open_response = client.put(
+        f"/api/exams/{exam_id}",
+        headers=admin_headers,
+        json={"status": "OPEN"},
+    )
+    assert open_response.status_code == 200
+    _assign_exam_to_learner(client, admin_headers, exam_id, learner_user.id, db)
+
+    attempt_response = client.post(
+        "/api/attempts/",
+        headers=learner_headers,
+        json={"exam_id": exam_id},
+    )
+    assert attempt_response.status_code == 200
+    attempt_id = attempt_response.json()["id"]
+
+    essay_answer_response = client.post(
+        f"/api/attempts/{attempt_id}/answers",
+        headers=learner_headers,
+        json={"question_id": essay_question_id, "answer": "It propagates to ancestor elements."},
+    )
+    assert essay_answer_response.status_code == 200
+    essay_answer_id = essay_answer_response.json()["id"]
+
+    mcq_answer_response = client.post(
+        f"/api/attempts/{attempt_id}/answers",
+        headers=learner_headers,
+        json={"question_id": mcq_question_id, "answer": "B"},
+    )
+    assert mcq_answer_response.status_code == 200
+
+    submit_response = client.post(
+        f"/api/attempts/{attempt_id}/submit",
+        headers=learner_headers,
+    )
+    assert submit_response.status_code == 200
+    assert submit_response.json()["score"] == 50.0
+    assert submit_response.json()["pending_manual_review"] is True
+
+    mcq_answer = db.scalar(
+        select(AttemptAnswer).where(
+            AttemptAnswer.attempt_id == attempt_id,
+            AttemptAnswer.question_id == mcq_question_id,
+        )
+    )
+    assert mcq_answer is not None
+    mcq_answer.is_correct = None
+    mcq_answer.points_earned = None
+    db.add(mcq_answer)
+    db.commit()
+
+    review_response = client.post(
+        f"/api/attempts/{attempt_id}/answers/{essay_answer_id}/review",
+        headers=admin_headers,
+        json={"points_earned": 1},
+    )
+    assert review_response.status_code == 200
+
+    finalize_response = client.post(
+        f"/api/attempts/{attempt_id}/finalize-review",
+        headers=admin_headers,
+    )
+
+    assert finalize_response.status_code == 200
+    body = finalize_response.json()
+    assert body["status"] == "GRADED"
+    assert body["score"] == 100.0
+
+    db.refresh(mcq_answer)
+    assert mcq_answer.points_earned == 1.0
 
 
 def test_admin_attempt_list_only_shows_owned_exam_attempts(client, admin_headers, learner_headers, learner_user, make_user, db):
