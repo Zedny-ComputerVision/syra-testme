@@ -473,20 +473,17 @@ export default function AdminNewTestWizard() {
       return
     }
     try {
-      const { data } = await adminApi.schedules()
-      const examSchedules = (data || []).filter((schedule) => String(schedule.exam_id) === String(targetExamId))
-      const nextAssigned = examSchedules.map((schedule) => {
-        const learner = users.find((user) => String(user.id) === String(schedule.user_id))
-        return {
-          id: schedule.id,
-          userId: schedule.user_id,
-          user: learner?.user_id || learner?.name || String(schedule.user_id).slice(0, 8),
-          mode: schedule.access_mode || 'OPEN',
-          at: schedule.scheduled_at || '',
-        }
-      })
+      const { data } = await adminApi.schedules({ params: { exam_id: targetExamId } })
+      const examSchedules = readPaginatedItems(data)
+      const nextAssigned = examSchedules.map((schedule) => ({
+        id: schedule.id,
+        userId: schedule.user_id,
+        user: schedule.user_student_id || schedule.user_name || String(schedule.user_id).slice(0, 8),
+        mode: schedule.access_mode || 'OPEN',
+        at: schedule.scheduled_at || '',
+      }))
       setAssignedSessions(nextAssigned)
-      setSelectedUsers(examSchedules.map((schedule) => schedule.user_id))
+      setSelectedUsers(examSchedules.map((schedule) => String(schedule.user_id)))
       if (examSchedules.length > 0) {
         const firstSchedule = examSchedules[0]
         setAccessMode(firstSchedule.access_mode || 'OPEN')
@@ -500,7 +497,7 @@ export default function AdminNewTestWizard() {
       setAssignedSessions([])
       setSelectedUsers([])
     }
-  }, [examId, users])
+  }, [examId])
 
   const handleCreateCourseInline = async () => {
     if (!newCourseTitle.trim()) {
@@ -677,7 +674,7 @@ export default function AdminNewTestWizard() {
 
   useEffect(() => {
     loadAssignedSessions(examId)
-  }, [examId, users, loadAssignedSessions])
+  }, [examId, loadAssignedSessions])
 
   const applyTemplate = (tplId) => {
     const tpl = examTemplates.find(t => t.id === tplId)
@@ -1279,7 +1276,7 @@ export default function AdminNewTestWizard() {
     setSelectedUsers((prev) => {
       const merged = new Map(prev.map((id) => [String(id), id]))
       incomingIds.forEach((id) => {
-        merged.set(String(id), id)
+        merged.set(String(id), String(id))
       })
       return Array.from(merged.values())
     })
@@ -1289,7 +1286,7 @@ export default function AdminNewTestWizard() {
     setSelectedUsers((prev) => (
       prev.some((id) => String(id) === String(uid))
         ? prev.filter((id) => String(id) !== String(uid))
-        : [...prev, uid]
+        : [...prev, String(uid)]
     ))
   }
 
@@ -1542,7 +1539,7 @@ export default function AdminNewTestWizard() {
     }
     setPanelError('')
     setBulkLearnerFeedback(`Selected all ${users.length} learner${users.length === 1 ? '' : 's'}.`)
-    setSelectedUsers(users.map((user) => user.id))
+    setSelectedUsers(users.map((user) => String(user.id)))
   }
 
   const handleSelectVisibleLearners = () => {
@@ -1551,7 +1548,7 @@ export default function AdminNewTestWizard() {
       return
     }
     setPanelError('')
-    mergeLearnerSelection(filteredUsers.map((user) => user.id))
+    mergeLearnerSelection(filteredUsers.map((user) => String(user.id)))
     setBulkLearnerFeedback(`Selected ${filteredUsers.length} learner${filteredUsers.length === 1 ? '' : 's'} from the filtered list.`)
   }
 
@@ -2737,7 +2734,7 @@ export default function AdminNewTestWizard() {
               <div className={styles.userList}>
                 {filteredUsers.map(u => (
                   <label key={u.id} className={styles.userItem}>
-                    <input type="checkbox" checked={selectedUsers.includes(u.id)} onChange={() => toggleUser(u.id)} />
+                    <input type="checkbox" checked={selectedLearnerKeys.has(String(u.id))} onChange={() => toggleUser(u.id)} />
                     <span>{u.user_id} - {u.name || u.email || 'Learner'}</span>
                   </label>
                 ))}

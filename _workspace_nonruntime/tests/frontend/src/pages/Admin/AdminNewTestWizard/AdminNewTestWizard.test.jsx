@@ -16,6 +16,7 @@ const learnersForSchedulingMock = vi.fn()
 const examTemplatesMock = vi.fn()
 const createTestMock = vi.fn()
 const updateTestMock = vi.fn()
+const getTestMock = vi.fn()
 const getQuestionsMock = vi.fn()
 const seedExamFromPoolMock = vi.fn()
 const attemptsMock = vi.fn()
@@ -39,6 +40,7 @@ vi.mock('../../../services/admin.service', () => ({
     examTemplates: (...args) => examTemplatesMock(...args),
     createTest: (...args) => createTestMock(...args),
     updateTest: (...args) => updateTestMock(...args),
+    getTest: (...args) => getTestMock(...args),
     getQuestions: (...args) => getQuestionsMock(...args),
     seedExamFromPool: (...args) => seedExamFromPoolMock(...args),
     attempts: (...args) => attemptsMock(...args),
@@ -63,11 +65,11 @@ vi.mock('../ExamQuestionPanel/ExamQuestionPanel', () => ({
   default: () => <div>Question Panel</div>,
 }))
 
-function renderWizard() {
+function renderWizard(initialEntry = '/admin/tests/new', routePath = '/admin/tests/new') {
   return render(
-    <MemoryRouter initialEntries={['/admin/tests/new']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <MemoryRouter initialEntries={[initialEntry]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
-        <Route path="/admin/tests/new" element={<AdminNewTestWizard />} />
+        <Route path={routePath} element={<AdminNewTestWizard />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -87,6 +89,7 @@ describe('AdminNewTestWizard', () => {
     examTemplatesMock.mockResolvedValue({ data: [] })
     createTestMock.mockResolvedValue({ data: { id: 'test-1' } })
     updateTestMock.mockResolvedValue({ data: {} })
+    getTestMock.mockResolvedValue({ data: null })
     getQuestionsMock.mockResolvedValue({ data: [] })
     seedExamFromPoolMock.mockResolvedValue({ data: {} })
     attemptsMock.mockResolvedValue({ data: [] })
@@ -269,5 +272,58 @@ describe('AdminNewTestWizard', () => {
     await waitFor(() => expect(screen.getByText('Matched 2 learners.')).toBeTruthy())
     expect(screen.getByText('Selected: 2')).toBeTruthy()
   }, 10000)
+
+  it('does not reload assigned sessions again when learner lookups finish in edit mode', async () => {
+    let resolveLearners
+    const learnersPromise = new Promise((resolve) => {
+      resolveLearners = resolve
+    })
+
+    getTestMock.mockResolvedValue({
+      data: {
+        id: 'test-1',
+        name: 'Existing Test',
+        type: 'MCQ',
+        status: 'DRAFT',
+        course_id: 'course-1',
+        node_id: 'node-1',
+        attempts_allowed: 1,
+        time_limit_minutes: 30,
+        runtime_settings: {},
+        proctoring_config: {},
+        certificate: null,
+      },
+    })
+    schedulesMock.mockResolvedValue({
+      data: [
+        {
+          id: 'schedule-1',
+          exam_id: 'test-1',
+          user_id: 'learner-1',
+          user_student_id: 'LIV1001',
+          user_name: 'Learner One',
+          scheduled_at: '2026-03-27T10:00:00Z',
+          access_mode: 'OPEN',
+        },
+      ],
+    })
+    learnersForSchedulingMock.mockImplementation(() => learnersPromise)
+
+    renderWizard('/admin/tests/test-1/edit', '/admin/tests/:id/edit')
+
+    await waitFor(() => expect(getTestMock).toHaveBeenCalledWith('test-1'))
+    await waitFor(() => expect(schedulesMock).toHaveBeenCalledTimes(1))
+
+    resolveLearners({
+      data: [
+        { id: 'learner-1', role: 'LEARNER', user_id: 'LIV1001', name: 'Learner One', email: 'one@example.com' },
+        { id: 'learner-2', role: 'LEARNER', user_id: 'LIV1002', name: 'Learner Two', email: 'two@example.com' },
+      ],
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    expect(schedulesMock).toHaveBeenCalledTimes(1)
+  })
 
 })
