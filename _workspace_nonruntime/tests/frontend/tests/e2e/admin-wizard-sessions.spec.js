@@ -78,17 +78,21 @@ test.describe('Admin New Test Wizard session editing', () => {
 
     await learnerTwoLabel.locator('input[type="checkbox"]').check()
     await page.getByRole('button', { name: /Save assignments/i }).click()
+    await expect(page.getByText(/Assigned sessions \(1\)/)).toBeVisible({ timeout: 15000 })
     await expect.poll(async () => {
-      const schedulesRes = await api.get('schedules/')
+      const schedulesRes = await api.get('schedules/', {
+        params: { exam_id: createdTest.id },
+      })
       const schedulesBody = await schedulesRes.json()
       const schedules = schedulesBody.items || schedulesBody
-      return schedules.filter((schedule) => String(schedule.exam_id) === String(createdTest.id))
+      return schedules
     }, { timeout: 15000 }).toHaveLength(1)
 
-    const schedulesRes = await api.get('schedules/')
+    const schedulesRes = await api.get('schedules/', {
+      params: { exam_id: createdTest.id },
+    })
     const schedulesBody = await schedulesRes.json()
     const schedules = schedulesBody.items || schedulesBody
-    const testSchedules = schedules.filter((schedule) => String(schedule.exam_id) === String(createdTest.id))
-    expect(String(testSchedules[0].user_id)).toBe(String(learnerTwoUser.id))
+    expect(String(schedules[0].user_id)).toBe(String(learnerTwoUser.id))
   })
 })

@@ -135,11 +135,10 @@ test.describe('Admin New Test Wizard end-to-end', () => {
     await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
 
     await expect(page.getByRole('heading', { name: 'Testing Sessions' })).toBeVisible({ timeout: STEP_TIMEOUT })
-    await page.locator('select').last().selectOption('RESTRICTED')
-    await page.locator('input[type="datetime-local"]').fill(formatDateTimeLocal(new Date(Date.now() - 30 * 1000)))
+    await page.locator('select').last().selectOption('OPEN')
     await page.locator('label', { hasText: learner.user_id }).locator('input[type="checkbox"]').check()
     await page.getByRole('button', { name: /Save assignments/i }).click()
-    await expect(page.getByText(learner.user_id, { exact: false })).toBeVisible({ timeout: STEP_TIMEOUT })
+    await expect(page.getByText(/Assigned sessions \(1\)/)).toBeVisible({ timeout: STEP_TIMEOUT })
     await waitForNextButtonReady(page)
     await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
 

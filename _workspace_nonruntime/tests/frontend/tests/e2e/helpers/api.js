@@ -39,17 +39,19 @@ export async function ensureAdmin(context) {
     cachedAdminToken = null
   }
   // Try login with known admin password candidates.
-  for (const candidate of candidatePasswords) {
-    const res = await base.post('auth/login', { data: { email: adminEmail, password: candidate } })
-    if (res.status() === 429) {
-      await sleep(1500)
-      continue
-    }
-    if (res.ok()) {
-      const body = await res.json()
-      cachedAdminPassword = candidate
-      cachedAdminToken = body.access_token
-      return { token: body.access_token, email: adminEmail, password: candidate }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (const candidate of candidatePasswords) {
+      const res = await base.post('auth/login', { data: { email: adminEmail, password: candidate } })
+      if (res.status() === 429 || res.status() >= 500) {
+        await sleep(1500 * (attempt + 1))
+        continue
+      }
+      if (res.ok()) {
+        const body = await res.json()
+        cachedAdminPassword = candidate
+        cachedAdminToken = body.access_token
+        return { token: body.access_token, email: adminEmail, password: candidate }
+      }
     }
   }
   // Try setup (only allowed when no admins exist)
@@ -62,17 +64,19 @@ export async function ensureAdmin(context) {
       role: 'ADMIN',
     },
   })
-  for (const candidate of candidatePasswords) {
-    const res = await base.post('auth/login', { data: { email: adminEmail, password: candidate } })
-    if (res.status() === 429) {
-      await sleep(1500)
-      continue
-    }
-    if (res.ok()) {
-      const body = await res.json()
-      cachedAdminPassword = candidate
-      cachedAdminToken = body.access_token
-      return { token: body.access_token, email: adminEmail, password: candidate }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (const candidate of candidatePasswords) {
+      const res = await base.post('auth/login', { data: { email: adminEmail, password: candidate } })
+      if (res.status() === 429 || res.status() >= 500) {
+        await sleep(1500 * (attempt + 1))
+        continue
+      }
+      if (res.ok()) {
+        const body = await res.json()
+        cachedAdminPassword = candidate
+        cachedAdminToken = body.access_token
+        return { token: body.access_token, email: adminEmail, password: candidate }
+      }
     }
   }
   throw new Error('Unable to create/login admin')

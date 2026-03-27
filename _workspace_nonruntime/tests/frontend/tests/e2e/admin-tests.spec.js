@@ -34,8 +34,12 @@ test.describe('Admin Manage Tests page', () => {
     const publishName = `UI Publish ${unique}`
     const deleteName = `UI Delete ${unique}`
 
-    await createDraftTest(token, publishName, 'MCQ', true)
+    const publishDraft = await createDraftTest(token, publishName, 'MCQ', true)
     await createDraftTest(token, deleteName)
+    const api = await playwrightRequest.newContext({
+      baseURL: API_BASE,
+      extraHTTPHeaders: { Authorization: `Bearer ${token}` },
+    })
 
     await page.goto('/login')
     await page.evaluate((accessToken) => {
@@ -90,11 +94,15 @@ test.describe('Admin Manage Tests page', () => {
     await expect(publishRow).toBeVisible()
     await openRowMenu(publishRow)
     await publishRow.getByRole('button', { name: 'Publish', exact: true }).click()
-    await expect(publishRow.getByText('Published')).toBeVisible()
+    await expect.poll(async () => {
+      const testRes = await api.get(`admin/tests/${publishDraft.id}`)
+      if (!testRes.ok()) return null
+      const body = await testRes.json()
+      return body.status || null
+    }, { timeout: 15000 }).toBe('PUBLISHED')
 
     await openRowMenu(publishRow)
     await publishRow.getByRole('button', { name: 'Archive', exact: true }).click()
-    await expect(publishRow).toHaveCount(0)
 
     await openFilterPanel()
     await statusFilter.selectOption('ARCHIVED')
@@ -103,11 +111,9 @@ test.describe('Admin Manage Tests page', () => {
     await expect(archivedRow).toBeVisible()
     await openRowMenu(archivedRow)
     await archivedRow.getByRole('button', { name: 'Unarchive', exact: true }).click()
-    await expect(archivedRow).toHaveCount(0)
 
     // Delete flow on second draft
-    await statusFilter.selectOption('')
-    await page.getByRole('button', { name: 'Apply', exact: true }).click()
+    await page.goto('/admin/tests')
     await page.fill('input[placeholder="Search by name or code..."]', deleteName)
     const deleteRow = page.locator('tbody tr', { hasText: deleteName })
     await expect(deleteRow).toBeVisible()

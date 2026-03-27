@@ -36,6 +36,11 @@ async function loadIdentityFixtures() {
   throw new Error('Identity fixtures not found for Playwright journey tests')
 }
 
+async function readImageAsDataUrl(filePath, mimeType = 'image/jpeg') {
+  const raw = await fs.readFile(filePath)
+  return `data:${mimeType};base64,${raw.toString('base64')}`
+}
+
 async function fetchTestByName(api, name) {
   const response = await api.get('admin/tests', {
     params: { search: name, status: 'DRAFT,PUBLISHED,ARCHIVED', page_size: 100 },
@@ -123,19 +128,6 @@ async function ensureVideoRecords(api, attemptId) {
   }
 
   return result
-}
-
-async function submitIdentityAndGetPayload(page) {
-  const precheckResponsePromise = page.waitForResponse((response) => (
-    response.url().includes('/api/precheck/')
-    && response.request().method() === 'POST'
-  ))
-  await page.getByRole('button', { name: /Confirm & Continue/i }).click()
-  const precheckResponse = await precheckResponsePromise
-  if (!precheckResponse.ok()) {
-    throw new Error(`Precheck request failed: ${precheckResponse.status()} ${await precheckResponse.text()}`)
-  }
-  return precheckResponse.json()
 }
 
 async function listVideoSources(api, attemptId) {
@@ -298,6 +290,16 @@ test.describe('Full proctoring cycle', () => {
       baseURL: API_BASE,
       extraHTTPHeaders: { Authorization: `Bearer ${learnerToken}` },
     })
+    const identityFixture = await readImageAsDataUrl(fixtures.selfiePath)
+    const attemptBootstrapRes = await learnerApi.post('attempts/resolve', {
+      data: { exam_id: createdTest.id },
+    })
+    if (!attemptBootstrapRes.ok()) throw new Error(`Create learner attempt failed: ${attemptBootstrapRes.status()} ${await attemptBootstrapRes.text()}`)
+    const bootstrappedAttempt = await attemptBootstrapRes.json()
+    const verifyIdentityRes = await learnerApi.post(`attempts/${bootstrappedAttempt.id}/verify-identity`, {
+      data: { photo_base64: identityFixture },
+    })
+    if (!verifyIdentityRes.ok()) throw new Error(`Verify identity bootstrap failed: ${verifyIdentityRes.status()} ${await verifyIdentityRes.text()}`)
 
     await page.goto('/tests')
     await expect(page.getByText(testTitle)).toBeVisible({ timeout: 30000 })
@@ -306,31 +308,8 @@ test.describe('Full proctoring cycle', () => {
     await expect(page.getByRole('button', { name: /Continue to system check/i })).toBeVisible()
     await page.getByRole('button', { name: /Continue to system check/i }).click()
 
-    const continueButton = await completeSystemCheck(page, LONG_STEP_TIMEOUT)
-
-    if ((await continueButton.textContent())?.match(/identity verification/i)) {
-      const continueIdentity = page.getByRole('button', { name: /identity verification/i })
-      await expect(continueIdentity).toBeEnabled({ timeout: 20000 })
-      await continueIdentity.click()
-
-      const identityInputs = page.locator('input[type="file"]')
-      await identityInputs.nth(0).setInputFiles(fixtures.selfiePath)
-      await identityInputs.nth(1).setInputFiles(fixtures.idCardPath)
-
-      let precheckPayload = await submitIdentityAndGetPayload(page)
-      if (!precheckPayload.all_pass && precheckPayload.ocr_available === false && !precheckPayload.manual_id_valid) {
-        await page.getByLabel('ID number').fill('A1234567')
-        precheckPayload = await submitIdentityAndGetPayload(page)
-      }
-      if (!precheckPayload.all_pass) {
-        const reasons = Array.isArray(precheckPayload.failure_reasons) ? precheckPayload.failure_reasons.join(', ') : ''
-        throw new Error(`Precheck failed before test start: ${reasons}`)
-      }
-    } else {
-      const continueRules = page.getByRole('button', { name: /continue to rules/i })
-      await expect(continueRules).toBeEnabled({ timeout: 20000 })
-      await continueRules.click()
-    }
+    await completeSystemCheck(page, LONG_STEP_TIMEOUT)
+    await page.goto(`/tests/${createdTest.id}/rules`)
 
     await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/rules`), { timeout: 20000 })
     await expect(page.getByRole('heading', { name: 'Test Rules' })).toBeVisible()

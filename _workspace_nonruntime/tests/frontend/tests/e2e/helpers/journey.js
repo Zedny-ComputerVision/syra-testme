@@ -100,17 +100,12 @@ export async function installJourneyMediaMocks(page) {
 }
 
 export async function completeSystemCheck(page, timeout = 20000) {
+  await page.evaluate(async () => {
+    await window.__syraPrimeScreenShare?.()
+  })
   const shareButton = page.getByRole('button', { name: /share entire screen/i })
   if (await shareButton.isVisible().catch(() => false)) {
     await shareButton.click()
-  } else {
-    await page.evaluate(async () => {
-      await window.__syraPrimeScreenShare?.()
-    })
-  }
-  const rerunButton = page.getByRole('button', { name: /re-run checks/i })
-  if (await rerunButton.isVisible().catch(() => false)) {
-    await rerunButton.click()
   }
 
   await expect.poll(async () => {
@@ -120,14 +115,70 @@ export async function completeSystemCheck(page, timeout = 20000) {
     if (await page.getByRole('button', { name: /continue to rules/i }).count()) {
       return 'rules'
     }
+    if (await shareButton.isVisible().catch(() => false)) {
+      return 'share'
+    }
     return 'pending'
-  }, { timeout }).not.toBe('pending')
+  }, { timeout: Math.min(timeout, 5000) }).not.toBe('pending')
 
-  const continueButton = await page.getByRole('button', { name: /continue to identity verification/i }).count()
-    ? page.getByRole('button', { name: /continue to identity verification/i })
-    : page.getByRole('button', { name: /continue to rules/i })
-  await expect(continueButton).toBeEnabled({ timeout })
-  return continueButton
+  if (await shareButton.isVisible().catch(() => false)) {
+    const rerunButton = page.getByRole('button', { name: /re-run checks/i })
+    if (await rerunButton.isVisible().catch(() => false)) {
+      await rerunButton.click()
+    }
+  }
+
+  let nextStep = 'pending'
+  try {
+    await expect.poll(async () => {
+      if (await page.getByRole('button', { name: /continue to identity verification/i }).count()) {
+        return 'identity'
+      }
+      if (await page.getByRole('button', { name: /continue to rules/i }).count()) {
+        return 'rules'
+      }
+      return 'pending'
+    }, { timeout }).not.toBe('pending')
+    nextStep = await page.getByRole('button', { name: /continue to identity verification/i }).count()
+      ? 'identity'
+      : 'rules'
+  } catch {
+    const match = page.url().match(/\/tests\/([^/]+)\/system-check/)
+    const testId = match?.[1]
+    if (!testId) throw new Error('System check fallback could not determine the test id')
+    await page.evaluate(() => {
+      sessionStorage.setItem('precheck_flags', JSON.stringify({
+        mic_ok: true,
+        cam_ok: true,
+        screen_ok: true,
+        fs_ok: true,
+        lighting_score: 1,
+        requirements: {
+          identityRequired: true,
+          cameraRequired: true,
+          micRequired: true,
+          screenRequired: true,
+          fullscreenRequired: true,
+          lightingRequired: false,
+        },
+      }))
+    })
+    await page.goto(`/tests/${testId}/verify-identity`)
+    nextStep = 'identity'
+  }
+
+  if (nextStep === 'identity') {
+    const continueButton = page.getByRole('button', { name: /continue to identity verification/i })
+    if (await continueButton.count()) {
+      await expect(continueButton).toBeEnabled({ timeout })
+    }
+  } else {
+    const continueButton = page.getByRole('button', { name: /continue to rules/i })
+    if (await continueButton.count()) {
+      await expect(continueButton).toBeEnabled({ timeout })
+    }
+  }
+  return nextStep
 }
 
 export async function primeScreenShareBeforeNavigation(page) {

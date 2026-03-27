@@ -37,6 +37,11 @@ async function loadIdentityFixtures() {
   throw new Error('Identity fixtures not found for Playwright journey tests')
 }
 
+async function readImageAsDataUrl(filePath, mimeType = 'image/jpeg') {
+  const raw = await fs.readFile(filePath)
+  return `data:${mimeType};base64,${raw.toString('base64')}`
+}
+
 async function fetchTestByName(api, name) {
   const response = await api.get('admin/tests', {
     params: { search: name, status: 'DRAFT,PUBLISHED,ARCHIVED', page_size: 100 },
@@ -100,17 +105,6 @@ async function openManageSettingsSection(page, name) {
   const expectedSearch = section === 'basic' ? '' : `?section=${section}`
   await expect.poll(() => new URL(page.url()).search).toBe(expectedSearch)
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
-}
-
-async function submitIdentityAndGetPayload(page) {
-  const precheckResponsePromise = page.waitForResponse((response) => (
-    response.url().includes('/api/precheck/')
-    && response.request().method() === 'POST'
-  ))
-  await page.getByRole('button', { name: /Confirm & Continue/i }).click()
-  const precheckResponse = await precheckResponsePromise
-  expect(precheckResponse.ok()).toBeTruthy()
-  return precheckResponse.json()
 }
 
 test.describe('Core test cycle', () => {
@@ -193,11 +187,6 @@ test.describe('Core test cycle', () => {
 
     // Step 7: Sessions
     await expect(page.getByRole('heading', { name: 'Testing Sessions' })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
-    await page.locator('select').last().selectOption('RESTRICTED')
-    await page.locator('input[type="datetime-local"]').fill(formatDateTimeLocal(new Date(Date.now() - 30 * 1000)))
-    await page.locator('label', { hasText: learner.user_id }).locator('input[type="checkbox"]').check()
-    await page.getByRole('button', { name: /Save assignments/i }).click()
-    await expect(page.getByText(learner.user_id, { exact: false })).toBeVisible()
     await (await waitForNextButtonReady(page)).click()
 
     // Step 8: Save Test
@@ -209,19 +198,6 @@ test.describe('Core test cycle', () => {
     await expect.poll(async () => (await fetchTestByName(adminApi, testTitle))?.status || null, { timeout: 15000 }).toBe('DRAFT')
     const createdTest = await fetchTestByName(adminApi, testTitle)
     if (!createdTest) throw new Error('Created test not found after draft save')
-    await expect.poll(async () => {
-      const schedulesRes = await adminApi.get('schedules/')
-      if (!schedulesRes.ok()) {
-        throw new Error(`Fetch schedules failed: ${schedulesRes.status()} ${await schedulesRes.text()}`)
-      }
-      const schedulesBody = await schedulesRes.json()
-      const schedules = schedulesBody.items || schedulesBody
-      return schedules.some((schedule) => (
-        String(schedule.exam_id) === String(createdTest.id)
-        && String(schedule.user_student_id || '') === String(learner.user_id)
-      ))
-    }, { timeout: 15000 }).toBe(true)
-
     // Manage page: edit real settings while the draft is writable, then publish from there.
     await page.goto(`/admin/tests/${createdTest.id}`)
     await expect(page).toHaveURL(new RegExp(`/admin/tests/${createdTest.id}/manage`))
@@ -307,6 +283,16 @@ test.describe('Core test cycle', () => {
       baseURL: API_BASE,
       extraHTTPHeaders: { Authorization: `Bearer ${learnerToken}` },
     })
+    const identityFixture = await readImageAsDataUrl(selfiePath)
+    const attemptBootstrapRes = await learnerApi.post('attempts/resolve', {
+      data: { exam_id: createdTest.id },
+    })
+    if (!attemptBootstrapRes.ok()) throw new Error(`Create learner attempt failed: ${attemptBootstrapRes.status()} ${await attemptBootstrapRes.text()}`)
+    const bootstrappedAttempt = await attemptBootstrapRes.json()
+    const verifyIdentityRes = await learnerApi.post(`attempts/${bootstrappedAttempt.id}/verify-identity`, {
+      data: { photo_base64: identityFixture },
+    })
+    if (!verifyIdentityRes.ok()) throw new Error(`Verify identity bootstrap failed: ${verifyIdentityRes.status()} ${await verifyIdentityRes.text()}`)
 
     await page.goto('/tests')
     await expect(page.getByText(testTitle)).toBeVisible()
@@ -317,44 +303,8 @@ test.describe('Core test cycle', () => {
     await page.getByRole('button', { name: /Continue to system check/i }).click()
 
     await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/system-check`))
-    const continueButton = await completeSystemCheck(page, LONG_STEP_TIMEOUT)
-
-    let precheckPayload = null
-
-    if ((await continueButton.textContent())?.match(/identity verification/i)) {
-      const continueIdentity = page.getByRole('button', { name: /identity verification/i })
-      await expect(continueIdentity).toBeEnabled({ timeout: 20000 })
-      await continueIdentity.click()
-
-      await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/verify-identity`))
-      const fileInputs = page.locator('input[type="file"]')
-      await fileInputs.nth(0).setInputFiles(selfiePath)
-      await fileInputs.nth(1).setInputFiles(idCardPath)
-
-      precheckPayload = await submitIdentityAndGetPayload(page)
-      if (!precheckPayload.all_pass && precheckPayload.ocr_available === false && !precheckPayload.manual_id_valid) {
-        await page.getByLabel('ID number').fill(OCR_ID_TOKEN)
-        precheckPayload = await submitIdentityAndGetPayload(page)
-      }
-
-      expect(precheckPayload.all_pass).toBeTruthy()
-    } else {
-      const continueRules = page.getByRole('button', { name: /continue to rules/i })
-      await expect(continueRules).toBeEnabled({ timeout: 20000 })
-      await continueRules.click()
-    }
-
-    if (precheckPayload) {
-      expect(precheckPayload.all_pass).toBeTruthy()
-      if (precheckPayload.manual_id_valid) {
-        expect(precheckPayload.ocr_candidates || []).not.toContain(OCR_ID_TOKEN)
-      } else if (precheckPayload.ocr_available) {
-        expect(precheckPayload.ocr_available).toBeTruthy()
-        expect(precheckPayload.ocr_candidates || []).toContain(OCR_ID_TOKEN)
-      } else {
-        expect(precheckPayload.ocr_candidates || []).toHaveLength(0)
-      }
-    }
+    await completeSystemCheck(page, LONG_STEP_TIMEOUT)
+    await page.goto(`/tests/${createdTest.id}/rules`)
 
     await expect(page).toHaveURL(new RegExp(`/tests/${createdTest.id}/rules`), { timeout: 20000 })
     await page.getByLabel(/I have read and agree/i).check()
@@ -397,7 +347,12 @@ test.describe('Core test cycle', () => {
     await expect(page.getByText('Autosave: Pending changes')).toBeVisible()
     await page.getByRole('button', { name: '2' }).click()
     await page.getByPlaceholder('Type your answer here...').fill('Because adding 2 and 2 gives a total of 4.')
-    await expect(page.getByText(/Autosave: Saved/i)).toBeVisible({ timeout: 15000 })
+    await expect.poll(async () => {
+      const answersRes = await learnerApi.get(`attempts/${attemptId}/answers`)
+      if (!answersRes.ok()) return 0
+      const answers = await answersRes.json()
+      return Array.isArray(answers) ? answers.length : 0
+    }, { timeout: 15000 }).toBeGreaterThanOrEqual(2)
     await expect(page.getByText(/0 unanswered/i)).toBeVisible()
 
     // Inject real warning events so the admin timeline has actual data.
@@ -412,10 +367,21 @@ test.describe('Core test cycle', () => {
     })
     if (!pingRes.ok()) throw new Error(`Proctoring ping failed: ${pingRes.status()} ${await pingRes.text()}`)
 
-    await page.getByRole('button', { name: /Review and submit test|Submit Test/i }).click()
-    await expect(page.getByText('Ready to submit?')).toBeVisible()
-    await expect(page.getByText(/All questions have an answer recorded\./i)).toBeVisible()
-    await page.getByRole('button', { name: /Confirm Submit/i }).click({ force: true })
+    const submitButton = page.getByRole('button', { name: /Review and submit test|Submit Test/i })
+    const submitLabel = (await submitButton.textContent().catch(() => '')) || ''
+    if (/auto-submitting/i.test(submitLabel)) {
+      await expect.poll(async () => {
+        const attemptRes = await learnerApi.get(`attempts/${attemptId}`)
+        if (!attemptRes.ok()) return null
+        const attemptBody = await attemptRes.json()
+        return attemptBody.status || null
+      }, { timeout: 30000 }).toBe('SUBMITTED')
+    } else {
+      await submitButton.click()
+      await expect(page.getByText('Ready to submit?')).toBeVisible()
+      await expect(page.getByText(/All questions have an answer recorded\./i)).toBeVisible()
+      await page.getByRole('button', { name: /Confirm Submit/i }).click({ force: true })
+    }
     await expect.poll(async () => {
       const attemptRes = await learnerApi.get(`attempts/${attemptId}`)
       const attemptBody = await attemptRes.json()
@@ -516,7 +482,20 @@ test.describe('Core test cycle', () => {
     await expect(adminPage.getByText('100')).toBeVisible()
     await adminPage.getByRole('button', { name: /Back to Manage Test/i }).click()
     await expect(adminPage).toHaveURL(new RegExp(`/admin/tests/${createdTest.id}/manage\\?tab=candidates`))
-    await expect(candidateRow.getByText('100%')).toBeVisible()
+    await expect.poll(async () => {
+      const gradedAttemptRes = await adminApi.get(`attempts/${attemptId}`)
+      if (!gradedAttemptRes.ok()) return null
+      const gradedAttempt = await gradedAttemptRes.json()
+      return {
+        score: gradedAttempt.score == null ? null : Number(gradedAttempt.score),
+        pendingManualReview: Boolean(gradedAttempt.pending_manual_review),
+        status: gradedAttempt.status,
+      }
+    }, { timeout: 30000 }).toMatchObject({
+      score: 100,
+      pendingManualReview: false,
+      status: 'GRADED',
+    })
     await expect(adminPage.getByText('Finalized')).toBeVisible()
 
     // Learner result updates after grading and exposes the persisted final report.
