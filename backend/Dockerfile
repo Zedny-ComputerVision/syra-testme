@@ -54,6 +54,7 @@ HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=10 \
 # and preloading would fork worker processes after the engine/pool already
 # exists in the master process. That leads to inherited DB connections and
 # intermittent request stalls under load.
-# WORKERS defaults to 2; override via docker-compose environment.
-ENV WORKERS=2
+# Live proctoring session tracking is process-local today, so the safe
+# production default is a single web worker unless a shared session bus is added.
+ENV WORKERS=1
 CMD ["sh", "-c", "gunicorn src.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${WORKERS} --timeout 600 --graceful-timeout 30 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips '*'"]

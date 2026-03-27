@@ -496,7 +496,7 @@ CLOUDFLARE_MEDIA_API_BASE_URL="${SYRA_CLOUDFLARE_MEDIA_API_BASE_URL:-$(first_non
 PROCTORING_VIDEO_STORAGE_PROVIDER="${SYRA_PROCTORING_VIDEO_STORAGE_PROVIDER:-$(first_non_empty "$existing_video_storage_provider" "$existing_root_video_storage_provider" "")}"
 
 existing_worker_value="$(first_non_empty "$existing_workers" "$existing_root_workers" "")"
-default_workers="2"
+default_workers="1"
 
 if [[ -n "${SYRA_WORKERS:-}" ]]; then
   WORKERS="$SYRA_WORKERS"
