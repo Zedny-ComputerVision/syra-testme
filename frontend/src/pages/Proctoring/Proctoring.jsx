@@ -230,7 +230,7 @@ export default function Proctoring() {
   const [cameraRecordingStatus, setCameraRecordingStatus] = useState('idle')
   const [screenRecordingStatus, setScreenRecordingStatus] = useState('disabled')
   const [uploadPercent, setUploadPercent] = useState({})
-  const [uploadSkippable, setUploadSkippable] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [screenShareBusy, setScreenShareBusy] = useState(false)
   const [screenShareRequestReady, setScreenShareRequestReady] = useState(false)
   const [proctorStatus, setProctorStatus] = useState('connecting')
@@ -975,6 +975,26 @@ export default function Proctoring() {
     setShowSubmitConfirm(true)
   }
 
+  const finishRequiredRecordingUploads = useCallback(async () => {
+    if (requiredRecordingSources.length === 0) {
+      return true
+    }
+    setSubmitPhase('uploading')
+    setUploadError('')
+    try {
+      await uploadRecordingSources(requiredRecordingSources)
+      return true
+    } catch (error) {
+      console.warn('Recording upload failed:', error)
+      setUploadError(
+        error?.response?.data?.detail
+          || error?.message
+          || 'Recording upload failed. Retry and keep this page open until every recording is saved.',
+      )
+      return false
+    }
+  }, [requiredRecordingSources, uploadRecordingSources])
+
   const handleSubmit = useCallback(async () => {
     if (submittingRef.current) return
     submittingRef.current = true
@@ -982,6 +1002,7 @@ export default function Proctoring() {
     setSubmitting(true)
     setSubmitPhase('Saving your latest answers...')
     setSubmitError('')
+    setUploadError('')
     try {
       await Promise.race([
         flush(),
@@ -991,28 +1012,21 @@ export default function Proctoring() {
       setSubmitPhase('Submitting your attempt...')
       await submitAttempt(attemptId)
       submittedRef.current = true
-      setSubmitting(false)
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch((error) => {
           emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
         })
       }
       // Show upload overlay — exam content is hidden, learner sees only progress
-      if (requiredRecordingSources.length > 0) {
-        setSubmitPhase('uploading')
-        setUploadSkippable(false)
-        const skipTimer = setTimeout(() => setUploadSkippable(true), 15000)
-        try {
-          await Promise.race([
-            uploadRecordingSources(requiredRecordingSources),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 300000)),
-          ])
-        } catch (error) {
-          console.warn('Recording upload failed or timed out:', error)
-        }
-        clearTimeout(skipTimer)
+      const uploadSucceeded = await finishRequiredRecordingUploads()
+      if (!uploadSucceeded) {
+        setSubmitting(false)
+        submittingRef.current = false
+        return
       }
       setSubmitPhase('')
+      setSubmitting(false)
+      submittingRef.current = false
       navigate(`/attempts/${attemptId}`)
     } catch (e) {
       setSubmitError(e.response?.data?.detail || e.message || 'Submission failed. Please try again.')
@@ -1020,7 +1034,23 @@ export default function Proctoring() {
       setSubmitting(false)
       submittingRef.current = false
     }
-  }, [attemptId, emitProctoringNotice, flush, navigate, requiredRecordingSources, uploadRecordingSources])
+  }, [attemptId, emitProctoringNotice, finishRequiredRecordingUploads, flush, navigate])
+
+  const handleRetryUpload = useCallback(async () => {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setSubmitting(true)
+    const uploadSucceeded = await finishRequiredRecordingUploads()
+    if (uploadSucceeded) {
+      setSubmitPhase('')
+      setSubmitting(false)
+      submittingRef.current = false
+      navigate(`/attempts/${attemptId}`)
+      return
+    }
+    setSubmitting(false)
+    submittingRef.current = false
+  }, [attemptId, finishRequiredRecordingUploads, navigate])
 
   const handleForcedSubmit = useCallback((detail = 'Test auto-submitted due to violations.') => {
     const event = normalizeProctoringAlert({
@@ -1593,6 +1623,20 @@ export default function Proctoring() {
               ? 'Upload finished. Final video processing is still running. Please do not close this page.'
               : 'Uploading your exam recordings. Please do not close this page.'}
           </div>
+          {uploadError && (
+            <div style={{
+              marginBottom: '1rem',
+              padding: '0.85rem 1rem',
+              borderRadius: 10,
+              background: 'rgba(127, 29, 29, 0.35)',
+              border: '1px solid rgba(248, 113, 113, 0.35)',
+              color: '#fecaca',
+              textAlign: 'left',
+              lineHeight: 1.45,
+            }}>
+              {uploadError}
+            </div>
+          )}
           {Object.entries(uploadPercent).map(([src, pct]) => (
             <div key={src} style={{ marginBottom: '1rem', textAlign: 'left' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontSize: '0.9rem', marginBottom: 4 }}>
@@ -1613,17 +1657,18 @@ export default function Proctoring() {
               Upload complete! Redirecting...
             </div>
           )}
-          {uploadSkippable && !allDone && (
+          {uploadError && !allDone && (
             <button
               type="button"
-              onClick={() => navigate(`/attempts/${attemptId}`)}
+              onClick={handleRetryUpload}
+              disabled={submitting}
               style={{
                 marginTop: '1rem', padding: '0.5rem 1.5rem',
                 background: 'transparent', border: '1px solid rgba(148,163,184,0.4)',
                 color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: '0.85rem',
               }}
             >
-              Skip upload &amp; view results
+              {submitting ? 'Retrying upload...' : 'Retry upload'}
             </button>
           )}
         </div>
