@@ -578,7 +578,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  min-width: 160px;
+  min-width: 0;
+  flex: 1;
 
   span {
     font-size: 0.76rem;
@@ -633,6 +634,39 @@
 
   .reportSecondaryBtn,
   .reportPrimaryBtn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .scoreRing {
+    width: 130px;
+    height: 130px;
+  }
+
+  .scoreValue {
+    font-size: 1.6rem;
+  }
+
+  .statsRow {
+    gap: 0.5rem;
+  }
+
+  .answerCard {
+    padding: 0.85rem 1rem;
+  }
+
+  .manualReviewEditor {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reviewFinalizeBtn,
+  .reviewSaveBtn {
     width: 100%;
   }
 }

@@ -361,3 +361,17 @@
     flex-direction: column;
   }
 }
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .kpiGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .kpiValue {
+    font-size: 1.35rem;
+  }
+}

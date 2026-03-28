@@ -328,3 +328,13 @@
     flex: 1;
   }
 }
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .filterGroup {
+    min-width: 0;
+  }
+}

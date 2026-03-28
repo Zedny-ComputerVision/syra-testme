@@ -99,7 +99,7 @@
 
 .searchInput {
   flex: 1;
-  min-width: 200px;
+  min-width: 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border); border-radius: 8px;
   background: var(--color-bg); color: var(--color-text);
@@ -414,5 +414,11 @@
   .toolbarActions {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
   }
 }

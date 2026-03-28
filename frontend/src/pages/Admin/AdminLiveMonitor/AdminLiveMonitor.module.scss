@@ -281,3 +281,9 @@
   color: var(--text-muted, #999);
   font-size: 0.7rem;
 }
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0.75rem;
+  }
+}

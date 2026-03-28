@@ -112,7 +112,7 @@
   padding: 0.45rem 0.7rem;
   border: 1px solid var(--color-border); border-radius: 8px;
   background: var(--color-bg); color: var(--color-text);
-  font-size: 0.82rem; outline: none; min-width: 180px;
+  font-size: 0.82rem; outline: none; min-width: 0; flex: 1;
   &:focus { border-color: var(--color-primary); }
 }
 

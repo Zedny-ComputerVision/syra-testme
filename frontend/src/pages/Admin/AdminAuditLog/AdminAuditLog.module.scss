@@ -123,7 +123,7 @@
 
 .searchInput {
   flex: 1;
-  min-width: 220px;
+  min-width: 0;
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -384,5 +384,31 @@
   .detailCell {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filterSelect {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+
+  .headerActions {
+    width: 100%;
   }
 }

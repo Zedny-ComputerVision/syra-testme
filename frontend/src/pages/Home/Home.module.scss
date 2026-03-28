@@ -562,3 +562,22 @@
     align-items: stretch;
   }
 }
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .heading {
+    font-size: 1.2rem;
+  }
+
+  .statsRow {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .scheduleGrid,
+  .recentGrid {
+    grid-template-columns: 1fr;
+  }
+}

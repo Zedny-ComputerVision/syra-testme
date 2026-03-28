@@ -15,7 +15,7 @@
 .title { font-size: 1.25rem; font-weight: 700; margin: 0; color: var(--color-text); }
 .subtitle { margin: 0.25rem 0 0; color: var(--color-muted); font-size: 0.88rem; }
 .toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.searchGroup { min-width: 280px; flex: 1; }
+.searchGroup { min-width: 0; flex: 1; }
 .filterLabel { display: block; margin-bottom: 0.35rem; font-size: 0.8rem; color: var(--color-muted); }
 .searchInput { width: 100%; border: 1px solid var(--color-border); border-radius: 10px; padding: 0.6rem 0.72rem; background: var(--color-bg); color: var(--color-text); }
 .toolbarActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -99,5 +99,15 @@
   .moduleHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
   }
 }

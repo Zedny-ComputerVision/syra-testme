@@ -1830,3 +1830,9 @@
     flex-wrap: wrap;
   }
 }
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+}

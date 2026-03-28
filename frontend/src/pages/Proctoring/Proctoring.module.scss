@@ -557,3 +557,36 @@
     flex-direction: column;
   }
 }
+
+@media (max-width: 480px) {
+  .examPane {
+    padding: 0.75rem;
+  }
+
+  .questionCard {
+    padding: 1rem;
+  }
+
+  .examTitle {
+    font-size: 1rem;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .btnNav,
+  .btnSubmit {
+    flex: 1;
+  }
+
+  .questionNav {
+    gap: 0.35rem;
+  }
+
+  .qNum {
+    width: 30px;
+    height: 30px;
+    font-size: 0.75rem;
+  }
+}

@@ -179,3 +179,13 @@
     flex-direction: column;
   }
 }
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+}
