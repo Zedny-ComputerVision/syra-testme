@@ -902,7 +902,7 @@ def _action_label(action: str) -> str:
     return labels.get(str(action or "").upper(), "Warn learner")
 
 
-def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> tuple[Path, int]:
+async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> tuple[Path, int]:
     upload_limit_bytes = settings.MAX_VIDEO_UPLOAD_MB * 1024 * 1024
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     temp_path = Path(temp_file.name)
