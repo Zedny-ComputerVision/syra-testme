@@ -176,6 +176,14 @@ class Exam(Base):
         CheckConstraint("time_limit > 0 OR time_limit IS NULL", name="ck_exams_time_limit_positive"),
         CheckConstraint("passing_score >= 0 AND passing_score <= 100", name="ck_exams_passing_score_range"),
         CheckConstraint("max_attempts >= 1", name="ck_exams_max_attempts_positive"),
+        # Partial index for the learner catalog query — only OPEN non-pool exams,
+        # pre-sorted by updated_at. Managed via migration (CONCURRENTLY).
+        Index(
+            "ix_exam_learner_catalog",
+            "updated_at",
+            "created_at",
+            postgresql_where=text("status = 'open' AND library_pool_id IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -293,6 +301,9 @@ class Schedule(Base):
     __tablename__ = "schedules"
     __table_args__ = (
         UniqueConstraint("user_id", "exam_id", name="uq_schedule_user_exam"),
+        # Covering index for the EXISTS check in the learner catalog query.
+        # Including scheduled_at avoids a heap fetch for the date comparison.
+        Index("ix_schedule_user_exam_scheduled", "user_id", "exam_id", "scheduled_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
