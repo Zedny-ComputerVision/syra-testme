@@ -1,4 +1,4 @@
-from src.app.models import User
+from src.app.models import RoleEnum, User
 
 
 def test_login_success_returns_tokens(client, learner_user):
@@ -72,3 +72,67 @@ def test_logout_returns_ok(client, learner_headers):
 
     assert response.status_code == 200
     assert response.json() == {"detail": "Logged out"}
+
+
+def test_reactivating_user_does_not_restore_previous_tokens(client, admin_headers, learner_user):
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": learner_user.email, "password": "Password123!"},
+    )
+    assert login_response.status_code == 200
+    tokens = login_response.json()
+    stale_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    deactivate_response = client.patch(
+        f"/api/users/{learner_user.id}",
+        json={"is_active": False},
+        headers=admin_headers,
+    )
+    assert deactivate_response.status_code == 200
+
+    reactivate_response = client.patch(
+        f"/api/users/{learner_user.id}",
+        json={"is_active": True},
+        headers=admin_headers,
+    )
+    assert reactivate_response.status_code == 200
+
+    me_response = client.get("/api/auth/me", headers=stale_headers)
+    assert me_response.status_code == 401
+    assert me_response.json() == {"detail": "Invalid token"}
+
+    refresh_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"]},
+    )
+    assert refresh_response.status_code == 401
+    assert refresh_response.json() == {"detail": "Invalid token"}
+
+
+def test_role_change_invalidates_existing_tokens(client, admin_headers, learner_user):
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": learner_user.email, "password": "Password123!"},
+    )
+    assert login_response.status_code == 200
+    tokens = login_response.json()
+    stale_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    role_change_response = client.patch(
+        f"/api/users/{learner_user.id}",
+        json={"role": RoleEnum.INSTRUCTOR.value},
+        headers=admin_headers,
+    )
+    assert role_change_response.status_code == 200
+    assert role_change_response.json()["role"] == RoleEnum.INSTRUCTOR.value
+
+    me_response = client.get("/api/auth/me", headers=stale_headers)
+    assert me_response.status_code == 401
+    assert me_response.json() == {"detail": "Invalid token"}
+
+    refresh_response = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"]},
+    )
+    assert refresh_response.status_code == 401
+    assert refresh_response.json() == {"detail": "Invalid token"}

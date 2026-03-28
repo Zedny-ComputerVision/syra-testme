@@ -31,6 +31,7 @@ def _create_token(data: dict[str, Any], expires_delta: timedelta, token_type: st
         {
             "type": token_type,
             "iat": int(issued_at.timestamp()),
+            "iat_ms": int(issued_at.timestamp() * 1000),
             "exp": issued_at + expires_delta,
         }
     )
@@ -82,6 +83,12 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> dict[str, A
 
 
 def token_issued_at(payload: dict[str, Any]) -> datetime | None:
+    try:
+        issued_at_ms = int(payload.get("iat_ms"))
+    except (TypeError, ValueError):
+        issued_at_ms = None
+    if issued_at_ms is not None:
+        return datetime.fromtimestamp(issued_at_ms / 1000, timezone.utc)
     try:
         issued_at = int(payload.get("iat"))
     except (TypeError, ValueError):

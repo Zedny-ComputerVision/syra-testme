@@ -345,7 +345,10 @@ class UserService:
         if not changed_fields:
             return user
 
-        user.updated_at = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        user.updated_at = now
+        if {"role", "is_active"} & set(changed_fields):
+            user.token_invalid_before = now
         self.repository.add(user)
         self.repository.commit()
         self.repository.refresh(user)

@@ -92,6 +92,8 @@ export default function AttemptResult() {
     setReviewError('')
     setReviewNotice('')
     setReportError('')
+    setReviewDrafts({})
+    setReviewBusy({})
     if (!id) {
       setAttempt(null)
       setQuestions([])
@@ -167,15 +169,6 @@ export default function AttemptResult() {
   useEffect(() => {
     void loadResult()
   }, [id])
-
-  useEffect(() => {
-    setReviewDrafts(
-      (answers || []).reduce((acc, answerRow) => {
-        acc[answerRow.id] = answerRow.points_earned != null ? String(answerRow.points_earned) : ''
-        return acc
-      }, {}),
-    )
-  }, [answers])
 
   if (loading) return <div className={styles.loading}>Loading result...</div>
   if (loadError) {
@@ -418,6 +411,10 @@ export default function AttemptResult() {
     try {
       const { data } = await reviewAttemptAnswer(id, answerRow.id, nextPoints)
       setAnswers((current) => current.map((row) => (row.id === data.id ? { ...row, ...data } : row)))
+      setReviewDrafts((current) => ({
+        ...current,
+        [data.id]: data.points_earned != null ? String(data.points_earned) : '',
+      }))
       setReviewNotice('Manual review points saved. Finalize the review to publish the updated score.')
     } catch (e) {
       setReviewError(e.response?.data?.detail || 'Unable to save manual review points.')
@@ -735,7 +732,7 @@ export default function AttemptResult() {
                         min="0"
                         max={maxPoints}
                         step="0.01"
-                        value={reviewDrafts[ans.id] ?? ''}
+                        value={reviewDrafts[ans.id] ?? (ans.points_earned != null ? String(ans.points_earned) : '')}
                         onChange={(event) => setReviewDrafts((current) => ({ ...current, [ans.id]: event.target.value }))}
                         disabled={reviewBusy[ans.id] || finalizingReview}
                       />

@@ -117,6 +117,19 @@ function decodeUser(accessToken, { allowExpired = false } = {}) {
   }
 }
 
+function normalizeUser(userLike, accessToken) {
+  const decoded = decodeUser(accessToken, { allowExpired: true }) || {};
+  const id = userLike?.id || decoded.id || decoded.sub || null;
+  const userId = userLike?.user_id || decoded.user_id || null;
+  return {
+    id,
+    role: userLike?.role || decoded.role || null,
+    user_id: userId,
+    name: userLike?.name || decoded.name || userId || id,
+    email: userLike?.email ?? decoded.email ?? null,
+  };
+}
+
 export function AuthProvider({ children }) {
   const initialTokens = useMemo(() => loadStoredTokens(), []);
   const [tokens, setTokens] = useState(initialTokens);
@@ -174,6 +187,15 @@ export function AuthProvider({ children }) {
     return refreshPromiseRef.current;
   }, []);
 
+  const fetchCurrentUser = useCallback(async (accessToken) => {
+    const meUrl = resolveApiUrl('auth/me');
+    const { data } = await axios.get(meUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 10000,
+    });
+    return normalizeUser(data, accessToken);
+  }, []);
+
   // Keep session alive across browser refresh by using refresh token when access token is expired.
   useEffect(() => {
     let cancelled = false;
@@ -189,11 +211,29 @@ export function AuthProvider({ children }) {
 
       const decoded = decodeUser(tokens.access_token);
       if (decoded) {
-        if (!cancelled) {
-          setUser(decoded);
-          setLoading(false);
+        try {
+          const currentUser = await fetchCurrentUser(tokens.access_token);
+          if (!cancelled) {
+            setUser(currentUser);
+            setLoading(false);
+          }
+          return;
+        } catch (error) {
+          if (isTerminalRefreshError(error)) {
+            if (!tokens.refresh_token) {
+              if (!cancelled) {
+                clearAuthState();
+              }
+              return;
+            }
+          } else {
+            if (!cancelled) {
+              setUser(decoded);
+              setLoading(false);
+            }
+            return;
+          }
         }
-        return;
       }
 
       try {
@@ -206,9 +246,19 @@ export function AuthProvider({ children }) {
         }
 
         safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
+        let nextUser = normalizeUser(null, refreshed.access_token);
+        try {
+          nextUser = await fetchCurrentUser(refreshed.access_token);
+        } catch (error) {
+          if (cancelled) return;
+          if (isTerminalRefreshError(error)) {
+            clearAuthState();
+            return;
+          }
+        }
         if (!cancelled) {
           setTokens(refreshed);
-          setUser(decodeUser(refreshed.access_token));
+          setUser(nextUser);
           setLoading(false);
         }
       } catch (error) {
@@ -217,7 +267,7 @@ export function AuthProvider({ children }) {
           clearAuthState();
           return;
         }
-        setUser(decodeUser(tokens.access_token, { allowExpired: Boolean(tokens.refresh_token) }));
+        setUser(normalizeUser(null, tokens.access_token));
         setLoading(false);
         return;
       }
@@ -227,7 +277,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [clearAuthState, tokens, refreshAccessToken]);
+  }, [clearAuthState, tokens, refreshAccessToken, fetchCurrentUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -376,9 +426,9 @@ export function AuthProvider({ children }) {
         return;
       }
       setTokens(nextTokens);
-      setUser(decodeUser(nextTokens.access_token));
+      setUser(normalizeUser(null, nextTokens.access_token));
       setPermissionsLoading(true);
-      setLoading(false);
+      setLoading(true);
     };
 
     window.addEventListener('storage', handleStorage);

@@ -334,6 +334,12 @@ api.interceptors.response.use(
       err.message = message
     }
 
+    if (status === 403 && normalizeDetailMessage(detail, '').toLowerCase() === 'inactive user') {
+      clearTokens()
+      redirectToLogin()
+      return Promise.reject(err)
+    }
+
     if (status !== 401 || isAuthEndpoint) {
       return Promise.reject(err)
     }
