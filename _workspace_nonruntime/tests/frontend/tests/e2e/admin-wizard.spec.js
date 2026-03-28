@@ -111,7 +111,7 @@ test.describe('Admin New Test Wizard end-to-end', () => {
     await page.getByRole('button', { name: /^(Next|Continue)$/i }).click()
 
     // Step 3 - Questions
-    await expect(page.getByRole('heading', { name: /Questions/i }).first()).toBeVisible({ timeout: STEP_TIMEOUT })
+    await expect(page.getByRole('button', { name: /Add Single Choice/i })).toBeVisible({ timeout: STEP_TIMEOUT })
     await page.getByRole('button', { name: /Add Single Choice/i }).click()
     await page.fill('input[placeholder="Enter question..."]', 'Warm-up question')
     await page.fill('input[placeholder="Option A"]', 'Option A')
