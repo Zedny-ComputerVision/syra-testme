@@ -89,7 +89,7 @@ def _public_report_filename_from_token(token: str) -> str:
 
 
 @router.get("/videos/{filename}")
-async def get_video(
+def get_video(
     filename: str,
     db: Session = Depends(get_db_dep),
     current_user: User = Depends(get_current_user),

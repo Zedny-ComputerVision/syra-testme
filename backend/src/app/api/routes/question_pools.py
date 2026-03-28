@@ -237,7 +237,7 @@ def _serialize_pool(pool: QuestionPool, db: Session) -> QuestionPoolRead:
 
 
 @router.post("/", response_model=QuestionPoolRead)
-async def create_pool(
+def create_pool(
     body: QuestionPoolCreate,
     request: Request,
     db: Session = Depends(get_db_dep),
@@ -267,7 +267,7 @@ async def create_pool(
 
 
 @router.get("/", response_model=list[QuestionPoolRead])
-async def list_pools(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def list_pools(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     query = select(QuestionPool).order_by(QuestionPool.name.asc())
     if current.role == RoleEnum.INSTRUCTOR:
         query = query.where(QuestionPool.created_by_id == current.id)
@@ -276,7 +276,7 @@ async def list_pools(db: Session = Depends(get_db_dep), current=Depends(require_
 
 
 @router.get("/{pool_id}", response_model=QuestionPoolRead)
-async def get_pool(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def get_pool(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     pool_pk = parse_uuid_param(pool_id, detail="Not found")
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
@@ -285,7 +285,7 @@ async def get_pool(pool_id: str, db: Session = Depends(get_db_dep), current=Depe
 
 
 @router.put("/{pool_id}", response_model=QuestionPoolRead)
-async def update_pool(
+def update_pool(
     pool_id: str,
     body: QuestionPoolCreate,
     request: Request,
@@ -317,7 +317,7 @@ async def update_pool(
 
 
 @router.get("/{pool_id}/questions", response_model=list[QuestionRead])
-async def list_pool_questions(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def list_pool_questions(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     pool_pk = parse_uuid_param(pool_id, detail="Pool not found")
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
@@ -326,7 +326,7 @@ async def list_pool_questions(pool_id: str, db: Session = Depends(get_db_dep), c
 
 
 @router.post("/{pool_id}/questions", response_model=QuestionRead)
-async def create_pool_question(
+def create_pool_question(
     pool_id: str,
     body: QuestionBase,
     db: Session = Depends(get_db_dep),
@@ -362,7 +362,7 @@ async def create_pool_question(
 
 
 @router.put("/{pool_id}/questions/{question_id}", response_model=QuestionRead)
-async def update_pool_question(
+def update_pool_question(
     pool_id: str,
     question_id: str,
     body: QuestionBase,
@@ -395,7 +395,7 @@ async def update_pool_question(
 
 
 @router.delete("/{pool_id}/questions/{question_id}", response_model=Message)
-async def delete_pool_question(
+def delete_pool_question(
     pool_id: str,
     question_id: str,
     db: Session = Depends(get_db_dep),
@@ -418,7 +418,7 @@ async def delete_pool_question(
 
 
 @router.post("/{pool_id}/seed-exam/{exam_id}", response_model=Message)
-async def seed_exam_from_pool(
+def seed_exam_from_pool(
     pool_id: str,
     exam_id: str,
     count: int = Query(default=5, ge=1, le=500),
@@ -456,7 +456,7 @@ async def seed_exam_from_pool(
 
 
 @router.delete("/{pool_id}", response_model=Message)
-async def delete_pool(
+def delete_pool(
     pool_id: str,
     request: Request,
     db: Session = Depends(get_db_dep),

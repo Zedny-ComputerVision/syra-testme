@@ -165,7 +165,7 @@ def _normalize_integrations_config(raw_value: str | None) -> str:
 
 
 @router.get("/", response_model=list[SystemSettingRead])
-async def list_settings(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def list_settings(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     rows = load_permission_rows(db)
     can_system_settings = permission_allowed(rows, current.role, "System Settings")
     can_manage_roles = permission_allowed(rows, current.role, "Manage Roles")
@@ -177,7 +177,7 @@ async def list_settings(db: Session = Depends(get_db_dep), current=Depends(get_c
 
 
 @router.get("/{key}", response_model=SystemSettingRead)
-async def get_setting(key: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def get_setting(key: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     _ensure_setting_access(db, current, key)
     if key == PERMISSIONS_CONFIG_KEY:
         return _get_or_create_permissions_setting(db)
@@ -188,7 +188,7 @@ async def get_setting(key: str, db: Session = Depends(get_db_dep), current=Depen
 
 
 @router.put("/{key}", response_model=SystemSettingRead)
-async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     _ensure_setting_access(db, current, key)
     if key == "integrations_config":
         body = SystemSettingUpdate(value=_normalize_integrations_config(body.value))
@@ -245,7 +245,7 @@ async def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depe
 
 
 @router.get("/maintenance/public")
-async def maintenance_public(db: Session = Depends(get_db_dep)):
+def maintenance_public(db: Session = Depends(get_db_dep)):
     def _load_maintenance_payload() -> dict[str, str]:
         mode = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
         banner = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_banner"))
@@ -260,7 +260,7 @@ async def maintenance_public(db: Session = Depends(get_db_dep)):
 
 
 @router.get("/permissions/public")
-async def permissions_public(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def permissions_public(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     rows = load_permission_rows(db)
     return {
         "role": current.role.value,

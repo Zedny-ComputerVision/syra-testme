@@ -64,7 +64,7 @@ def _normalize_scale_payload(body: GradingScaleBase) -> dict:
 
 
 @router.post("/", response_model=GradingScaleRead)
-async def create_scale(
+def create_scale(
     body: GradingScaleBase,
     request: Request,
     db: Session = Depends(get_db_dep),
@@ -89,12 +89,12 @@ async def create_scale(
 
 
 @router.get("/", response_model=list[GradingScaleRead])
-async def list_scales(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def list_scales(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     return db.scalars(select(GradingScale).order_by(GradingScale.name.asc())).all()
 
 
 @router.get("/{scale_id}", response_model=GradingScaleRead)
-async def get_scale(scale_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def get_scale(scale_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     scale_pk = parse_uuid_param(scale_id, detail="Not found")
     scale = db.get(GradingScale, scale_pk)
     if not scale:
@@ -103,7 +103,7 @@ async def get_scale(scale_id: str, db: Session = Depends(get_db_dep), current=De
 
 
 @router.put("/{scale_id}", response_model=GradingScaleRead)
-async def update_scale(
+def update_scale(
     scale_id: str,
     body: GradingScaleBase,
     request: Request,
@@ -134,7 +134,7 @@ async def update_scale(
 
 
 @router.delete("/{scale_id}", response_model=Message)
-async def delete_scale(
+def delete_scale(
     scale_id: str,
     request: Request,
     db: Session = Depends(get_db_dep),

@@ -98,7 +98,7 @@ def _validate_response_payload(survey: Survey, survey_id: str, body: SurveyRespo
 
 
 @router.post("/", response_model=SurveyRead)
-async def create_survey(body: SurveyCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def create_survey(body: SurveyCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     payload = _normalize_survey_payload(body.model_dump(), partial=False)
     questions = payload.pop("questions", [])
     survey = Survey(created_by_id=current.id, **payload)
@@ -110,7 +110,7 @@ async def create_survey(body: SurveyCreate, db: Session = Depends(get_db_dep), c
 
 
 @router.get("/", response_model=list[SurveyRead])
-async def list_surveys(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def list_surveys(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Survey)
     if current.role == RoleEnum.LEARNER:
         query = query.where(Survey.is_active.is_(True))
@@ -121,7 +121,7 @@ async def list_surveys(db: Session = Depends(get_db_dep), current=Depends(get_cu
 
 
 @router.get("/{survey_id}", response_model=SurveyRead)
-async def get_survey(survey_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def get_survey(survey_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     survey_pk = parse_uuid_param(survey_id, detail="Survey not found")
     survey = db.get(Survey, survey_pk)
     if not survey:
@@ -134,7 +134,7 @@ async def get_survey(survey_id: str, db: Session = Depends(get_db_dep), current=
 
 
 @router.put("/{survey_id}", response_model=SurveyRead)
-async def update_survey(
+def update_survey(
     survey_id: str,
     body: SurveyUpdate,
     db: Session = Depends(get_db_dep),
@@ -163,7 +163,7 @@ async def update_survey(
 
 
 @router.delete("/{survey_id}", response_model=Message)
-async def delete_survey(survey_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
+def delete_survey(survey_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
     survey_pk = parse_uuid_param(survey_id, detail="Survey not found")
     survey = db.get(Survey, survey_pk)
     if not survey:
@@ -174,7 +174,7 @@ async def delete_survey(survey_id: str, db: Session = Depends(get_db_dep), curre
 
 
 @router.post("/{survey_id}/respond", response_model=SurveyResponseRead)
-async def submit_response(survey_id: str, body: SurveyResponseCreate, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def submit_response(survey_id: str, body: SurveyResponseCreate, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     survey_pk = parse_uuid_param(survey_id, detail="Survey not found")
     survey = db.get(Survey, survey_pk)
     if not survey:
@@ -195,7 +195,7 @@ async def submit_response(survey_id: str, body: SurveyResponseCreate, db: Sessio
 
 
 @router.get("/{survey_id}/responses", response_model=list[SurveyResponseRead])
-async def list_responses(survey_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def list_responses(survey_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     survey_pk = parse_uuid_param(survey_id, detail="Survey not found")
     survey = db.get(Survey, survey_pk)
     if not survey:

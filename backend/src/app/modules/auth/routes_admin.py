@@ -24,7 +24,7 @@ async def _bg_send_admin_setup_email(user: User):
 
 
 @router.post("/setup", response_model=UserRead)
-async def setup_admin(
+def setup_admin(
     body: UserCreate,
     background: BackgroundTasks,
     service: AuthService = Depends(_service_from_db),

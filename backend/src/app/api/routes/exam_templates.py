@@ -57,7 +57,7 @@ def _normalize_template_payload(body: ExamTemplateCreate) -> dict:
 
 
 @router.post("/", response_model=ExamTemplateRead)
-async def create_template(body: ExamTemplateCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def create_template(body: ExamTemplateCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     payload = _normalize_template_payload(body)
     _ensure_unique_template_name(db, payload["name"])
     tpl = ExamTemplate(created_by_id=current.id, **payload)
@@ -68,7 +68,7 @@ async def create_template(body: ExamTemplateCreate, db: Session = Depends(get_db
 
 
 @router.get("/", response_model=list[ExamTemplateRead])
-async def list_templates(db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def list_templates(db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     query = select(ExamTemplate).order_by(ExamTemplate.created_at.desc())
     if current.role == RoleEnum.INSTRUCTOR:
         query = query.where(ExamTemplate.created_by_id == current.id)
@@ -76,7 +76,7 @@ async def list_templates(db: Session = Depends(get_db_dep), current=Depends(requ
 
 
 @router.get("/{template_id}", response_model=ExamTemplateRead)
-async def get_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def get_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     template_pk = parse_uuid_param(template_id, detail="Not found")
     tpl = db.get(ExamTemplate, template_pk)
     if not tpl:
@@ -85,7 +85,7 @@ async def get_template(template_id: str, db: Session = Depends(get_db_dep), curr
 
 
 @router.put("/{template_id}", response_model=ExamTemplateRead)
-async def update_template(template_id: str, body: ExamTemplateCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def update_template(template_id: str, body: ExamTemplateCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     template_pk = parse_uuid_param(template_id, detail="Not found")
     tpl = db.get(ExamTemplate, template_pk)
     if not tpl:
@@ -104,7 +104,7 @@ async def update_template(template_id: str, body: ExamTemplateCreate, db: Sessio
 
 
 @router.delete("/{template_id}", response_model=Message)
-async def delete_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
+def delete_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
     template_pk = parse_uuid_param(template_id, detail="Not found")
     tpl = db.get(ExamTemplate, template_pk)
     if not tpl:

@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.get("/", response_model=PaginatedResponse[AuditLogRead])
-async def list_audit_logs(
+def list_audit_logs(
     page: int | None = Query(None, ge=1),
     page_size: int | None = Query(None, ge=1, le=MAX_PAGE_SIZE),
     search: str | None = Query(None, description="Search in action or resource_id"),

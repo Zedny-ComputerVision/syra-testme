@@ -81,7 +81,7 @@ def _build_group_read(group: UserGroup) -> UserGroupRead:
 
 
 @router.post("/", response_model=UserGroupRead)
-async def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
     payload = _normalize_group_payload(db, body)
     _ensure_unique_group_name(db, payload["name"])
     member_ids = payload.pop("member_ids", [])
@@ -94,18 +94,18 @@ async def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep),
 
 
 @router.get("/", response_model=list[UserGroupRead])
-async def list_groups(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+def list_groups(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
     groups = db.scalars(select(UserGroup).order_by(UserGroup.created_at.desc())).all()
     return [_build_group_read(group) for group in groups]
 
 
 @router.get("/{group_id}", response_model=UserGroupRead)
-async def get_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+def get_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
     return _build_group_read(_get_group_or_404(db, group_id))
 
 
 @router.put("/{group_id}", response_model=UserGroupRead)
-async def update_group(group_id: str, body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+def update_group(group_id: str, body: UserGroupCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
     group = _get_group_or_404(db, group_id)
     payload = _normalize_group_payload(db, body)
     _ensure_unique_group_name(db, payload["name"], existing_group_id=group.id)
@@ -119,7 +119,7 @@ async def update_group(group_id: str, body: UserGroupCreate, db: Session = Depen
 
 
 @router.delete("/{group_id}", response_model=Message)
-async def delete_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
+def delete_group(group_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Users", RoleEnum.ADMIN))):
     group = _get_group_or_404(db, group_id)
     db.delete(group)
     db.commit()
@@ -127,7 +127,7 @@ async def delete_group(group_id: str, db: Session = Depends(get_db_dep), current
 
 
 @router.get("/{group_id}/members", response_model=list[UserRead])
-async def list_group_members(
+def list_group_members(
     group_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
@@ -143,7 +143,7 @@ async def list_group_members(
 
 
 @router.post("/{group_id}/members", response_model=Message)
-async def add_group_member(
+def add_group_member(
     group_id: str,
     payload: dict = Body(...),
     db: Session = Depends(get_db_dep),
@@ -174,7 +174,7 @@ async def add_group_member(
 
 
 @router.post("/{group_id}/members/bulk", response_model=Message)
-async def add_group_members_bulk(
+def add_group_members_bulk(
     group_id: str,
     payload: dict = Body(...),
     db: Session = Depends(get_db_dep),
@@ -204,7 +204,7 @@ async def add_group_members_bulk(
 
 
 @router.delete("/{group_id}/members/{user_id}", response_model=Message)
-async def remove_group_member(
+def remove_group_member(
     group_id: str,
     user_id: str,
     db: Session = Depends(get_db_dep),

@@ -17,7 +17,7 @@ def _service_from_db(db=Depends(get_db_dep)) -> UserService:
 
 
 @router.get("/learners", response_model=list[UserRead])
-async def list_learners_for_scheduling(
+def list_learners_for_scheduling(
     search: str | None = None,
     is_active: bool | None = True,
     current: User = Depends(get_current_user),
@@ -27,7 +27,7 @@ async def list_learners_for_scheduling(
 
 
 @router.patch("/me", response_model=UserRead)
-async def update_me(
+def update_me(
     body: UserSelfUpdate,
     current: User = Depends(get_current_user),
     service: UserService = Depends(_service_from_db),
@@ -36,7 +36,7 @@ async def update_me(
 
 
 @router.get("/me/preferences/{key}", response_model=UserPreferenceRead)
-async def get_my_preference(
+def get_my_preference(
     key: str,
     current: User = Depends(get_current_user),
     service: UserService = Depends(_service_from_db),
@@ -45,7 +45,7 @@ async def get_my_preference(
 
 
 @router.put("/me/preferences/{key}", response_model=UserPreferenceRead)
-async def update_my_preference(
+def update_my_preference(
     key: str,
     body: UserPreferenceUpdate,
     current: User = Depends(get_current_user),

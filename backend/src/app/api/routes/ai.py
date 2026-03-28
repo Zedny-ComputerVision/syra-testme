@@ -23,7 +23,7 @@ class GeneratedQuestion(BaseModel):
 
 
 @router.post("/generate-questions", response_model=list[GeneratedQuestion])
-async def generate_questions(
+def generate_questions(
     body: GenerateRequest,
     _=Depends(require_permission("Create Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):

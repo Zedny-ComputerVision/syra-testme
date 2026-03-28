@@ -1142,7 +1142,7 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
 
 
 @router.post("/", response_model=AttemptRead)
-async def create_attempt(body: AttemptCreate, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.LEARNER, RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def create_attempt(body: AttemptCreate, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.LEARNER, RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     exam = db.get(Exam, body.exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="Test not found")
@@ -1151,7 +1151,7 @@ async def create_attempt(body: AttemptCreate, db: Session = Depends(get_db_dep),
 
 
 @router.post("/resolve", response_model=AttemptRead)
-async def resolve_attempt(
+def resolve_attempt(
     body: AttemptResolveRequest,
     db: Session = Depends(get_db_dep),
     current=Depends(require_role(RoleEnum.LEARNER, RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
@@ -1177,7 +1177,7 @@ async def resolve_attempt(
 
 
 @router.get("/", response_model=PaginatedResponse[AttemptRead])
-async def list_attempts(
+def list_attempts(
     exam_id: str | None = None,
     user_id: str | None = None,
     status: str | None = None,
@@ -1321,7 +1321,7 @@ async def list_attempts(
 
 
 @router.get("/{attempt_id}", response_model=AttemptRead)
-async def get_attempt(
+def get_attempt(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
@@ -1342,7 +1342,7 @@ async def get_attempt(
 
 
 @router.post("/{attempt_id}/answers", response_model=AttemptAnswerRead)
-async def submit_answer(
+def submit_answer(
     attempt_id: str,
     body: AttemptAnswerBase,
     db: Session = Depends(get_db_dep),
@@ -1404,7 +1404,7 @@ async def submit_answer(
 
 
 @router.get("/{attempt_id}/answers", response_model=list[AttemptAnswerRead])
-async def list_attempt_answers(
+def list_attempt_answers(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
@@ -1427,7 +1427,7 @@ async def list_attempt_answers(
 
 
 @router.post("/{attempt_id}/submit", response_model=AttemptRead)
-async def submit_attempt(
+def submit_attempt(
     attempt_id: str,
     score: float | None = None,
     db: Session = Depends(get_db_dep),
@@ -1502,7 +1502,7 @@ async def submit_attempt(
 
 
 @router.post("/{attempt_id}/grade", response_model=AttemptRead)
-async def grade_attempt(
+def grade_attempt(
     attempt_id: str,
     score: float,
     db: Session = Depends(get_db_dep),
@@ -1519,7 +1519,7 @@ async def grade_attempt(
 
 
 @router.post("/{attempt_id}/answers/{answer_id}/review", response_model=AttemptAnswerRead)
-async def review_attempt_answer(
+def review_attempt_answer(
     attempt_id: str,
     answer_id: str,
     body: AttemptAnswerReviewUpdate,
@@ -1565,7 +1565,7 @@ async def review_attempt_answer(
 
 
 @router.post("/{attempt_id}/finalize-review", response_model=AttemptRead)
-async def finalize_attempt_review(
+def finalize_attempt_review(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
@@ -1598,7 +1598,7 @@ async def finalize_attempt_review(
 
 
 @router.post("/{attempt_id}/certificate-review", response_model=AttemptRead)
-async def review_attempt_certificate(
+def review_attempt_certificate(
     attempt_id: str,
     body: AttemptCertificateReviewUpdate,
     db: Session = Depends(get_db_dep),
@@ -1739,7 +1739,7 @@ def _generate_certificate(attempt: Attempt) -> bytes:
 
 
 @router.post("/import", response_model=list[AttemptRead])
-async def import_attempts(
+def import_attempts(
     body: list[dict] = Body(...),
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
@@ -1783,7 +1783,7 @@ async def import_attempts(
 
 
 @router.get("/{attempt_id}/certificate")
-async def download_certificate(
+def download_certificate(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),

@@ -39,7 +39,7 @@ def _normalize_category_payload(body: CategoryBase) -> dict:
 
 
 @router.post("/", response_model=CategoryRead)
-async def create_category(
+def create_category(
     body: CategoryBase,
     request: Request,
     db: Session = Depends(get_db_dep),
@@ -64,12 +64,12 @@ async def create_category(
 
 
 @router.get("/", response_model=list[CategoryRead])
-async def list_categories(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def list_categories(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     return db.scalars(select(Category).order_by(Category.name.asc())).all()
 
 
 @router.get("/{category_id}", response_model=CategoryRead)
-async def get_category(category_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def get_category(category_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     category_pk = parse_uuid_param(category_id, detail="Not found")
     cat = db.get(Category, category_pk)
     if not cat:
@@ -78,7 +78,7 @@ async def get_category(category_id: str, db: Session = Depends(get_db_dep), curr
 
 
 @router.put("/{category_id}", response_model=CategoryRead)
-async def update_category(
+def update_category(
     category_id: str,
     body: CategoryBase,
     request: Request,
@@ -109,7 +109,7 @@ async def update_category(
 
 
 @router.delete("/{category_id}", response_model=Message)
-async def delete_category(
+def delete_category(
     category_id: str,
     request: Request,
     db: Session = Depends(get_db_dep),

@@ -25,7 +25,7 @@ def _service_from_db(db=Depends(get_db_dep)) -> ReportService:
 
 
 @router.post("/export/preview", response_model=CustomReportPreview)
-async def preview_custom_report(
+def preview_custom_report(
     body: CustomReportExportRequest,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -35,7 +35,7 @@ async def preview_custom_report(
 
 
 @router.post("/export")
-async def export_custom_report(
+def export_custom_report(
     body: CustomReportExportRequest,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -44,7 +44,7 @@ async def export_custom_report(
 
 
 @router.post("/predefined/{slug}")
-async def generate_predefined_report(
+def generate_predefined_report(
     slug: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -53,7 +53,7 @@ async def generate_predefined_report(
 
 
 @router.get("/test/{test_id}")
-async def generate_test_report(
+def generate_test_report(
     test_id: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -62,7 +62,7 @@ async def generate_test_report(
 
 
 @router.get("/exam/{exam_id}")
-async def generate_exam_report(
+def generate_exam_report(
     exam_id: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -71,7 +71,7 @@ async def generate_exam_report(
 
 
 @router.get("/test/{test_id}/pdf")
-async def generate_test_report_pdf(
+def generate_test_report_pdf(
     test_id: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -80,7 +80,7 @@ async def generate_test_report_pdf(
 
 
 @router.get("/exam/{exam_id}/pdf")
-async def generate_exam_report_pdf(
+def generate_exam_report_pdf(
     exam_id: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -89,7 +89,7 @@ async def generate_exam_report_pdf(
 
 
 @schedule_router.post("/", response_model=ReportScheduleRead)
-async def create_report_schedule(
+def create_report_schedule(
     body: ReportScheduleCreate,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -98,7 +98,7 @@ async def create_report_schedule(
 
 
 @schedule_router.get("/", response_model=list[ReportScheduleRead])
-async def list_report_schedules(
+def list_report_schedules(
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
 ):
@@ -107,7 +107,7 @@ async def list_report_schedules(
 
 
 @schedule_router.get("/{schedule_id}", response_model=ReportScheduleRead)
-async def get_report_schedule(
+def get_report_schedule(
     schedule_id: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
@@ -117,7 +117,7 @@ async def get_report_schedule(
 
 
 @schedule_router.delete("/{schedule_id}", response_model=Message)
-async def delete_report_schedule(
+def delete_report_schedule(
     schedule_id: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),

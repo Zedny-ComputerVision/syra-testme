@@ -34,7 +34,7 @@ router.include_router(public_router)
 router.include_router(admin_router)
 
 
-async def list_learners_for_scheduling(
+def list_learners_for_scheduling(
     search: str | None = None,
     is_active: bool | None = True,
     db=None,
@@ -47,7 +47,7 @@ async def list_learners_for_scheduling(
     )
 
 
-async def get_my_preference(
+def get_my_preference(
     key: str,
     db=None,
     current=None,
@@ -55,7 +55,7 @@ async def get_my_preference(
     return _service_from_db(db).get_my_preference(key=key, current=current)
 
 
-async def update_my_preference(
+def update_my_preference(
     key: str,
     body: UserPreferenceUpdate,
     db=None,
@@ -64,7 +64,7 @@ async def update_my_preference(
     return _service_from_db(db).update_my_preference(key=key, body=body, current=current)
 
 
-async def update_user(
+def update_user(
     user_id: str,
     body: UserUpdate,
     db=None,

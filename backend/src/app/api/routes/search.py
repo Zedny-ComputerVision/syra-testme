@@ -14,7 +14,7 @@ def _is_pool_library_exam(exam: Exam) -> bool:
 
 
 @router.get("/")
-async def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = q.strip().lower()
     if not query:
         raise HTTPException(status_code=400, detail="Search query is required")

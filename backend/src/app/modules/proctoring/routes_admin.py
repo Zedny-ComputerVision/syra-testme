@@ -56,7 +56,7 @@ def _owned_exam_or_404(db: Session, exam_id: UUID | str, current: User) -> Exam:
 
 
 @router.get("/admin/sessions")
-async def list_proctoring_sessions(
+def list_proctoring_sessions(
     exam_id: UUID | None = None,
     user_id: UUID | None = None,
     min_risk: int | None = Query(None, ge=0, le=100),
@@ -176,7 +176,7 @@ async def list_proctoring_sessions(
 
 
 @router.get("/admin/sessions/{attempt_id}/summary")
-async def get_session_summary(
+def get_session_summary(
     attempt_id: str,
     current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
     db: Session = Depends(get_db_dep),
@@ -239,7 +239,7 @@ async def get_session_summary(
 
 
 @router.get("/admin/sessions/{attempt_id}/export")
-async def export_session_events(
+def export_session_events(
     attempt_id: str,
     current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
     db: Session = Depends(get_db_dep),
@@ -282,7 +282,7 @@ async def export_session_events(
 
 
 @router.get("/admin/stats/{exam_id}")
-async def get_exam_proctoring_stats(
+def get_exam_proctoring_stats(
     exam_id: str,
     current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
     db: Session = Depends(get_db_dep),
@@ -360,7 +360,7 @@ async def get_exam_proctoring_stats(
 
 
 @router.get("/admin/config-history/{exam_id}")
-async def get_proctoring_config_history(
+def get_proctoring_config_history(
     exam_id: str,
     current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
     db: Session = Depends(get_db_dep),
@@ -439,7 +439,7 @@ async def force_submit_attempt(
 # ── Live Monitoring ───────────────────────────────────────────────────────────
 
 @router.get("/admin/live")
-async def list_active_sessions(
+def list_active_sessions(
     current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
     db: Session = Depends(get_db_dep),
 ):

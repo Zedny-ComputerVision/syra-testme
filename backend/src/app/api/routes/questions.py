@@ -30,7 +30,7 @@ def _learner_question_response(question: Question) -> dict:
 
 
 @router.post("/", response_model=QuestionRead)
-async def create_question(body: QuestionCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def create_question(body: QuestionCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     exam = db.get(Exam, body.exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="Test not found")
@@ -46,7 +46,7 @@ async def create_question(body: QuestionCreate, db: Session = Depends(get_db_dep
 
 
 @router.get("/", response_model=list[QuestionRead])
-async def list_questions(exam_id: str | None = None, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def list_questions(exam_id: str | None = None, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
     elif not exam_id:
@@ -77,7 +77,7 @@ async def list_questions(exam_id: str | None = None, db: Session = Depends(get_d
 
 
 @router.get("/{question_id}", response_model=QuestionRead)
-async def get_question(
+def get_question(
     question_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
@@ -95,7 +95,7 @@ async def get_question(
 
 
 @router.put("/{question_id}", response_model=QuestionRead)
-async def update_question(question_id: str, body: QuestionBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def update_question(question_id: str, body: QuestionBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     parsed_id = _parse_uuid(question_id, "Question not found")
     q = db.get(Question, parsed_id)
     if not q:
@@ -116,7 +116,7 @@ async def update_question(question_id: str, body: QuestionBase, db: Session = De
 
 
 @router.delete("/{question_id}", response_model=Message)
-async def delete_question(question_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def delete_question(question_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     parsed_id = _parse_uuid(question_id, "Question not found")
     q = db.get(Question, parsed_id)
     if not q:

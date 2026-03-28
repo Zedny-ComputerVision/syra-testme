@@ -25,7 +25,7 @@ _schedule_service.write_audit_log = _write_schedule_audit_log
 
 
 @router.post("/", response_model=ScheduleRead)
-async def create_schedule(
+def create_schedule(
     body: ScheduleBase,
     db=Depends(get_db_dep),
     current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
@@ -34,7 +34,7 @@ async def create_schedule(
 
 
 @router.get("/tests", response_model=list[ExamRead])
-async def list_schedulable_tests(
+def list_schedulable_tests(
     db=Depends(get_db_dep),
     current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
@@ -42,7 +42,7 @@ async def list_schedulable_tests(
 
 
 @router.get("/", response_model=list[ScheduleRead])
-async def list_schedules(
+def list_schedules(
     exam_id: str | None = Query(None),
     db=Depends(get_db_dep),
     current=Depends(get_current_user),
@@ -51,7 +51,7 @@ async def list_schedules(
 
 
 @router.put("/{schedule_id}", response_model=ScheduleRead)
-async def update_schedule(
+def update_schedule(
     schedule_id: str,
     body: ScheduleUpdate,
     db=Depends(get_db_dep),
@@ -61,7 +61,7 @@ async def update_schedule(
 
 
 @router.delete("/{schedule_id}", response_model=Message)
-async def delete_schedule(
+def delete_schedule(
     schedule_id: str,
     db=Depends(get_db_dep),
     current=Depends(require_permission("Assign Schedules", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),

@@ -43,7 +43,7 @@ def _actor_from_current(current) -> ServiceActor:
 
 
 @router.get("/", response_model=TestListResponseDTO)
-async def list_tests(
+def list_tests(
     search: str | None = None,
     status: str | None = None,
     type: TestType | None = None,
@@ -92,7 +92,7 @@ async def list_tests(
 
 
 @router.post("/", response_model=TestResponseDTO, status_code=201)
-async def create_test(
+def create_test(
     body: TestCreateDTO,
     request: Request,
     current=Depends(require_permission("Create Tests", RoleEnum.ADMIN)),
@@ -105,7 +105,7 @@ async def create_test(
 
 
 @router.get("/{test_id}", response_model=TestResponseDTO)
-async def get_test(
+def get_test(
     test_id: str,
     current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: TestService = Depends(_service_from_db),
@@ -117,7 +117,7 @@ async def get_test(
 
 
 @router.patch("/{test_id}", response_model=TestResponseDTO)
-async def update_test(
+def update_test(
     test_id: str,
     body: TestUpdateDTO,
     request: Request,
@@ -136,7 +136,7 @@ async def update_test(
 
 
 @router.post("/{test_id}/publish", response_model=TestResponseDTO)
-async def publish_test(
+def publish_test(
     test_id: str,
     current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN)),
     service: TestService = Depends(_service_from_db),
@@ -148,7 +148,7 @@ async def publish_test(
 
 
 @router.post("/{test_id}/duplicate", response_model=TestResponseDTO)
-async def duplicate_test(
+def duplicate_test(
     test_id: str,
     request: Request,
     current=Depends(require_permission("Create Tests", RoleEnum.ADMIN)),
@@ -165,7 +165,7 @@ async def duplicate_test(
 
 
 @router.post("/{test_id}/archive", response_model=TestResponseDTO)
-async def archive_test(
+def archive_test(
     test_id: str,
     current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN)),
     service: TestService = Depends(_service_from_db),
@@ -177,7 +177,7 @@ async def archive_test(
 
 
 @router.post("/{test_id}/unarchive", response_model=TestResponseDTO)
-async def unarchive_test(
+def unarchive_test(
     test_id: str,
     current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN)),
     service: TestService = Depends(_service_from_db),
@@ -189,7 +189,7 @@ async def unarchive_test(
 
 
 @router.delete("/{test_id}", status_code=204)
-async def delete_test(
+def delete_test(
     test_id: str,
     request: Request,
     current=Depends(require_permission("Delete Tests", RoleEnum.ADMIN)),
@@ -207,7 +207,7 @@ async def delete_test(
 
 
 @router.get("/{test_id}/report")
-async def download_report(
+def download_report(
     test_id: str,
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: TestService = Depends(_service_from_db),

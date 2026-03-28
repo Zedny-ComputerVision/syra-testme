@@ -12,13 +12,13 @@ _unread_count_cache: TimedSingleFlightCache[dict[str, int]] = TimedSingleFlightC
 
 
 @router.get("/", response_model=list[NotificationRead])
-async def list_notifications(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def list_notifications(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Notification).where(Notification.user_id == current.id).order_by(Notification.created_at.desc())
     return db.scalars(query).all()
 
 
 @router.post("/{notification_id}/read", response_model=Message)
-async def mark_read(notification_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def mark_read(notification_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     notif_pk = parse_uuid_param(notification_id, detail="Not found")
     notif = db.get(Notification, notif_pk)
     if not notif or notif.user_id != current.id:
@@ -31,7 +31,7 @@ async def mark_read(notification_id: str, db: Session = Depends(get_db_dep), cur
 
 
 @router.post("/read-all", response_model=Message)
-async def mark_all_read(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def mark_all_read(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     db.execute(
         update(Notification)
         .where(Notification.user_id == current.id, Notification.is_read.is_(False))
@@ -43,7 +43,7 @@ async def mark_all_read(db: Session = Depends(get_db_dep), current=Depends(get_c
 
 
 @router.get("/unread-count")
-async def unread_count(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def unread_count(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     cache_key = str(current.id)
 
     def _load_count() -> dict[str, int]:

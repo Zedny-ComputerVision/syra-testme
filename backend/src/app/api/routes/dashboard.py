@@ -8,5 +8,5 @@ router = APIRouter()
 
 
 @router.get("/", response_model=DashboardRead)
-async def dashboard(db=Depends(get_db_dep), current=Depends(get_current_user)):
+def dashboard(db=Depends(get_db_dep), current=Depends(get_current_user)):
     return build_dashboard(db=db, current=current)

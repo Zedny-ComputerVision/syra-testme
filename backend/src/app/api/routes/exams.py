@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get("/", response_model=PaginatedResponse[ExamRead])
-async def list_exams(
+def list_exams(
     page: int | None = Query(None, ge=1),
     page_size: int | None = Query(None, ge=1, le=MAX_PAGE_SIZE),
     search: str | None = Query(None),
@@ -42,7 +42,7 @@ async def list_exams(
 
 
 @router.post("/", response_model=ExamRead)
-async def create_exam(
+def create_exam(
     body: ExamCreate,
     db=Depends(get_db_dep),
     current=Depends(require_permission("Create Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
@@ -51,7 +51,7 @@ async def create_exam(
 
 
 @router.get("/{exam_id}", response_model=ExamRead)
-async def get_exam(
+def get_exam(
     exam_id: str,
     db=Depends(get_db_dep),
     current=Depends(get_current_user),
@@ -60,7 +60,7 @@ async def get_exam(
 
 
 @router.put("/{exam_id}", response_model=ExamRead)
-async def update_exam(
+def update_exam(
     exam_id: str,
     body: ExamUpdate,
     db=Depends(get_db_dep),
@@ -70,7 +70,7 @@ async def update_exam(
 
 
 @router.delete("/{exam_id}", response_model=Message)
-async def delete_exam(
+def delete_exam(
     exam_id: str,
     db=Depends(get_db_dep),
     current=Depends(require_permission("Delete Tests", RoleEnum.ADMIN)),

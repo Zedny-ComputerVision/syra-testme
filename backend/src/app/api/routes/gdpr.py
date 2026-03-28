@@ -7,7 +7,7 @@ router = APIRouter()
 
 
 @router.post("/users/{user_id}/export-data")
-async def export_user_data(
+def export_user_data(
     user_id: str,
     db=Depends(get_db_dep),
     current=Depends(get_current_user),

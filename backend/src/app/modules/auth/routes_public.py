@@ -56,13 +56,13 @@ async def _bg_send_password_reset_email(user: User, token: str):
 
 
 @router.get("/signup-status")
-async def signup_status(service: AuthService = Depends(_service_from_db)):
+def signup_status(service: AuthService = Depends(_service_from_db)):
     return service.signup_status()
 
 
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
 @router.post("/signup", response_model=Message)
-async def signup(
+def signup(
     request: Request,
     body: SignupRequest,
     background: BackgroundTasks,
@@ -76,7 +76,7 @@ async def signup(
 
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
 @router.post("/login", response_model=Token)
-async def login(
+def login(
     request: Request,
     body: LoginRequest,
     service: AuthService = Depends(_service_from_db),
@@ -86,7 +86,7 @@ async def login(
 
 @limiter.limit(settings.RATE_LIMIT_REFRESH)
 @router.post("/refresh", response_model=TokenRefresh)
-async def refresh(
+def refresh(
     request: Request,
     body: RefreshRequest,
     service: AuthService = Depends(_service_from_db),
@@ -96,12 +96,12 @@ async def refresh(
 
 
 @router.get("/me", response_model=UserRead)
-async def me(current_user: User = Depends(get_current_user)):
+def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
 @router.post("/logout", response_model=Message)
-async def logout(
+def logout(
     request: Request,
     current_user: User = Depends(get_current_user),
     service: AuthService = Depends(_service_from_db),
@@ -110,7 +110,7 @@ async def logout(
 
 
 @router.post("/change-password", response_model=Message)
-async def change_password(
+def change_password(
     body: ChangePasswordRequest,
     background: BackgroundTasks,
     current_user: User = Depends(get_current_user),
@@ -123,7 +123,7 @@ async def change_password(
 
 @limiter.limit(settings.RATE_LIMIT_FORGOT)
 @router.post("/forgot-password", status_code=202, response_model=Message)
-async def forgot_password(
+def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,
     background: BackgroundTasks,
@@ -144,7 +144,7 @@ async def forgot_password(
 
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
 @router.post("/reset-password", response_model=Message)
-async def reset_password(
+def reset_password(
     request: Request,
     body: ResetPasswordRequest,
     service: AuthService = Depends(_service_from_db),

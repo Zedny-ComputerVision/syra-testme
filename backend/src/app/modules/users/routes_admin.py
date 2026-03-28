@@ -26,7 +26,7 @@ def _service_from_db(db=Depends(get_db_dep)) -> UserService:
 
 
 @router.get("/", response_model=PaginatedResponse[UserRead])
-async def list_users(
+def list_users(
     role: str | None = None,
     search: str | None = None,
     is_active: bool | None = None,
@@ -57,7 +57,7 @@ async def list_users(
 
 
 @router.post("/", response_model=UserRead)
-async def create_user(
+def create_user(
     body: UserCreate,
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
     service: UserService = Depends(_service_from_db),
@@ -67,7 +67,7 @@ async def create_user(
 
 
 @router.get("/{user_id}", response_model=UserRead)
-async def get_user(
+def get_user(
     user_id: str,
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: UserService = Depends(_service_from_db),
@@ -77,7 +77,7 @@ async def get_user(
 
 
 @router.put("/{user_id}", response_model=UserRead)
-async def update_user(
+def update_user(
     user_id: str,
     body: UserUpdate,
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
@@ -87,7 +87,7 @@ async def update_user(
 
 
 @router.patch("/{user_id}", response_model=UserRead)
-async def patch_user(
+def patch_user(
     user_id: str,
     body: AdminUserPatch,
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
@@ -97,7 +97,7 @@ async def patch_user(
 
 
 @router.post("/{user_id}/reset-password", response_model=Message)
-async def reset_user_password(
+def reset_user_password(
     user_id: str,
     body: AdminPasswordResetRequest,
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
@@ -107,7 +107,7 @@ async def reset_user_password(
 
 
 @router.delete("/{user_id}", response_model=Message)
-async def delete_user(
+def delete_user(
     user_id: str,
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
     service: UserService = Depends(_service_from_db),

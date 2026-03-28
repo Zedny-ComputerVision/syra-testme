@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.post("/", response_model=NodeRead)
-async def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     course = db.get(Course, body.course_id)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
@@ -27,7 +27,7 @@ async def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), curre
 
 
 @router.get("/", response_model=list[NodeRead])
-async def list_nodes(course_id: str | None = None, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def list_nodes(course_id: str | None = None, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Node)
     if course_id:
         course_pk = parse_uuid_param(course_id, detail="Invalid course_id")
@@ -41,7 +41,7 @@ async def list_nodes(course_id: str | None = None, db: Session = Depends(get_db_
 
 
 @router.get("/{node_id}", response_model=NodeRead)
-async def get_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def get_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     node_pk = parse_uuid_param(node_id, detail="Node not found")
     node = db.get(Node, node_pk)
     if not node:
@@ -54,7 +54,7 @@ async def get_node(node_id: str, db: Session = Depends(get_db_dep), current=Depe
 
 
 @router.put("/{node_id}", response_model=NodeRead)
-async def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     node_pk = parse_uuid_param(node_id, detail="Node not found")
     node = db.get(Node, node_pk)
     if not node:
@@ -71,7 +71,7 @@ async def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db
 
 
 @router.delete("/{node_id}", response_model=Message)
-async def delete_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def delete_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     node_pk = parse_uuid_param(node_id, detail="Node not found")
     node = db.get(Node, node_pk)
     if not node:

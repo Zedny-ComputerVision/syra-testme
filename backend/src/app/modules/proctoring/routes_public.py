@@ -902,7 +902,7 @@ def _action_label(action: str) -> str:
     return labels.get(str(action or "").upper(), "Warn learner")
 
 
-async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> tuple[Path, int]:
+def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> tuple[Path, int]:
     upload_limit_bytes = settings.MAX_VIDEO_UPLOAD_MB * 1024 * 1024
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     temp_path = Path(temp_file.name)
@@ -1402,7 +1402,7 @@ def _apply_alert_rules(
 
 
 @router.post("/{attempt_id}/ping", response_model=ProctoringPingResponse)
-async def proctoring_ping(
+def proctoring_ping(
     attempt_id: str,
     request: Request,
     payload: dict = Body(...),
@@ -1529,7 +1529,7 @@ async def proctoring_ping(
 
 
 @router.post("/{attempt_id}/video/start")
-async def start_video_capture(
+def start_video_capture(
     attempt_id: str,
     payload: dict = Body(default={}),
     db: Session = Depends(get_db_dep),
@@ -1542,7 +1542,7 @@ async def start_video_capture(
 
 
 @router.post("/{attempt_id}/video/chunk", response_model=Message)
-async def upload_video_chunk(
+def upload_video_chunk(
     attempt_id: str,
     session_id: str = Form(...),
     chunk_index: int = Form(..., ge=0),
@@ -1557,7 +1557,7 @@ async def upload_video_chunk(
 
 
 @router.post("/{attempt_id}/video/finalize")
-async def finalize_video_capture(
+def finalize_video_capture(
     attempt_id: str,
     payload: dict = Body(...),
     db: Session = Depends(get_db_dep),
@@ -1765,7 +1765,7 @@ async def register_video_capture(
 
 
 @router.post("/{attempt_id}/video/upload-progress", response_model=Message)
-async def report_video_upload_progress(
+def report_video_upload_progress(
     attempt_id: str,
     payload: dict = Body(...),
     db: Session = Depends(get_db_dep),
@@ -1857,7 +1857,7 @@ async def get_video_batch_status(
 
 
 @router.post("/{attempt_id}/pause", response_model=Message)
-async def pause_attempt(
+def pause_attempt(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
@@ -1880,7 +1880,7 @@ async def pause_attempt(
 
 
 @router.post("/{attempt_id}/resume", response_model=Message)
-async def resume_attempt(
+def resume_attempt(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
@@ -1930,7 +1930,7 @@ async def list_videos(
 
 
 @router.get("/exam/{exam_id}/video-upload-status")
-async def list_exam_video_upload_status(
+def list_exam_video_upload_status(
     exam_id: str,
     attempt_ids: list[str] | None = Query(default=None),
     db: Session = Depends(get_db_dep),
@@ -2911,7 +2911,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
 
 @router.get("/{attempt_id}/events", response_model=list[ProctoringEventRead])
-async def list_events(
+def list_events(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
@@ -2926,7 +2926,7 @@ async def list_events(
 
 
 @router.get("/{attempt_id}/summary", response_model=AttemptProctoringSummaryRead)
-async def get_attempt_summary(
+def get_attempt_summary(
     attempt_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
@@ -2937,7 +2937,7 @@ async def get_attempt_summary(
 
 
 @router.post("/{attempt_id}/generate-report")
-async def generate_report(
+def generate_report(
     attempt_id: str,
     output_format: str = "html",
     db: Session = Depends(get_db_dep),

@@ -72,7 +72,7 @@ def _exclude_internal_library_courses(statement):
 
 
 @router.get("/", response_model=list[CourseRead])
-async def list_courses(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def list_courses(db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Course)
     if current.role == RoleEnum.LEARNER:
         query = _exclude_internal_library_courses(
@@ -85,7 +85,7 @@ async def list_courses(db: Session = Depends(get_db_dep), current=Depends(get_cu
 
 
 @router.post("/", response_model=CourseRead)
-async def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     payload = _normalize_course_payload(body)
     _ensure_unique_course_title(db, payload["title"])
     now = datetime.now(timezone.utc)
@@ -104,7 +104,7 @@ async def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), c
 
 
 @router.get("/{course_id}", response_model=CourseRead)
-async def get_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
+def get_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     course_pk = parse_uuid_param(course_id, detail="Course not found")
     course = db.get(Course, course_pk)
     if not course:
@@ -117,7 +117,7 @@ async def get_course(course_id: str, db: Session = Depends(get_db_dep), current=
 
 
 @router.put("/{course_id}", response_model=CourseRead)
-async def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
+def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     course_pk = parse_uuid_param(course_id, detail="Course not found")
     course = db.get(Course, course_pk)
     if not course:
@@ -136,7 +136,7 @@ async def update_course(course_id: str, body: CourseBase, db: Session = Depends(
 
 
 @router.delete("/{course_id}", response_model=Message)
-async def delete_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
+def delete_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
     course_pk = parse_uuid_param(course_id, detail="Course not found")
     course = db.get(Course, course_pk)
     if not course:
