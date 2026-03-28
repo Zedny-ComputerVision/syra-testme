@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None
+    SENTRY_DSN: str | None = None
+    THREADPOOL_SIZE: int = Field(default=40, ge=10)
+    MAINTENANCE_CACHE_TTL_SECONDS: float = Field(default=300.0, ge=60.0)
     CLOUDFLARE_MEDIA_API_BASE_URL: str = Field(default="")
     CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS: bool = False
     CLOUDFLARE_STREAM_SIGNING_KEY: str = Field(default="")

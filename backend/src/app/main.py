@@ -32,6 +32,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 setup_logging()
 logger = logging.getLogger("syra")
 settings = get_settings()
+
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
+    logger.info("Sentry error tracking enabled")
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/src/app -> backend
 STORAGE_DIR = BASE_DIR / "storage"
 IDENTITY_DIR = STORAGE_DIR / "identity"
@@ -107,7 +116,7 @@ MAINTENANCE_ALLOWED_WRITE_PATHS = {
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
 }
-MAINTENANCE_CACHE_TTL_SECONDS = 60.0
+MAINTENANCE_CACHE_TTL_SECONDS = settings.MAINTENANCE_CACHE_TTL_SECONDS
 _maintenance_mode_cache = {
     "mode": "off",
     "expires_at": 0.0,
@@ -566,6 +575,11 @@ def _try_acquire_leader_lock() -> bool:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    import anyio
+    limiter = anyio.to_thread.current_default_thread_limiter()
+    limiter.total_tokens = settings.THREADPOOL_SIZE
+    logger.info("anyio thread pool size set to %d", settings.THREADPOOL_SIZE)
+
     is_test_env = _is_test_env()
     _run_startup_initialization_once_per_container(is_test_env=is_test_env)
     is_leader = _try_acquire_leader_lock()

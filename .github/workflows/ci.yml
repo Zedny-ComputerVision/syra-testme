@@ -92,6 +92,8 @@ jobs:
         run: npm run lint
       - name: Run Flake8
         run: python -m flake8 backend/src _workspace_nonruntime/tests/backend/tests
+      - name: Check for blocking async route handlers
+        run: python .github/scripts/check_async_routes.py backend/src/app
 
   build:
     runs-on: ubuntu-latest

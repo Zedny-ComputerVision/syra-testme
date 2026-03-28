@@ -36,6 +36,9 @@ tf-keras
 webrtcvad-wheels>=2.0.14
 scipy>=1.11.0
 
+# ── Observability ────────────────────────────
+sentry-sdk[fastapi]>=2.0.0
+
 # ── Utilities ────────────────────────────────
 reportlab>=4.1.0
 croniter>=2.0.0

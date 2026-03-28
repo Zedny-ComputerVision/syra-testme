@@ -39,12 +39,12 @@ app = FastAPI(title="SYRA AI Inference", redirect_slashes=False, lifespan=lifesp
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/ready")
-async def ready() -> JSONResponse:
+def ready() -> JSONResponse:
     if not getattr(app.state, "ready", False):
         return JSONResponse(status_code=503, content={"status": "warming"})
     return JSONResponse(

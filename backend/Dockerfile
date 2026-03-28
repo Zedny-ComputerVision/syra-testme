@@ -47,7 +47,7 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=10 \
-    CMD curl -f http://127.0.0.1:8000/api/health || exit 1
+    CMD curl -f http://127.0.0.1:8000/api/health/db || exit 1
 
 # Production: gunicorn with uvicorn workers for proper process management.
 # Do not use --preload here: the SQLAlchemy engine is created at import time,
@@ -57,4 +57,4 @@ HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=10 \
 # Live proctoring session tracking is process-local today, so the safe
 # production default is a single web worker unless a shared session bus is added.
 ENV WORKERS=1
-CMD ["sh", "-c", "gunicorn src.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${WORKERS} --timeout 600 --graceful-timeout 30 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips '*'"]
+CMD ["sh", "-c", "gunicorn src.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${WORKERS} --timeout 600 --graceful-timeout 120 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips '*'"]
