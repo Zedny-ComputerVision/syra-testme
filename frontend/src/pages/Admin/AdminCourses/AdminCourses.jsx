@@ -50,9 +50,10 @@ export default function AdminCourses() {
     setError('')
     setWarning('')
     try {
-      const [coursesRes, testsRes] = await Promise.allSettled([
+      const [coursesRes, testsRes, nodesRes] = await Promise.allSettled([
         adminApi.courses(),
         adminApi.allTests({ page_size: 200 }),
+        adminApi.nodes(),
       ])
       if (coursesRes.status !== 'fulfilled') {
         setCourses([])
@@ -72,32 +73,26 @@ export default function AdminCourses() {
         setWarning('Linked tests could not be loaded. Courses and modules remain available, but linked test counts may be incomplete until you retry.')
       }
 
-      const nodeEntries = await Promise.allSettled(
-        courseList.map(async (course) => {
-          const res = await adminApi.nodes(course.id)
-          return [course.id, res.data || []]
-        }),
-      )
-
-      const nodeMap = {}
-      const failedCourses = []
-      nodeEntries.forEach((entry, index) => {
-        if (entry.status === 'fulfilled') {
-          const [courseId, rows] = entry.value
-          nodeMap[courseId] = rows
-        } else {
-          nodeMap[courseList[index].id] = []
-          failedCourses.push(courseList[index].title)
+      const nodeMap = Object.fromEntries(courseList.map((course) => [course.id, []]))
+      if (nodesRes.status === 'fulfilled') {
+        for (const node of nodesRes.value.data || []) {
+          const courseId = String(node.course_id || '')
+          if (!courseId) continue
+          if (!nodeMap[courseId]) nodeMap[courseId] = []
+          nodeMap[courseId].push(node)
         }
-      })
-      setNodes(nodeMap)
-      if (failedCourses.length) {
+      } else {
         setWarning((current) => (
           current
-            ? `${current} Some module lists could not be loaded: ${failedCourses.join(', ')}.`
-            : `Some module lists could not be loaded: ${failedCourses.join(', ')}.`
+            ? `${current} Course modules could not be loaded until you retry.`
+            : 'Course modules could not be loaded until you retry.'
         ))
       }
+
+      Object.values(nodeMap).forEach((rows) => {
+        rows.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      })
+      setNodes(nodeMap)
     } catch (err) {
       setCourses([])
       setNodes({})
