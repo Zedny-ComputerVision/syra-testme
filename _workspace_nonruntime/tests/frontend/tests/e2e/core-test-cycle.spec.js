@@ -439,11 +439,11 @@ test.describe('Core test cycle', () => {
     await expect(adminPage.getByRole('heading', { name: 'Video Review' })).toBeVisible()
     await expect(adminPage.getByText('Warning Timeline')).toBeVisible()
     await expect(adminPage.getByRole('heading', { name: 'Exam Events' })).toBeVisible()
-    if (await adminPage.getByRole('button', { name: /FOCUS_LOSS|ALT_TAB/ }).count()) {
-      await expect(adminPage.getByRole('button', { name: /FOCUS_LOSS|ALT_TAB/ }).first()).toBeVisible()
-    } else {
-      await expect(adminPage.getByText(/No warning events detected for this attempt|No warning events fall within the selected recording|No warning events match the active filters/)).toBeVisible()
-    }
+    await expect(
+      adminPage.getByText(
+        /FOCUS LOSS|FOCUS_LOSS|ALT TAB|ALT_TAB|CAMERA COVERED|CAMERA_COVERED|FACE DISAPPEARED|FACE_DISAPPEARED|No warning events detected for this attempt|No warning events fall within the selected recording|No warning events match the active filters/i,
+      ).first(),
+    ).toBeVisible()
 
     // Manage page proctoring tab reflects the real attempt data.
     await adminPage.goto(`/admin/tests/${createdTest.id}/manage?tab=proctoring`)

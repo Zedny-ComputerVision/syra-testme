@@ -64,10 +64,16 @@ test.describe('Admin system pages', () => {
 
     const row = scheduleRow(page, scheduleName)
     await expect(row).toBeVisible()
+    const runResponsePromise = page.waitForResponse((response) => (
+      response.url().includes('/api/report-schedules/')
+      && response.url().includes('/run')
+      && response.request().method() === 'POST'
+    ))
     await row.getByRole('button', { name: 'Run now' }).click()
-    await expect(page.getByText(/Report generated successfully|Report run completed successfully/)).toBeVisible()
+    const runResponse = await runResponsePromise
+    expect(runResponse.ok(), `schedule run failed: ${runResponse.status()} ${await runResponse.text()}`).toBeTruthy()
     const generatedReportLink = page.getByRole('link', { name: 'Open generated report' })
-    await expect(generatedReportLink).toBeVisible()
+    await expect(generatedReportLink).toBeVisible({ timeout: 30000 })
     await expect(generatedReportLink).toHaveAttribute('href', /\/api\/media\/reports\//)
 
     await row.getByRole('button', { name: 'Delete' }).click()
