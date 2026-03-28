@@ -439,11 +439,20 @@ test.describe('Core test cycle', () => {
     await expect(adminPage.getByRole('heading', { name: 'Video Review' })).toBeVisible()
     await expect(adminPage.getByText('Warning Timeline')).toBeVisible()
     await expect(adminPage.getByRole('heading', { name: 'Exam Events' })).toBeVisible()
-    await expect(
-      adminPage.getByText(
-        /FOCUS LOSS|FOCUS_LOSS|ALT TAB|ALT_TAB|CAMERA COVERED|CAMERA_COVERED|FACE DISAPPEARED|FACE_DISAPPEARED|No warning events detected for this attempt|No warning events fall within the selected recording|No warning events match the active filters/i,
-      ).first(),
-    ).toBeVisible()
+    const examEventsPanel = adminPage.locator('aside').filter({
+      has: adminPage.getByRole('heading', { name: 'Exam Events' }),
+    }).first()
+    const visibleWarningEvent = examEventsPanel.locator('button', {
+      hasText: /FOCUS LOSS|FOCUS_LOSS|ALT TAB|ALT_TAB|CAMERA COVERED|CAMERA_COVERED|FACE DISAPPEARED|FACE_DISAPPEARED|FAST ANSWER|FAST_ANSWER/i,
+    }).first()
+    const warningEmptyState = examEventsPanel.getByText(
+      /No warning events detected for this attempt|No warning events fall within the selected recording|No warning events match the active filters/i,
+    ).first()
+    await expect.poll(async () => {
+      if (await visibleWarningEvent.isVisible().catch(() => false)) return 'event'
+      if (await warningEmptyState.isVisible().catch(() => false)) return 'empty'
+      return 'pending'
+    }, { timeout: 15000 }).not.toBe('pending')
 
     // Manage page proctoring tab reflects the real attempt data.
     await adminPage.goto(`/admin/tests/${createdTest.id}/manage?tab=proctoring`)
