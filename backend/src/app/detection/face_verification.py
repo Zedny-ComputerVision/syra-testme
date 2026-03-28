@@ -172,6 +172,7 @@ class FaceVerifier:
     def __init__(self, baseline: list[float] | None, threshold: float | None = None, enabled: bool = True):
         self.enabled = enabled and baseline is not None
         self.baseline = np.array(baseline, dtype=np.float32) if baseline is not None else None
+        self._use_deepface = _get_deepface_class() is not None and (baseline is not None and len(baseline) == 512)
 
         if self._use_deepface:
             # DeepFace 512-D cosine distance has different characteristics than
@@ -183,8 +184,6 @@ class FaceVerifier:
             self.threshold = float(threshold)
         else:
             self.threshold = self._LANDMARK_THRESHOLD
-
-        self._use_deepface = _get_deepface_class() is not None and (baseline is not None and len(baseline) == 512)
 
         try:
             import mediapipe as mp

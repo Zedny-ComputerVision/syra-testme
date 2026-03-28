@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import inspect
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -36,6 +37,20 @@ from src.app.schemas import AttemptAnswerBase, QuestionCreate, QuestionRead, Sch
 
 
 client = TestClient(app)
+
+
+def _run(coro_or_value):
+    """Call a route handler that may be sync (def) or async (async def).
+
+    Route handlers were converted from async def to def so FastAPI runs them
+    in a thread pool.  Tests that called them via asyncio.run() would break
+    because plain function calls return values, not coroutines.  This helper
+    handles both: if the result is a coroutine it runs it, otherwise it
+    returns it directly.
+    """
+    if inspect.iscoroutine(coro_or_value):
+        return asyncio.run(coro_or_value)
+    return coro_or_value
 
 
 def test_required_routes_registered():
@@ -111,7 +126,7 @@ def test_submit_attempt_skips_identity_gate_for_fullscreen_only_proctoring():
         def refresh(self, _obj):
             pass
 
-    out = asyncio.run(
+    out = _run(
         attempts_routes.submit_attempt(
             str(attempt_id),
             db=DummySession(),
@@ -147,7 +162,7 @@ def test_precheck_allows_system_only_checks_without_identity_images():
         def commit(self):
             pass
 
-    out = asyncio.run(
+    out = _run(
         precheck_routes.precheck(
             str(attempt_id),
             payload={"fs_ok": True},
@@ -281,7 +296,7 @@ def test_list_exams_orders_newest_first():
             return DummyExecuteResult()
 
     session = DummySession()
-    out = asyncio.run(exams_routes.list_exams(db=session, current=learner))
+    out = _run(exams_routes.list_exams(db=session, current=learner))
     assert out == {"items": [], "total": 0, "skip": 0, "limit": 50}
     assert [str(clause) for clause in session.query._order_by_clauses] == [
         "exams.updated_at DESC",
@@ -316,7 +331,7 @@ def test_list_exams_applies_custom_search_and_sort_for_learner():
             return DummyExecuteResult()
 
     session = DummySession()
-    out = asyncio.run(
+    out = _run(
         exams_routes.list_exams(
             db=session,
             current=learner,
@@ -366,7 +381,7 @@ def test_list_exams_prefers_page_over_skip_when_both_provided():
             return DummyExecuteResult()
 
     session = DummySession()
-    out = asyncio.run(
+    out = _run(
         exams_routes.list_exams(
             db=session,
             current=learner,
@@ -416,7 +431,7 @@ def test_list_exams_does_not_apply_learner_schedule_filters_for_admin():
             return DummyExecuteResult()
 
     session = DummySession()
-    out = asyncio.run(
+    out = _run(
         exams_routes.list_exams(
             db=session,
             current=admin,
@@ -722,7 +737,7 @@ def test_grade_attempt_preserves_original_submission_timestamp():
         def refresh(self, _obj):
             pass
 
-    out = asyncio.run(
+    out = _run(
         attempts_routes.grade_attempt(
             str(attempt_id),
             score=88.5,
@@ -893,7 +908,7 @@ def test_review_attempt_answer_and_finalize_review_publish_score():
         def refresh(self, _obj):
             pass
 
-    review_out = asyncio.run(
+    review_out = _run(
         attempts_routes.review_attempt_answer(
             str(attempt_id),
             str(answer_id),
@@ -934,7 +949,7 @@ def test_review_attempt_answer_and_finalize_review_publish_score():
         def refresh(self, _obj):
             pass
 
-    finalize_out = asyncio.run(
+    finalize_out = _run(
         attempts_routes.finalize_attempt_review(
             str(attempt_id),
             db=FinalizeSession(),
@@ -1005,7 +1020,7 @@ def test_finalize_attempt_review_requires_all_manual_answers_to_be_scored():
             return DummyScalarResult([text_question])
 
     try:
-        asyncio.run(
+        _run(
             attempts_routes.finalize_attempt_review(
                 str(attempt_id),
                 db=DummySession(),
@@ -1071,7 +1086,7 @@ def test_list_learners_for_scheduling_allows_instructor_with_assign_schedules(mo
 
     current_user = SimpleNamespace(role=RoleEnum.INSTRUCTOR)
 
-    out = asyncio.run(
+    out = _run(
         users_routes.list_learners_for_scheduling(
             db=DummySession(),
             current=current_user,
@@ -1210,7 +1225,7 @@ def test_submit_answer_upserts_same_attempt_question_pair():
 
     db = DummySession()
 
-    first = asyncio.run(
+    first = _run(
         attempts_routes.submit_answer(
             str(attempt_id),
             AttemptAnswerBase(question_id=question_id, answer="A"),
@@ -1218,7 +1233,7 @@ def test_submit_answer_upserts_same_attempt_question_pair():
             current=current_user,
         )
     )
-    second = asyncio.run(
+    second = _run(
         attempts_routes.submit_answer(
             str(attempt_id),
             AttemptAnswerBase(question_id=question_id, answer="B"),
@@ -1270,7 +1285,7 @@ def test_submit_answer_accepts_multi_payload_and_serializes():
             pass
 
     db = DummySession()
-    created = asyncio.run(
+    created = _run(
         attempts_routes.submit_answer(
             str(attempt_id),
             AttemptAnswerBase(question_id=question_id, answer=["A", "C"]),
@@ -1289,7 +1304,7 @@ def test_get_exam_with_invalid_uuid_returns_404_not_500():
 
     current_user = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.ADMIN)
     try:
-        asyncio.run(exams_routes.get_exam("1", db=DummySession(), current=current_user))
+        _run(exams_routes.get_exam("1", db=DummySession(), current=current_user))
     except HTTPException as exc:
         assert exc.status_code == 404
         assert exc.detail == "Test not found"
@@ -1304,7 +1319,7 @@ def test_list_questions_with_invalid_exam_id_returns_422_not_500():
 
     current_user = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.ADMIN)
     try:
-        asyncio.run(questions_routes.list_questions(exam_id="1", db=DummySession(), current=current_user))
+        _run(questions_routes.list_questions(exam_id="1", db=DummySession(), current=current_user))
     except HTTPException as exc:
         assert exc.status_code == 422
         assert exc.detail == "Invalid exam_id"
@@ -1336,7 +1351,7 @@ def test_precheck_accepts_nested_payload_bypass_shape():
     previous = precheck_routes.ALLOW_TEST_BYPASS
     precheck_routes.ALLOW_TEST_BYPASS = True
     try:
-        out = asyncio.run(
+        out = _run(
             precheck_routes.precheck(
                 str(attempt_id),
                 payload={"data": {"test_pass": True}},
@@ -1363,7 +1378,7 @@ def test_learner_cannot_access_node_from_draft_course():
             return None
 
     try:
-        asyncio.run(nodes_routes.get_node(str(node_id), db=DummySession(), current=learner))
+        _run(nodes_routes.get_node(str(node_id), db=DummySession(), current=learner))
     except HTTPException as exc:
         assert exc.status_code == 404
         assert exc.detail == "Node not found"
@@ -1405,7 +1420,7 @@ def test_user_preferences_are_upserted_per_user():
 
     db = DummySession()
 
-    updated = asyncio.run(
+    updated = _run(
         users_routes.update_my_preference(
             "favorite_reports",
             UserPreferenceUpdate(value=[{"title": "Risk Alerts", "link": "/admin/reports"}]),
@@ -1413,7 +1428,7 @@ def test_user_preferences_are_upserted_per_user():
             current=current_user,
         )
     )
-    fetched = asyncio.run(
+    fetched = _run(
         users_routes.get_my_preference("favorite_reports", db=db, current=current_user)
     )
 
@@ -1462,7 +1477,7 @@ def test_verify_identity_marks_precheck_fields_for_submit():
     attempts_routes._save_identity_photo = lambda *_args, **_kwargs: None
     try:
         payload = "data:image/jpeg;base64," + base64.b64encode(b"fake-image").decode()
-        asyncio.run(
+        _run(
             attempts_routes.verify_identity(
                 str(attempt_id),
                 photo_base64=payload,
@@ -1585,8 +1600,8 @@ def test_permissions_config_is_accessible_without_system_settings():
     current_user = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.ADMIN)
     db = DummySession()
 
-    fetched = asyncio.run(admin_settings_routes.get_setting("permissions_config", db=db, current=current_user))
-    updated = asyncio.run(
+    fetched = _run(admin_settings_routes.get_setting("permissions_config", db=db, current=current_user))
+    updated = _run(
         admin_settings_routes.update_setting(
             "permissions_config",
             admin_settings_routes.SystemSettingUpdate(value=json.dumps([
@@ -1633,7 +1648,7 @@ def test_integrations_config_requires_http_urls():
     current_user = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.ADMIN)
 
     try:
-        asyncio.run(
+        _run(
             admin_settings_routes.update_setting(
                 "integrations_config",
                 admin_settings_routes.SystemSettingUpdate(
@@ -1676,7 +1691,7 @@ def test_integrations_config_is_trimmed_before_save():
     current_user = SimpleNamespace(id=uuid.uuid4(), role=RoleEnum.ADMIN)
     db = DummySession()
 
-    saved = asyncio.run(
+    saved = _run(
         admin_settings_routes.update_setting(
             "integrations_config",
             admin_settings_routes.SystemSettingUpdate(
@@ -1807,7 +1822,7 @@ def test_run_schedule_now_returns_public_report_url(monkeypatch):
     monkeypatch.setattr(report_schedules_routes, "send_report_integration_event", fake_send_report_integration_event)
     monkeypatch.setattr(report_schedules_routes, "write_audit_log", lambda *_args, **_kwargs: None)
 
-    result = asyncio.run(
+    result = _run(
         report_schedules_routes.run_schedule_now(
             str(schedule_id),
             db=DummySession(),
@@ -1859,7 +1874,7 @@ def test_schedule_update_changes_existing_assignment():
     original_audit = schedules_routes.write_audit_log
     schedules_routes.write_audit_log = lambda *args, **kwargs: None
     try:
-        updated = asyncio.run(
+        updated = _run(
             schedules_routes.update_schedule(
                 str(schedule_id),
                 ScheduleUpdate(
@@ -1911,7 +1926,7 @@ def test_user_update_supports_user_id_changes():
         def refresh(self, _obj):
             pass
 
-    updated = asyncio.run(
+    updated = _run(
         users_routes.update_user(
             str(target_user_id),
             users_routes.UserUpdate(user_id="NEW-USER", name="New Name"),

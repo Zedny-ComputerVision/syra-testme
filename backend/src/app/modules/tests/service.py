@@ -46,6 +46,7 @@ DEFAULT_UI_CONFIG = {
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(slots=True)
 class ServiceActor:
     id: uuid.UUID | None
