@@ -35,7 +35,7 @@ def upgrade() -> None:
     # Serves the entire learner catalog WHERE + ORDER BY in a single index scan.
     op.execute(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_exam_learner_catalog
+        CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
         ON exams (updated_at DESC, created_at DESC)
         WHERE status = 'open' AND library_pool_id IS NULL
         """
@@ -45,12 +45,12 @@ def upgrade() -> None:
     # Includes scheduled_at so the check never needs to touch the heap.
     op.execute(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_schedule_user_exam_scheduled
+        CREATE INDEX IF NOT EXISTS ix_schedule_user_exam_scheduled
         ON schedules (user_id, exam_id, scheduled_at)
         """
     )
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_schedule_user_exam_scheduled")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_exam_learner_catalog")
+    op.execute("DROP INDEX IF EXISTS ix_schedule_user_exam_scheduled")
+    op.execute("DROP INDEX IF EXISTS ix_exam_learner_catalog")
