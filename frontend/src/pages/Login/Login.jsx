@@ -351,7 +351,7 @@ export default function Login() {
   }
 
   return (
-    <div className={styles.page}>
+    <main className={styles.page}>
       <form className={styles.card} onSubmit={handleSubmit}>
         <div className={styles.brand}>
           <div className={styles.logo}>
@@ -433,6 +433,6 @@ export default function Login() {
           <Link className={styles.secondaryLink} to="/signup">Create account</Link>
         </div>
       </form>
-    </div>
+    </main>
   )
 }

@@ -44,7 +44,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className={styles.page}>
+    <main className={styles.page}>
       <form className={styles.card} onSubmit={submit}>
         <h1 className={styles.title}>Reset Password</h1>
         {success && <div className={styles.info}>{success}</div>}
@@ -55,6 +55,6 @@ export default function ResetPassword() {
         <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Resetting...' : 'Reset Password'}</button>
         <p className={styles.loginLink}>Back to <Link className={styles.link} to="/login">login</Link></p>
       </form>
-    </div>
+    </main>
   )
 }

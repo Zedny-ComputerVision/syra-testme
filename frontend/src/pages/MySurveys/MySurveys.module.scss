@@ -9,6 +9,13 @@
   gap: 0.5rem;
 }
 
+.titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
 .title { font-size: 1.2rem; font-weight: 700; color: var(--color-text); margin: 0; }
 
 .compactBanner {

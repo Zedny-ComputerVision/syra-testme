@@ -91,7 +91,7 @@ export default function SignUp() {
   }
 
   return (
-    <div className={styles.page}>
+    <main className={styles.page}>
       <form className={`${styles.card} ${styles.signupCard}`} onSubmit={submit}>
         <div className={styles.authEyebrow}>Learner onboarding</div>
         <div className={styles.signupHero}>
@@ -148,6 +148,6 @@ export default function SignUp() {
         )}
         <p className={styles.loginLink}>Already have an account? <Link to="/login" className={styles.link}>Log in</Link></p>
       </form>
-    </div>
+    </main>
   )
 }

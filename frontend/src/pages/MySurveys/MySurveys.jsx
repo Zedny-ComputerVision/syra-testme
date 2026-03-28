@@ -64,12 +64,14 @@ export default function MySurveys() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>
-          My Surveys
+        <div className={styles.titleRow}>
+          <h1 className={styles.title}>My Surveys</h1>
           {!loading && surveys.length > 0 && (
-            <span className={styles.surveyCount}>{surveys.length}</span>
+            <span className={styles.surveyCount} aria-label={`${surveys.length} available surveys`}>
+              {surveys.length}
+            </span>
           )}
-        </h1>
+        </div>
         {!loading && submittedCount > 0 && (
           <span className={`${styles.noticeBanner} ${styles.compactBanner}`}>
             {submittedCount}/{surveys.length} completed

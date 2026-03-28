@@ -34,7 +34,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className={styles.page}>
+    <main className={styles.page}>
       <form className={styles.card} onSubmit={submit}>
         <h1 className={styles.title}>Forgot Password</h1>
         <p className={styles.sub}>Enter your email to receive a reset link.</p>
@@ -44,6 +44,6 @@ export default function ForgotPassword() {
         <button className={styles.btn} type="button" disabled={loading} onClick={requestFormSubmit}>{loading ? 'Sending...' : 'Send Reset Link'}</button>
         <p className={styles.loginLink}>Back to <Link className={styles.link} to="/login">login</Link></p>
       </form>
-    </div>
+    </main>
   )
 }
