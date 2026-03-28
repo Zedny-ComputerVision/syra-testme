@@ -44,6 +44,7 @@ test.describe('Admin CRUD pages', () => {
     await expect(page.getByText('User updated.')).toBeVisible()
 
     await page.reload()
+    await page.getByPlaceholder('Search by name, email, ID...').fill(learnerEmail)
     await expect(tableRow(page, learnerEmail)).toContainText(updatedUserId)
 
     await page.goto('/admin/user-groups')
@@ -91,6 +92,7 @@ test.describe('Admin CRUD pages', () => {
     await coursesMain.getByPlaceholder('New module title').first().fill(moduleTitle)
     await coursesMain.getByRole('button', { name: 'Add' }).first().click()
     await expect(page.getByText('Module added.')).toBeVisible()
+    await expect(coursesMain.getByText('Loading...')).toHaveCount(0)
     await expect(page.getByText(moduleTitle)).toBeVisible()
 
     await page.goto('/admin/templates')

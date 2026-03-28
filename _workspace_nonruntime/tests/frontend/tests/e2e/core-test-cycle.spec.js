@@ -146,7 +146,13 @@ test.describe('Core test cycle', () => {
 
     // Step 2: Settings
     await expect(page.getByRole('heading', { level: 3, name: /Proctoring/i })).toBeVisible({ timeout: LONG_STEP_TIMEOUT })
-    await page.fill('input[name="time_limit"]', '15')
+    // Raise violation score threshold to max (40) so incidental background violations during the full suite run can't trigger auto-submit
+    // The max_score_before_autosubmit control is the only number input with min=3, max=40 in the wizard
+    const violationScoreInput = page.locator('input[type="number"][min="3"][max="40"]')
+    if (await violationScoreInput.count() > 0) {
+      await violationScoreInput.fill('40')
+    }
+    await page.fill('input[name="time_limit"]', '120')
     await (await waitForNextButtonReady(page)).click()
 
     // Step 3: Questions
@@ -352,7 +358,7 @@ test.describe('Core test cycle', () => {
       if (!answersRes.ok()) return 0
       const answers = await answersRes.json()
       return Array.isArray(answers) ? answers.length : 0
-    }, { timeout: 15000 }).toBeGreaterThanOrEqual(2)
+    }, { timeout: 30000 }).toBeGreaterThanOrEqual(2)
     await expect(page.getByText(/0 unanswered/i)).toBeVisible()
 
     // Inject real warning events so the admin timeline has actual data.

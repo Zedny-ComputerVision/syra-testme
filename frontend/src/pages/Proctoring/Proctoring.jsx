@@ -1922,7 +1922,7 @@ export default function Proctoring() {
                         disabled={interactionLocked}
                         readOnly
                       />
-                      <span>{letter}. {opt}</span>
+                      <span>{currentQType === 'TRUEFALSE' ? letter : `${letter}. ${opt}`}</span>
                     </motion.label>
                   )
                 })}

@@ -387,8 +387,8 @@ export default function AdminNewTestWizard() {
   const [aiDifficulty, setAiDifficulty] = useState('mixed')
 
   /* ─── Step 8: Save ─── */
-  const [publishStatus, setPublishStatus] = useState('CLOSED')
-  const publishStatusRef = useRef('CLOSED')
+  const [publishStatus, setPublishStatus] = useState('OPEN')
+  const publishStatusRef = useRef('OPEN')
   const wizardBaselineRef = useRef('')
   const [wizardReady, setWizardReady] = useState(!editId)
   const [wizardBaselineVersion, setWizardBaselineVersion] = useState(0)
@@ -2448,7 +2448,7 @@ export default function AdminNewTestWizard() {
           {!unlimitedTime && (
             <div className={`${styles.formGroup} ${styles.timeLimitWrap}`}>
               <label className={styles.label} htmlFor="wizard-time-limit">Duration (minutes)</label>
-              <input id="wizard-time-limit" name="time_limit" className={`${styles.input} ${styles.timeLimitInput}`} type="number" min={1} max={600} value={timeLimitMinutes} onChange={e => setTimeLimitMinutes(Number(e.target.value))} />
+              <input id="wizard-time-limit" name="time_limit" className={`${styles.input} ${styles.timeLimitInput}`} type="number" min={1} max={600} value={timeLimitMinutes} onFocus={e => e.target.select()} onChange={e => setTimeLimitMinutes(Number(e.target.value))} />
             </div>
           )}
         </>
@@ -2513,7 +2513,7 @@ export default function AdminNewTestWizard() {
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="wizard-max-attempts">Max Attempts Allowed</label>
-              <input id="wizard-max-attempts" className={styles.input} type="number" min={1} max={99} value={maxAttempts} onChange={e => { setMaxAttempts(Number(e.target.value)); if (examId) autoPersist() }} />
+              <input id="wizard-max-attempts" className={styles.input} type="number" min={1} max={20} value={maxAttempts} onChange={e => { setMaxAttempts(Number(e.target.value)); if (examId) autoPersist() }} />
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="wizard-grading-scale">Grading Scale</label>

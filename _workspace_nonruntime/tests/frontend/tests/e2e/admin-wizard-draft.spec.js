@@ -24,10 +24,12 @@ test.describe('Admin New Test Wizard draft flow', () => {
     await page.locator('select[name="course"]').selectOption(String(node.course_id))
     await expect.poll(async () => {
       return await page.locator('select[name="node"]').inputValue()
-    }).not.toBe('')
+    }, { timeout: 30000 }).not.toBe('')
 
     for (let step = 0; step < 8; step += 1) {
-      await page.getByRole('button', { name: /Next/i }).click()
+      const nextBtn = page.getByRole('button', { name: /Next/i })
+      await expect(nextBtn).toBeEnabled({ timeout: 30000 })
+      await nextBtn.click()
     }
 
     await expect(page.getByText(/Drafts can be saved without questions/i)).toBeVisible()

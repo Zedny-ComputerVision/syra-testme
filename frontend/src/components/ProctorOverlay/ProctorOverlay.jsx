@@ -308,9 +308,6 @@ export default function ProctorOverlay({
           emitLocalCameraCoveredAlert()
         }
       }
-      if (blocked) {
-        emitLocalCameraCoveredAlert()
-      }
     } catch (error) {
       emitRateLimitedSystemError('camera_frame_read', error?.message || 'Unable to inspect the current camera frame for proctoring.', 10000)
     }
@@ -385,7 +382,11 @@ export default function ProctorOverlay({
   useEffect(() => {
     if (!attemptId || !videoRequired) return
     localFrameIntervalRef.current = setInterval(() => {
-      analyzeLocalFrame()
+      // Skip when WebSocket is open — the WS frame loop already calls analyzeLocalFrame
+      // and updates camera state. Only run here to cover reconnect gaps / no-WS mode.
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        analyzeLocalFrame()
+      }
     }, visualFrameInterval)
     return () => {
       if (localFrameIntervalRef.current) clearInterval(localFrameIntervalRef.current)
@@ -621,7 +622,7 @@ export default function ProctorOverlay({
             }
             emitSystemError(msg.detail)
           } else if (msg.type === 'detection_status') {
-            setDetectorStatus(msg)
+            setDetectorStatus((prev) => ({ ...prev, ...msg }))
             setDetectorStatusReady(true)
             // Server reports which detection modules are actually active
             const disabled = Object.entries(msg)

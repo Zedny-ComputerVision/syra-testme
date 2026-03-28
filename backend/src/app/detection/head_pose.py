@@ -173,8 +173,10 @@ class HeadPoseDetector:
                 yaw_span = max(1e-6, self.yaw_max_rad - self.yaw_min_rad)
                 confidence = min(0.99, 0.55 + ((pitch_over / pitch_span) + (yaw_over / yaw_span)) / 2.0)
 
-                self._prev_pitch = pitch_rad
-                self._prev_yaw = yaw_rad
+                # Reset prev so the next frame isn't treated as stationary from this
+                # alert position — allows the counter to rebuild cleanly for repeated violations.
+                self._prev_pitch = None
+                self._prev_yaw = None
                 return {
                     "event_type": "HEAD_POSE",
                     "severity": "MEDIUM",

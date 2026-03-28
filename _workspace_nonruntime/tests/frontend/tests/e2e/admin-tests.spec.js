@@ -74,26 +74,30 @@ test.describe('Admin Manage Tests page', () => {
       await row.getByRole('button', { name: /More actions for/i }).click()
     }
 
+    const reloadAndSearch = async (name) => {
+      await page.goto('/admin/tests', { waitUntil: 'networkidle' })
+      await page.fill('input[placeholder="Search by name or code..."]', name)
+      const row = page.locator('tbody tr', { hasText: name }).first()
+      await expect(row).toBeVisible()
+      return row
+    }
+
     // Publish -> Archive -> Unarchive flow on first draft
     await page.fill('input[placeholder="Search by name or code..."]', publishName)
-    const publishRow = page.locator('tbody tr', { hasText: publishName })
+    const publishRow = page.locator('tbody tr', { hasText: publishName }).first()
     await expect(publishRow).toBeVisible()
     await openRowMenu(publishRow)
     await publishRow.getByRole('button', { name: 'Testing sessions' }).click()
     await expect(page).toHaveURL(/\/admin\/tests\/.+\/manage\?tab=sessions/)
     await expect(page.getByRole('heading', { name: /Testing Sessions/i })).toBeVisible()
-    await page.goto('/admin/tests')
-    await page.fill('input[placeholder="Search by name or code..."]', publishName)
-    await expect(publishRow).toBeVisible()
-    await openRowMenu(publishRow)
-    await publishRow.getByRole('button', { name: 'Candidates' }).click()
+    let row = await reloadAndSearch(publishName)
+    await openRowMenu(row)
+    await row.getByRole('button', { name: 'Candidates' }).click()
     await expect(page).toHaveURL(/\/admin\/tests\/.+\/manage\?tab=candidates/)
     await expect(page.getByRole('heading', { name: /Candidates/i })).toBeVisible()
-    await page.goto('/admin/tests')
-    await page.fill('input[placeholder="Search by name or code..."]', publishName)
-    await expect(publishRow).toBeVisible()
-    await openRowMenu(publishRow)
-    await publishRow.getByRole('button', { name: 'Publish', exact: true }).click()
+    row = await reloadAndSearch(publishName)
+    await openRowMenu(row)
+    await row.getByRole('button', { name: 'Publish', exact: true }).click()
     await expect.poll(async () => {
       const testRes = await api.get(`admin/tests/${publishDraft.id}`)
       if (!testRes.ok()) return null
@@ -101,25 +105,34 @@ test.describe('Admin Manage Tests page', () => {
       return body.status || null
     }, { timeout: 15000 }).toBe('PUBLISHED')
 
-    await page.goto('/admin/tests')
-    await page.fill('input[placeholder="Search by name or code..."]', publishName)
-    await expect(publishRow).toBeVisible()
-    await openRowMenu(publishRow)
-    await publishRow.getByRole('button', { name: 'Archive', exact: true }).click()
+    row = await reloadAndSearch(publishName)
+    await openRowMenu(row)
+    await row.getByRole('button', { name: 'Archive', exact: true }).click()
+    await expect.poll(async () => {
+      const testRes = await api.get(`admin/tests/${publishDraft.id}`)
+      if (!testRes.ok()) return null
+      const body = await testRes.json()
+      return body.status || null
+    }, { timeout: 15000 }).toBe('ARCHIVED')
 
     await openFilterPanel()
     await statusFilter.selectOption('ARCHIVED')
     await page.getByRole('button', { name: 'Apply', exact: true }).click()
-    const archivedRow = page.locator('tbody tr', { hasText: publishName })
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+    const archivedRow = page.locator('tbody tr', { hasText: publishName }).first()
     await expect(archivedRow).toBeVisible()
     await openRowMenu(archivedRow)
+    await expect(archivedRow.getByRole('button', { name: 'Unarchive', exact: true })).toBeVisible()
     await archivedRow.getByRole('button', { name: 'Unarchive', exact: true }).click()
+    await expect.poll(async () => {
+      const testRes = await api.get(`admin/tests/${publishDraft.id}`)
+      if (!testRes.ok()) return null
+      const body = await testRes.json()
+      return body.status || null
+    }, { timeout: 15000 }).toBe('PUBLISHED')
 
     // Delete flow on second draft
-    await page.goto('/admin/tests')
-    await page.fill('input[placeholder="Search by name or code..."]', deleteName)
-    const deleteRow = page.locator('tbody tr', { hasText: deleteName })
-    await expect(deleteRow).toBeVisible()
+    const deleteRow = await reloadAndSearch(deleteName)
     await openRowMenu(deleteRow)
     await deleteRow.getByRole('button', { name: 'Delete', exact: true }).click()
     await deleteRow.getByRole('button', { name: 'Confirm delete', exact: true }).click()

@@ -173,10 +173,14 @@ class FaceVerifier:
         self.enabled = enabled and baseline is not None
         self.baseline = np.array(baseline, dtype=np.float32) if baseline is not None else None
 
-        if threshold is not None:
-            self.threshold = float(threshold)
-        elif baseline is not None and len(baseline) == 512:
+        if self._use_deepface:
+            # DeepFace 512-D cosine distance has different characteristics than
+            # the 40-landmark vector — always use the DeepFace-specific threshold
+            # so that the generic config value (designed for landmarks) doesn't
+            # make identity matching unreasonably strict and produce false mismatches.
             self.threshold = self._DEEPFACE_THRESHOLD
+        elif threshold is not None:
+            self.threshold = float(threshold)
         else:
             self.threshold = self._LANDMARK_THRESHOLD
 

@@ -176,6 +176,12 @@ class EyeTracker:
             self._consecutive_away += 1
             if self._consecutive_away >= self.consecutive_threshold:
                 self._consecutive_away = 0
+                # Reset prev gaze so next frame isn't treated as stationary from this
+                # position — lets the counter rebuild cleanly for repeated violations.
+                self._prev_left_pitch = None
+                self._prev_left_yaw = None
+                self._prev_right_pitch = None
+                self._prev_right_yaw = None
 
                 avg_yaw = (left_yaw + right_yaw) / 2.0
                 avg_pitch = (left_pitch + right_pitch) / 2.0
