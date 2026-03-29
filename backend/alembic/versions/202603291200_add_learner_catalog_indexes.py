@@ -31,6 +31,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Supabase transaction-pooler enforces a statement timeout that kills slow DDL.
+    # SET LOCAL applies only to this transaction so it does not affect other sessions.
+    op.execute("SET LOCAL statement_timeout = 0")
+
     # Partial index: only OPEN exams with no library pool, sorted by updated_at.
     # Serves the entire learner catalog WHERE + ORDER BY in a single index scan.
     op.execute(
@@ -52,5 +56,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("SET LOCAL statement_timeout = 0")
     op.execute("DROP INDEX IF EXISTS ix_schedule_user_exam_scheduled")
     op.execute("DROP INDEX IF EXISTS ix_exam_learner_catalog")

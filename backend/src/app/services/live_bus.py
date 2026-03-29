@@ -27,15 +27,15 @@ from ..core.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Redis key / channel schema
-_KEY_SESSION = "syra:live:session:{}"  # JSON session metadata
-_KEY_THUMB = "syra:live:thumb:{}"  # raw JPEG bytes of last thumbnail
-_CHANNEL = "syra:live:{}"  # pub/sub channel per attempt
+# ── Redis key / channel schema ─────────────────────────────────────────────
+_KEY_SESSION = "syra:live:session:{}"   # JSON session metadata
+_KEY_THUMB   = "syra:live:thumb:{}"     # raw JPEG bytes of last thumbnail
+_CHANNEL     = "syra:live:{}"           # pub/sub channel per attempt
 
-SESSION_TTL_S = 3 * 3600  # 3 h - safety expiry in case of crash
-THUMB_TTL_S = 120  # 2 min - last thumbnail expires quickly
+SESSION_TTL_S = 3 * 3600   # 3 h — safety expiry in case of crash
+THUMB_TTL_S   = 120        # 2 min — last thumbnail expires quickly
 
-# Shared connection pool (for all non-subscribe operations)
+# ── Shared connection pool (for all non-subscribe operations) ──────────────
 _pool: ConnectionPool | None = None
 
 
@@ -59,6 +59,8 @@ def _client() -> aioredis.Redis | None:
         return None
     return aioredis.Redis(connection_pool=pool)
 
+
+# ── Publish helpers (student-side) ─────────────────────────────────────────
 
 async def publish_session_open(attempt_id: str, session_info: dict) -> None:
     """Store session metadata in Redis so any worker can read it."""
@@ -89,7 +91,7 @@ async def publish_session_closed(attempt_id: str) -> None:
 
 
 async def publish_json_event(attempt_id: str, message: dict) -> None:
-    """Broadcast a JSON message (alert, live_summary, force_submitted, etc.)."""
+    """Broadcast a JSON message (alert, live_summary, force_submitted …)."""
     r = _client()
     if r is None:
         return
@@ -128,6 +130,8 @@ async def publish_thumb(
         await r.aclose()
 
 
+# ── Read helpers (admin-side) ──────────────────────────────────────────────
+
 async def get_session_info(attempt_id: str) -> dict | None:
     r = _client()
     if r is None:
@@ -153,10 +157,10 @@ async def get_all_sessions() -> list[dict]:
             return []
         vals = await r.mget(*keys)
         result = []
-        for value in vals:
-            if value:
+        for v in vals:
+            if v:
                 with contextlib.suppress(Exception):
-                    result.append(json.loads(value))
+                    result.append(json.loads(v))
         return result
     except Exception as exc:
         logger.warning("live_bus: get_all_sessions: %s", exc)
@@ -195,17 +199,19 @@ async def get_viewer_count(attempt_id: str) -> int:
         await r.aclose()
 
 
+# ── Subscription (admin-side) ──────────────────────────────────────────────
+
 async def subscribe(attempt_id: str) -> AsyncIterator[dict]:
     """Async generator yielding decoded messages from the session channel.
 
     Each yielded item is a dict with at least a "type" key:
-      {"type": "json", "payload": {...}}
-      {"type": "thumb", "payload": "<b64>", "msg_type": "frame"|"screen"}
+      {"type": "json",        "payload": {...}}
+      {"type": "thumb",       "payload": "<b64>", "msg_type": "frame"|"screen"}
       {"type": "session_ended", "attempt_id": "..."}
 
     The generator exits when:
       - A "session_ended" message is received
-      - The caller cancels/stops iteration (for example, WebSocket disconnect)
+      - The caller cancels/stops iteration (e.g. WebSocket disconnect)
       - A Redis error occurs
     """
     url = _get_url()
