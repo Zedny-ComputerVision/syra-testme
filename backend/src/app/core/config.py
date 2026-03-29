@@ -200,6 +200,14 @@ class Settings(BaseSettings):
             raise ValueError("PROCTORING_INFERENCE_QUEUE is required")
         return normalized
 
+    @field_validator("DB_DISABLE_POOLING", mode="before")
+    @classmethod
+    def normalize_db_disable_pooling(cls, value: object) -> object:
+        # Treat empty string as None (unset) so bool parsing doesn't fail.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", mode="before")
     @classmethod
     def normalize_queue_url(cls, value: str | None) -> str | None:
