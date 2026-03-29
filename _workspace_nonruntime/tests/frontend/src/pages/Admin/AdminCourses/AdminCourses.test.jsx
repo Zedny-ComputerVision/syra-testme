@@ -73,7 +73,7 @@ describe('AdminCourses instructor permissions', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Shared Course')).toBeTruthy())
-    expect(screen.getByText('Shared Course Course modules could not be loaded until you retry.')).toBeTruthy()
+    expect(screen.getByText('Course modules could not be loaded until you retry.')).toBeTruthy()
   })
 
   it('keeps courses visible when linked tests fail to load', async () => {
