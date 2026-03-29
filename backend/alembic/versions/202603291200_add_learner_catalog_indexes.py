@@ -37,7 +37,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
         ON exams (updated_at DESC, created_at DESC)
-        WHERE status = 'open' AND library_pool_id IS NULL
+        WHERE status = 'OPEN' AND library_pool_id IS NULL
         """
     )
 

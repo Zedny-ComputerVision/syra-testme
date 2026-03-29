@@ -182,7 +182,7 @@ class Exam(Base):
             "ix_exam_learner_catalog",
             "updated_at",
             "created_at",
-            postgresql_where=text("status = 'open' AND library_pool_id IS NULL"),
+            postgresql_where=text("status = 'OPEN' AND library_pool_id IS NULL"),
         ),
     )
 
