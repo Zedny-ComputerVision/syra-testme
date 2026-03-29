@@ -39,6 +39,14 @@ EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 settings = get_settings()
 ALLOW_TEST_BYPASS = settings.precheck_test_bypass_enabled
 _ID_TOKEN_RE = re.compile(r"[A-Z0-9]{6,24}")
+_ARABIC_NUMERAL_TABLE = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+
+
+def _convert_arabic_numerals(text: str) -> str:
+    """Convert Eastern Arabic-Indic digits to Western ASCII digits."""
+    return text.translate(_ARABIC_NUMERAL_TABLE)
+
+
 _HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _TESSERACT_CONFIGURED = False
 _TESSERACT_LOCK = threading.Lock()  # pytesseract is not thread-safe
@@ -103,11 +111,19 @@ def _tesseract_text(img_bgr: np.ndarray) -> dict:
                     pytesseract.pytesseract.tesseract_cmd = str(default_win_path)
             _TESSERACT_CONFIGURED = True
         _ = pytesseract.get_tesseract_version()
-        # Run OCR on both raw and preprocessed image, merge results
+        # Run OCR on both raw and preprocessed image, merge results.
+        # Try Arabic+English first (Egyptian IDs have Arabic text); fall back to English only.
         preprocessed = _preprocess_id_image(img_bgr)
         with _TESSERACT_LOCK:
-            raw_txt = pytesseract.image_to_string(img_bgr)
-            pre_txt = pytesseract.image_to_string(preprocessed, config="--psm 6")
+            try:
+                raw_txt = pytesseract.image_to_string(img_bgr, lang="ara+eng")
+                pre_txt = pytesseract.image_to_string(preprocessed, lang="ara+eng", config="--psm 6")
+            except Exception:
+                raw_txt = pytesseract.image_to_string(img_bgr)
+                pre_txt = pytesseract.image_to_string(preprocessed, config="--psm 6")
+        # Normalise Eastern Arabic-Indic digits → ASCII so the ID regex matches
+        raw_txt = _convert_arabic_numerals(raw_txt)
+        pre_txt = _convert_arabic_numerals(pre_txt)
         combined = raw_txt + "\n" + pre_txt
         lines = list(dict.fromkeys(line.strip() for line in combined.splitlines() if line.strip()))
         return {"raw": combined, "lines": lines[:30], "available": True, "error": None, "engine": "tesseract"}
@@ -498,16 +514,21 @@ async def precheck(
         lighting_score = _brightness_score(selfie_img)
         lighting_ok = lighting_score >= lighting_min
 
-        # Use DeepFace WITH face detection for identity comparison — it properly
-        # detects, aligns, and crops the face before computing the embedding.
-        # Pass full images (not Haar crops) so DeepFace's detector can work.
+        # For the selfie: run DeepFace with detection so it aligns the face properly.
         selfie_vec, selfie_sig_mode = _compute_signature_with_fallback(selfie_img, use_detection=True)
-        id_vec, id_sig_mode = _compute_signature_with_fallback(id_img, use_detection=True)
         # Preserve original selfie embedding for live proctoring face verification
         selfie_baseline = selfie_vec
-        # Keep Haar crop info for legacy fields / fallback comparison
+        # For the ID card: pre-crop the face region with Haar first so DeepFace
+        # works on just the face, not the whole card (pyramids, text, background).
+        # If Haar can't find a face on the card, fall back to full-image detection.
         id_crop = _extract_face_crop(id_img)
         id_target = id_crop if id_crop is not None else id_img
+        if id_crop is not None:
+            # Haar found the face — pass the crop directly (skip internal detection)
+            id_vec, id_sig_mode = _compute_signature_with_fallback(id_crop, use_detection=False)
+        else:
+            # Let DeepFace try to find the face itself
+            id_vec, id_sig_mode = _compute_signature_with_fallback(id_img, use_detection=True)
 
         # When embedding methods differ (e.g. DeepFace 512-D vs MediaPipe 120-D),
         # vectors cannot be compared.  Re-compute both with a consistent method.
@@ -531,19 +552,20 @@ async def precheck(
 
         match_score = 1.0
         face_match = False
-        # ID-vs-selfie comparison needs a lenient threshold: the ID photo
-        # differs in age, lighting, angle, and camera quality from the selfie.
-        # DeepFace with proper face detection produces distances of 0.3–0.5 for
-        # same-person ID-vs-selfie pairs, so the floor must be >= 0.55.
-        raw_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.55))
+        # ID-vs-selfie threshold: same-person DeepFace distances typically land
+        # at 0.25–0.42 even with age/lighting/quality differences.  0.55 was too
+        # lenient — it allowed clearly different people (different gender, etc.) to
+        # pass.  0.42 rejects different-person pairs while still accepting the
+        # normal same-person ID-vs-selfie variance.
+        raw_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.42))
         if selfie_sig_mode == id_sig_mode == "mediapipe":
             threshold = min(raw_threshold, 0.25)
         elif selfie_sig_mode == id_sig_mode == "haar":
             threshold = max(raw_threshold, 0.50)
         else:
-            # Enforce a minimum floor — old DB values (0.18) were calibrated for
-            # a broken pipeline that didn't detect/align faces.
-            threshold = max(raw_threshold, 0.55)
+            # Floor of 0.42 — strict enough to block different people, lenient
+            # enough for the same person's ID photo vs live selfie.
+            threshold = max(raw_threshold, 0.42)
         if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
             match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
             face_match = match_score <= threshold
