@@ -7,7 +7,6 @@ import useAuth from '../../hooks/useAuth'
 import { getAttempt, getAttemptAnswers, submitAnswer, submitAttempt } from '../../services/attempt.service'
 import { getTestQuestions, getTest } from '../../services/test.service'
 import {
-  getProctoringVideoJobStatus,
   proctoringPing,
   reportProctoringVideoUploadProgress,
   uploadProctoringVideo,
@@ -51,8 +50,6 @@ const DEFAULT_PROCTORING = {
 
 const VIDEO_UPLOAD_PROGRESS_STEP = 5
 const VIDEO_UPLOAD_PROGRESS_INTERVAL_MS = 1000
-const VIDEO_UPLOAD_JOB_POLL_INTERVAL_MS = 5000
-const VIDEO_UPLOAD_JOB_POLL_ATTEMPTS = 24
 const AUTO_SUBMIT_COUNTDOWN_SECONDS = 10
 
 function clampUploadPercent(value) {
@@ -751,36 +748,6 @@ export default function Proctoring() {
     return payloads.filter(Boolean)
   }, [prepareSingleRecordingUpload])
 
-  const waitForVideoUploadJob = useCallback(async (uploadAttemptId, jobId, source) => {
-    setRecordingStatusForSource(source, 'processing')
-    for (let attempt = 0; attempt < VIDEO_UPLOAD_JOB_POLL_ATTEMPTS; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 0 : VIDEO_UPLOAD_JOB_POLL_INTERVAL_MS))
-      try {
-        const response = await getProctoringVideoJobStatus(uploadAttemptId, jobId)
-        const payload = response?.data ?? response?.payload ?? {}
-        const status = String(payload?.status || '').toUpperCase()
-        if (status === 'COMPLETED') {
-          return payload
-        }
-        if (status === 'FAILED') {
-          const message = String(payload?.detail || 'Recording upload failed.').trim()
-          emitProctoringNotice(`video_upload_failed_${source}`, message, 'LOW', 'VIDEO_UPLOAD_FAILED', 15000)
-          const failure = new Error(message)
-          failure.name = 'VideoUploadJobFailed'
-          throw failure
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === 'VideoUploadJobFailed') {
-          throw error
-        }
-        console.warn(`Failed to poll ${source} video upload job ${jobId}.`, error)
-      }
-    }
-    throw new Error(
-      `${source.charAt(0).toUpperCase() + source.slice(1)} recording upload is still processing. Keep this page open and retry if it does not finish shortly.`,
-    )
-  }, [emitProctoringNotice, setRecordingStatusForSource])
-
   const uploadPreparedRecording = useCallback(async (payload) => {
     const { attemptId: uploadAttemptId, sessionId, source, filename, blob, metadata } = payload
     const progressState = {
@@ -862,12 +829,13 @@ export default function Proctoring() {
         const uploadPayload = uploadResponse?.data ?? uploadResponse?.payload ?? {}
         const jobId = String(uploadPayload?.job_id || '').trim()
         if (jobId) {
-          await sendUploadProgress({
-            uploadedBytes: totalBytes || Number(blob?.size || 0),
-            progressPercent: 100,
-            status: 'processing',
-          })
-          await waitForVideoUploadJob(uploadAttemptId, jobId, source)
+          emitProctoringNotice(
+            `video_upload_queued_${source}`,
+            `${source.charAt(0).toUpperCase() + source.slice(1)} recording uploaded. Background processing will continue after you leave this page.`,
+            'LOW',
+            'VIDEO_UPLOAD_QUEUED',
+            12000,
+          )
         }
         await sendUploadProgress({
           uploadedBytes: totalBytes || Number(blob?.size || 0),
@@ -892,7 +860,7 @@ export default function Proctoring() {
       throw lastError
     }
     setRecordingStatusForSource(source, 'saved')
-  }, [setRecordingStatusForSource, waitForVideoUploadJob])
+  }, [emitProctoringNotice, setRecordingStatusForSource])
 
   const uploadRecordingSources = useCallback(async (sources = []) => {
     const payloads = await prepareRecordingUploads(sources)
