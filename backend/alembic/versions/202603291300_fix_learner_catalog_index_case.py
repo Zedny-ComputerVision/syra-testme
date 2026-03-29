@@ -22,13 +22,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Drop the potentially wrong-case index (ignore if it doesn't exist).
+    # Supabase transaction-pooler enforces a statement timeout that kills slow DDL.
+    # SET LOCAL applies only to this transaction so it does not affect other sessions.
+    op.execute("SET LOCAL statement_timeout = 0")
     op.execute("DROP INDEX IF EXISTS ix_exam_learner_catalog")
-
-    # Recreate with the correct uppercase enum predicate.
     op.execute(
         """
-        CREATE INDEX ix_exam_learner_catalog
+        CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
         ON exams (updated_at DESC, created_at DESC)
         WHERE status = 'OPEN' AND library_pool_id IS NULL
         """
@@ -36,10 +36,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("SET LOCAL statement_timeout = 0")
     op.execute("DROP INDEX IF EXISTS ix_exam_learner_catalog")
     op.execute(
         """
-        CREATE INDEX ix_exam_learner_catalog
+        CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
         ON exams (updated_at DESC, created_at DESC)
         WHERE status = 'OPEN' AND library_pool_id IS NULL
         """
