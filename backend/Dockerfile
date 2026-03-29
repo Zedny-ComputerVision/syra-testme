@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir --default-timeout=180 --retries 10 -r requirement
 
 # ── Application code ────────────────────────────────────
 COPY backend/src/ ./src/
+COPY backend/scripts/ ./scripts/
 COPY backend/alembic/ ./alembic/
 COPY backend/alembic.ini ./alembic.ini
 COPY config.yaml ./config.yaml
