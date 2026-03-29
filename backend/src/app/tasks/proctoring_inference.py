@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import logging
+import sys
 import threading
 import uuid
 from typing import Any
@@ -22,6 +23,32 @@ settings = get_settings()
 store = get_proctoring_inference_store()
 _worker_models_ready = False
 _worker_models_lock = threading.Lock()
+
+
+def _worker_targets_inference_queue() -> bool:
+    queue_name = str(settings.PROCTORING_INFERENCE_QUEUE or "proctoring-inference").strip()
+    if not queue_name:
+        return True
+
+    args = list(sys.argv[1:])
+    for index, arg in enumerate(args):
+        value = None
+        if arg.startswith("--queues="):
+            value = arg.split("=", 1)[1]
+        elif arg == "--queues" and index + 1 < len(args):
+            value = args[index + 1]
+        elif arg.startswith("-Q="):
+            value = arg.split("=", 1)[1]
+        elif arg == "-Q" and index + 1 < len(args):
+            value = args[index + 1]
+
+        if value is None:
+            continue
+
+        queues = {item.strip() for item in str(value).split(",") if item.strip()}
+        return queue_name in queues
+
+    return True
 
 
 def _ensure_worker_models_ready() -> None:
@@ -95,6 +122,8 @@ def _decode_payload(encoded_payload: str, *, label: str) -> bytes:
 
 @worker_process_init.connect
 def _warm_worker_models_on_start(**_: Any) -> None:
+    if not _worker_targets_inference_queue():
+        return
     with contextlib.suppress(Exception):
         _ensure_worker_models_ready()
 
