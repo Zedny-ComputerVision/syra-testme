@@ -13,21 +13,12 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
-        env:
-          GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
-          SYRA_DATABASE_URL: ${{ secrets.SYRA_DATABASE_URL }}
-          SYRA_DATABASE_MIGRATION_URL: ${{ secrets.SYRA_DATABASE_MIGRATION_URL }}
-          SYRA_JWT_SECRET: ${{ secrets.SYRA_JWT_SECRET }}
-          SYRA_BREVO_API_KEY: ${{ secrets.SYRA_BREVO_API_KEY }}
-          SYRA_BREVO_SENDER_EMAIL: ${{ secrets.SYRA_BREVO_SENDER_EMAIL }}
-          SYRA_BREVO_SENDER_NAME: ${{ secrets.SYRA_BREVO_SENDER_NAME }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           password: ${{ secrets.VM_PASSWORD }}
           port: 22
           command_timeout: 30m
-          envs: GIT_PASSWORD,SYRA_DATABASE_URL,SYRA_DATABASE_MIGRATION_URL,SYRA_JWT_SECRET,SYRA_BREVO_API_KEY,SYRA_BREVO_SENDER_EMAIL,SYRA_BREVO_SENDER_NAME
           script: |
             set -Eeuo pipefail
             cd /opt/syra-testme
@@ -60,6 +51,54 @@ jobs:
             # Fetch and reset
             git fetch origin main
             git reset --hard origin/main
+
+            echo ">>> Seeding deployment env files from GitHub secrets..."
+            python3 - <<'PY'
+            import json
+            from pathlib import Path
+
+            repo_root = Path("/opt/syra-testme")
+            targets = (
+                repo_root / ".env",
+                repo_root / "backend" / ".env.docker",
+            )
+            updates = {
+                "DATABASE_URL": json.loads(r'''${{ toJSON(secrets.SYRA_DATABASE_URL) }}'''),
+                "DATABASE_MIGRATION_URL": json.loads(r'''${{ toJSON(secrets.SYRA_DATABASE_MIGRATION_URL) }}'''),
+                "JWT_SECRET": json.loads(r'''${{ toJSON(secrets.SYRA_JWT_SECRET) }}'''),
+                "BREVO_API_KEY": json.loads(r'''${{ toJSON(secrets.SYRA_BREVO_API_KEY) }}'''),
+                "BREVO_SENDER_EMAIL": json.loads(r'''${{ toJSON(secrets.SYRA_BREVO_SENDER_EMAIL) }}'''),
+                "BREVO_SENDER_NAME": json.loads(r'''${{ toJSON(secrets.SYRA_BREVO_SENDER_NAME) }}'''),
+            }
+
+            def upsert_env(path: Path, values: dict[str, str]) -> None:
+                lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+                pending = {key: value for key, value in values.items() if value}
+                if not pending:
+                    return
+
+                seen: set[str] = set()
+                new_lines: list[str] = []
+                for line in lines:
+                    key, sep, _ = line.partition("=")
+                    if sep and key in pending:
+                        new_lines.append(f"{key}={pending[key]}")
+                        seen.add(key)
+                    else:
+                        new_lines.append(line)
+
+                for key, value in pending.items():
+                    if key not in seen:
+                        new_lines.append(f"{key}={value}")
+
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+            for target in targets:
+                upsert_env(target, updates)
+
+            print(">>> Wrote secret overrides into .env and backend/.env.docker")
+            PY
 
             echo ">>> Running deploy script..."
             export SYRA_SEED_DEMO_DATA=0
