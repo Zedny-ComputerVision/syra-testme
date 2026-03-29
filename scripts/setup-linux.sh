@@ -810,22 +810,6 @@ if ! database_connectivity_check; then
   log "WARNING: Database preflight failed. Continuing to service startup; post-start health checks will validate the deployment."
 fi
 
-log "Building backend image..."
-(
-  cd "$REPO_ROOT"
-  compose build backend
-)
-
-log "Running database migrations..."
-(
-  cd "$REPO_ROOT"
-  # Run migrations in a one-shot container before the backend starts.
-  # This avoids a race where the Docker health check times out while
-  # slow DDL (CREATE INDEX on large tables) runs inside the startup CMD.
-  # --no-deps: do not start redis / other services just for migrations.
-  compose run --rm --no-deps backend alembic upgrade head
-)
-
 log "Starting services..."
 (
   cd "$REPO_ROOT"
