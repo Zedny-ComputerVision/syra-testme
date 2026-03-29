@@ -65,6 +65,9 @@ Environment overrides:
 - SYRA_CLOUDFLARE_MEDIA_REQUIRE_SIGNED_URLS
 - SYRA_DB_CONNECT_RETRIES
 - SYRA_DB_CONNECT_RETRY_DELAY_SECONDS
+- SYRA_DB_MIGRATION_TIMEOUT_SECONDS
+- SYRA_BACKEND_HEALTH_TIMEOUT_SECONDS
+- SYRA_FRONTEND_HEALTH_TIMEOUT_SECONDS
 - SYRA_PRECHECK_ALLOW_TEST_BYPASS
 - SYRA_WEB_REPORT_SCHEDULER_ENABLED
 - SYRA_NGINX_CLIENT_MAX_BODY_SIZE
@@ -99,6 +102,7 @@ ensure_linux() {
 ensure_docker() {
   require_command docker
   require_command curl
+  require_command timeout
   docker compose version >/dev/null 2>&1 || die "Docker Compose plugin is required."
   docker info >/dev/null 2>&1 || die "Docker daemon is not reachable. Start Docker and try again."
 }
@@ -223,6 +227,7 @@ wait_for_service_health() {
   local timeout_seconds="${2:-900}"
   local interval_seconds=5
   local elapsed=0
+  local next_progress_log_at=0
   local container_id
   local status
 
@@ -241,6 +246,10 @@ wait_for_service_health() {
         die "Service '$service' became $status."
         ;;
     esac
+    if (( elapsed >= next_progress_log_at )); then
+      log "Waiting for service '$service' to become healthy (status: ${status:-unknown}, elapsed: ${elapsed}s/${timeout_seconds}s)."
+      next_progress_log_at=$((elapsed + 30))
+    fi
     sleep "$interval_seconds"
     elapsed=$((elapsed + interval_seconds))
   done
@@ -657,6 +666,13 @@ SEED_FORCE="${SYRA_SEED_FORCE:-0}"
 ADMIN_PASSWORD="${SYRA_ADMIN_PASSWORD:-Admin1234!}"
 INSTRUCTOR_PASSWORD="${SYRA_INSTRUCTOR_PASSWORD:-Instructor1234!}"
 STUDENT_PASSWORD="${SYRA_STUDENT_PASSWORD:-Student1234!}"
+DB_MIGRATION_TIMEOUT_SECONDS="${SYRA_DB_MIGRATION_TIMEOUT_SECONDS:-360}"
+BACKEND_HEALTH_TIMEOUT_SECONDS="${SYRA_BACKEND_HEALTH_TIMEOUT_SECONDS:-240}"
+FRONTEND_HEALTH_TIMEOUT_SECONDS="${SYRA_FRONTEND_HEALTH_TIMEOUT_SECONDS:-120}"
+
+[[ "$DB_MIGRATION_TIMEOUT_SECONDS" =~ ^[0-9]+$ && "$DB_MIGRATION_TIMEOUT_SECONDS" -gt 0 ]] || die "SYRA_DB_MIGRATION_TIMEOUT_SECONDS must be a positive integer."
+[[ "$BACKEND_HEALTH_TIMEOUT_SECONDS" =~ ^[0-9]+$ && "$BACKEND_HEALTH_TIMEOUT_SECONDS" -gt 0 ]] || die "SYRA_BACKEND_HEALTH_TIMEOUT_SECONDS must be a positive integer."
+[[ "$FRONTEND_HEALTH_TIMEOUT_SECONDS" =~ ^[0-9]+$ && "$FRONTEND_HEALTH_TIMEOUT_SECONDS" -gt 0 ]] || die "SYRA_FRONTEND_HEALTH_TIMEOUT_SECONDS must be a positive integer."
 
 if [[ "$RUN_LOCAL_DB" == "1" ]]; then
   APP_DATABASE_URL_DEFAULT="postgresql+psycopg://postgres:postgres@localhost:5432/syra_lms"
@@ -816,14 +832,23 @@ log "Building backend image..."
   compose build backend
 )
 
-log "Running database migrations..."
+log "Running database migrations (timeout: ${DB_MIGRATION_TIMEOUT_SECONDS}s)..."
 (
   cd "$REPO_ROOT"
   # Run migrations in a one-shot container before the backend starts.
   # This avoids a race where the Docker health check times out while
   # slow DDL (CREATE INDEX on large tables) runs inside the startup CMD.
+  # If a migration stalls on a long lock or DDL, fail fast with a clear error.
   # --no-deps: do not start redis / other services just for migrations.
-  compose run --rm --no-deps backend alembic upgrade head
+  migration_exit_code=0
+  timeout --foreground --signal=TERM --kill-after=30s "${DB_MIGRATION_TIMEOUT_SECONDS}s" \
+    compose run --rm --no-deps backend alembic upgrade head || migration_exit_code=$?
+  if (( migration_exit_code != 0 )); then
+    if (( migration_exit_code == 124 )); then
+      die "Database migrations timed out after ${DB_MIGRATION_TIMEOUT_SECONDS}s."
+    fi
+    die "Database migrations failed with exit code ${migration_exit_code}."
+  fi
 )
 
 log "Starting services..."
@@ -843,10 +868,10 @@ if [[ -n "$backend_cid" ]]; then
   fi
 fi
 
-wait_for_service_health backend
+wait_for_service_health backend "$BACKEND_HEALTH_TIMEOUT_SECONDS"
 seed_demo_data
 seed_login_users
-wait_for_service_health frontend
+wait_for_service_health frontend "$FRONTEND_HEALTH_TIMEOUT_SECONDS"
 
 API_HEALTH_URL="${BACKEND_URL%/}"
 if [[ "$API_HEALTH_URL" == */api ]]; then

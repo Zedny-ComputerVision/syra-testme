@@ -40,7 +40,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           password: ${{ secrets.VM_PASSWORD }}
           port: 22
-          command_timeout: 30m
+          command_timeout: 15m
           script: |
             set -Eeuo pipefail
             cd /opt/syra-testme
@@ -52,8 +52,8 @@ jobs:
               docker compose ps -a || true
               echo ">>> Backend logs"
               docker compose logs --tail 200 backend || true
-              echo ">>> AI inference logs"
-              docker compose logs --tail 120 ai-inference || true
+              echo ">>> AI worker logs"
+              docker compose logs --tail 120 ai-worker || true
               echo ">>> Batch worker logs"
               docker compose logs --tail 120 ai-batch-worker || true
               echo ">>> Redis logs"
@@ -126,6 +126,9 @@ jobs:
             export SYRA_SEED_DEMO_DATA=0
             export SYRA_FRONTEND_URL="https://testme.zedny.ai"
             export SYRA_BACKEND_URL="https://testme.zedny.ai/api"
+            export SYRA_DB_MIGRATION_TIMEOUT_SECONDS=360
+            export SYRA_BACKEND_HEALTH_TIMEOUT_SECONDS=240
+            export SYRA_FRONTEND_HEALTH_TIMEOUT_SECONDS=120
             bash scripts/deploy-linux.sh
 
             trap - ERR
