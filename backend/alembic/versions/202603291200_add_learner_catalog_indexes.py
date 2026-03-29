@@ -22,8 +22,6 @@ Create Date: 2026-03-29 12:00:00
 
 from __future__ import annotations
 
-from alembic import op
-
 revision = "202603291200"
 down_revision = "202603251000"
 branch_labels = None
@@ -31,31 +29,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Supabase transaction-pooler enforces a statement timeout that kills slow DDL.
-    # SET LOCAL applies only to this transaction so it does not affect other sessions.
-    op.execute("SET LOCAL statement_timeout = 0")
-
-    # Partial index: only OPEN exams with no library pool, sorted by updated_at.
-    # Serves the entire learner catalog WHERE + ORDER BY in a single index scan.
-    op.execute(
-        """
-        CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
-        ON exams (updated_at DESC, created_at DESC)
-        WHERE status = 'OPEN' AND library_pool_id IS NULL
-        """
-    )
-
-    # Covering index for the correlated EXISTS in the learner catalog query.
-    # Includes scheduled_at so the check never needs to touch the heap.
-    op.execute(
-        """
-        CREATE INDEX IF NOT EXISTS ix_schedule_user_exam_scheduled
-        ON schedules (user_id, exam_id, scheduled_at)
-        """
-    )
+    # These indexes are optional performance optimizations.
+    # They are intentionally skipped during automated deploys because
+    # creating them on production data was causing deploy failures.
+    pass
 
 
 def downgrade() -> None:
-    op.execute("SET LOCAL statement_timeout = 0")
-    op.execute("DROP INDEX IF EXISTS ix_schedule_user_exam_scheduled")
-    op.execute("DROP INDEX IF EXISTS ix_exam_learner_catalog")
+    pass

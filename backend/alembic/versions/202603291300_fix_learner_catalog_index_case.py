@@ -13,8 +13,6 @@ Create Date: 2026-03-29 13:00:00
 
 from __future__ import annotations
 
-from alembic import op
-
 revision = "202603291300"
 down_revision = "202603291200"
 branch_labels = None
@@ -22,26 +20,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Supabase transaction-pooler enforces a statement timeout that kills slow DDL.
-    # SET LOCAL applies only to this transaction so it does not affect other sessions.
-    op.execute("SET LOCAL statement_timeout = 0")
-    op.execute("DROP INDEX IF EXISTS ix_exam_learner_catalog")
-    op.execute(
-        """
-        CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
-        ON exams (updated_at DESC, created_at DESC)
-        WHERE status = 'OPEN' AND library_pool_id IS NULL
-        """
-    )
+    # The parent revision is intentionally a no-op, so this follow-up fix is too.
+    pass
 
 
 def downgrade() -> None:
-    op.execute("SET LOCAL statement_timeout = 0")
-    op.execute("DROP INDEX IF EXISTS ix_exam_learner_catalog")
-    op.execute(
-        """
-        CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
-        ON exams (updated_at DESC, created_at DESC)
-        WHERE status = 'OPEN' AND library_pool_id IS NULL
-        """
-    )
+    pass
