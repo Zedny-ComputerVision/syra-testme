@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 _CLOUDFLARE_REFRESH_ATTEMPTS = 6
 _CLOUDFLARE_REFRESH_DELAY_SECONDS = 5
+_INVALID_VIDEO_STATUSES = {"error", "failed"}
 
 
 def _safe_int(value: object, default: int = 0) -> int:
@@ -85,11 +86,18 @@ def _build_findings(file_info: dict[str, Any]) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     provider = str(file_info.get("provider") or "").strip().lower()
     source = str(file_info.get("source") or "camera").strip().lower() or "camera"
+    status = str(file_info.get("status") or "").strip().lower()
     size = max(0, _safe_int(file_info.get("size")))
     duration = _safe_float(file_info.get("duration"), 0.0)
     ready_to_stream = bool(file_info.get("ready_to_stream"))
 
-    if size <= 0:
+    if status in _INVALID_VIDEO_STATUSES:
+        findings.append({
+            "code": "VIDEO_STREAM_ERROR",
+            "severity": "MEDIUM",
+            "detail": f"{source.title()} recording upload reached storage, but playback processing failed.",
+        })
+    elif size <= 0:
         findings.append({
             "code": "VIDEO_UPLOAD_EMPTY",
             "severity": "MEDIUM",
@@ -110,15 +118,22 @@ def _build_findings(file_info: dict[str, Any]) -> list[dict[str, Any]]:
         })
 
     if provider == "cloudflare":
-        findings.append({
-            "code": "VIDEO_STREAM_READY" if ready_to_stream else "VIDEO_TRANSCODING_PENDING",
-            "severity": "LOW",
-            "detail": (
-                f"{source.title()} Cloudflare stream is ready for playback."
-                if ready_to_stream
-                else f"{source.title()} Cloudflare stream is still processing."
-            ),
-        })
+        if status in _INVALID_VIDEO_STATUSES:
+            findings.append({
+                "code": "VIDEO_STREAM_UNAVAILABLE",
+                "severity": "MEDIUM",
+                "detail": f"{source.title()} Cloudflare stream is unavailable because processing failed.",
+            })
+        else:
+            findings.append({
+                "code": "VIDEO_STREAM_READY" if ready_to_stream else "VIDEO_TRANSCODING_PENDING",
+                "severity": "LOW",
+                "detail": (
+                    f"{source.title()} Cloudflare stream is ready for playback."
+                    if ready_to_stream
+                    else f"{source.title()} Cloudflare stream is still processing."
+                ),
+            })
 
     return findings
 

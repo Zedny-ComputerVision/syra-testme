@@ -61,6 +61,7 @@ HEARTBEAT_INTERVAL_SECONDS = 10
 INACTIVITY_TIMEOUT_SECONDS = 60
 ADMIN_PROCTORING_NOTIFICATION_WINDOW = timedelta(minutes=5)
 logger = logging.getLogger(__name__)
+_INVALID_SAVED_VIDEO_STATUSES = {"error", "failed"}
 
 SEVERITY_MAP = {
     "CRITICAL": SeverityEnum.HIGH,
@@ -209,6 +210,17 @@ def _normalize_saved_video_meta(meta: object, occurred_at: datetime | None = Non
     return item
 
 
+def _saved_video_meta_is_valid(meta: object) -> bool:
+    if not isinstance(meta, dict):
+        return False
+    status = str(meta.get("status") or "").strip().lower()
+    if status in _INVALID_SAVED_VIDEO_STATUSES:
+        return False
+    if meta.get("ready_to_stream") is True:
+        return True
+    return _coerce_non_negative_int(meta.get("size")) > 0
+
+
 def _saved_video_events(db: Session, attempt_id: str) -> list[ProctoringEvent]:
     return list(
         db.scalars(
@@ -325,7 +337,7 @@ def _build_attempt_video_upload_summary(
     for source in ordered_sources:
         saved_item = saved_items.get(source)
         progress_item = progress_items.get(source)
-        if saved_item:
+        if saved_item and _saved_video_meta_is_valid(saved_item):
             size = _coerce_non_negative_int(saved_item.get("size"))
             source_summaries.append({
                 "source": source,
@@ -337,6 +349,20 @@ def _build_attempt_video_upload_summary(
                 "uploaded_bytes": size,
                 "total_bytes": size,
                 "has_saved_video": True,
+            })
+            continue
+        if saved_item:
+            size = _coerce_non_negative_int(saved_item.get("size"))
+            source_summaries.append({
+                "source": source,
+                "label": source.title(),
+                "session_id": str(saved_item.get("session_id") or ""),
+                "progress_percent": 100 if size > 0 else 0,
+                "remaining_percent": 0 if size > 0 else 100,
+                "status": "error",
+                "uploaded_bytes": size,
+                "total_bytes": size,
+                "has_saved_video": False,
             })
             continue
 
@@ -366,9 +392,9 @@ def _build_attempt_video_upload_summary(
     remaining_percent = max(0, 100 - upload_percent)
     failed = any(item["status"] == "error" for item in source_summaries)
     uploading = any(item["status"] in {"queued", "uploading", "processing"} for item in source_summaries)
-    has_video = bool(saved_items)
-    completed_sources = [item["source"] for item in source_summaries if int(item["progress_percent"]) >= 100]
-    all_required_uploaded = bool(required_sources) and all(source in saved_items for source in required_sources)
+    has_video = any(bool(item["has_saved_video"]) for item in source_summaries)
+    completed_sources = [item["source"] for item in source_summaries if item["status"] == "complete"]
+    all_required_uploaded = bool(required_sources) and all(source in completed_sources for source in required_sources)
 
     if source_summaries and len(completed_sources) == len(source_summaries):
         summary_status = "complete"
@@ -389,7 +415,7 @@ def _build_attempt_video_upload_summary(
     return {
         "attempt_id": str(attempt.id),
         "has_video": has_video,
-        "saved_video_count": len(saved_items),
+        "saved_video_count": len(completed_sources),
         "required_sources": required_sources,
         "completed_sources": completed_sources,
         "upload_percent": upload_percent,
@@ -1104,6 +1130,8 @@ def _saved_recordings_by_source(events: list[ProctoringEvent]) -> dict[str, Proc
     saved: dict[str, ProctoringEvent] = {}
     for event in sorted(events, key=lambda item: item.occurred_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True):
         if str(event.event_type or "").strip().upper() != "VIDEO_SAVED":
+            continue
+        if not _saved_video_meta_is_valid(event.meta):
             continue
         source = _normalize_video_source((event.meta or {}).get("source"))
         if source not in saved:

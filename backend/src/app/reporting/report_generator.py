@@ -24,6 +24,7 @@ from ..modules.tests.proctoring_requirements import get_proctoring_requirements
 _HTML_ENV = Environment(autoescape=True)
 _SEVERITY_ORDER = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
 _VIDEO_EVENT_TYPES = {"VIDEO_SAVED", "VIDEO_UPLOAD_PROGRESS"}
+_INVALID_SAVED_VIDEO_STATUSES = {"error", "failed"}
 _REPORT_TEMPLATE = _HTML_ENV.from_string(
     """<!DOCTYPE html>
 <html lang="en">
@@ -286,6 +287,25 @@ def _load_attempt_events(db: Session, attempt: Attempt) -> list[ProctoringEvent]
     ).all()
 
 
+def _coerce_non_negative_int(value: object) -> int:
+    try:
+        numeric = int(float(value))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, numeric)
+
+
+def _saved_video_meta_is_valid(meta: object) -> bool:
+    if not isinstance(meta, dict):
+        return False
+    status = str(meta.get("status") or "").strip().lower()
+    if status in _INVALID_SAVED_VIDEO_STATUSES:
+        return False
+    if meta.get("ready_to_stream") is True:
+        return True
+    return _coerce_non_negative_int(meta.get("size")) > 0
+
+
 def _build_recording_rows(events: list[ProctoringEvent], expected_sources: list[str]) -> list[dict[str, str]]:
     latest_progress: dict[str, ProctoringEvent] = {}
     saved: dict[str, ProctoringEvent] = {}
@@ -307,7 +327,7 @@ def _build_recording_rows(events: list[ProctoringEvent], expected_sources: list[
     rows: list[dict[str, str]] = []
     for source in ordered_sources:
         saved_event = saved.get(source)
-        if saved_event:
+        if saved_event and _saved_video_meta_is_valid(saved_event.meta):
             meta = saved_event.meta if isinstance(saved_event.meta, dict) else {}
             note_bits = [str(meta.get("name") or meta.get("filename") or "").strip(), str(meta.get("playback_type") or "").strip().upper()]
             rows.append({
@@ -318,6 +338,24 @@ def _build_recording_rows(events: list[ProctoringEvent], expected_sources: list[
                 "saved_at": _format_dt(saved_event.occurred_at, include_tz=False),
                 "size": _format_bytes(meta.get("size")),
                 "note": " | ".join(bit for bit in note_bits if bit) or "Final recording saved successfully.",
+            })
+            continue
+        if saved_event:
+            meta = saved_event.meta if isinstance(saved_event.meta, dict) else {}
+            status = str(meta.get("status") or "error").replace("_", " ").title()
+            detail = "Video upload finished but the stored recording is not playable."
+            if str(meta.get("status") or "").strip().lower() in _INVALID_SAVED_VIDEO_STATUSES:
+                detail = "Video upload finished but the storage provider marked the recording as failed."
+            elif _coerce_non_negative_int(meta.get("size")) <= 0:
+                detail = "Video upload finished but the stored recording is empty."
+            rows.append({
+                "label": source.title(),
+                "status": status,
+                "pill_tone": "bad",
+                "recorded_duration": _recording_duration(meta),
+                "saved_at": _format_dt(saved_event.occurred_at, include_tz=False),
+                "size": _format_bytes(meta.get("size")),
+                "note": detail,
             })
             continue
 
