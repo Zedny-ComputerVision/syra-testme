@@ -307,7 +307,6 @@ export function AuthProvider({ children }) {
         }
       } catch {
         if (!cancelled) {
-          setPermissionRows([]);
           setPermissionsError('Permissions could not be loaded.');
         }
       } finally {
