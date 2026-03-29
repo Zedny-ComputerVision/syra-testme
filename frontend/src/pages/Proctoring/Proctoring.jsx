@@ -968,7 +968,7 @@ export default function Proctoring() {
     }
   }, [cameraRecordingStatus, requiredRecordingSources, screenRecordingStatus, uploadRecordingSources])
 
-  const finalizeAttemptSubmission = useCallback(async () => {
+  const submitAttemptToServer = useCallback(async () => {
     setSubmitPhase('Submitting your attempt...')
     await submitAttempt(attemptId)
     submittedRef.current = true
@@ -977,11 +977,14 @@ export default function Proctoring() {
         emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
       })
     }
+  }, [attemptId, emitProctoringNotice])
+
+  const finishSubmissionUi = useCallback(() => {
     setSubmitPhase('')
     setSubmitting(false)
     submittingRef.current = false
     navigate(`/attempts/${attemptId}`)
-  }, [attemptId, emitProctoringNotice, navigate])
+  }, [attemptId, navigate])
 
   const runSubmissionFlow = useCallback(async ({ skipFlush = false } = {}) => {
     if (submittingRef.current) return
@@ -1000,20 +1003,25 @@ export default function Proctoring() {
           new Promise((_, reject) => setTimeout(() => reject(new Error('Save timed out')), 8000)),
         ]).catch(() => { /* best-effort flush — proceed with upload and submission */ })
       }
+      // Lock the attempt first, then keep the learner on the upload gate
+      // until the required recordings finish or surface an explicit retry state.
+      if (!submittedRef.current) {
+        await submitAttemptToServer()
+      }
       const uploadSucceeded = await finishRequiredRecordingUploads()
       if (!uploadSucceeded) {
         setSubmitting(false)
         submittingRef.current = false
         return
       }
-      await finalizeAttemptSubmission()
+      finishSubmissionUi()
     } catch (e) {
       setSubmitError(e.response?.data?.detail || e.message || 'Submission failed. Please try again.')
       setSubmitPhase('')
       setSubmitting(false)
       submittingRef.current = false
     }
-  }, [finalizeAttemptSubmission, finishRequiredRecordingUploads, flush])
+  }, [finishRequiredRecordingUploads, finishSubmissionUi, flush, submitAttemptToServer])
 
   const handleSubmit = useCallback(async () => {
     void runSubmissionFlow()
@@ -1592,7 +1600,9 @@ export default function Proctoring() {
           <div style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
             {anyProcessing
               ? 'Upload finished. Final video processing is still running. Please do not close this page.'
-              : 'Uploading your required proctoring recordings before submission. Please do not close this page.'}
+              : submittedRef.current
+                ? 'Uploading your exam recordings. Please do not close this page.'
+                : 'Uploading your required proctoring recordings before submission. Please do not close this page.'}
           </div>
           {uploadError && (
             <div style={{
