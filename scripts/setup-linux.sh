@@ -139,6 +139,26 @@ cleanup_stale_backend_migration_containers() {
   fi
 }
 
+dump_latest_backend_migration_logs() {
+  local project_name
+  local latest_container
+
+  project_name="$(basename "$REPO_ROOT")"
+  latest_container="$(
+    docker ps -a --format '{{.ID}} {{.CreatedAt}} {{.Names}}' \
+      --filter "label=com.docker.compose.project=${project_name}" \
+      --filter "label=com.docker.compose.service=backend" \
+      --filter "name=${project_name}-backend-run-" 2>/dev/null |
+      tail -n 1 |
+      awk '{ print $1 }'
+  )"
+
+  if [[ -n "$latest_container" ]]; then
+    log "Latest backend migration container logs:"
+    docker logs --tail 200 "$latest_container" >&2 || true
+  fi
+}
+
 prepare_backend_for_deploy() {
   local backend_cid
 
@@ -876,6 +896,7 @@ log "Running database migrations (timeout: ${DB_MIGRATION_TIMEOUT_SECONDS}s)..."
     timeout --foreground --signal=TERM --kill-after=30s "${DB_MIGRATION_TIMEOUT_SECONDS}s" \
       docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps backend alembic upgrade head || migration_exit_code=$?
   if (( migration_exit_code != 0 )); then
+    dump_latest_backend_migration_logs
     cleanup_stale_backend_migration_containers
     if (( migration_exit_code == 124 )); then
       die "Database migrations timed out after ${DB_MIGRATION_TIMEOUT_SECONDS}s."

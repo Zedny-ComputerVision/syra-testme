@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy to Production VM
@@ -129,7 +133,18 @@ jobs:
             export SYRA_DB_MIGRATION_TIMEOUT_SECONDS=60
             export SYRA_BACKEND_HEALTH_TIMEOUT_SECONDS=15
             export SYRA_FRONTEND_HEALTH_TIMEOUT_SECONDS=10
-            bash scripts/deploy-linux.sh
+            if ! command -v flock >/dev/null 2>&1; then
+              echo "::error title=Missing required command::flock is required on the VM to serialize deploys."
+              exit 1
+            fi
+
+            flock -n /tmp/syra-testme-deploy.lock bash scripts/deploy-linux.sh || {
+              exit_code=$?
+              if [[ "$exit_code" -eq 1 ]]; then
+                echo "::error title=Deploy already in progress::Another deploy is currently running on the VM."
+              fi
+              exit "$exit_code"
+            }
 
             trap - ERR
             echo ">>> Deployment complete!"
