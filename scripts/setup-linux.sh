@@ -121,6 +121,35 @@ compose() {
   POSTGRES_PASSWORD="$POSTGRES_PASSWORD" docker compose "${COMPOSE_FILES[@]}" "$@"
 }
 
+cleanup_stale_backend_migration_containers() {
+  local project_name
+  local stale_containers=()
+
+  project_name="$(basename "$REPO_ROOT")"
+  mapfile -t stale_containers < <(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=${project_name}" \
+      --filter "label=com.docker.compose.service=backend" \
+      --filter "name=${project_name}-backend-run-" 2>/dev/null || true
+  )
+
+  if (( ${#stale_containers[@]} > 0 )); then
+    log "Removing ${#stale_containers[@]} stale backend migration container(s)."
+    docker rm -f "${stale_containers[@]}" >/dev/null 2>&1 || true
+  fi
+}
+
+prepare_backend_for_deploy() {
+  local backend_cid
+
+  cleanup_stale_backend_migration_containers
+  backend_cid="$(compose ps -a -q backend 2>/dev/null || true)"
+  if [[ -n "$backend_cid" ]]; then
+    log "Removing existing backend container before standalone migrations."
+    compose rm -sf backend >/dev/null 2>&1 || true
+  fi
+}
+
 generate_secret() {
   printf '%s%s\n' "$(tr -d '-' </proc/sys/kernel/random/uuid)" "$(tr -d '-' </proc/sys/kernel/random/uuid)"
 }
@@ -826,6 +855,8 @@ if ! database_connectivity_check; then
   log "WARNING: Database preflight failed. Continuing to service startup; post-start health checks will validate the deployment."
 fi
 
+prepare_backend_for_deploy
+
 log "Building backend image..."
 (
   cd "$REPO_ROOT"
@@ -845,6 +876,7 @@ log "Running database migrations (timeout: ${DB_MIGRATION_TIMEOUT_SECONDS}s)..."
     timeout --foreground --signal=TERM --kill-after=30s "${DB_MIGRATION_TIMEOUT_SECONDS}s" \
       docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps backend alembic upgrade head || migration_exit_code=$?
   if (( migration_exit_code != 0 )); then
+    cleanup_stale_backend_migration_containers
     if (( migration_exit_code == 124 )); then
       die "Database migrations timed out after ${DB_MIGRATION_TIMEOUT_SECONDS}s."
     fi
