@@ -11,6 +11,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate deploy secrets
+        shell: bash
+        env:
+          SYRA_DATABASE_URL: ${{ secrets.SYRA_DATABASE_URL }}
+          SYRA_DATABASE_MIGRATION_URL: ${{ secrets.SYRA_DATABASE_MIGRATION_URL }}
+          SYRA_JWT_SECRET: ${{ secrets.SYRA_JWT_SECRET }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "${SYRA_DATABASE_URL}" ]]; then
+            echo "::error title=Missing required deploy secret::SYRA_DATABASE_URL is not set. Add it as a repository secret or attach the correct GitHub Actions environment to this job."
+            exit 1
+          fi
+
+          if [[ -z "${SYRA_DATABASE_MIGRATION_URL}" ]]; then
+            echo "::warning title=Missing optional deploy secret::SYRA_DATABASE_MIGRATION_URL is not set. setup-linux.sh will derive it from SYRA_DATABASE_URL when possible."
+          fi
+
+          if [[ -z "${SYRA_JWT_SECRET}" ]]; then
+            echo "::warning title=Missing optional deploy secret::SYRA_JWT_SECRET is not set. The deploy will reuse the JWT secret already persisted on the VM."
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
