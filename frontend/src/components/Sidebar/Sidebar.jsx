@@ -139,7 +139,7 @@ export default function Sidebar({ collapsed = false, mobileOpen = false, onClose
 
   useEffect(() => {
     if (mobileOpen && onClose) onClose()
-  }, [location.pathname, onClose])
+  }, [location.pathname])
 
   useEffect(() => {
     if (!mobileOpen || !onClose) return undefined
