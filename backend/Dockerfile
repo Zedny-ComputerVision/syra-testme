@@ -48,7 +48,7 @@ USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=10 \
+HEALTHCHECK --interval=15s --timeout=10s --start-period=600s --retries=10 \
     CMD curl -f http://127.0.0.1:8000/api/health/db || exit 1
 
 # Production: gunicorn with uvicorn workers for proper process management.
