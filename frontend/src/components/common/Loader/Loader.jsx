@@ -28,7 +28,7 @@ export default function Loader({ size = 40, label = 'Loading...', fullPage = fal
             <span className={styles.brandMark}>S</span>
             <span className={styles.brandTextWrap}>
               <span className={styles.brandKicker}>Secure assessment platform</span>
-              <span className={styles.brandText}>SYRA LMS</span>
+              <span className={styles.brandText}>syra</span>
             </span>
           </div>
         )}

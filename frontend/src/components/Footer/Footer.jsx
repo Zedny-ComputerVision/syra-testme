@@ -18,7 +18,7 @@ export default function Footer() {
               {workspaceLabel}
             </span>
           </div>
-          <span className={styles.copyright}>SYRA LMS &copy; {new Date().getFullYear()}</span>
+          <span className={styles.copyright}>syra &copy; {new Date().getFullYear()}</span>
           <span className={styles.caption}>
             {isAdmin || isInstructor ? 'Manage delivery, reports, and learner progress from one workspace.' : 'Keep your schedule, attempts, and upcoming tests in one place.'}
           </span>

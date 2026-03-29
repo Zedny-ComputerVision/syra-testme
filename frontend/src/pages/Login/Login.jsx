@@ -361,7 +361,7 @@ export default function Login() {
                 fill="#fff" fontSize="22" fontWeight="800" fontFamily="system-ui">S</text>
             </svg>
           </div>
-          <h1 className={styles.title}>SYRA LMS</h1>
+          <h1 className={styles.title}>syra</h1>
           <p className={styles.subtitle}>Sign in to your account</p>
         </div>
 

@@ -209,7 +209,7 @@ export default function Sidebar({ collapsed = false, mobileOpen = false, onClose
           <Link to={dashboardPath} className={styles.brandLink} onClick={handleNavigate}>
             <span className={styles.brandLogo}>S</span>
             <span className={styles.brandTextWrap}>
-              <span className={styles.brandText}>SYRA LMS</span>
+              <span className={styles.brandText}>syra</span>
             </span>
           </Link>
         </div>
@@ -293,7 +293,7 @@ export default function Sidebar({ collapsed = false, mobileOpen = false, onClose
         <div className={styles.sidebarFooter}>
           <div className={styles.versionRow}>
             <span className={styles.statusDot} aria-hidden="true" />
-            <span className={styles.version}>SYRA LMS v1.0</span>
+            <span className={styles.version}>syra v1.0</span>
           </div>
           <span className={styles.footerMeta}>Secure assessment workspace</span>
         </div>

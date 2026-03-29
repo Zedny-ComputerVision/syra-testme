@@ -98,7 +98,7 @@ const translations = {
     arabic: 'Arabic',
 
     // Misc
-    copyright: 'SYRA LMS',
+    copyright: 'syra',
     all_rights_reserved: 'All rights reserved',
     version: 'Version',
   },
@@ -200,7 +200,7 @@ const translations = {
     arabic: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629',
 
     // Misc
-    copyright: 'SYRA LMS',
+    copyright: 'syra',
     all_rights_reserved: '\u062c\u0645\u064a\u0639 \u0627\u0644\u062d\u0642\u0648\u0642 \u0645\u062d\u0641\u0648\u0638\u0629',
     version: '\u0627\u0644\u0625\u0635\u062f\u0627\u0631',
   },
