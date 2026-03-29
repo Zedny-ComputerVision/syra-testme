@@ -5,20 +5,25 @@ import logging
 import time
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from celery import Task
 
 from ..core.celery_app import celery_app
+from ..core.config import get_settings
 from ..db.session import SessionLocal
 from ..models import ProctoringEvent, SeverityEnum
-from ..services.cloudflare_media import get_cloudflare_video_details
+from ..services.cloudflare_media import get_cloudflare_video_details, upload_video_to_cloudflare
 
 logger = logging.getLogger(__name__)
+BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "storage"
+VIDEO_UPLOAD_SPOOL_DIR = BASE_STORAGE_DIR / "video_uploads"
 
 _CLOUDFLARE_REFRESH_ATTEMPTS = 6
 _CLOUDFLARE_REFRESH_DELAY_SECONDS = 5
 _INVALID_VIDEO_STATUSES = {"error", "failed"}
+_UPLOAD_RETRY_LIMIT = 3
 
 
 def _safe_int(value: object, default: int = 0) -> int:
@@ -49,6 +54,82 @@ def _normalize_file_info(file_info: Mapping[str, Any] | None) -> dict[str, Any]:
         "duration": _safe_float(data.get("duration"), 0.0),
         "ready_to_stream": bool(data.get("ready_to_stream")),
     }
+
+
+def _normalize_upload_request(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    data = dict(payload or {})
+    return {
+        "session_id": str(data.get("session_id") or "").strip(),
+        "source": str(data.get("source") or "camera").strip().lower() or "camera",
+        "filename": str(data.get("filename") or "").strip(),
+        "extension": str(data.get("extension") or "").replace(".", "").strip().lower() or "webm",
+        "spool_path": str(data.get("spool_path") or "").strip(),
+        "size": max(0, _safe_int(data.get("size"))),
+        "content_type": str(data.get("content_type") or "application/octet-stream").strip() or "application/octet-stream",
+        "recording_started_at": str(data.get("recording_started_at") or "").strip() or None,
+        "recording_stopped_at": str(data.get("recording_stopped_at") or "").strip() or None,
+        "upload_ip": str(data.get("upload_ip") or "").strip() or None,
+    }
+
+
+def _resolve_spool_path(raw_path: str) -> Path:
+    candidate = Path(str(raw_path or "")).expanduser()
+    if not candidate.is_absolute():
+        candidate = (VIDEO_UPLOAD_SPOOL_DIR / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+
+    spool_root = VIDEO_UPLOAD_SPOOL_DIR.resolve()
+    if candidate != spool_root and spool_root not in candidate.parents:
+        raise ValueError("Queued upload spool path is outside the allowed storage directory")
+    return candidate
+
+
+def _build_uploaded_file_info(*, remote: Mapping[str, Any], upload_request: Mapping[str, Any]) -> dict[str, Any]:
+    source = str(upload_request.get("source") or "camera").strip().lower() or "camera"
+    file_info: dict[str, Any] = {
+        "provider": "cloudflare",
+        "session_id": str(upload_request.get("session_id") or "").strip(),
+        "source": source,
+        "extension": str(upload_request.get("extension") or "webm").replace(".", "").strip().lower() or "webm",
+        "name": str(remote.get("name") or upload_request.get("filename") or "").strip(),
+        "url": remote.get("url") or remote.get("playback_url"),
+        "playback_url": remote.get("playback_url") or remote.get("url"),
+        "playback_type": remote.get("playback_type"),
+        "thumbnail": remote.get("thumbnail"),
+        "uid": remote.get("uid"),
+        "status": remote.get("status"),
+        "ready_to_stream": remote.get("ready_to_stream"),
+        "duration": remote.get("duration"),
+        "size": remote.get("size") or max(0, _safe_int(upload_request.get("size"))),
+        "created_at": remote.get("created_at"),
+        "recording_started_at": upload_request.get("recording_started_at"),
+        "recording_stopped_at": upload_request.get("recording_stopped_at"),
+        "remote": remote.get("remote") if isinstance(remote.get("remote"), dict) else dict(remote),
+    }
+    upload_ip = str(upload_request.get("upload_ip") or "").strip()
+    if upload_ip:
+        file_info["upload_ip"] = upload_ip
+    return {key: value for key, value in file_info.items() if value not in (None, "")}
+
+
+def _queue_video_batch_event(*, attempt_id: str, file_info: dict[str, Any], job_id: str) -> None:
+    meta = {
+        "job_id": str(job_id),
+        "status": "QUEUED",
+        "detail": "Batch video analysis queued.",
+        "analysis_status_url": f"/api/proctoring/{attempt_id}/jobs/{job_id}/status",
+        "session_id": str(file_info.get("session_id") or ""),
+        "source": str(file_info.get("source") or "camera"),
+        "file": file_info,
+    }
+    _record_event(
+        attempt_id=attempt_id,
+        event_type="VIDEO_BATCH_ANALYSIS_QUEUED",
+        severity=SeverityEnum.LOW,
+        detail=f"Batch analysis queued for {str(file_info.get('source') or 'video').title()} recording",
+        meta=meta,
+    )
 
 
 def _refresh_cloudflare_info(file_info: dict[str, Any]) -> dict[str, Any]:
@@ -183,6 +264,93 @@ def _record_event(
         logger.warning("Failed to record %s event for attempt %s: %s", event_type, attempt_id, exc)
     finally:
         db.close()
+
+
+def _video_batch_analysis_enabled() -> bool:
+    settings = get_settings()
+    return bool(
+        settings.PROCTORING_BATCH_ANALYSIS_ENABLED
+        and settings.celery_broker_url
+        and settings.celery_result_backend
+    )
+
+
+@celery_app.task(
+    bind=True,
+    name="upload_proctoring_video_capture",
+    queue="proctoring-upload",
+)
+def upload_proctoring_video_capture(self: Task, attempt_id: str, upload_request: dict[str, Any]) -> dict[str, Any]:
+    job_id = str(self.request.id or "")
+    normalized_request = _normalize_upload_request(upload_request)
+    source = str(normalized_request.get("source") or "camera")
+    spool_path = _resolve_spool_path(str(normalized_request.get("spool_path") or ""))
+
+    if not spool_path.is_file():
+        raise FileNotFoundError(f"Queued upload file not found: {spool_path}")
+
+    try:
+        remote = asyncio.run(
+            upload_video_to_cloudflare(
+                spool_path,
+                filename=str(normalized_request.get("filename") or spool_path.name),
+                source=source,
+            )
+        )
+    except Exception as exc:
+        retries = int(self.request.retries or 0)
+        if retries < _UPLOAD_RETRY_LIMIT:
+            countdown = min(30, 5 * (2 ** retries))
+            raise self.retry(exc=exc, countdown=countdown) from exc
+
+        failure_meta = {
+            "job_id": job_id,
+            "status": "FAILED",
+            "detail": str(exc)[:500] or "Queued Cloudflare upload failed.",
+            "session_id": str(normalized_request.get("session_id") or ""),
+            "source": source,
+            "filename": str(normalized_request.get("filename") or spool_path.name),
+            "size": max(0, _safe_int(normalized_request.get("size"))),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _record_event(
+            attempt_id=attempt_id,
+            event_type="VIDEO_UPLOAD_FAILED",
+            severity=SeverityEnum.MEDIUM,
+            detail=f"Queued Cloudflare upload failed for {source} recording",
+            meta=failure_meta,
+        )
+        spool_path.unlink(missing_ok=True)
+        raise
+
+    file_info = _build_uploaded_file_info(remote=remote, upload_request=normalized_request)
+    _record_event(
+        attempt_id=attempt_id,
+        event_type="VIDEO_SAVED",
+        severity=SeverityEnum.LOW,
+        detail=f"Proctoring {source} video saved",
+        meta=file_info,
+    )
+
+    result = {
+        "job_id": job_id,
+        "status": "COMPLETED",
+        "detail": "Video uploaded successfully.",
+        "session_id": str(file_info.get("session_id") or ""),
+        "source": source,
+        "file": file_info,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if _video_batch_analysis_enabled():
+        batch_task = process_uploaded_proctoring_video.apply_async(
+            kwargs={"attempt_id": str(attempt_id), "file_info": dict(file_info or {})},
+            queue="proctoring-batch",
+        )
+        _queue_video_batch_event(attempt_id=attempt_id, file_info=file_info, job_id=str(batch_task.id))
+
+    spool_path.unlink(missing_ok=True)
+    return result
 
 
 @celery_app.task(

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -35,9 +36,11 @@ from ...services.integrations import send_proctoring_integration_event
 from ...services.proctoring_inference import get_proctoring_inference_gateway
 from ...services.proctoring_video_batch import (
     enqueue_video_batch_analysis,
-    get_video_batch_job_status,
+    get_proctoring_video_job_status,
     video_batch_analysis_enabled,
+    video_job_queue_enabled,
 )
+from ...tasks.proctoring_video import upload_proctoring_video_capture
 from ...services.audit import write_audit_log
 from ...services.notifications import notify_proctoring_event, notify_user
 from ...services.cloudflare_media import (
@@ -57,6 +60,7 @@ from ...services import live_bus
 router = APIRouter()
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
+VIDEO_UPLOAD_SPOOL_DIR = BASE_STORAGE_DIR / "video_uploads"
 HEARTBEAT_INTERVAL_SECONDS = 10
 INACTIVITY_TIMEOUT_SECONDS = 60
 ADMIN_PROCTORING_NOTIFICATION_WINDOW = timedelta(minutes=5)
@@ -122,6 +126,11 @@ def _require_cloudflare_video_storage() -> None:
         raise HTTPException(status_code=503, detail="Cloudflare video storage must be enabled for proctoring recordings")
     if not cloudflare_video_storage_enabled():
         raise HTTPException(status_code=503, detail="Cloudflare video storage is not configured")
+
+
+def _cloudflare_upload_queue_enabled() -> bool:
+    provider = str(get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER or "").strip().lower()
+    return provider == "cloudflare" and video_job_queue_enabled()
 
 
 def _is_absolute_http_url(value: object) -> bool:
@@ -572,7 +581,7 @@ _PROCTORING_SUMMARY_EXCLUDED_EVENT_TYPES = {
 }
 
 
-def _build_video_batch_status_url(attempt_id: str, job_id: str) -> str:
+def _build_video_job_status_url(attempt_id: str, job_id: str) -> str:
     return f"/api/proctoring/{attempt_id}/jobs/{job_id}/status"
 
 
@@ -676,7 +685,7 @@ async def _build_video_upload_response(
         payload["status"] = str(job_info.get("status") or "QUEUED").upper()
         payload["analysis_status_url"] = (
             str(job_info.get("analysis_status_url") or "").strip()
-            or _build_video_batch_status_url(attempt_id, str(job_info.get("job_id") or ""))
+            or _build_video_job_status_url(attempt_id, str(job_info.get("job_id") or ""))
         )
     return JSONResponse(status_code=status_code, content=payload)
 
@@ -915,6 +924,35 @@ async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> 
         raise HTTPException(status_code=400, detail="Empty video upload")
 
     return temp_path, total_size
+
+
+async def _write_video_upload_to_spool_file(request: Request, *, suffix: str) -> tuple[Path, int]:
+    upload_limit_bytes = settings.MAX_VIDEO_UPLOAD_MB * 1024 * 1024
+    VIDEO_UPLOAD_SPOOL_DIR.mkdir(parents=True, exist_ok=True)
+    spool_path = (VIDEO_UPLOAD_SPOOL_DIR / f"{uuid4().hex}{suffix}").resolve()
+    total_size = 0
+
+    try:
+        with spool_path.open("wb") as spool_file:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                total_size += len(chunk)
+                if total_size > upload_limit_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Video upload exceeds the {settings.MAX_VIDEO_UPLOAD_MB} MB limit",
+                    )
+                spool_file.write(chunk)
+    except Exception:
+        spool_path.unlink(missing_ok=True)
+        raise
+
+    if total_size == 0:
+        spool_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Empty video upload")
+
+    return spool_path, total_size
 
 
 def _ping_event_detail(event_type: str) -> str:
@@ -1596,11 +1634,48 @@ async def upload_video_capture(
     safe_filename = Path(filename).name if filename else _video_filename(attempt_id, session_id, normalized_source, extension)
     normalized_recording_started_at = _normalize_iso_datetime(recording_started_at)
     normalized_recording_stopped_at = _normalize_iso_datetime(recording_stopped_at)
+    provider = _video_storage_provider()
+
+    if provider == "cloudflare" and _cloudflare_upload_queue_enabled():
+        spool_path, upload_size = await _write_video_upload_to_spool_file(request, suffix=f".{extension}")
+        try:
+            queued_job = upload_proctoring_video_capture.apply_async(
+                kwargs={
+                    "attempt_id": str(attempt_id),
+                    "upload_request": {
+                        "session_id": session_id,
+                        "source": normalized_source,
+                        "filename": safe_filename,
+                        "extension": extension,
+                        "spool_path": str(spool_path),
+                        "size": upload_size,
+                        "content_type": content_type,
+                        "recording_started_at": normalized_recording_started_at,
+                        "recording_stopped_at": normalized_recording_stopped_at,
+                        "upload_ip": get_request_ip(request),
+                    },
+                },
+                queue="proctoring-upload",
+            )
+        except Exception:
+            spool_path.unlink(missing_ok=True)
+            logger.exception("Failed to queue Cloudflare video upload for attempt %s", attempt_id)
+            raise HTTPException(status_code=503, detail="Cloudflare video upload queue is unavailable")
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "detail": "video received and cloud upload queued",
+                "job_id": str(queued_job.id),
+                "status": "QUEUED",
+                "analysis_status_url": _build_video_job_status_url(attempt_id, str(queued_job.id)),
+            },
+        )
+
     temp_path, upload_size = await _write_video_upload_to_temp_file(request, suffix=f".{extension}")
 
     file_info: dict[str, object]
     response_detail = "video uploaded"
-    provider = _video_storage_provider()
     try:
         if provider == "cloudflare":
             try:
@@ -1673,7 +1748,7 @@ async def upload_video_capture(
         try:
             queued_job = enqueue_video_batch_analysis(attempt_id, file_info)
             if queued_job:
-                queued_job["analysis_status_url"] = _build_video_batch_status_url(attempt_id, str(queued_job.get("job_id") or ""))
+                queued_job["analysis_status_url"] = _build_video_job_status_url(attempt_id, str(queued_job.get("job_id") or ""))
                 _queue_video_batch_event(db, attempt_id=attempt_id, file_info=file_info, job_info=queued_job)
                 job_info = queued_job
                 response_detail = "video uploaded and batch analysis queued"
@@ -1734,7 +1809,7 @@ async def register_video_capture(
         try:
             queued_job = enqueue_video_batch_analysis(attempt_id, file_info)
             if queued_job:
-                queued_job["analysis_status_url"] = _build_video_batch_status_url(attempt_id, str(queued_job.get("job_id") or ""))
+                queued_job["analysis_status_url"] = _build_video_job_status_url(attempt_id, str(queued_job.get("job_id") or ""))
                 _queue_video_batch_event(db, attempt_id=attempt_id, file_info=file_info, job_info=queued_job)
                 job_info = queued_job
         except Exception as exc:
@@ -1809,17 +1884,17 @@ def report_video_upload_progress(
 
 
 @router.get("/{attempt_id}/jobs/{job_id}/status", response_model=ProctoringJobStatusResponse)
-async def get_video_batch_status(
+async def get_video_job_status(
     attempt_id: str,
     job_id: str,
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
-    if not video_batch_analysis_enabled():
-        raise HTTPException(status_code=503, detail="Batch video analysis is not enabled")
+    if not video_job_queue_enabled():
+        raise HTTPException(status_code=503, detail="Background proctoring jobs are not enabled")
 
-    status_payload = get_video_batch_job_status(job_id)
+    status_payload = get_proctoring_video_job_status(job_id)
     event_payload = _find_video_batch_info_by_job_id(db, attempt_id, job_id)
 
     if event_payload:

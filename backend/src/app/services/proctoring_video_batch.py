@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from celery.result import AsyncResult
@@ -36,28 +37,39 @@ def enqueue_video_batch_analysis(attempt_id: str, file_info: dict[str, Any]) -> 
     }
 
 
-def get_video_batch_job_status(job_id: str) -> dict[str, Any]:
-    result = AsyncResult(str(job_id), app=celery_app)
+def video_job_queue_enabled() -> bool:
+    settings = get_settings()
+    return bool(settings.celery_broker_url and settings.celery_result_backend)
+
+
+def _build_job_status_payload(
+    job_id: str,
+    *,
+    result: AsyncResult,
+    queued_detail: str,
+    processing_detail: str,
+    completed_detail: str,
+) -> dict[str, Any]:
     try:
         state = str(result.state or "PENDING").upper()
     except Exception as exc:
-        logger.warning("Failed to read batch job %s status: %s", job_id, exc)
+        logger.warning("Failed to read job %s status: %s", job_id, exc)
         return {
             "job_id": str(job_id),
             "status": "PROCESSING",
-            "detail": "Batch video analysis status is temporarily unavailable.",
+            "detail": processing_detail,
             "findings": [],
             "summary": {},
             "file": None,
             "completed_at": None,
         }
 
-    if state in {"SUCCESS"}:
-        payload = result.result if isinstance(result.result, dict) else {}
+    if state == "SUCCESS":
+        payload = result.result if isinstance(result.result, Mapping) else {}
         return {
             "job_id": str(job_id),
             "status": str(payload.get("status") or "COMPLETED").upper(),
-            "detail": str(payload.get("detail") or "Batch video analysis completed."),
+            "detail": str(payload.get("detail") or completed_detail),
             "findings": list(payload.get("findings") or []),
             "summary": dict(payload.get("summary") or {}),
             "file": payload.get("file"),
@@ -65,7 +77,7 @@ def get_video_batch_job_status(job_id: str) -> dict[str, Any]:
         }
 
     if state in {"FAILURE", "REVOKED"}:
-        detail = str(result.result)[:500] if result.result is not None else "Batch video analysis failed."
+        detail = str(result.result)[:500] if result.result is not None else "Video processing failed."
         return {
             "job_id": str(job_id),
             "status": "FAILED",
@@ -80,9 +92,31 @@ def get_video_batch_job_status(job_id: str) -> dict[str, Any]:
     return {
         "job_id": str(job_id),
         "status": mapped_status,
-        "detail": "Batch video analysis is still running." if mapped_status == "PROCESSING" else "Batch video analysis is queued.",
+        "detail": processing_detail if mapped_status == "PROCESSING" else queued_detail,
         "findings": [],
         "summary": {},
         "file": None,
         "completed_at": None,
     }
+
+
+def get_proctoring_video_job_status(job_id: str) -> dict[str, Any]:
+    result = AsyncResult(str(job_id), app=celery_app)
+    return _build_job_status_payload(
+        str(job_id),
+        result=result,
+        queued_detail="Video processing is queued.",
+        processing_detail="Video processing is still running.",
+        completed_detail="Video processing completed.",
+    )
+
+
+def get_video_batch_job_status(job_id: str) -> dict[str, Any]:
+    result = AsyncResult(str(job_id), app=celery_app)
+    return _build_job_status_payload(
+        str(job_id),
+        result=result,
+        queued_detail="Batch video analysis is queued.",
+        processing_detail="Batch video analysis is still running.",
+        completed_detail="Batch video analysis completed.",
+    )
