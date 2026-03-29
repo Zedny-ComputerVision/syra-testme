@@ -445,12 +445,14 @@ textarea:not([class]):disabled {
 /* ---------- Responsive: collapse sidebar below 900px ---------- */
 /* Breakpoints: 1100px tablet-lg | 900px tablet | 768px tablet-sm | 480px phone | 360px phone-sm */
 @media (max-width: 900px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
   .app-shell__content {
     padding: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    grid-template-columns: 1fr;
   }
 }
 
