@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SYRA favicon">
+  <rect width="64" height="64" rx="14" fill="#ffffff" />
+  <path
+    fill="#050505"
+    d="M39.5 4c1.9 0 3.3 1.8 3 3.7L39 26h12.2c2.4 0 3.8 2.8 2.4 4.7L31.7 59.1c-2.1 2.7-6.2.7-5.6-2.7L29.4 38H15.9c-2.5 0-4-3-2.3-4.9L36.8 5.2A3.5 3.5 0 0 1 39.5 4Z"
+  />
+  <path
+    d="M40 23.5H29l-2.4 6.2h12.1l-2.7 10.7H24.5"
+    fill="none"
+    stroke="#ffffff"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="6.2"
+  />
+</svg>
