@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, case, exists, func, select, true
+from sqlalchemy import and_, case, func, select, true
 from sqlalchemy.orm import Session, joinedload, load_only
 
 from ..api.deps import ensure_permission
@@ -60,19 +60,23 @@ def _build_learner_dashboard(*, db: Session, current, now: datetime) -> Dashboar
     scored_attempts = int(attempts_metrics[4] or 0)
     passed_attempts = int(attempts_metrics[5] or 0)
 
-    learner_schedule_available = exists(
-        select(Schedule.id).where(
-            Schedule.exam_id == Exam.id,
+    learner_visible_exam_ids = (
+        select(Schedule.exam_id.label("exam_id"))
+        .where(
             Schedule.user_id == current.id,
+            Schedule.exam_id.is_not(None),
             Schedule.scheduled_at <= now,
         )
+        .subquery()
     )
     visible_tests = (
         db.scalar(
-            select(func.count(Exam.id)).where(
+            select(func.count(Exam.id))
+            .select_from(Exam)
+            .join(learner_visible_exam_ids, learner_visible_exam_ids.c.exam_id == Exam.id)
+            .where(
                 Exam.library_pool_id.is_(None),
                 Exam.status == ExamStatus.OPEN,
-                learner_schedule_available,
             )
         )
         or 0

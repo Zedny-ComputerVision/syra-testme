@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 import uuid
 
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.models import (
+    AccessMode,
     Course,
     CourseStatus,
     Exam,
@@ -21,12 +22,14 @@ from app.models import (
     Question,
     QuestionPool,
     RoleEnum,
+    Schedule,
     User,
 )
 from app.modules.tests.enums import TestStatus
 from app.modules.tests.repository import TestListRow as AdminTestListRow, TestRepository as AdminTestRepository
 from app.modules.tests.schemas import TestUpdateDTO as AdminTestUpdateDTO
 from app.modules.tests.service import ServiceActor, TestService as AdminTestService
+from app.services import exam_compat_service, schedule_service
 from app.services.normalized_relations import set_exam_certificate
 from app.utils.pagination import PaginationParams
 from app.api.routes.question_pools import _cleanup_pool_library_resources, _ensure_pool_library_exam
@@ -107,6 +110,20 @@ def _create_exam(db: Session, *, owner: User) -> Exam:
     db.add(exam)
     db.flush()
     return exam
+
+
+def _list_learner_catalog(db: Session, *, learner: User):
+    return exam_compat_service.list_tests(
+        db=db,
+        current=learner,
+        page=None,
+        page_size=None,
+        search=None,
+        sort=None,
+        order=None,
+        skip=0,
+        limit=50,
+    )
 
 
 def _create_pool(db: Session, *, owner: User, name: str) -> QuestionPool:
@@ -466,5 +483,112 @@ def test_list_courses_hides_internal_pool_library_from_learners() -> None:
         courses = list_courses(db=db, current=learner)
 
         assert [course.title for course in courses] == ["Visible Biology"]
+    finally:
+        db.close()
+
+
+def test_learner_catalog_returns_only_due_scheduled_open_tests_sorted_by_update() -> None:
+    db = _new_session()
+    try:
+        admin = _create_admin(db)
+        learner = _create_learner(db)
+        now = _now()
+
+        newest = _create_exam(db, owner=admin)
+        newest.title = "Visible newest"
+        newest.status = ExamStatus.OPEN
+        newest.updated_at = now
+
+        older = _create_exam(db, owner=admin)
+        older.title = "Visible older"
+        older.status = ExamStatus.OPEN
+        older.updated_at = now - timedelta(hours=1)
+
+        future = _create_exam(db, owner=admin)
+        future.title = "Future schedule"
+        future.status = ExamStatus.OPEN
+
+        unscheduled = _create_exam(db, owner=admin)
+        unscheduled.title = "No schedule"
+        unscheduled.status = ExamStatus.OPEN
+
+        closed = _create_exam(db, owner=admin)
+        closed.title = "Closed scheduled"
+        closed.status = ExamStatus.CLOSED
+
+        db.add_all([
+            Schedule(
+                exam_id=newest.id,
+                user_id=learner.id,
+                scheduled_at=now - timedelta(hours=2),
+                access_mode=AccessMode.OPEN,
+                created_at=now,
+                updated_at=now,
+            ),
+            Schedule(
+                exam_id=older.id,
+                user_id=learner.id,
+                scheduled_at=now - timedelta(hours=3),
+                access_mode=AccessMode.OPEN,
+                created_at=now,
+                updated_at=now,
+            ),
+            Schedule(
+                exam_id=future.id,
+                user_id=learner.id,
+                scheduled_at=now + timedelta(hours=1),
+                access_mode=AccessMode.OPEN,
+                created_at=now,
+                updated_at=now,
+            ),
+            Schedule(
+                exam_id=closed.id,
+                user_id=learner.id,
+                scheduled_at=now - timedelta(hours=1),
+                access_mode=AccessMode.OPEN,
+                created_at=now,
+                updated_at=now,
+            ),
+        ])
+        db.commit()
+
+        payload = _list_learner_catalog(db, learner=learner)
+
+        assert payload["total"] == 2
+        assert [item.title for item in payload["items"]] == ["Visible newest", "Visible older"]
+    finally:
+        db.close()
+
+
+def test_delete_schedule_invalidates_learner_catalog_cache() -> None:
+    db = _new_session()
+    try:
+        admin = _create_admin(db)
+        learner = _create_learner(db)
+        exam = _create_exam(db, owner=admin)
+        exam.title = "Assigned later"
+        exam.status = ExamStatus.OPEN
+        now = _now()
+        schedule = Schedule(
+            exam_id=exam.id,
+            user_id=learner.id,
+            scheduled_at=now - timedelta(minutes=5),
+            access_mode=AccessMode.OPEN,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(schedule)
+        db.commit()
+
+        first_payload = _list_learner_catalog(db, learner=learner)
+        assert first_payload["total"] == 1
+        assert [item.title for item in first_payload["items"]] == ["Assigned later"]
+
+        schedule_service.delete_schedule(db=db, schedule_id=str(schedule.id), actor=admin)
+
+        second_payload = _list_learner_catalog(db, learner=learner)
+
+        assert second_payload["total"] == 0
+        assert second_payload["items"] == []
     finally:
         db.close()

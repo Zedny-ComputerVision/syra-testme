@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, load_only
 
 from ..api.deps import ensure_exam_owner, ensure_permission, learner_can_access_exam
 from ..models import Course, CourseStatus, Exam, ExamStatus, Node, Question, RoleEnum, Schedule
@@ -209,36 +209,62 @@ def _list_learner_tests(*, db: Session, current, pagination, order_column) -> di
 
     def _load() -> dict:
         current_time = datetime.now(timezone.utc)
-        learner_schedule_available = exists(
-            select(Schedule.id).where(
-                Schedule.exam_id == Exam.id,
+        scheduled_exam_ids = (
+            select(Schedule.exam_id.label("exam_id"))
+            .where(
                 Schedule.user_id == current.id,
+                Schedule.exam_id.is_not(None),
                 Schedule.scheduled_at <= current_time,
             )
+            .subquery()
         )
-        query = (
-            select(Exam)
-            .options(joinedload(Exam.node).joinedload(Node.course))
-            .where(
-                Exam.library_pool_id.is_(None),
-                Exam.status == ExamStatus.OPEN,
-                learner_schedule_available,
-            )
-            .order_by(order_column, Exam.created_at.desc())
-        )
+        filters = [
+            Exam.library_pool_id.is_(None),
+            Exam.status == ExamStatus.OPEN,
+        ]
         if pagination.search:
             like = f"%{pagination.search.lower()}%"
-            query = query.where(
+            filters.append(
                 or_(
                     func.lower(Exam.title).like(like),
                     func.lower(func.coalesce(Exam.description, "")).like(like),
                 )
             )
 
+        query = (
+            select(Exam)
+            .join(scheduled_exam_ids, scheduled_exam_ids.c.exam_id == Exam.id)
+            .options(
+                load_only(
+                    Exam.id,
+                    Exam.node_id,
+                    Exam.title,
+                    Exam.type,
+                    Exam.status,
+                    Exam.time_limit,
+                    Exam.max_attempts,
+                    Exam.passing_score,
+                    Exam.description,
+                    Exam.category_id,
+                    Exam.grading_scale_id,
+                    Exam.created_at,
+                    Exam.updated_at,
+                ),
+                joinedload(Exam.node)
+                .load_only(Node.id, Node.title, Node.course_id)
+                .joinedload(Node.course)
+                .load_only(Course.id, Course.title),
+            )
+            .where(*filters)
+            .order_by(order_column, Exam.created_at.desc())
+        )
         total = db.scalar(
-            select(func.count()).select_from(query.with_only_columns(Exam.id).order_by(None).subquery())
+            select(func.count(Exam.id))
+            .select_from(Exam)
+            .join(scheduled_exam_ids, scheduled_exam_ids.c.exam_id == Exam.id)
+            .where(*filters)
         ) or 0
-        tests = _scalars_all(db, query.offset(pagination.offset).limit(pagination.limit))
+        tests = db.execute(query.offset(pagination.offset).limit(pagination.limit)).unique().scalars().all()
         return build_page_response(
             items=[serialize_learner_catalog_test(test) for test in tests],
             total=total,

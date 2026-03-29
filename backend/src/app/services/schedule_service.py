@@ -346,3 +346,6 @@ def schedule_title(schedule: Schedule) -> str:
 def invalidate_schedule_caches() -> None:
     _schedulable_tests_cache.invalidate()
     _schedule_list_cache.invalidate()
+    from . import exam_compat_service
+
+    exam_compat_service._invalidate_learner_exam_list_cache()
