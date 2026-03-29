@@ -278,7 +278,7 @@ def _video_batch_analysis_enabled() -> bool:
 @celery_app.task(
     bind=True,
     name="upload_proctoring_video_capture",
-    queue="proctoring-upload",
+    queue="proctoring-batch",
 )
 def upload_proctoring_video_capture(self: Task, attempt_id: str, upload_request: dict[str, Any]) -> dict[str, Any]:
     job_id = str(self.request.id or "")

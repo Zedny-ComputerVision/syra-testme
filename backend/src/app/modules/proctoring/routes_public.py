@@ -1655,7 +1655,7 @@ async def upload_video_capture(
                         "upload_ip": get_request_ip(request),
                     },
                 },
-                queue="proctoring-upload",
+                queue="proctoring-batch",
             )
         except Exception:
             spool_path.unlink(missing_ok=True)
