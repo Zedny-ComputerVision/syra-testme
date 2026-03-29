@@ -19,6 +19,7 @@ _deepface_model_name = os.environ.get("DEEPFACE_MODEL", "Facenet512")
 _deepface_warned = False
 _DeepFace = None
 _deepface_checked = False
+_HAAR_FACE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 # 40 stable landmark indices covering all facial regions
 _LANDMARK_INDICES = [
@@ -113,6 +114,35 @@ def _embedding_via_landmarks(frame_bgr: np.ndarray) -> Optional[list[float]]:
         return None
 
 
+def _embedding_via_haar(frame_bgr: np.ndarray) -> Optional[list[float]]:
+    """Last-resort grayscale face crop embedding used when richer models are unavailable."""
+    try:
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        faces = _HAAR_FACE.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(24, 24))
+        if len(faces) == 0:
+            return None
+        x, y, w, h = max(faces, key=lambda f: int(f[2]) * int(f[3]))
+        pad = int(max(w, h) * 0.25)
+        x0 = max(0, x - pad)
+        y0 = max(0, y - pad)
+        x1 = min(frame_bgr.shape[1], x + w + pad)
+        y1 = min(frame_bgr.shape[0], y + h + pad)
+        face_crop = frame_bgr[y0:y1, x0:x1]
+        if face_crop.size == 0:
+            return None
+        gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, (64, 64), interpolation=cv2.INTER_AREA)
+        gray = cv2.equalizeHist(gray)
+        vec = gray.astype(np.float32).flatten()
+        norm = np.linalg.norm(vec)
+        if norm < 1e-8:
+            return None
+        vec /= norm
+        return vec.tolist()
+    except Exception:
+        return None
+
+
 def compute_face_signature(frame_bytes: bytes) -> Optional[list[float]]:
     """Return a face embedding list or None if no face is found."""
     np_arr = np.frombuffer(frame_bytes, np.uint8)
@@ -168,11 +198,13 @@ class FaceVerifier:
 
     _DEEPFACE_THRESHOLD = float(os.environ.get("DEEPFACE_VERIFY_THRESHOLD", "0.30"))
     _LANDMARK_THRESHOLD = 0.18
+    _HAAR_THRESHOLD = 0.18
 
     def __init__(self, baseline: list[float] | None, threshold: float | None = None, enabled: bool = True):
         self.enabled = enabled and baseline is not None
         self.baseline = np.array(baseline, dtype=np.float32) if baseline is not None else None
         self._use_deepface = _get_deepface_class() is not None and (baseline is not None and len(baseline) == 512)
+        self._use_haar = baseline is not None and len(baseline) == 4096
 
         if self._use_deepface:
             # DeepFace 512-D cosine distance has different characteristics than
@@ -180,6 +212,10 @@ class FaceVerifier:
             # so that the generic config value (designed for landmarks) doesn't
             # make identity matching unreasonably strict and produce false mismatches.
             self.threshold = self._DEEPFACE_THRESHOLD
+        elif self._use_haar:
+            # Keep a minimum floor when the enrolled identity had to fall back to
+            # a low-fidelity Haar crop so live frames can still be compared.
+            self.threshold = max(float(threshold) if threshold is not None else self._LANDMARK_THRESHOLD, self._HAAR_THRESHOLD)
         elif threshold is not None:
             self.threshold = float(threshold)
         else:
@@ -208,6 +244,10 @@ class FaceVerifier:
             emb = _embedding_via_deepface(frame)
             if emb is not None:
                 return np.array(emb, dtype=np.float32)
+        if self._use_haar:
+            emb = _embedding_via_haar(frame)
+            if emb is not None:
+                return np.array(emb, dtype=np.float32)
         if self._mesh is None:
             return None
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -218,13 +258,20 @@ class FaceVerifier:
         return vec if vec is not None else None
 
     def _compare_embedding(self, live_vec: np.ndarray) -> dict | None:
+        if self.baseline is None or self.baseline.shape != live_vec.shape:
+            logger.warning(
+                "Skipping face verification because enrolled/live embedding shapes differ: baseline=%s live=%s",
+                None if self.baseline is None else tuple(self.baseline.shape),
+                tuple(live_vec.shape),
+            )
+            return None
         dist = cosine_distance(self.baseline, live_vec)
 
         if dist > self.threshold:
             self._consecutive_mismatches += 1
             if self._consecutive_mismatches >= self._consecutive_required:
                 self._mismatching = True
-                method = "neural" if self._use_deepface else "landmark"
+                method = "neural" if self._use_deepface else ("haar" if self._use_haar else "landmark")
                 return {
                     "event_type": "FACE_MISMATCH",
                     "severity": "HIGH",
