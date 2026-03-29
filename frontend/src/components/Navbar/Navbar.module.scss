@@ -54,13 +54,8 @@
   border-radius: 1px;
 }
 
-.sidebarToggle {
-  display: inline-flex;
-}
-
 @media (max-width: 640px) {
   .hamburger { display: flex; }
-  .iconBtn.sidebarToggle { display: none; }
 }
 
 /* ---------- Search ---------- */

@@ -32,6 +32,12 @@
     padding-inline: 0.75rem;
   }
 
+  .brandHeader {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.55rem;
+  }
+
   .brandLink {
     justify-content: center;
   }
@@ -92,6 +98,12 @@
   backdrop-filter: blur(16px);
 }
 
+.brandHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
 .brandLink {
   display: flex;
   align-items: center;
@@ -99,6 +111,7 @@
   text-decoration: none;
   color: var(--color-text);
   min-width: 0;
+  max-width: 100%;
 }
 
 .brandLogo {
@@ -129,6 +142,33 @@
   letter-spacing: 0.5px;
   color: var(--color-text);
   line-height: 1;
+}
+
+.collapseToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  flex-shrink: 0;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+    color: var(--color-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
+    outline-offset: 2px;
+  }
 }
 
 /* ---------- Navigation ---------- */
@@ -316,6 +356,10 @@
 
 /* ---------- Responsive ---------- */
 @media (max-width: 640px) {
+  .collapseToggle {
+    display: none;
+  }
+
   .sidebar {
     position: fixed;
     top: 0;

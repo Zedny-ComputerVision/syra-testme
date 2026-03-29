@@ -238,14 +238,13 @@ function Shell({ children }) {
             collapsed={sidebarCollapsed}
             mobileOpen={mobileOpen}
             onClose={() => setMobileOpen(false)}
+            onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
           />
         )}
         <div className="app-shell__main">
           {!isExamMode && (
             <Navbar
-              sidebarCollapsed={sidebarCollapsed}
               onMenuToggle={() => setMobileOpen((prev) => !prev)}
-              onSidebarToggle={() => setSidebarCollapsed((prev) => !prev)}
             />
           )}
           <AnimatePresence mode="wait">
