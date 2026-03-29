@@ -15,6 +15,9 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
+          SYRA_DATABASE_URL: ${{ secrets.SYRA_DATABASE_URL }}
+          SYRA_DATABASE_MIGRATION_URL: ${{ secrets.SYRA_DATABASE_MIGRATION_URL }}
+          SYRA_JWT_SECRET: ${{ secrets.SYRA_JWT_SECRET }}
           SYRA_BREVO_API_KEY: ${{ secrets.SYRA_BREVO_API_KEY }}
           SYRA_BREVO_SENDER_EMAIL: ${{ secrets.SYRA_BREVO_SENDER_EMAIL }}
           SYRA_BREVO_SENDER_NAME: ${{ secrets.SYRA_BREVO_SENDER_NAME }}
@@ -24,7 +27,7 @@ jobs:
           password: ${{ secrets.VM_PASSWORD }}
           port: 22
           command_timeout: 30m
-          envs: GIT_PASSWORD,SYRA_BREVO_API_KEY,SYRA_BREVO_SENDER_EMAIL,SYRA_BREVO_SENDER_NAME
+          envs: GIT_PASSWORD,SYRA_DATABASE_URL,SYRA_DATABASE_MIGRATION_URL,SYRA_JWT_SECRET,SYRA_BREVO_API_KEY,SYRA_BREVO_SENDER_EMAIL,SYRA_BREVO_SENDER_NAME
           script: |
             set -Eeuo pipefail
             cd /opt/syra-testme
