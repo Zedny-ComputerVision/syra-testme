@@ -61,4 +61,4 @@ HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=10 \
 # All other state (AI inference, proctoring sessions) is handled by Celery workers,
 # making multi-worker safe for general API traffic.
 ENV WORKERS=4
-CMD ["sh", "-c", "gunicorn src.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${WORKERS} --timeout 600 --graceful-timeout 120 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips '*'"]
+CMD ["sh", "-c", "alembic upgrade head && gunicorn src.app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${WORKERS} --timeout 600 --graceful-timeout 120 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips '*'"]
