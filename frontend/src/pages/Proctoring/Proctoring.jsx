@@ -976,13 +976,18 @@ export default function Proctoring() {
   }
 
   const finishRequiredRecordingUploads = useCallback(async () => {
-    if (requiredRecordingSources.length === 0) {
+    const pendingSources = requiredRecordingSources.filter((source) => {
+      if (source === 'camera') return cameraRecordingStatus !== 'saved'
+      if (source === 'screen') return screenRecordingStatus !== 'saved'
+      return true
+    })
+    if (pendingSources.length === 0) {
       return true
     }
     setSubmitPhase('uploading')
     setUploadError('')
     try {
-      await uploadRecordingSources(requiredRecordingSources)
+      await uploadRecordingSources(pendingSources)
       return true
     } catch (error) {
       console.warn('Recording upload failed:', error)
@@ -993,64 +998,62 @@ export default function Proctoring() {
       )
       return false
     }
-  }, [requiredRecordingSources, uploadRecordingSources])
+  }, [cameraRecordingStatus, requiredRecordingSources, screenRecordingStatus, uploadRecordingSources])
 
-  const handleSubmit = useCallback(async () => {
+  const finalizeAttemptSubmission = useCallback(async () => {
+    setSubmitPhase('Submitting your attempt...')
+    await submitAttempt(attemptId)
+    submittedRef.current = true
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch((error) => {
+        emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
+      })
+    }
+    setSubmitPhase('')
+    setSubmitting(false)
+    submittingRef.current = false
+    navigate(`/attempts/${attemptId}`)
+  }, [attemptId, emitProctoringNotice, navigate])
+
+  const runSubmissionFlow = useCallback(async ({ skipFlush = false } = {}) => {
     if (submittingRef.current) return
     submittingRef.current = true
     setAutoSubmitState(null)
     setSubmitting(true)
-    setSubmitPhase('Saving your latest answers...')
     setSubmitError('')
     setUploadError('')
+    if (!skipFlush) {
+      setSubmitPhase('Saving your latest answers...')
+    }
     try {
-      await Promise.race([
-        flush(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Save timed out')), 8000)),
-      ]).catch(() => { /* best-effort flush — proceed with submission */ })
-      // Submit the attempt first so the learner isn't blocked
-      setSubmitPhase('Submitting your attempt...')
-      await submitAttempt(attemptId)
-      submittedRef.current = true
-      if (document.fullscreenElement) {
-        document.exitFullscreen?.().catch((error) => {
-          emitProctoringNotice('exit_fullscreen', error?.message || 'Unable to exit fullscreen cleanly after submission.', 'LOW')
-        })
+      if (!skipFlush) {
+        await Promise.race([
+          flush(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Save timed out')), 8000)),
+        ]).catch(() => { /* best-effort flush — proceed with upload and submission */ })
       }
-      // Show upload overlay — exam content is hidden, learner sees only progress
       const uploadSucceeded = await finishRequiredRecordingUploads()
       if (!uploadSucceeded) {
         setSubmitting(false)
         submittingRef.current = false
         return
       }
-      setSubmitPhase('')
-      setSubmitting(false)
-      submittingRef.current = false
-      navigate(`/attempts/${attemptId}`)
+      await finalizeAttemptSubmission()
     } catch (e) {
       setSubmitError(e.response?.data?.detail || e.message || 'Submission failed. Please try again.')
       setSubmitPhase('')
       setSubmitting(false)
       submittingRef.current = false
     }
-  }, [attemptId, emitProctoringNotice, finishRequiredRecordingUploads, flush, navigate])
+  }, [finalizeAttemptSubmission, finishRequiredRecordingUploads, flush])
+
+  const handleSubmit = useCallback(async () => {
+    void runSubmissionFlow()
+  }, [runSubmissionFlow])
 
   const handleRetryUpload = useCallback(async () => {
-    if (submittingRef.current) return
-    submittingRef.current = true
-    setSubmitting(true)
-    const uploadSucceeded = await finishRequiredRecordingUploads()
-    if (uploadSucceeded) {
-      setSubmitPhase('')
-      setSubmitting(false)
-      submittingRef.current = false
-      navigate(`/attempts/${attemptId}`)
-      return
-    }
-    setSubmitting(false)
-    submittingRef.current = false
-  }, [attemptId, finishRequiredRecordingUploads, navigate])
+    void runSubmissionFlow({ skipFlush: true })
+  }, [runSubmissionFlow])
 
   const handleForcedSubmit = useCallback((detail = 'Test auto-submitted due to violations.') => {
     const event = normalizeProctoringAlert({
@@ -1600,8 +1603,8 @@ export default function Proctoring() {
     )
   }
 
-  // ── Post-submit upload overlay ──────────────────────────────────────────────
-  if (submittedRef.current && submitPhase === 'uploading') {
+  // ── Recording upload overlay ────────────────────────────────────────────────
+  if (submitPhase === 'uploading') {
     const anyProcessing = cameraRecordingStatus === 'processing' || screenRecordingStatus === 'processing'
     const allDone = Object.values(uploadPercent).length > 0 && Object.values(uploadPercent).every((p) => p >= 100) && !anyProcessing
     return (
@@ -1616,12 +1619,12 @@ export default function Proctoring() {
           border: '1px solid rgba(6,182,212,0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
         }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f1f5f9', marginBottom: '0.5rem' }}>
-            Exam Submitted
+            {submittedRef.current ? 'Exam Submitted' : 'Finalizing Your Exam'}
           </div>
           <div style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
             {anyProcessing
               ? 'Upload finished. Final video processing is still running. Please do not close this page.'
-              : 'Uploading your exam recordings. Please do not close this page.'}
+              : 'Uploading your required proctoring recordings before submission. Please do not close this page.'}
           </div>
           {uploadError && (
             <div style={{
