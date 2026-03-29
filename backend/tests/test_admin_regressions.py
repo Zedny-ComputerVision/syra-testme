@@ -463,7 +463,7 @@ def test_list_courses_hides_internal_pool_library_from_learners() -> None:
         ])
         db.commit()
 
-        courses = asyncio.run(list_courses(db=db, current=learner))
+        courses = list_courses(db=db, current=learner)
 
         assert [course.title for course in courses] == ["Visible Biology"]
     finally:

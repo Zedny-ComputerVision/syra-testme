@@ -52,6 +52,7 @@ from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabas
 from ...utils.request_ip import get_request_ip, get_websocket_ip
 from ...utils.response_cache import TimedSingleFlightCache
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
+from ...services import live_bus
 
 router = APIRouter()
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "storage"
@@ -73,51 +74,9 @@ _video_upload_status_cache: TimedSingleFlightCache[list[dict[str, object]]] = Ti
     ttl_seconds=VIDEO_UPLOAD_STATUS_CACHE_TTL_SECONDS
 )
 
-# ── Live monitoring registry ──────────────────────────────────────────────────
-# Maps attempt_id → set of admin WebSocket connections watching that session.
-# Also stores the latest frame thumbnail + session metadata for new viewers.
-_live_viewers: dict[str, set[WebSocket]] = {}
-_live_session_info: dict[str, dict] = {}  # attempt_id → {user_name, exam_title, started_at, ...}
-_live_latest_thumb: dict[str, bytes] = {}  # attempt_id → last JPEG thumbnail (small)
-
-
-async def _broadcast_to_viewers(attempt_id: str, message: dict) -> None:
-    """Send a JSON message to all admin viewers watching this attempt."""
-    viewers = _live_viewers.get(attempt_id)
-    if not viewers:
-        return
-    dead: list[WebSocket] = []
-    for ws in viewers:
-        try:
-            if ws.application_state == WebSocketState.CONNECTED:
-                await ws.send_json(message)
-            else:
-                dead.append(ws)
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        viewers.discard(ws)
-
-
-async def _broadcast_bytes_to_viewers(attempt_id: str, data: bytes, msg_type: str = "frame") -> None:
-    """Send binary data (frame thumbnail) to admin viewers."""
-    viewers = _live_viewers.get(attempt_id)
-    if not viewers:
-        return
-    # Prepend a type byte: 0x01 = frame, 0x02 = screen
-    type_byte = b'\x01' if msg_type == "frame" else b'\x02'
-    payload = type_byte + data
-    dead: list[WebSocket] = []
-    for ws in viewers:
-        try:
-            if ws.application_state == WebSocketState.CONNECTED:
-                await ws.send_bytes(payload)
-            else:
-                dead.append(ws)
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        viewers.discard(ws)
+# Live monitoring state is stored in Redis (see services/live_bus.py) so it is
+# shared across all Gunicorn workers. Student WebSockets publish to Redis;
+# admin WebSockets subscribe to Redis and receive events on any worker.
 
 
 def _normalize_video_source(value: object) -> str:
@@ -2152,10 +2111,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
     }
     _release_db_session(db)
 
-    # ── Register live monitoring session ──────────────────────────────────────
-    _live_session_info[attempt_id] = live_session_info
-    if attempt_id not in _live_viewers:
-        _live_viewers[attempt_id] = set()
+    # ── Register live monitoring session in Redis ─────────────────────────────
+    await live_bus.publish_session_open(attempt_id, live_session_info)
 
     # ── Model availability checks — run in background after orchestrator init ──
     # These are deferred so the WS connect handshake isn't blocked by model loading.
@@ -2428,11 +2385,10 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
                             break
 
-                    # Broadcast frame thumbnail + alerts to live admin viewers
-                    if _live_viewers.get(attempt_id):
-                        # Send a small thumbnail (max 320px wide) — rate-limited to 1fps
-                        _thumb_now = time.monotonic()
-                        _should_broadcast_thumb = (_thumb_now - _last_thumb_broadcast) >= 1.0
+                    # Broadcast frame thumbnail + alerts to live admin viewers via Redis
+                    _thumb_now = time.monotonic()
+                    _should_broadcast_thumb = (_thumb_now - _last_thumb_broadcast) >= 1.0
+                    if _should_broadcast_thumb:
                         try:
                             import cv2 as _live_cv2
                             import numpy as _live_np
@@ -2444,29 +2400,26 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                     _scale = 320 / _w
                                     _frame_img = _live_cv2.resize(_frame_img, (320, int(_h * _scale)))
                                 _, _thumb_buf = _live_cv2.imencode('.jpg', _frame_img, [_live_cv2.IMWRITE_JPEG_QUALITY, 50])
-                                _thumb_bytes = _thumb_buf.tobytes()
-                                _live_latest_thumb[attempt_id] = _thumb_bytes
-                                if _should_broadcast_thumb:
-                                    await _broadcast_bytes_to_viewers(attempt_id, _thumb_bytes, "frame")
-                                    _last_thumb_broadcast = _thumb_now
+                                await live_bus.publish_thumb(attempt_id, _thumb_buf.tobytes(), "frame")
+                                _last_thumb_broadcast = _thumb_now
                         except Exception:
                             pass
-                        for alert in alerts:
-                            await _broadcast_to_viewers(attempt_id, {
-                                "type": "alert",
-                                "attempt_id": attempt_id,
-                                "event_type": alert["event_type"],
-                                "severity": alert["severity"],
-                                "detail": alert.get("detail", ""),
-                                "confidence": alert.get("confidence", 0),
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
-                        if alerts or int(session_summary.get("face_checks") or 0) % 10 == 0:
-                            await _broadcast_to_viewers(attempt_id, {
-                                "type": "live_summary",
-                                "attempt_id": attempt_id,
-                                **session_summary,
-                            })
+                    for alert in alerts:
+                        await live_bus.publish_json_event(attempt_id, {
+                            "type": "alert",
+                            "attempt_id": attempt_id,
+                            "event_type": alert["event_type"],
+                            "severity": alert["severity"],
+                            "detail": alert.get("detail", ""),
+                            "confidence": alert.get("confidence", 0),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
+                    if alerts or int(session_summary.get("face_checks") or 0) % 10 == 0:
+                        await live_bus.publish_json_event(attempt_id, {
+                            "type": "live_summary",
+                            "attempt_id": attempt_id,
+                            **session_summary,
+                        })
 
                     # Single commit for all events from this frame
                     if alerts:
@@ -2893,12 +2846,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         except Exception:
             with contextlib.suppress(Exception):
                 db.rollback()
-        # Clean up live monitoring session
-        _live_session_info.pop(attempt_id, None)
-        _live_latest_thumb.pop(attempt_id, None)
-        # Notify admin viewers that session ended, then close their connections
-        await _broadcast_to_viewers(attempt_id, {"type": "session_ended", "attempt_id": attempt_id})
-        _live_viewers.pop(attempt_id, None)
+        # Notify admin viewers that session ended and clean up Redis keys
+        await live_bus.publish_session_closed(attempt_id)
         # Notify client of graceful close
         if websocket.application_state == WebSocketState.CONNECTED:
             with contextlib.suppress(Exception):

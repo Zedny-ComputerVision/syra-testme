@@ -408,7 +408,8 @@ async def force_submit_attempt(
 ):
     """Force-submit a learner's attempt. Admin can force any; instructor only their own exams."""
     from ...api.deps import parse_uuid_param
-    from .routes_public import _auto_submit_attempt, _broadcast_to_viewers
+    from ...services import live_bus
+    from .routes_public import _auto_submit_attempt
 
     pk = parse_uuid_param(attempt_id)
     attempt = db.get(Attempt, pk)
@@ -428,7 +429,7 @@ async def force_submit_attempt(
     )
 
     # Notify live viewers that the session was force-submitted
-    await _broadcast_to_viewers(str(pk), {
+    await live_bus.publish_json_event(str(pk), {
         "type": "force_submitted",
         "detail": "Attempt was force-submitted by an administrator.",
     })
@@ -439,26 +440,25 @@ async def force_submit_attempt(
 # ── Live Monitoring ───────────────────────────────────────────────────────────
 
 @router.get("/admin/live")
-def list_active_sessions(
+async def list_active_sessions(
     current: User = Depends(require_permission("proctoring.admin", RoleEnum.ADMIN)),
     db: Session = Depends(get_db_dep),
 ):
     """List all currently active proctoring sessions (learners with an open WS)."""
-    from .routes_public import _live_session_info, _live_viewers
+    from ...services import live_bus
 
+    all_sessions = await live_bus.get_all_sessions()
     sessions = []
-    for attempt_id, info in _live_session_info.items():
+    for info in all_sessions:
         exam_id = info.get("exam_id")
         if not exam_id:
             continue
         exam = db.get(Exam, exam_id)
         if not exam or exam.created_by_id != current.id:
             continue
-        viewers_count = len(_live_viewers.get(attempt_id, set()))
-        sessions.append({
-            **info,
-            "viewers": viewers_count,
-        })
+        attempt_id = info.get("attempt_id", "")
+        viewers_count = await live_bus.get_viewer_count(attempt_id)
+        sessions.append({**info, "viewers": viewers_count})
     return {"active_sessions": sessions}
 
 
@@ -469,9 +469,13 @@ async def live_monitor_ws(websocket: WebSocket, attempt_id: str, token: str):
     Receives:
       - Binary messages: frame thumbnails (type byte + JPEG data)
       - JSON messages: alerts, summaries, session_ended
+
+    Session state and message routing use Redis pub/sub so this handler works
+    correctly regardless of which Gunicorn worker the student's WebSocket landed on.
     """
+    import base64 as _b64
     from ...core.security import verify_token
-    from .routes_public import _live_viewers, _live_session_info, _live_latest_thumb
+    from ...services import live_bus
 
     # Authenticate admin
     try:
@@ -483,7 +487,8 @@ async def live_monitor_ws(websocket: WebSocket, attempt_id: str, token: str):
         await websocket.close(code=4403)
         return
 
-    session_info_check = _live_session_info.get(attempt_id)
+    # Authorise: instructor may only watch exams they own
+    session_info_check = await live_bus.get_session_info(attempt_id)
     if session_info_check:
         from ...db.session import get_db
         db_gen = get_db()
@@ -501,45 +506,64 @@ async def live_monitor_ws(websocket: WebSocket, attempt_id: str, token: str):
 
     await websocket.accept()
 
-    # Check if session is active
-    session_info = _live_session_info.get(attempt_id)
+    session_info = await live_bus.get_session_info(attempt_id)
     if not session_info:
         await websocket.send_json({"type": "error", "detail": "Session not active or not found"})
         await websocket.close(code=4404)
         return
 
-    # Register this viewer
-    if attempt_id not in _live_viewers:
-        _live_viewers[attempt_id] = set()
-    _live_viewers[attempt_id].add(websocket)
-
     await websocket.send_json({"type": "connected", **session_info})
 
-    # Send last known thumbnail if available
-    thumb = _live_latest_thumb.get(attempt_id)
+    # Send last known thumbnail so the admin sees something immediately
+    thumb = await live_bus.get_latest_thumb(attempt_id)
     if thumb:
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_bytes(b'\x01' + thumb)
-        except Exception:
-            pass
 
-    try:
-        # Keep alive — just consume any messages from admin (e.g., keepalives)
-        while True:
+    # ── Two concurrent tasks ──────────────────────────────────────────────
+    # Task 1: forward Redis pub/sub messages to this admin WebSocket.
+    # Task 2: receive messages from the admin (pings, future commands).
+    # Whichever finishes first triggers cleanup of the other.
+
+    async def _redis_to_ws() -> None:
+        async for msg in live_bus.subscribe(attempt_id):
+            msg_type = msg.get("type")
             try:
-                data = await websocket.receive_json()
-                # Admin can send commands in the future (e.g., send warning to student)
-                msg_type = data.get("type", "")
-                if msg_type == "ping":
-                    await websocket.send_json({"type": "pong"})
-            except WebSocketDisconnect:
-                break
+                if msg_type == "session_ended":
+                    with contextlib.suppress(Exception):
+                        await websocket.send_json(msg)
+                    break
+                elif msg_type == "thumb":
+                    raw_type = msg.get("msg_type", "frame")
+                    type_byte = b'\x01' if raw_type == "frame" else b'\x02'
+                    data = _b64.b64decode(msg.get("payload", ""))
+                    await websocket.send_bytes(type_byte + data)
+                elif msg_type == "json":
+                    await websocket.send_json(msg.get("payload", {}))
             except Exception:
                 break
+
+    async def _ws_receive() -> None:
+        try:
+            while True:
+                data = await websocket.receive_json()
+                if data.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+        except (WebSocketDisconnect, Exception):
+            pass
+
+    redis_task = asyncio.create_task(_redis_to_ws())
+    ws_task = asyncio.create_task(_ws_receive())
+    try:
+        _done, pending = await asyncio.wait(
+            [redis_task, ws_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
     finally:
-        viewers = _live_viewers.get(attempt_id)
-        if viewers:
-            viewers.discard(websocket)
         if websocket.application_state == WebSocketState.CONNECTED:
             with contextlib.suppress(Exception):
                 await websocket.close(code=1000)

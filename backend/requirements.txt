@@ -19,6 +19,7 @@ bcrypt>=4.0,<5
 # ── HTTP client ───────────────────────────────
 httpx>=0.27.0
 celery[redis]>=5.4.0
+redis[asyncio]>=4.2.0          # live_bus.py uses redis.asyncio for cross-worker pub/sub
 
 # ── Config & templating ──────────────────────
 pydantic-settings>=2.2.0

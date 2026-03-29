@@ -44,9 +44,9 @@ describe('AdminDashboard', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Some dashboard panels could not be loaded in time. Refresh to retry.')).toBeTruthy())
-    expect(screen.getByText('Total Attempts')).toBeTruthy()
+    expect(screen.getByText('Total attempts')).toBeTruthy()
     expect(screen.getAllByText('7').length).toBeGreaterThan(0)
-    expect(screen.getByText('No activity yet.')).toBeTruthy()
+    expect(screen.getByText('No recent audit activity has been recorded yet.')).toBeTruthy()
   })
 
   it('retries dashboard loading from the refresh action', async () => {

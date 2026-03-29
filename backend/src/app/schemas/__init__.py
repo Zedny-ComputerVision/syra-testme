@@ -583,20 +583,71 @@ class AttemptProctoringSummaryRead(BaseModel):
     recent_events: list[ProctoringEventRead] = Field(default_factory=list)
 
 
+class DashboardSeriesPointRead(BaseModel):
+    key: str
+    label: str
+    value: int
+
+
+class DashboardTopTestRead(BaseModel):
+    exam_id: UUID
+    title: str
+    attempts: int = 0
+    scored_attempts: int = 0
+    average_score: Optional[float] = None
+    passed_attempts: int = 0
+    pass_rate: float = 0
+    high_risk_attempts: int = 0
+    flagged_attempts: int = 0
+
+
+class DashboardFlaggedAttemptRead(BaseModel):
+    id: UUID
+    exam_id: UUID
+    user_id: UUID
+    status: AttemptStatus
+    score: Optional[float] = None
+    user_name: Optional[str] = None
+    user_student_id: Optional[str] = None
+    test_title: Optional[str] = None
+    started_at: Optional[datetime] = None
+    submitted_at: Optional[datetime] = None
+    high_violations: int = 0
+    med_violations: int = 0
+    integrity_score: int = 100
+    risk_level: str = "CLEAN"
+
+
 class DashboardRead(BaseModel):
     total_exams: int
     total_tests: int = 0
     total_users: int = 0
     total_learners: int = 0
     total_admins: int = 0
+    total_instructors: int = 0
+    active_users: int = 0
     published_tests: int = 0
+    open_tests: int = 0
+    closed_tests: int = 0
     total_attempts: int
     in_progress_attempts: int
     completed_attempts: int
     best_score: Optional[float]
     average_score: Optional[float]
+    pass_rate: float = 0
+    awaiting_review_attempts: int = 0
+    high_risk_attempts: int = 0
+    medium_risk_attempts: int = 0
     upcoming_count: int
     upcoming_schedules: list[ScheduleRead]
+    attempt_status_breakdown: list[DashboardSeriesPointRead] = Field(default_factory=list)
+    score_distribution: list[DashboardSeriesPointRead] = Field(default_factory=list)
+    role_distribution: list[DashboardSeriesPointRead] = Field(default_factory=list)
+    test_status_breakdown: list[DashboardSeriesPointRead] = Field(default_factory=list)
+    recent_attempt_trend: list[DashboardSeriesPointRead] = Field(default_factory=list)
+    top_tests: list[DashboardTopTestRead] = Field(default_factory=list)
+    recent_flagged_attempts: list[DashboardFlaggedAttemptRead] = Field(default_factory=list)
+    generated_at: Optional[datetime] = None
 
 
 class ChangePasswordRequest(BaseModel):

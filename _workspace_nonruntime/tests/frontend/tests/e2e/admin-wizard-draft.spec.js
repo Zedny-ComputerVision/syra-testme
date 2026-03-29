@@ -33,6 +33,7 @@ test.describe('Admin New Test Wizard draft flow', () => {
     }
 
     await expect(page.getByText(/Drafts can be saved without questions/i)).toBeVisible()
+    await page.getByRole('radio', { name: /Draft Not visible to candidates/i }).check()
     await page.getByRole('button', { name: /Save as Draft/i }).click()
     await expect(page).toHaveURL(/\/admin\/tests$/)
 
