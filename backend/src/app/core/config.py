@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     PROCTORING_INFERENCE_OPEN_TIMEOUT_SECONDS: int = Field(default=180, ge=5)
     PROCTORING_INFERENCE_TASK_TIMEOUT_SECONDS: int = Field(default=30, ge=5)
     PROCTORING_BATCH_ANALYSIS_ENABLED: bool = False
+    PROCTORING_BATCH_ANALYSIS_DISPATCH_DELAY_SECONDS: int = Field(default=120, ge=0)
     REDIS_URL: str | None = None
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None

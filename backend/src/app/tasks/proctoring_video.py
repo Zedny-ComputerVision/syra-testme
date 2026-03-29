@@ -275,6 +275,11 @@ def _video_batch_analysis_enabled() -> bool:
     )
 
 
+def _video_batch_dispatch_delay_seconds() -> int:
+    settings = get_settings()
+    return max(0, int(getattr(settings, "PROCTORING_BATCH_ANALYSIS_DISPATCH_DELAY_SECONDS", 0) or 0))
+
+
 @celery_app.task(
     bind=True,
     name="upload_proctoring_video_capture",
@@ -343,9 +348,11 @@ def upload_proctoring_video_capture(self: Task, attempt_id: str, upload_request:
     }
 
     if _video_batch_analysis_enabled():
+        dispatch_delay = _video_batch_dispatch_delay_seconds()
         batch_task = process_uploaded_proctoring_video.apply_async(
             kwargs={"attempt_id": str(attempt_id), "file_info": dict(file_info or {})},
             queue="proctoring-batch",
+            countdown=dispatch_delay,
         )
         _queue_video_batch_event(attempt_id=attempt_id, file_info=file_info, job_id=str(batch_task.id))
 
