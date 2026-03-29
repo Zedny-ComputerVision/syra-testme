@@ -541,14 +541,14 @@ if [[ "$RUN_LOCAL_DB" == "0" ]]; then
   derived_supabase_migration_url=""
   derived_supabase_runtime_url=""
   if [[ "$DATABASE_URL" == *".pooler.supabase.com"* ]]; then
-    derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "$DATABASE_URL" || true)"
+    derived_supabase_migration_url="$(derive_supabase_session_pooler_url "$DATABASE_URL" || true)"
     derived_supabase_runtime_url="$(derive_supabase_transaction_pooler_url "$DATABASE_URL" || true)"
   elif [[ -z "${DATABASE_MIGRATION_URL:-}" || "$DATABASE_MIGRATION_URL" == *".pooler.supabase.com"* ]]; then
-    derived_supabase_migration_url="$(derive_supabase_transaction_pooler_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
+    derived_supabase_migration_url="$(derive_supabase_session_pooler_url "${DATABASE_MIGRATION_URL:-$DATABASE_URL}" || true)"
   fi
   if [[ -n "$derived_supabase_migration_url" ]]; then
     DATABASE_MIGRATION_URL="$derived_supabase_migration_url"
-    log "Derived Supabase transaction-pooler DATABASE_MIGRATION_URL for migrations and preflight."
+    log "Derived Supabase session-pooler DATABASE_MIGRATION_URL for migrations and preflight."
   fi
   if [[ -n "$derived_supabase_runtime_url" ]]; then
     DATABASE_URL="$derived_supabase_runtime_url"
@@ -841,8 +841,9 @@ log "Running database migrations (timeout: ${DB_MIGRATION_TIMEOUT_SECONDS}s)..."
   # If a migration stalls on a long lock or DDL, fail fast with a clear error.
   # --no-deps: do not start redis / other services just for migrations.
   migration_exit_code=0
-  timeout --foreground --signal=TERM --kill-after=30s "${DB_MIGRATION_TIMEOUT_SECONDS}s" \
-    compose run --rm --no-deps backend alembic upgrade head || migration_exit_code=$?
+  POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+    timeout --foreground --signal=TERM --kill-after=30s "${DB_MIGRATION_TIMEOUT_SECONDS}s" \
+      docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps backend alembic upgrade head || migration_exit_code=$?
   if (( migration_exit_code != 0 )); then
     if (( migration_exit_code == 124 )); then
       die "Database migrations timed out after ${DB_MIGRATION_TIMEOUT_SECONDS}s."
