@@ -11,16 +11,16 @@ import { readTestAccessError } from '../../utils/testAccessError'
 import styles from './VerifyIdentityPage.module.scss'
 
 const REASON_MESSAGES = {
-  MIC_CHECK_FAILED: 'Microphone check failed.',
-  CAMERA_CHECK_FAILED: 'Camera check failed.',
-  FULLSCREEN_REQUIRED: 'Fullscreen is required.',
-  LOW_LIGHTING: 'Lighting is too low. Move to a brighter area.',
-  FACE_MATCH_FAILED: 'Face match between selfie and ID photo failed.',
-  ID_TEXT_MISSING_OR_INVALID: 'No valid ID number was found. Enter it manually and try again.',
-  OCR_UNAVAILABLE_AND_MANUAL_ID_REQUIRED: 'We could not read the ID number automatically. Enter it manually.',
-  ID_IMAGE_TOO_SIMILAR_TO_SELFIE: 'ID capture is too similar to your selfie. Show the actual ID card.',
-  ID_CAPTURE_LOOKS_LIKE_SELFIE: 'ID capture looks like a selfie. Hold your ID card in front of the camera.',
-  ID_DOCUMENT_NOT_DETECTED: 'No ID card/document outline detected. Make sure the full ID card is visible in frame.',
+  MIC_CHECK_FAILED: 'Microphone access is required. Please allow microphone access and try again.',
+  CAMERA_CHECK_FAILED: 'Camera access is required. Please allow camera access and try again.',
+  FULLSCREEN_REQUIRED: 'Please switch to fullscreen to continue.',
+  LOW_LIGHTING: 'Your photo is too dark. Move to a brighter area and retake.',
+  FACE_MATCH_FAILED: 'Your selfie does not match the face on your ID. Make sure both photos are clear and try again.',
+  ID_TEXT_MISSING_OR_INVALID: 'We could not read your ID number. Please type it in the field below.',
+  OCR_UNAVAILABLE_AND_MANUAL_ID_REQUIRED: 'Please type your ID number in the field below.',
+  ID_IMAGE_TOO_SIMILAR_TO_SELFIE: 'The ID photo looks the same as your selfie. Please take a photo of your actual ID card.',
+  ID_CAPTURE_LOOKS_LIKE_SELFIE: 'Please take a photo of your ID card, not your face.',
+  ID_DOCUMENT_NOT_DETECTED: 'We could not detect your ID card. Make sure the full card is visible and well-lit.',
 }
 
 const toReasonText = (reason) => REASON_MESSAGES[reason] || reason
@@ -360,7 +360,7 @@ export default function VerifyIdentityPage() {
       if (!data.all_pass) {
         const reasons = Array.isArray(data.failure_reasons) ? data.failure_reasons : []
         setFailureReasons(reasons)
-        setError('Precheck failed. Fix the issues below and retry.')
+        setError('Verification failed. Please fix the issues below and try again.')
         return
       }
       if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop())
@@ -558,24 +558,6 @@ export default function VerifyIdentityPage() {
               e.target.value = ''
             }}
           />
-          {result && (
-            <div className={styles.resultPanel}>
-              <div className={styles.resultBox}>
-                <div>Face match score: {result.face_match_score?.toFixed(3)}</div>
-                <div>Lighting ok: {result.lighting_ok ? 'Yes' : 'No'}</div>
-                <div>ID verified: {result.id_verified ? 'Yes' : 'No'}</div>
-                <div>Manual ID accepted: {result.manual_id_valid ? 'Yes' : 'No'}</div>
-                <div>Document outline detected: {result.id_document_outline ? 'Yes' : 'No'}</div>
-                <div>Face signature mode: {result.signature_mode?.selfie || 'n/a'} / {result.signature_mode?.id || 'n/a'}</div>
-              </div>
-              <div className={styles.resultBox}>
-                <div>Detected ID numbers: {(result.ocr_candidates || []).length > 0 ? result.ocr_candidates.join(', ') : 'None detected'}</div>
-                <div>Selfie vs ID similarity: {typeof result.id_selfie_similarity === 'number' ? result.id_selfie_similarity.toFixed(3) : '-'}</div>
-                <div>ID face ratio: {typeof result.id_face_ratio === 'number' ? result.id_face_ratio.toFixed(3) : '-'}</div>
-                <div>Failure reasons: {failureReasons.length > 0 ? failureReasons.map(toReasonText).join(' | ') : 'None'}</div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
