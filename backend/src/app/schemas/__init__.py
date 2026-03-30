@@ -108,23 +108,23 @@ class UserRead(UserBase):
 
 
 class UserUpdate(BaseModel):
-    user_id: Optional[str] = None
-    name: Optional[str] = None
+    user_id: Optional[str] = Field(default=None, max_length=50)
+    name: Optional[str] = Field(default=None, max_length=255)
     email: Optional[EmailStr] = None
     role: Optional[RoleEnum] = None
     is_active: Optional[bool] = None
 
 
 class AdminUserPatch(BaseModel):
-    user_id: Optional[str] = None
-    name: Optional[str] = None
+    user_id: Optional[str] = Field(default=None, max_length=50)
+    name: Optional[str] = Field(default=None, max_length=255)
     email: Optional[EmailStr] = None
     role: Optional[RoleEnum] = None
     is_active: Optional[bool] = None
 
 
 class UserSelfUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=255)
     email: Optional[EmailStr] = None
 
 
@@ -362,7 +362,7 @@ class ExamUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     node_id: Optional[UUID] = None
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=255)
     type: Optional[ExamType] = Field(default=None, alias="exam_type")
     status: Optional[ExamStatus] = None
     time_limit: Optional[int] = Field(default=None, alias="time_limit_minutes")
@@ -371,7 +371,7 @@ class ExamUpdate(BaseModel):
     proctoring_config: Optional[dict] = None
     category_id: Optional[UUID] = None
     grading_scale_id: Optional[UUID] = None
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=4000)
     settings: Optional[dict] = None
     certificate: Optional[dict] = None
 
