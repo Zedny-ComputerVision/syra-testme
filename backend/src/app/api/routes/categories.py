@@ -5,20 +5,21 @@ from sqlalchemy.orm import Session
 from ...models import Category, Exam, RoleEnum
 from ...schemas import CategoryBase, CategoryRead, Message
 from ...services.audit import write_audit_log
+from ...services.sanitization import sanitize_plain_text
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
 
 
 def _clean_required_text(value: str | None, field_name: str) -> str:
-    cleaned = (value or "").strip()
+    cleaned = sanitize_plain_text((value or "").strip()) or ""
     if not cleaned:
         raise HTTPException(status_code=422, detail=f"{field_name} is required")
     return cleaned
 
 
 def _clean_optional_text(value: str | None) -> str | None:
-    cleaned = (value or "").strip()
+    cleaned = sanitize_plain_text((value or "").strip()) or ""
     return cleaned or None
 
 

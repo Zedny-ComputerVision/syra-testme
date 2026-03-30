@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ...models import Attempt, Course, CourseStatus, Exam, Node, RoleEnum
 from ...schemas import NodeCreate, NodeRead, NodeBase, Message
+from ...services.sanitization import sanitize_plain_text
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -19,7 +20,7 @@ def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), current=Dep
     if current.role == RoleEnum.INSTRUCTOR and course.created_by_id != current.id:
         raise HTTPException(status_code=403, detail="Not allowed")
     now = datetime.now(timezone.utc)
-    node = Node(course_id=body.course_id, title=body.title, order=body.order, created_at=now, updated_at=now)
+    node = Node(course_id=body.course_id, title=sanitize_plain_text(body.title) or body.title, order=body.order, created_at=now, updated_at=now)
     db.add(node)
     db.commit()
     db.refresh(node)
@@ -61,7 +62,7 @@ def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db_dep),
         raise HTTPException(status_code=404, detail="Node not found")
     if current.role == RoleEnum.INSTRUCTOR and (not node.course or node.course.created_by_id != current.id):
         raise HTTPException(status_code=403, detail="Not allowed")
-    node.title = body.title
+    node.title = sanitize_plain_text(body.title) or body.title
     node.order = body.order
     node.updated_at = datetime.now(timezone.utc)
     db.add(node)

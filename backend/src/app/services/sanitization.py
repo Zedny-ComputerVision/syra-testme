@@ -6,6 +6,14 @@ import bleach
 ALLOWED_HTML_TAGS = ["b", "i", "u", "p", "br", "ul", "ol", "li", "strong", "em"]
 
 
+def sanitize_plain_text(value: str | None) -> str | None:
+    """Strip ALL HTML tags from a plain-text field (names, titles, etc.)."""
+    if value is None:
+        return None
+    cleaned = bleach.clean(str(value).strip(), tags=[], attributes={}, protocols=[], strip=True)
+    return cleaned.strip()
+
+
 def sanitize_html_fragment(value: str | None) -> str | None:
     if value is None:
         return None

@@ -17,6 +17,7 @@ from ...core.security import (
 from ...models import RoleEnum, User
 from ...schemas import Message, Token, TokenRefresh
 from ...services.audit import write_audit_log
+from ...services.sanitization import sanitize_plain_text
 from .repository import AuthRepository
 from .schemas import (
     ChangePasswordRequest,
@@ -38,7 +39,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Admin already set up")
         user = User(
             email=body.email,
-            name=body.name,
+            name=sanitize_plain_text(body.name) or body.name,
             user_id=body.user_id,
             hashed_password=hash_password(body.password),
             role=RoleEnum.ADMIN,
@@ -63,7 +64,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
         user = User(
             email=body.email,
-            name=body.name,
+            name=sanitize_plain_text(body.name) or body.name,
             user_id=body.user_id,
             hashed_password=hash_password(body.password),
             role=RoleEnum.LEARNER,

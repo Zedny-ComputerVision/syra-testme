@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ...models import Survey, SurveyResponse, RoleEnum
 from ...schemas import SurveyCreate, SurveyUpdate, SurveyRead, SurveyResponseCreate, SurveyResponseRead, Message
 from ...services.normalized_relations import replace_survey_questions, serialize_survey_questions
+from ...services.sanitization import sanitize_plain_text
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -14,14 +15,14 @@ CHOICE_TYPES = {"MCQ", "MULTI_SELECT"}
 
 
 def _clean_required_text(value: str | None, field_name: str) -> str:
-    text = str(value or "").strip()
+    text = sanitize_plain_text(str(value or "").strip()) or ""
     if not text:
         raise HTTPException(status_code=422, detail=f"{field_name} is required")
     return text
 
 
 def _clean_optional_text(value: str | None) -> str | None:
-    text = str(value or "").strip()
+    text = sanitize_plain_text(str(value or "").strip()) or ""
     return text or None
 
 
@@ -32,7 +33,7 @@ def _normalize_questions(raw_questions) -> list[dict]:
     for index, raw_question in enumerate(raw_questions, start=1):
         if not isinstance(raw_question, dict):
             raise HTTPException(status_code=422, detail=f"Question {index} is invalid")
-        text = str(raw_question.get("text") or "").strip()
+        text = sanitize_plain_text(str(raw_question.get("text") or "").strip()) or ""
         if not text:
             continue
         question_type = str(raw_question.get("question_type") or raw_question.get("type") or "TEXT").strip().upper()
@@ -43,7 +44,7 @@ def _normalize_questions(raw_questions) -> list[dict]:
             "question_type": question_type,
         }
         if question_type in CHOICE_TYPES:
-            options = [str(option or "").strip() for option in (raw_question.get("options") or [])]
+            options = [sanitize_plain_text(str(option or "").strip()) or "" for option in (raw_question.get("options") or [])]
             options = [option for option in options if option]
             if len(options) < 2:
                 raise HTTPException(status_code=422, detail=f"Question {index} needs at least two options")

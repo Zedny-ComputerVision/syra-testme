@@ -13,6 +13,7 @@ from ..models import Attempt, AttemptStatus, Category, Course, Exam, Node, Quest
 from ..schemas import ExamRead, Message, ScheduleBase, ScheduleRead, ScheduleUpdate
 from ..utils.response_cache import TimedSingleFlightCache
 from .audit import write_audit_log
+from .sanitization import sanitize_plain_text
 from .normalized_relations import exam_archived_at
 from .notifications import notify_user
 
@@ -113,6 +114,8 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     now = datetime.now(timezone.utc)
     payload = body.model_dump(exclude={"test_id"})
     payload["exam_id"] = exam_id
+    if "notes" in payload and payload["notes"]:
+        payload["notes"] = sanitize_plain_text(payload["notes"])
     schedule = Schedule(**payload, created_at=now, updated_at=now)
     try:
         db.add(schedule)

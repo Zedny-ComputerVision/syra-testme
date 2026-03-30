@@ -5,13 +5,14 @@ from sqlalchemy.orm import Session
 from ...models import User, UserGroup, RoleEnum
 from ...schemas import UserGroupCreate, UserGroupRead, UserRead, Message
 from ...services.normalized_relations import replace_user_group_members, serialize_user_group_member_ids
+from ...services.sanitization import sanitize_plain_text
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
 
 
 def _clean_required_text(value: str | None, field_name: str) -> str:
-    text = str(value or "").strip()
+    text = sanitize_plain_text(str(value or "").strip()) or ""
     if not text:
         raise HTTPException(
             status_code=422,
@@ -21,7 +22,7 @@ def _clean_required_text(value: str | None, field_name: str) -> str:
 
 
 def _clean_optional_text(value: str | None) -> str | None:
-    text = str(value or "").strip()
+    text = sanitize_plain_text(str(value or "").strip()) or ""
     return text or None
 
 

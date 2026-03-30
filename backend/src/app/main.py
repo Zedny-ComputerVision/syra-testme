@@ -12,6 +12,7 @@ from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 import asyncio
 from datetime import datetime, timezone
@@ -278,6 +279,20 @@ class EnsureCORSHeaders(BaseHTTPMiddleware):
 
 
 app.add_middleware(EnsureCORSHeaders)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {"Retry-After": str(exc.detail or "60")}
+    if _origin_is_allowed(origin):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Try again later."},
+        headers=headers,
+    )
 
 
 @app.exception_handler(Exception)

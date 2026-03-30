@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ...models import ExamTemplate, RoleEnum
 from ...schemas import ExamTemplateCreate, ExamTemplateRead, Message
+from ...services.sanitization import sanitize_plain_text
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -26,14 +27,14 @@ def _query_first(db: Session, statement):
 
 
 def _clean_required_text(value: str | None, field_name: str) -> str:
-    text = str(value or "").strip()
+    text = sanitize_plain_text(str(value or "").strip()) or ""
     if not text:
         raise HTTPException(status_code=422, detail=f"{field_name} is required")
     return text
 
 
 def _clean_optional_text(value: str | None) -> str | None:
-    text = str(value or "").strip()
+    text = sanitize_plain_text(str(value or "").strip()) or ""
     return text or None
 
 

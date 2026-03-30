@@ -17,7 +17,9 @@ async def dispatch_integrations(event: Dict[str, Any], config: Dict[str, Any]) -
     results: Dict[str, str] = {}
     async with httpx.AsyncClient(timeout=5) as client:
         for key, entry in (config or {}).items():
-            if not entry or not entry.get("enabled"):
+            if not isinstance(entry, dict):
+                continue
+            if not entry.get("enabled"):
                 continue
             url = entry.get("url")
             if not url:

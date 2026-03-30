@@ -22,6 +22,7 @@ from ...schemas import (
     UserUpdate,
 )
 from ...services.audit import write_audit_log
+from ...services.sanitization import sanitize_plain_text
 from ...utils.response_cache import TimedSingleFlightCache
 from ...utils.pagination import PaginationParams, build_page_response, clamp_sort_field
 from .repository import UserRepository
@@ -283,7 +284,7 @@ class UserService:
         return Message(detail="Deleted")
 
     def _clean_required_text(self, value: str | None, field_name: str) -> str:
-        text = str(value or "").strip()
+        text = sanitize_plain_text(str(value or "").strip()) or ""
         if not text:
             raise HTTPException(status_code=422, detail=f"{field_name} is required")
         return text
