@@ -52,6 +52,7 @@ _TESSERACT_CONFIGURED = False
 _TESSERACT_LOCK = threading.Lock()  # pytesseract is not thread-safe
 _EASYOCR_READER = None
 _EASYOCR_INIT_ATTEMPTED = False
+_HIGH_CONFIDENCE_FACE_MODES = {"deepface", "mediapipe"}
 
 
 def _decode_b64(data_url: str) -> bytes:
@@ -145,7 +146,7 @@ def _easyocr_text(img_bgr: np.ndarray, prior_error: str | None = None) -> dict:
         if _EASYOCR_READER is None:
             if _EASYOCR_INIT_ATTEMPTED:
                 raise RuntimeError(prior_error or "easyocr_initialization_failed")
-            _EASYOCR_READER = easyocr.Reader(["en"], gpu=False)
+            _EASYOCR_READER = easyocr.Reader(["ar", "en"], gpu=False)
             _EASYOCR_INIT_ATTEMPTED = True
         lines = [str(line).strip() for line in _EASYOCR_READER.readtext(img_bgr, detail=0) if str(line).strip()]
         return {
@@ -216,6 +217,23 @@ def _compute_signature_with_fallback(img_bgr: np.ndarray, *, use_detection: bool
     if fallback:
         return fallback, "haar"
     return None, "none"
+
+
+def _resolve_id_face_threshold(selfie_sig_mode: str, id_sig_mode: str, raw_threshold: float) -> float | None:
+    """Return the allowed ID/selfie distance or None when the match is too weak to trust."""
+
+    normalized_threshold = max(0.0, float(raw_threshold))
+
+    if selfie_sig_mode == id_sig_mode == "deepface":
+        return min(normalized_threshold, 0.42)
+
+    if selfie_sig_mode == id_sig_mode == "mediapipe":
+        return min(normalized_threshold, 0.25)
+
+    if selfie_sig_mode in _HIGH_CONFIDENCE_FACE_MODES and id_sig_mode in _HIGH_CONFIDENCE_FACE_MODES:
+        return min(normalized_threshold, 0.25)
+
+    return None
 
 
 def _normalized_id_text(text: str | None) -> str:
@@ -558,17 +576,20 @@ async def precheck(
         # pass.  0.42 rejects different-person pairs while still accepting the
         # normal same-person ID-vs-selfie variance.
         raw_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.42))
-        if selfie_sig_mode == id_sig_mode == "mediapipe":
-            threshold = min(raw_threshold, 0.25)
-        elif selfie_sig_mode == id_sig_mode == "haar":
-            threshold = max(raw_threshold, 0.50)
-        else:
+        threshold = _resolve_id_face_threshold(selfie_sig_mode, id_sig_mode, raw_threshold)
+        if threshold is not None:
             # Floor of 0.42 — strict enough to block different people, lenient
             # enough for the same person's ID photo vs live selfie.
-            threshold = max(raw_threshold, 0.42)
-        if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
-            match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
-            face_match = match_score <= threshold
+            if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
+                match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
+                face_match = match_score <= threshold
+        if threshold is None and requirements["identity_required"]:
+            logger.warning(
+                "Rejecting identity match because selfie/id embeddings are not high-confidence enough "
+                "(selfie_mode=%s, id_mode=%s)",
+                selfie_sig_mode,
+                id_sig_mode,
+            )
 
         ocr_text = _tesseract_text(id_img)
         ocr_candidates = _extract_id_candidates(ocr_text)

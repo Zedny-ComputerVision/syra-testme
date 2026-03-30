@@ -6,6 +6,7 @@ import { readPaginatedItems } from '../../../utils/pagination'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import DashboardAnalytics from './DashboardAnalytics'
 import DashboardOperations from './DashboardOperations'
+import useAuth from '../../../hooks/useAuth'
 import {
   EMPTY_DASHBOARD,
   formatCompact,
@@ -23,6 +24,7 @@ const KpiSvg = ({ d, size = 20 }) => (
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD)
   const [auditLog, setAuditLog] = useState([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +39,8 @@ export default function AdminDashboard() {
     if (value && typeof value === 'object') return Object.keys(value).length > 0
     return Boolean(value)
   })
+
+  const heroName = user?.name?.trim()?.split(/\s+/)[0] || user?.user_id || 'Admin'
 
   const loadDashboard = async ({ preserveData = false } = {}) => {
     const loadSequence = loadSequenceRef.current + 1
@@ -149,7 +153,7 @@ export default function AdminDashboard() {
       <section className={styles.hero}>
         <div className={styles.heroMain}>
           <div className={styles.heroEyebrow}>Operations cockpit</div>
-          <h2 className={styles.heroTitle}>Everything important, without the scavenger hunt.</h2>
+          <h2 className={styles.heroTitle}>{heroName}</h2>
           <p className={styles.heroSubtitle}>Monitor platform growth, learner throughput, proctoring risk, and which tests or sessions need attention next.</p>
           <div className={styles.heroMeta}>
             <span>Last refreshed {dashboard.generated_at ? formatTime(dashboard.generated_at) : 'just now'}</span>
