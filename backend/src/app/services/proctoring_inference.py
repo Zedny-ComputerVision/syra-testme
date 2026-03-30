@@ -275,7 +275,11 @@ class LocalProctoringInferenceGateway(ProctoringInferenceGateway):
         return await asyncio.to_thread(self._store.process_frame, attempt_id, frame_bytes)
 
     async def process_audio(self, attempt_id: str, audio_bytes: bytes, *, sample_rate: int | None = None) -> InferenceResult:
-        return await asyncio.to_thread(self._store.process_audio, attempt_id, audio_bytes, sample_rate=sample_rate)
+        # Audio processing is extremely fast (~0.06ms) — run it directly in the
+        # event loop instead of going through the thread pool.  This prevents
+        # audio from being starved when heavy frame processing (YOLO, DeepFace)
+        # saturates the thread pool under high concurrency.
+        return self._store.process_audio(attempt_id, audio_bytes, sample_rate=sample_rate)
 
     async def process_screen(self, attempt_id: str, frame_bytes: bytes) -> InferenceResult:
         return await asyncio.to_thread(self._store.process_screen, attempt_id, frame_bytes)

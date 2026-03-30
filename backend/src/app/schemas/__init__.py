@@ -437,6 +437,7 @@ class AttemptRead(AttemptBase):
     identity_verified: bool
     precheck_passed_at: Optional[datetime] = None
     lighting_score: Optional[float] = None
+    id_text: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
     test_title: Optional[str] = None

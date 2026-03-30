@@ -458,6 +458,7 @@ def _build_attempt_read(
         identity_verified=attempt.identity_verified,
         precheck_passed_at=getattr(attempt, "precheck_passed_at", None),
         lighting_score=getattr(attempt, "lighting_score", None),
+        id_text=getattr(attempt, "id_text", None) if isinstance(getattr(attempt, "id_text", None), dict) else None,
         created_at=attempt.created_at,
         updated_at=attempt.updated_at,
         test_title=title,

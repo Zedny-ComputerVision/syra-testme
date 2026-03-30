@@ -253,6 +253,8 @@ def _build_id_text_payload(
         "method": method,
         "raw_text": (ocr_text or {}).get("raw", "") if isinstance(ocr_text, dict) else "",
         "ocr_available": ocr_available,
+        "engine": (ocr_text or {}).get("engine") if isinstance(ocr_text, dict) else None,
+        "ocr_error": (ocr_text or {}).get("error") if isinstance(ocr_text, dict) else None,
     }
     if requirements is not None:
         payload["requirements"] = requirements
