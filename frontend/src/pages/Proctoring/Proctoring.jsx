@@ -89,8 +89,10 @@ function buildRecordingStream(stream, source) {
   if (!stream) return null
   if (source !== 'camera') return stream
   const videoTracks = stream.getVideoTracks?.() || []
-  if (!videoTracks.length) return stream
-  return new MediaStream(videoTracks)
+  const audioTracks = stream.getAudioTracks?.() || []
+  const tracks = [...videoTracks, ...audioTracks]
+  if (!tracks.length) return stream
+  return new MediaStream(tracks)
 }
 
 function createVideoSessionId() {
