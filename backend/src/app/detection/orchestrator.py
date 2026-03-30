@@ -27,7 +27,9 @@ import numpy as np
 
 try:
     import mediapipe as _mp
-    _MP_AVAILABLE = hasattr(_mp, "solutions")
+    _MP_AVAILABLE = hasattr(_mp, "solutions") or hasattr(_mp, "tasks")
+    if not hasattr(_mp, "solutions") and hasattr(_mp, "tasks"):
+        logger.info("MediaPipe solutions API not available; tasks API detected — some detectors may use fallback mode")
 except Exception:
     _mp = None
     _MP_AVAILABLE = False
@@ -401,6 +403,17 @@ class ProctoringOrchestrator:
         # Thread pool for running object detection in parallel with face pipeline
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="obj_detect")
 
+        # Log model availability at session init so issues are visible immediately
+        face_model = get_face_model()
+        obj_model = self.object_detector._get_model()
+        logger.info(
+            "Orchestrator init — face_model=%s, object_model=%s, deepface=%s, mediapipe=%s",
+            "OK" if face_model is not None else "UNAVAILABLE",
+            "OK" if obj_model is not None else "UNAVAILABLE",
+            "OK" if self.face_verifier._use_deepface else "off/unavailable",
+            "OK" if self._shared_mesh is not None else "UNAVAILABLE",
+        )
+
     def close(self) -> None:
         """Shut down the thread pool executor."""
         self._executor.shutdown(wait=False)
@@ -449,6 +462,8 @@ class ProctoringOrchestrator:
                 ]
                 face_count = len(face_confidences)
 
+        if not face_model_available and (self.enable_face_detection or self.enable_multi_face) and self._frame_count <= 3:
+            logger.error("Frame %d: YOLO face model unavailable — face detection and multi-face detection disabled", self._frame_count)
         if face_model_available and face_count > 0:
             logger.info("Frame %d: YOLO detected %d face(s), confidences=%s", self._frame_count, face_count, [round(c, 2) for c in face_confidences])
 

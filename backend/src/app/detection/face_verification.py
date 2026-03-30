@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable
 from typing import Optional
 
 import cv2
@@ -108,17 +107,57 @@ def _embedding_via_landmarks(frame_bgr: np.ndarray) -> Optional[list[float]]:
     try:
         import mediapipe as mp
 
-        if not hasattr(mp, "solutions"):
+        if hasattr(mp, "solutions"):
+            mesh = mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=True, refine_landmarks=True, max_num_faces=1
+            )
+            rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            res = mesh.process(rgb)
+            if not res.multi_face_landmarks:
+                return None
+            vec = _landmark_vector(res.multi_face_landmarks[0].landmark)
+            return vec.tolist() if vec is not None else None
+
+        # Fallback: new tasks API (mediapipe >= 0.10.30)
+        if hasattr(mp, "tasks") and hasattr(mp.tasks, "vision"):
+            return _embedding_via_tasks_api(frame_bgr)
+
+        return None
+    except Exception:
+        return None
+
+
+def _embedding_via_tasks_api(frame_bgr: np.ndarray) -> Optional[list[float]]:
+    """Use the new mediapipe.tasks.vision.FaceLandmarker API."""
+    try:
+        import mediapipe as mp
+        import os
+        model_path = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
+        if not os.path.exists(model_path):
             return None
-        mesh = mp.solutions.face_mesh.FaceMesh(
-            static_image_mode=True, refine_landmarks=True, max_num_faces=1
+        options = mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
+            output_face_blendshapes=False,
+            output_facial_transformation_matrixes=False,
+            num_faces=1,
         )
-        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        res = mesh.process(rgb)
-        if not res.multi_face_landmarks:
-            return None
-        vec = _landmark_vector(res.multi_face_landmarks[0].landmark)
-        return vec.tolist() if vec is not None else None
+        with mp.tasks.vision.FaceLandmarker.create_from_options(options) as landmarker:
+            rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            result = landmarker.detect(image)
+            if not result.face_landmarks:
+                return None
+            landmarks = result.face_landmarks[0]
+            pts = np.array(
+                [[lm.x, lm.y, lm.z] for i, lm in enumerate(landmarks) if i in _LANDMARK_INDICES],
+                dtype=np.float32,
+            )
+            pts -= pts.mean(axis=0)
+            scale = np.linalg.norm(pts)
+            if scale < 1e-8:
+                return None
+            pts /= scale
+            return pts.flatten().tolist()
     except Exception:
         return None
 
@@ -158,7 +197,7 @@ def compute_face_signature(frame_bytes: bytes) -> Optional[list[float]]:
     frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if frame is None:
         return None
-    emb = _embedding_via_deepface(frame)
+    emb = _embedding_via_deepface(frame, detector_backend="opencv")
     if emb is not None:
         return emb
     return _embedding_via_landmarks(frame)
@@ -250,7 +289,7 @@ class FaceVerifier:
 
     def _get_live_embedding(self, frame: np.ndarray) -> Optional[np.ndarray]:
         if self._use_deepface:
-            emb = _embedding_via_deepface(frame)
+            emb = _embedding_via_deepface(frame, detector_backend="opencv")
             if emb is not None:
                 return np.array(emb, dtype=np.float32)
         if self._use_haar:
@@ -266,12 +305,7 @@ class FaceVerifier:
         vec = _landmark_vector(res.multi_face_landmarks[0].landmark)
         return vec if vec is not None else None
 
-    def _compare_embedding(
-        self,
-        live_vec: np.ndarray,
-        *,
-        confirm_live_vec: Callable[[], Optional[np.ndarray]] | None = None,
-    ) -> dict | None:
+    def _compare_embedding(self, live_vec: np.ndarray) -> dict | None:
         if self.baseline is None or self.baseline.shape != live_vec.shape:
             logger.warning(
                 "Skipping face verification because enrolled/live embedding shapes differ: baseline=%s live=%s",
@@ -280,18 +314,6 @@ class FaceVerifier:
             )
             return None
         dist = cosine_distance(self.baseline, live_vec)
-
-        # When the fast DeepFace embedding says "mismatch", retry once with
-        # face detection/alignment before escalating. This is more tolerant of
-        # common appearance drift like facial hair, framing, and lighting.
-        if dist > self.threshold and confirm_live_vec is not None:
-            confirmed_vec = confirm_live_vec()
-            if (
-                confirmed_vec is not None
-                and self.baseline is not None
-                and self.baseline.shape == confirmed_vec.shape
-            ):
-                dist = min(dist, cosine_distance(self.baseline, confirmed_vec))
 
         if dist > self.threshold:
             self._consecutive_mismatches += 1
@@ -330,16 +352,7 @@ class FaceVerifier:
         live_vec = self._get_live_embedding(frame)
         if live_vec is None:
             return None
-        confirm_live_vec = None
-        if self._use_deepface:
-            def _confirmed_live_vec() -> Optional[np.ndarray]:
-                emb = _embedding_via_deepface(frame, detector_backend="opencv")
-                if emb is None:
-                    return None
-                return np.array(emb, dtype=np.float32)
-
-            confirm_live_vec = _confirmed_live_vec
-        return self._compare_embedding(live_vec, confirm_live_vec=confirm_live_vec)
+        return self._compare_embedding(live_vec)
 
     def process_landmarks(self, landmarks, frame: np.ndarray | None = None) -> dict | None:
         """Use pre-computed FaceMesh landmarks and fall back to DeepFace when a frame is available."""
@@ -347,7 +360,7 @@ class FaceVerifier:
             return None
         live_vec = None
         if self._use_deepface and frame is not None:
-            emb = _embedding_via_deepface(frame)
+            emb = _embedding_via_deepface(frame, detector_backend="opencv")
             if emb is not None:
                 live_vec = np.array(emb, dtype=np.float32)
         if live_vec is None and landmarks is not None:
@@ -356,16 +369,7 @@ class FaceVerifier:
                 live_vec = vec
         if live_vec is None:
             return None
-        confirm_live_vec = None
-        if self._use_deepface and frame is not None:
-            def _confirmed_live_vec() -> Optional[np.ndarray]:
-                emb = _embedding_via_deepface(frame, detector_backend="opencv")
-                if emb is None:
-                    return None
-                return np.array(emb, dtype=np.float32)
-
-            confirm_live_vec = _confirmed_live_vec
-        return self._compare_embedding(live_vec, confirm_live_vec=confirm_live_vec)
+        return self._compare_embedding(live_vec)
 
     def process(self, frame_bytes: bytes) -> dict | None:
         np_arr = np.frombuffer(frame_bytes, np.uint8)
