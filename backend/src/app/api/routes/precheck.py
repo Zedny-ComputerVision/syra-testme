@@ -145,7 +145,7 @@ def _easyocr_text(img_bgr: np.ndarray, prior_error: str | None = None) -> dict:
         if _EASYOCR_READER is None:
             if _EASYOCR_INIT_ATTEMPTED:
                 raise RuntimeError(prior_error or "easyocr_initialization_failed")
-            _EASYOCR_READER = easyocr.Reader(["en"], gpu=False)
+            _EASYOCR_READER = easyocr.Reader(["ar", "en"], gpu=False)
             _EASYOCR_INIT_ATTEMPTED = True
         lines = [str(line).strip() for line in _EASYOCR_READER.readtext(img_bgr, detail=0) if str(line).strip()]
         return {
@@ -569,6 +569,11 @@ async def precheck(
         if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
             match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
             face_match = match_score <= threshold
+        elif selfie_vec is None or id_vec is None:
+            logger.warning(
+                "Face embedding extraction failed for attempt %s: selfie=%s id=%s",
+                attempt_id, selfie_sig_mode, id_sig_mode,
+            )
 
         ocr_text = _tesseract_text(id_img)
         ocr_candidates = _extract_id_candidates(ocr_text)
@@ -669,21 +674,23 @@ async def precheck(
     attempt.id_verified = all_pass
     attempt.lighting_score = lighting_score
     attempt.precheck_passed_at = datetime.now(timezone.utc) if all_pass else None
-    attempt.identity_verified = all_pass
+    # identity_verified should reflect whether the person's identity was actually
+    # confirmed (face match + ID evidence), not whether every precheck passed.
+    if requirements["identity_required"]:
+        attempt.identity_verified = face_match and (not require_id_text or id_evidence_ok)
+    else:
+        attempt.identity_verified = all_pass
     db.add(attempt)
     db.commit()
 
     # Build identity match results (only populated when identity check ran)
     identity_match_result = {}
-    if requirements["identity_required"] and not (ALLOW_TEST_BYPASS):
-        try:
-            identity_match_result = {
-                "id_number_match": id_match,
-                "name_match": name_match,
-                "identity_verified_by_ocr": identity_verified,
-            }
-        except NameError:
-            pass
+    if requirements["identity_required"] and not ALLOW_TEST_BYPASS:
+        identity_match_result = {
+            "id_number_match": id_match,
+            "name_match": name_match,
+            "identity_verified_by_ocr": identity_verified,
+        }
 
     return {
         "status": "ok",
