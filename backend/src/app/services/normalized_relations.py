@@ -493,19 +493,21 @@ def serialize_user_group_member_ids(group: UserGroup) -> list[str]:
 
 def replace_user_group_members(group: UserGroup, member_ids: Iterable[str], *, db=None) -> None:
     from sqlalchemy import delete as sa_delete
+    from sqlalchemy.orm import Session as SASession
 
     normalized = [str(member_id) for member_id in member_ids]
     group.member_ids = normalized
 
-    # Explicitly delete old rows and flush before inserting new ones to
-    # avoid UniqueConstraint collisions on (group_id, position).
+    # When a session is available, explicitly DELETE old rows, flush, and
+    # expire the cached relationship so SQLAlchemy doesn't collide on
+    # the UniqueConstraint(group_id, position) during the same flush.
     if db is not None and group.id is not None:
-        db.execute(sa_delete(UserGroupMember).where(UserGroupMember.group_id == group.id))
-        db.flush()
-        group.member_links = [
-            UserGroupMember(user_id=member_id, position=index)
-            for index, member_id in enumerate(normalized, start=1)
-        ]
+        session: SASession = db
+        session.execute(sa_delete(UserGroupMember).where(UserGroupMember.group_id == group.id))
+        session.flush()
+        session.expire(group, ["member_links"])
+        for index, member_id in enumerate(normalized, start=1):
+            session.add(UserGroupMember(group_id=group.id, user_id=member_id, position=index))
     else:
         group.member_links = [
             UserGroupMember(user_id=member_id, position=index)
