@@ -456,6 +456,8 @@ def _build_attempt_read(
         started_at=attempt.started_at,
         submitted_at=attempt.submitted_at,
         identity_verified=attempt.identity_verified,
+        precheck_passed_at=getattr(attempt, "precheck_passed_at", None),
+        lighting_score=getattr(attempt, "lighting_score", None),
         created_at=attempt.created_at,
         updated_at=attempt.updated_at,
         test_title=title,
@@ -1359,6 +1361,11 @@ def submit_answer(
         raise HTTPException(status_code=409, detail="Cannot modify answers on a submitted attempt")
     if _attempt_is_paused(db, attempt_pk):
         raise HTTPException(status_code=409, detail="Attempt is paused")
+    # Server-side identity verification enforcement
+    proctoring_payload = exam_proctoring(attempt.exam) if attempt.exam else None
+    exam_requirements = get_proctoring_requirements(proctoring_payload)
+    if exam_requirements["identity_required"] and not (attempt.id_verified or attempt.identity_verified):
+        raise HTTPException(status_code=403, detail="Identity verification is required before answering questions")
     # Server-side time limit enforcement
     time_limit = getattr(attempt.exam, "time_limit", None) if attempt.exam else None
     if time_limit and attempt.started_at:
@@ -1679,9 +1686,13 @@ async def verify_identity(
     if inspect.isawaitable(saved_photo):
         saved_photo = await saved_photo
 
-    attempt.identity_verified = True
-    attempt.id_verified = True
-    attempt.precheck_passed_at = datetime.now(timezone.utc)
+    # Only mark as verified if a face signature could be computed.
+    # This endpoint captures a single photo — it does NOT compare faces.
+    # Full identity verification (selfie vs ID) goes through /precheck.
+    verified = signature is not None
+    attempt.identity_verified = verified
+    attempt.id_verified = verified
+    attempt.precheck_passed_at = datetime.now(timezone.utc) if verified else None
     attempt.face_signature = signature
     attempt.updated_at = datetime.now(timezone.utc)
     db.add(attempt)

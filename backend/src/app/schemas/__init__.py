@@ -435,6 +435,8 @@ class AttemptRead(AttemptBase):
     started_at: Optional[datetime]
     submitted_at: Optional[datetime]
     identity_verified: bool
+    precheck_passed_at: Optional[datetime] = None
+    lighting_score: Optional[float] = None
     created_at: datetime
     updated_at: datetime
     test_title: Optional[str] = None
