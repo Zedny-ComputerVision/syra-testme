@@ -77,8 +77,8 @@ class ReportScheduleRunResult(BaseModel):
 
 class UserBase(BaseModel):
     email: EmailStr
-    name: str
-    user_id: str
+    name: str = Field(max_length=255)
+    user_id: str = Field(max_length=50)
     role: RoleEnum
     is_active: bool = True
 
@@ -152,8 +152,8 @@ class AdminPasswordResetRequest(BaseModel):
 
 
 class CourseBase(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title: str = Field(max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1024)
     status: CourseStatus = CourseStatus.DRAFT
 
 
@@ -171,7 +171,7 @@ class CourseRead(CourseBase):
 
 
 class NodeBase(BaseModel):
-    title: str
+    title: str = Field(max_length=255)
     order: int = 0
 
 
@@ -189,9 +189,9 @@ class NodeRead(NodeBase):
 
 
 class CategoryBase(BaseModel):
-    name: str
+    name: str = Field(max_length=255)
     type: CategoryType = CategoryType.TEST
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=1024)
 
 
 class CategoryRead(CategoryBase):
@@ -201,7 +201,7 @@ class CategoryRead(CategoryBase):
 
 
 class GradingScaleBase(BaseModel):
-    name: str
+    name: str = Field(max_length=255)
     labels: list[dict]
 
     @field_validator("labels")
@@ -319,7 +319,7 @@ class ExamBase(BaseModel):
 
     # Frontend sends exam_type and time_limit_minutes; keep friendly aliases.
     node_id: Optional[UUID] = None
-    title: str
+    title: str = Field(max_length=255)
     type: ExamType = Field(default=ExamType.MCQ, alias="exam_type")
     status: ExamStatus = ExamStatus.CLOSED
     time_limit: Optional[int] = Field(default=None, alias="time_limit_minutes")
@@ -328,7 +328,7 @@ class ExamBase(BaseModel):
     proctoring_config: Optional[dict] = None
     category_id: Optional[UUID] = None
     grading_scale_id: Optional[UUID] = None
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=4000)
     settings: Optional[dict] = None
     certificate: Optional[dict] = None
 
@@ -495,7 +495,7 @@ class ScheduleBase(BaseModel):
     user_id: UUID
     scheduled_at: datetime
     access_mode: AccessMode = AccessMode.OPEN
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=512)
 
     @model_validator(mode="after")
     def validate_target(self):
@@ -532,8 +532,8 @@ class ScheduleRead(ScheduleBase):
 
 
 class QuestionPoolBase(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1024)
 
 
 class QuestionPoolCreate(QuestionPoolBase):
