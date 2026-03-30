@@ -55,7 +55,7 @@ DEFAULT_PROCTORING = {
     "max_fullscreen_exits": 2,
     "max_alt_tabs": 3,
     "lighting_min_score": 0.35,
-    "face_verify_id_threshold": 0.42,
+    "face_verify_id_threshold": 0.55,
     "max_score_before_autosubmit": 15,
     "frame_interval_ms": 900,
     "audio_chunk_ms": 2000,
