@@ -177,7 +177,9 @@ function Shell({ children }) {
         setMaintenance(data)
         setMaintenanceError('')
       } catch {
-        setMaintenanceError('Maintenance status could not be loaded.')
+        // Silently ignore — maintenance check failure should not block the app.
+        // The banner only appears when maintenance mode is actively enabled.
+        setMaintenanceError('')
       }
     }
 
