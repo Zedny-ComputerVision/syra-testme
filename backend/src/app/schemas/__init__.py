@@ -265,15 +265,15 @@ class QuestionBase(BaseModel):
     def validate_type(cls, v: ExamType):
         return v
 
-    @classmethod
     @field_validator("points")
+    @classmethod
     def validate_points(cls, v: float):
         if v is None or v < 0:
             raise ValueError("points must be greater than or equal to 0")
         return v
 
-    @classmethod
     @field_validator("order")
+    @classmethod
     def validate_order(cls, v: int):
         if v < 0:
             raise ValueError("order must be greater than or equal to 0")

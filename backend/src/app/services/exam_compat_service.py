@@ -403,7 +403,10 @@ def delete_test(*, db: Session, test_id: str, current) -> Message:
     except Exception:
         db.rollback()
         logger.exception("Failed to delete legacy test %s", test_id)
-        raise
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete test with existing attempts or schedules",
+        )
     _invalidate_learner_exam_list_cache()
     return Message(detail="Deleted")
 
