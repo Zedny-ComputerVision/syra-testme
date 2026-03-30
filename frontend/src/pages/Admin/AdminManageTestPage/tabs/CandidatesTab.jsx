@@ -1,5 +1,82 @@
-import React, { memo } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../../utils/authenticatedMedia'
 import styles from '../AdminManageTestPage.module.scss'
+
+function IdentityPhotos({ attemptId, selfiePath, idDocPath }) {
+  const [urls, setUrls] = useState({ selfie: '', id: '' })
+  const [expanded, setExpanded] = useState(false)
+  const urlsRef = useRef({ selfie: '', id: '' })
+
+  useEffect(() => {
+    urlsRef.current = urls
+  }, [urls])
+
+  useEffect(() => {
+    return () => {
+      revokeObjectUrl(urlsRef.current.selfie)
+      revokeObjectUrl(urlsRef.current.id)
+    }
+  }, [])
+
+  const load = useCallback(async () => {
+    if (!attemptId) return
+    const next = { selfie: '', id: '' }
+    try {
+      if (selfiePath) next.selfie = await fetchAuthenticatedMediaObjectUrl(`identity/${attemptId}/selfie`)
+    } catch { /* ignore */ }
+    try {
+      if (idDocPath) next.id = await fetchAuthenticatedMediaObjectUrl(`identity/${attemptId}/id`)
+    } catch { /* ignore */ }
+    setUrls((prev) => {
+      revokeObjectUrl(prev.selfie)
+      revokeObjectUrl(prev.id)
+      return next
+    })
+  }, [attemptId, selfiePath, idDocPath])
+
+  const handleToggle = () => {
+    if (!expanded && !urls.selfie && !urls.id) {
+      void load()
+    }
+    setExpanded((prev) => !prev)
+  }
+
+  if (!selfiePath && !idDocPath) return <span className={styles.identityNone}>-</span>
+
+  return (
+    <div className={styles.identityCell}>
+      <button type="button" className={styles.identityToggle} onClick={handleToggle}>
+        {expanded ? 'Hide' : 'View'}
+      </button>
+      {expanded && (
+        <div className={styles.identityPopover}>
+          {urls.selfie ? (
+            <div className={styles.identityThumb}>
+              <div className={styles.identityThumbLabel}>Selfie</div>
+              <img src={urls.selfie} alt="Selfie" className={styles.identityThumbImg} />
+            </div>
+          ) : selfiePath ? (
+            <div className={styles.identityThumb}>
+              <div className={styles.identityThumbLabel}>Selfie</div>
+              <div className={styles.identityThumbPlaceholder}>Loading...</div>
+            </div>
+          ) : null}
+          {urls.id ? (
+            <div className={styles.identityThumb}>
+              <div className={styles.identityThumbLabel}>ID</div>
+              <img src={urls.id} alt="ID" className={styles.identityThumbImg} />
+            </div>
+          ) : idDocPath ? (
+            <div className={styles.identityThumb}>
+              <div className={styles.identityThumbLabel}>ID</div>
+              <div className={styles.identityThumbPlaceholder}>Loading...</div>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function CandidatesTab({
   candidateRows,
@@ -23,10 +100,10 @@ function CandidatesTab({
       </p>
       <div className={styles.tableCard}>
         <table className={styles.table}>
-          <thead><tr><th>Attempt</th><th>User</th><th>Status</th><th>Started</th><th>Score</th><th>Review</th><th>High</th><th>Medium</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Attempt</th><th>User</th><th>Status</th><th>Identity</th><th>Started</th><th>Score</th><th>Review</th><th>High</th><th>Medium</th><th>Actions</th></tr></thead>
           <tbody>
             {candidateRows.length === 0 ? (
-              <tr><td colSpan={9}>No learners or attempts are assigned to this test yet.</td></tr>
+              <tr><td colSpan={10}>No learners or attempts are assigned to this test yet.</td></tr>
             ) : candidateRows.map((row) => (
               <tr key={row.id}>
                 <td>{row.attemptId}</td>
@@ -35,6 +112,17 @@ function CandidatesTab({
                   <span className={`${styles.statusBadge} ${row.status === 'NOT_STARTED' ? styles.statusNeutral : row.needsManualReview ? styles.statusPending : row.status === 'GRADED' ? styles.statusGraded : styles.statusNeutral}`}>
                     {formatAttemptStatus(row)}
                   </span>
+                </td>
+                <td>
+                  {row.attemptIdFull ? (
+                    <IdentityPhotos
+                      attemptId={row.attemptIdFull}
+                      selfiePath={row.selfiePath}
+                      idDocPath={row.idDocPath}
+                    />
+                  ) : (
+                    <span className={styles.identityNone}>-</span>
+                  )}
                 </td>
                 <td>{row.startedAt ? new Date(row.startedAt).toLocaleString() : '-'}</td>
                 <td>{formatScore(row.score)}</td>

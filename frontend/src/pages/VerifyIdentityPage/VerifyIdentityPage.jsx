@@ -42,7 +42,6 @@ export default function VerifyIdentityPage() {
   const videoRef = useRef(null)
   const canvasRef = useRef(document.createElement('canvas'))
   const streamRef = useRef(null)
-  const selfieInputRef = useRef(null)
   const idInputRef = useRef(null)
   const pickerExitedFullscreenRef = useRef(false)
   const [selfie, setSelfie] = useState(null)
@@ -73,7 +72,7 @@ export default function VerifyIdentityPage() {
     {
       label: 'Camera',
       value: requirements.cameraRequired ? 'Required' : 'Optional',
-      helper: requirements.cameraRequired ? 'Live camera access is expected for capture and proctoring.' : 'Uploads can be used without a live camera requirement.',
+      helper: requirements.cameraRequired ? 'Live camera access is required for your selfie and proctoring.' : 'Camera access is needed for your selfie.',
     },
     {
       label: 'Lighting',
@@ -131,7 +130,7 @@ export default function VerifyIdentityPage() {
       }
     } catch {
       setCameraReady(false)
-      setError('Camera is unavailable. You can still upload selfie and ID images below.')
+      setError('Camera access is required for identity verification. Please allow camera access and reload.')
     }
   }, [stopCamera])
 
@@ -204,7 +203,7 @@ export default function VerifyIdentityPage() {
   const capture = () => {
     const video = videoRef.current
     if (!video || !streamRef.current || !cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
-      setError('Live camera capture is not ready. Allow camera access or upload your images instead.')
+      setError('Camera is not ready. Please allow camera access and try again.')
       return
     }
     const canvas = canvasRef.current
@@ -225,7 +224,7 @@ export default function VerifyIdentityPage() {
   const captureId = () => {
     const video = videoRef.current
     if (!video || !streamRef.current || !cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
-      setError('Live camera capture is not ready. Allow camera access or upload your images instead.')
+      setError('Camera is not ready. Please allow camera access and try again.')
       return
     }
     const canvas = canvasRef.current
@@ -242,52 +241,6 @@ export default function VerifyIdentityPage() {
     reader.onerror = () => reject(new Error('Failed to read file'))
     reader.readAsDataURL(file)
   })
-
-  const estimateLightingFromDataUrl = (dataUrl) => new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => {
-      try {
-        const canvas = canvasRef.current
-        canvas.width = img.width
-        canvas.height = img.height
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(img, 0, 0)
-        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-        let sum = 0
-        for (let i = 0; i < data.length; i += 4) {
-          sum += (data[i] + data[i + 1] + data[i + 2]) / 3
-        }
-        resolve(sum / (data.length / 4) / 255)
-      } catch {
-        resolve(0)
-      }
-    }
-    img.onerror = () => resolve(0)
-    img.src = dataUrl
-  })
-
-  const handleUploadSelfie = async (file) => {
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload a valid selfie image file.')
-      setFullscreenResumeNeeded(false)
-      return
-    }
-    if (fullscreenRequiredHere && !document.fullscreenElement) {
-      setFullscreenResumeNeeded(true)
-    }
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      setSelfie(dataUrl)
-      const score = await estimateLightingFromDataUrl(dataUrl)
-      setLightingScore(score)
-      setError('')
-      setFailureReasons([])
-      setResult(null)
-    } catch {
-      setError('Failed to load selfie image.')
-    }
-  }
 
   const handleUploadId = async (file) => {
     if (!file) return
@@ -330,7 +283,7 @@ export default function VerifyIdentityPage() {
       return
     }
     if (!selfie || !idPhoto) {
-      setError('Capture or upload both your selfie and your ID photo first.')
+      setError('Take a live selfie and provide your ID photo first.')
       return
     }
     if (fullscreenRequiredHere && !document.fullscreenElement) {
@@ -392,7 +345,7 @@ export default function VerifyIdentityPage() {
 
       <div className={styles.card}>
         <h1 className={styles.title}>Verify Your Identity</h1>
-        <p className={styles.sub}>Capture or upload a clear selfie and a clear ID image</p>
+        <p className={styles.sub}>Take a live selfie and provide a clear ID image</p>
 
         <div className={styles.requirementGrid}>
           {requirementCards.map((card) => (
@@ -476,16 +429,6 @@ export default function VerifyIdentityPage() {
                 <button
                   type="button"
                   className={styles.captureBtn}
-                  onClick={() => openUploadPicker(selfieInputRef)}
-                  disabled={loadingConfig || submitting || !configResolved}
-                  aria-label="Upload selfie image"
-                  title="Upload selfie image"
-                >
-                  Upload Selfie
-                </button>
-                <button
-                  type="button"
-                  className={styles.captureBtn}
                   onClick={captureId}
                   disabled={loadingConfig || submitting || !configResolved || !cameraReady}
                   aria-label="Capture ID photo from live camera"
@@ -506,7 +449,7 @@ export default function VerifyIdentityPage() {
               </div>
               {configResolved && !cameraReady && (
                 <p className={styles.helper}>
-                  Live camera capture is unavailable right now. Allow camera access or continue with the upload buttons.
+                  Camera access is required for your selfie. Please allow camera access and reload the page.
                 </p>
               )}
               <div className={styles.captureChecklist}>
@@ -536,17 +479,6 @@ export default function VerifyIdentityPage() {
               </div>
             </div>
           </div>
-          <input
-            ref={selfieInputRef}
-            className={styles.fileInput}
-            type="file"
-            accept="image/*"
-            aria-label="Upload selfie image"
-            onChange={(e) => {
-              handleUploadSelfie(e.target.files?.[0])
-              e.target.value = ''
-            }}
-          />
           <input
             ref={idInputRef}
             className={styles.fileInput}

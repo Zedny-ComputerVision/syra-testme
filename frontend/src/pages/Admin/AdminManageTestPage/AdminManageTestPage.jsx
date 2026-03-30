@@ -1055,6 +1055,9 @@ export default function AdminManageTestPage() {
         sessionId: session?.id || '',
         highAlerts,
         mediumAlerts,
+        identityVerified: Boolean(attempt.identity_verified),
+        selfiePath: attempt.selfie_path || null,
+        idDocPath: attempt.id_doc_path || null,
       }, uploadStatus)
     })
   }, [])

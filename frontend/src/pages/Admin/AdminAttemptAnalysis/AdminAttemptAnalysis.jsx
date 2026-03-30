@@ -62,6 +62,8 @@ export default function AdminAttemptAnalysis() {
   const [reviewNotice, setReviewNotice] = useState('')
   const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [evidenceUrls, setEvidenceUrls] = useState({})
+  const [identityPhotoUrls, setIdentityPhotoUrls] = useState({ selfie: '', id: '' })
+  const identityPhotoUrlsRef = useRef({ selfie: '', id: '' })
   const evidenceUrlsRef = useRef({})
   const listAbortRef = useRef(null)
   const detailAbortRef = useRef(null)
@@ -177,10 +179,64 @@ export default function AdminAttemptAnalysis() {
   }, [evidenceUrls])
 
   useEffect(() => {
+    identityPhotoUrlsRef.current = identityPhotoUrls
+  }, [identityPhotoUrls])
+
+  useEffect(() => {
     return () => {
       Object.values(evidenceUrlsRef.current).forEach(revokeObjectUrl)
+      revokeObjectUrl(identityPhotoUrlsRef.current.selfie)
+      revokeObjectUrl(identityPhotoUrlsRef.current.id)
     }
   }, [])
+
+  useEffect(() => {
+    if (!attempt?.id) {
+      setIdentityPhotoUrls((prev) => {
+        revokeObjectUrl(prev.selfie)
+        revokeObjectUrl(prev.id)
+        return { selfie: '', id: '' }
+      })
+      return
+    }
+    const hasSelfie = Boolean(attempt.selfie_path)
+    const hasId = Boolean(attempt.id_doc_path)
+    if (!hasSelfie && !hasId) {
+      setIdentityPhotoUrls((prev) => {
+        revokeObjectUrl(prev.selfie)
+        revokeObjectUrl(prev.id)
+        return { selfie: '', id: '' }
+      })
+      return
+    }
+
+    let cancelled = false
+    async function loadIdentityPhotos() {
+      const next = { selfie: '', id: '' }
+      try {
+        if (hasSelfie) {
+          next.selfie = await fetchAuthenticatedMediaObjectUrl(`identity/${attempt.id}/selfie`)
+        }
+      } catch { /* photo may not exist */ }
+      try {
+        if (hasId) {
+          next.id = await fetchAuthenticatedMediaObjectUrl(`identity/${attempt.id}/id`)
+        }
+      } catch { /* photo may not exist */ }
+      if (!cancelled) {
+        setIdentityPhotoUrls((prev) => {
+          revokeObjectUrl(prev.selfie)
+          revokeObjectUrl(prev.id)
+          return next
+        })
+      } else {
+        revokeObjectUrl(next.selfie)
+        revokeObjectUrl(next.id)
+      }
+    }
+    void loadIdentityPhotos()
+    return () => { cancelled = true }
+  }, [attempt?.id, attempt?.selfie_path, attempt?.id_doc_path])
 
   useEffect(() => {
     if (evidenceAbortRef.current) evidenceAbortRef.current.abort()
@@ -606,10 +662,51 @@ export default function AdminAttemptAnalysis() {
           )}
 
           {tab === 'Evidence' && (
+            <>
+              {(identityPhotoUrls.selfie || identityPhotoUrls.id) && (
+                <div className={styles.identitySection}>
+                  <div className={styles.identitySectionTitle}>Identity Verification Photos</div>
+                  <div className={styles.identityPhotoRow}>
+                    {identityPhotoUrls.selfie && (
+                      <div className={styles.identityPhotoCard}>
+                        <div className={styles.identityPhotoLabel}>Selfie</div>
+                        <img
+                          className={styles.identityPhotoImg}
+                          src={identityPhotoUrls.selfie}
+                          alt="Candidate selfie"
+                          onClick={() => setSelectedEvidence({ _identityType: 'selfie' })}
+                        />
+                      </div>
+                    )}
+                    {identityPhotoUrls.id && (
+                      <div className={styles.identityPhotoCard}>
+                        <div className={styles.identityPhotoLabel}>ID Document</div>
+                        <img
+                          className={styles.identityPhotoImg}
+                          src={identityPhotoUrls.id}
+                          alt="ID document"
+                          onClick={() => setSelectedEvidence({ _identityType: 'id' })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className={styles.identityStatus}>
+                    Identity verified: {attempt.identity_verified ? 'Yes' : 'No'}
+                  </div>
+                </div>
+              )}
+              {!identityPhotoUrls.selfie && !identityPhotoUrls.id && attempt.identity_verified != null && (
+                <div className={styles.identitySection}>
+                  <div className={styles.identitySectionTitle}>Identity Verification</div>
+                  <div className={styles.identityStatus}>
+                    {attempt.identity_verified ? 'Identity was verified (photos not available)' : 'Identity was not verified'}
+                  </div>
+                </div>
+              )}
             <div className={styles.evidenceGrid}>
-              {evidenceEvents.length === 0 ? (
+              {evidenceEvents.length === 0 && !identityPhotoUrls.selfie && !identityPhotoUrls.id ? (
                 <div className={styles.empty}>No evidence screenshots captured.</div>
-              ) : (
+              ) : evidenceEvents.length === 0 ? null : (
                 evidenceEvents.map((event, index) => (
                   <button
                     key={`${event.id || event.occurred_at || index}`}
@@ -636,6 +733,7 @@ export default function AdminAttemptAnalysis() {
                 ))
               )}
             </div>
+          </>
           )}
         </>
       )}
@@ -646,26 +744,47 @@ export default function AdminAttemptAnalysis() {
             <button type="button" className={styles.lightboxClose} onClick={() => setSelectedEvidence(null)}>
               Close
             </button>
-            {evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)] ? (
-              <img
-                className={styles.lightboxImg}
-                src={evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)]}
-                alt={`${selectedEvidence.event_type?.replace(/_/g, ' ')} evidence`}
-              />
+            {selectedEvidence._identityType ? (
+              <>
+                <img
+                  className={styles.lightboxImg}
+                  src={identityPhotoUrls[selectedEvidence._identityType === 'selfie' ? 'selfie' : 'id']}
+                  alt={selectedEvidence._identityType === 'selfie' ? 'Candidate selfie' : 'ID document'}
+                />
+                <div className={styles.lightboxMeta}>
+                  <div className={styles.lightboxHeader}>
+                    <span className={styles.lightboxTitle}>
+                      {selectedEvidence._identityType === 'selfie' ? 'Candidate Selfie' : 'ID Document'}
+                    </span>
+                  </div>
+                  <div>Identity verification photo captured during precheck.</div>
+                  <div>Identity verified: {attempt?.identity_verified ? 'Yes' : 'No'}</div>
+                </div>
+              </>
             ) : (
-              <div className={styles.lightboxImg} />
+              <>
+                {evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)] ? (
+                  <img
+                    className={styles.lightboxImg}
+                    src={evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)]}
+                    alt={`${selectedEvidence.event_type?.replace(/_/g, ' ')} evidence`}
+                  />
+                ) : (
+                  <div className={styles.lightboxImg} />
+                )}
+                <div className={styles.lightboxMeta}>
+                  <div className={styles.lightboxHeader}>
+                    <span className={styles.lightboxTitle}>{selectedEvidence.event_type?.replace(/_/g, ' ')}</span>
+                    <span className={`${styles.severityBadge} ${getSeverityClass('severity', selectedEvidence.severity, styles)}`}>
+                      {selectedEvidence.severity}
+                    </span>
+                  </div>
+                  <div>{selectedEvidence.detail || 'Evidence captured during proctoring review.'}</div>
+                  <div>{formatConfidence(selectedEvidence.ai_confidence)}</div>
+                  <div>Captured at {formatTime(selectedEvidence.occurred_at)}</div>
+                </div>
+              </>
             )}
-            <div className={styles.lightboxMeta}>
-              <div className={styles.lightboxHeader}>
-                <span className={styles.lightboxTitle}>{selectedEvidence.event_type?.replace(/_/g, ' ')}</span>
-                <span className={`${styles.severityBadge} ${getSeverityClass('severity', selectedEvidence.severity, styles)}`}>
-                  {selectedEvidence.severity}
-                </span>
-              </div>
-              <div>{selectedEvidence.detail || 'Evidence captured during proctoring review.'}</div>
-              <div>{formatConfidence(selectedEvidence.ai_confidence)}</div>
-              <div>Captured at {formatTime(selectedEvidence.occurred_at)}</div>
-            </div>
           </div>
         </div>
       )}

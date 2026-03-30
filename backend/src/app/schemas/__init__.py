@@ -448,6 +448,8 @@ class AttemptRead(AttemptBase):
     attempts_remaining: Optional[int] = None
     user_name: Optional[str] = None
     user_student_id: Optional[str] = None
+    selfie_path: Optional[str] = None
+    id_doc_path: Optional[str] = None
     certificate_eligible: Optional[bool] = None
     certificate_issue_rule: Optional[str] = None
     certificate_review_status: Optional[str] = None

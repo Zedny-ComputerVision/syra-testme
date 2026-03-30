@@ -469,6 +469,8 @@ def _build_attempt_read(
         attempts_remaining=None,
         user_name=getattr(user, "name", None) if user else None,
         user_student_id=getattr(user, "user_id", None) if user else None,
+        selfie_path=attempt.selfie_path,
+        id_doc_path=attempt.id_doc_path,
         certificate_eligible=bool(resolved_certificate["eligible"]) if resolved_certificate["issue_rule"] else None,
         certificate_issue_rule=resolved_certificate["issue_rule"],
         certificate_review_status=resolved_certificate["review_status"],

@@ -2,12 +2,13 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from ...core.config import get_settings
 from ...core.security import verify_token
 from ...models import Attempt, RoleEnum, User
+from ...services.crypto_utils import decrypt_bytes
 from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_role
 
@@ -19,6 +20,7 @@ BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent /
 REPORTS_DIR = BASE_STORAGE_DIR / "reports"
 VIDEO_DIR = BASE_STORAGE_DIR / "videos"
 EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
+IDENTITY_DIR = BASE_STORAGE_DIR / "identity"
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -127,3 +129,45 @@ async def get_report(
     if settings.MEDIA_STORAGE_PROVIDER == "supabase":
         return await _redirect_supabase_media("reports", filename)
     return _serve_admin_media_file(REPORTS_DIR, filename)
+
+
+@router.get("/identity/{attempt_id}/{photo_type}")
+async def get_identity_photo(
+    attempt_id: str,
+    photo_type: str,
+    db: Session = Depends(get_db_dep),
+    current_user: User = Depends(get_current_user),
+):
+    """Serve a decrypted identity photo (selfie or ID document). Admin/staff only."""
+    if photo_type not in ("selfie", "id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid photo type")
+
+    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt = db.get(Attempt, attempt_pk)
+    if not attempt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
+
+    _enforce_media_access(attempt, current_user, db)
+
+    stored_path = attempt.selfie_path if photo_type == "selfie" else attempt.id_doc_path
+    if not stored_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not available")
+
+    # Try local storage first
+    local_path = Path(stored_path)
+    if not local_path.is_absolute():
+        local_path = IDENTITY_DIR / Path(stored_path).name
+
+    if local_path.is_file():
+        encrypted = local_path.read_bytes()
+        decrypted = decrypt_bytes(encrypted)
+        if not decrypted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo could not be decrypted")
+        return Response(content=decrypted, media_type="image/jpeg")
+
+    # Fall back to Supabase
+    if settings.MEDIA_STORAGE_PROVIDER == "supabase":
+        cleaned = _sanitize_filename(Path(stored_path).name)
+        return await _redirect_supabase_media("identity", cleaned)
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")

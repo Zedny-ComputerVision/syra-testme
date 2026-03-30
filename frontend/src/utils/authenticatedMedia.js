@@ -47,6 +47,9 @@ export function normalizeMediaRequestPath(path, _depth = 0) {
   if (normalized.startsWith('reports/')) {
     return `media/${normalized}`
   }
+  if (normalized.startsWith('identity/')) {
+    return `media/${normalized}`
+  }
   return normalized
 }
 
