@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from typing import Optional
 
 import cv2
@@ -66,7 +67,11 @@ def _landmark_vector(landmarks) -> Optional[np.ndarray]:
     return pts.flatten()
 
 
-def _embedding_via_deepface(frame_bgr: np.ndarray) -> Optional[list[float]]:
+def _embedding_via_deepface(
+    frame_bgr: np.ndarray,
+    *,
+    detector_backend: str = "skip",
+) -> Optional[list[float]]:
     """Extract a 512-D embedding via DeepFace."""
     global _deepface_warned
     deepface_class = _get_deepface_class()
@@ -77,7 +82,7 @@ def _embedding_via_deepface(frame_bgr: np.ndarray) -> Optional[list[float]]:
         result = deepface_class.represent(
             img_path=frame_rgb,
             model_name=_deepface_model_name,
-            detector_backend="skip",
+            detector_backend=detector_backend,
             enforce_detection=False,
             align=True,
         )
@@ -89,7 +94,11 @@ def _embedding_via_deepface(frame_bgr: np.ndarray) -> Optional[list[float]]:
             return emb.tolist()
     except Exception as exc:
         if not _deepface_warned:
-            logger.warning("DeepFace represent() failed: %s - falling back to landmarks", exc)
+            logger.warning(
+                "DeepFace represent() failed (backend=%s): %s - falling back to landmarks",
+                detector_backend,
+                exc,
+            )
             _deepface_warned = True
     return None
 
@@ -257,7 +266,12 @@ class FaceVerifier:
         vec = _landmark_vector(res.multi_face_landmarks[0].landmark)
         return vec if vec is not None else None
 
-    def _compare_embedding(self, live_vec: np.ndarray) -> dict | None:
+    def _compare_embedding(
+        self,
+        live_vec: np.ndarray,
+        *,
+        confirm_live_vec: Callable[[], Optional[np.ndarray]] | None = None,
+    ) -> dict | None:
         if self.baseline is None or self.baseline.shape != live_vec.shape:
             logger.warning(
                 "Skipping face verification because enrolled/live embedding shapes differ: baseline=%s live=%s",
@@ -267,8 +281,22 @@ class FaceVerifier:
             return None
         dist = cosine_distance(self.baseline, live_vec)
 
+        # When the fast DeepFace embedding says "mismatch", retry once with
+        # face detection/alignment before escalating. This is more tolerant of
+        # common appearance drift like facial hair, framing, and lighting.
+        if dist > self.threshold and confirm_live_vec is not None:
+            confirmed_vec = confirm_live_vec()
+            if (
+                confirmed_vec is not None
+                and self.baseline is not None
+                and self.baseline.shape == confirmed_vec.shape
+            ):
+                dist = min(dist, cosine_distance(self.baseline, confirmed_vec))
+
         if dist > self.threshold:
             self._consecutive_mismatches += 1
+            if self._mismatching:
+                return None
             if self._consecutive_mismatches >= self._consecutive_required:
                 self._mismatching = True
                 method = "neural" if self._use_deepface else ("haar" if self._use_haar else "landmark")
@@ -302,7 +330,16 @@ class FaceVerifier:
         live_vec = self._get_live_embedding(frame)
         if live_vec is None:
             return None
-        return self._compare_embedding(live_vec)
+        confirm_live_vec = None
+        if self._use_deepface:
+            def _confirmed_live_vec() -> Optional[np.ndarray]:
+                emb = _embedding_via_deepface(frame, detector_backend="opencv")
+                if emb is None:
+                    return None
+                return np.array(emb, dtype=np.float32)
+
+            confirm_live_vec = _confirmed_live_vec
+        return self._compare_embedding(live_vec, confirm_live_vec=confirm_live_vec)
 
     def process_landmarks(self, landmarks, frame: np.ndarray | None = None) -> dict | None:
         """Use pre-computed FaceMesh landmarks and fall back to DeepFace when a frame is available."""
@@ -319,7 +356,16 @@ class FaceVerifier:
                 live_vec = vec
         if live_vec is None:
             return None
-        return self._compare_embedding(live_vec)
+        confirm_live_vec = None
+        if self._use_deepface and frame is not None:
+            def _confirmed_live_vec() -> Optional[np.ndarray]:
+                emb = _embedding_via_deepface(frame, detector_backend="opencv")
+                if emb is None:
+                    return None
+                return np.array(emb, dtype=np.float32)
+
+            confirm_live_vec = _confirmed_live_vec
+        return self._compare_embedding(live_vec, confirm_live_vec=confirm_live_vec)
 
     def process(self, frame_bytes: bytes) -> dict | None:
         np_arr = np.frombuffer(frame_bytes, np.uint8)
