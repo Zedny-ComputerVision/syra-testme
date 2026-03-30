@@ -172,7 +172,9 @@ export default function RulesPage() {
       if (requirements.identityRequired) {
         try {
           const { data: attemptData } = await getAttempt(attemptId)
-          if (!(attemptData?.identity_verified || attemptData?.id_verified)) {
+          const identityOk = attemptData?.identity_verified || attemptData?.id_verified
+          const precheckDone = Boolean(attemptData?.precheck_passed_at)
+          if (!identityOk || !precheckDone) {
             setAttemptId(attemptId)
             navigate(`/tests/${testId}/verify-identity`)
             return

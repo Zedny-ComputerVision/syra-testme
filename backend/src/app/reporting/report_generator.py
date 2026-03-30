@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from html import escape
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment
@@ -14,12 +17,16 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import LongTable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image as RLImage, LongTable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Attempt, ProctoringEvent
 from ..modules.tests.proctoring_requirements import get_proctoring_requirements
+from ..services.crypto_utils import decrypt_bytes
+
+_logger = logging.getLogger(__name__)
+_IDENTITY_DIR = Path(__file__).resolve().parent.parent.parent / "storage" / "identity"
 
 _HTML_ENV = Environment(autoescape=True)
 _SEVERITY_ORDER = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
@@ -96,6 +103,7 @@ _REPORT_TEMPLATE = _HTML_ENV.from_string(
     <div class="content">
       <section class="section"><h2>Executive Summary</h2><div class="card"><ul class="summary">{% for item in summary_points %}<li>{{ item }}</li>{% endfor %}</ul></div></section>
       <section class="section"><h2>Session Overview</h2><div class="grid">{% for item in overview_items %}<div class="card"><div class="stat-label">{{ item.label }}</div><div class="stat-value {{ item.tone }}">{{ item.value }}</div>{% if item.note %}<div class="stat-note">{{ item.note }}</div>{% endif %}</div>{% endfor %}</div></section>
+      <section class="section"><h2>Identity Verification</h2><p class="sub">Selfie and ID document captured during the pre-check step before the exam started.</p>{% if identity.has_identity %}<div class="grid"><div class="card" style="text-align:center;">{% if identity.selfie_b64 %}<div class="stat-label">Selfie</div><img src="{{ identity.selfie_b64 }}" alt="Selfie" style="max-width:240px;max-height:240px;border-radius:12px;margin:10px auto;display:block;border:2px solid var(--line);">{% else %}<div class="stat-label">Selfie</div><div class="stat-note">Not captured</div>{% endif %}</div><div class="card" style="text-align:center;">{% if identity.id_photo_b64 %}<div class="stat-label">ID Document</div><img src="{{ identity.id_photo_b64 }}" alt="ID Document" style="max-width:320px;max-height:240px;border-radius:12px;margin:10px auto;display:block;border:2px solid var(--line);">{% else %}<div class="stat-label">ID Document</div><div class="stat-note">Not captured</div>{% endif %}</div></div><div class="grid" style="margin-top:14px;"><div class="card"><div class="stat-label">Identity Verified</div><div class="stat-value {{ 'good' if identity.identity_verified else 'bad' }}">{{ 'Yes' if identity.identity_verified else 'No' }}</div><div class="stat-note">{{ 'Pre-check passed' if identity.precheck_passed else 'Pre-check not completed' }}</div></div><div class="card"><div class="stat-label">Face Signature</div><div class="stat-value {{ 'good' if identity.has_face_signature else 'warn' }}">{{ 'Stored' if identity.has_face_signature else 'Not captured' }}</div><div class="stat-note">Used for live face mismatch detection during the exam</div></div>{% if identity.lighting_score is not none %}<div class="card"><div class="stat-label">Lighting Score</div><div class="stat-value {{ 'good' if identity.lighting_score >= 35 else 'warn' }}">{{ identity.lighting_score }}%</div><div class="stat-note">Brightness of the selfie photo</div></div>{% endif %}<div class="card"><div class="stat-label">OCR Status</div><div class="stat-value {{ 'good' if identity.ocr_available else 'warn' }}">{{ identity.ocr_engine or 'Not available' }}</div><div class="stat-note">{% if identity.ocr_candidates %}Detected IDs: {{ identity.ocr_candidates|join(', ') }}{% else %}No ID numbers detected from the document{% endif %}</div></div></div>{% else %}<div class="card"><div class="stat-note" style="text-align:center;padding:20px;">No identity photos were captured for this attempt. The exam may not require identity verification, or the pre-check step was skipped.</div></div>{% endif %}</section>
       <section class="section"><h2>Key Metrics</h2><div class="metrics">{% for item in metrics %}<div class="card"><div class="stat-label">{{ item.label }}</div><div class="stat-value {{ item.tone }}">{{ item.value }}</div>{% if item.note %}<div class="stat-note">{{ item.note }}</div>{% endif %}</div>{% endfor %}</div></section>
       <section class="section"><h2>Incident Categories</h2><p class="sub">Grouped view of what happened during the exam so reviewers can spot patterns quickly.</p><div class="categories">{% for row in category_rows %}<div class="card"><div class="stat-label">{{ row.label }}</div><div class="stat-value {{ row.tone }}">{{ row.count }}</div><div class="stat-note">Highest severity: <span class="pill {{ row.pill_tone }}">{{ row.highest_severity }}</span><br>Share of incidents: {{ row.share }}</div></div>{% endfor %}{% if not category_rows %}<div class="card"><div class="stat-label">No incidents</div><div class="stat-note">No reportable proctoring incidents were recorded for this attempt.</div></div>{% endif %}</div></section>
       <section class="section"><h2>Recording Coverage</h2><p class="sub">Capture status for the proctoring sources that were expected or observed during the session.</p><div class="card"><table><thead><tr><th>Source</th><th>Status</th><th>Recorded Duration</th><th>Saved At</th><th>Size</th><th>Notes</th></tr></thead><tbody>{% for row in recording_rows %}<tr><td>{{ row.label }}</td><td><span class="pill {{ row.pill_tone }}">{{ row.status }}</span></td><td>{{ row.recorded_duration }}</td><td>{{ row.saved_at }}</td><td>{{ row.size }}</td><td class="muted">{{ row.note }}</td></tr>{% endfor %}{% if not recording_rows %}<tr><td colspan="6" class="empty">No proctoring recording activity was logged for this attempt.</td></tr>{% endif %}</tbody></table></div></section>
@@ -145,6 +153,27 @@ def _event_category(event_type: str | None) -> str:
     if any(token in normalized for token in ("PAUSED", "RESUMED", "CONNECTION", "SUBMIT")):
         return "Session Control"
     return "Other"
+
+
+def _load_identity_photo_b64(stored_path: str | None) -> str | None:
+    """Load an encrypted identity photo and return as a base64 data URI."""
+    if not stored_path:
+        return None
+    try:
+        local_path = Path(stored_path)
+        if not local_path.is_absolute():
+            local_path = _IDENTITY_DIR / Path(stored_path).name
+        if not local_path.is_file():
+            return None
+        encrypted = local_path.read_bytes()
+        decrypted = decrypt_bytes(encrypted)
+        if not decrypted:
+            return None
+        encoded = base64.b64encode(decrypted).decode("ascii")
+        return f"data:image/jpeg;base64,{encoded}"
+    except Exception:
+        _logger.debug("Failed to load identity photo from %s", stored_path, exc_info=True)
+        return None
 
 
 def _clean_detail(value: object) -> str:
@@ -539,6 +568,25 @@ def build_attempt_report_data(db: Session, attempt: Attempt) -> dict[str, Any]:
         {"label": "Exam score", "value": score_display, "tone": "good" if pass_label == "Pass" else "warn", "note": f"Passing score: {passing_score:g}" if passing_score is not None else "No passing threshold configured"},
     ]
 
+    # Identity verification data
+    selfie_b64 = _load_identity_photo_b64(attempt.selfie_path)
+    id_photo_b64 = _load_identity_photo_b64(attempt.id_doc_path)
+    id_text_data = attempt.id_text if isinstance(attempt.id_text, dict) else {}
+    identity_data = {
+        "has_identity": bool(selfie_b64 or id_photo_b64),
+        "selfie_b64": selfie_b64,
+        "id_photo_b64": id_photo_b64,
+        "identity_verified": bool(getattr(attempt, "identity_verified", False)),
+        "precheck_passed": bool(getattr(attempt, "precheck_passed_at", None)),
+        "has_face_signature": bool(getattr(attempt, "face_signature", None)),
+        "lighting_score": round(float(attempt.lighting_score or 0) * 100) if attempt.lighting_score else None,
+        "ocr_available": id_text_data.get("ocr_available", False),
+        "ocr_engine": id_text_data.get("engine"),
+        "ocr_candidates": id_text_data.get("ocr_candidates", []),
+        "ocr_lines": id_text_data.get("lines", [])[:5],
+        "id_method": id_text_data.get("method"),
+    }
+
     return {
         "report_title": f"Proctoring Incident Report - {str(attempt.id)[:8]}",
         "attempt_id_full": str(attempt.id),
@@ -559,6 +607,7 @@ def build_attempt_report_data(db: Session, attempt: Attempt) -> dict[str, Any]:
         "peak_window": peak_window,
         "breakdown_rows": breakdown_rows,
         "timeline_rows": timeline_rows,
+        "identity": identity_data,
         "generated_at": _format_dt(datetime.now(timezone.utc)),
     }
 

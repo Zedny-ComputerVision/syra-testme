@@ -201,20 +201,30 @@ def _fallback_face_signature(img_bgr: np.ndarray) -> list[float] | None:
 
 def _compute_signature_with_fallback(img_bgr: np.ndarray, *, use_detection: bool = False) -> tuple[list[float] | None, str]:
     if use_detection:
-        # Use DeepFace WITH face detection/alignment — much better for ID cards
         vec = compute_face_signature_detected(img_bgr)
         if vec:
             mode = "deepface" if len(vec) == 512 else "mediapipe"
+            logger.info("Face signature computed via %s (%d-D, detection=True)", mode, len(vec))
             return vec, mode
+        logger.warning("DeepFace/MediaPipe with detection failed, trying Haar fallback (img shape=%s)", img_bgr.shape)
     else:
         raw = cv2.imencode(".jpg", img_bgr)[1].tobytes()
         vec = compute_face_signature(raw)
         if vec:
             mode = "deepface" if len(vec) == 512 else "mediapipe"
+            logger.info("Face signature computed via %s (%d-D, detection=False)", mode, len(vec))
             return vec, mode
+        logger.warning("DeepFace/MediaPipe without detection failed, trying Haar fallback (img shape=%s)", img_bgr.shape)
     fallback = _fallback_face_signature(img_bgr)
     if fallback:
+        logger.info("Face signature computed via haar fallback (%d-D)", len(fallback))
         return fallback, "haar"
+    # Last resort: try to detect face with Haar to diagnose the issue
+    face_box = _largest_face_box(img_bgr)
+    logger.error(
+        "All face signature methods failed. Haar face detected: %s, image shape: %s, mean brightness: %.1f",
+        face_box is not None, img_bgr.shape, float(img_bgr.mean()),
+    )
     return None, "none"
 
 
