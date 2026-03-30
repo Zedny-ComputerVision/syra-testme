@@ -709,14 +709,14 @@ class AuditLogRead(BaseModel):
 
 
 class SurveyCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title: str = Field(max_length=255)
+    description: Optional[str] = Field(default=None, max_length=2048)
     questions: Optional[list[dict]] = None
 
 
 class SurveyUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=2048)
     questions: Optional[list[dict]] = None
     is_active: Optional[bool] = None
 
@@ -750,8 +750,8 @@ class SurveyResponseRead(BaseModel):
 
 
 class UserGroupCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1024)
     member_ids: Optional[list[str]] = None
 
 
@@ -767,8 +767,8 @@ class UserGroupRead(BaseModel):
 
 
 class ExamTemplateCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1024)
     config: Optional[dict] = None
 
 
@@ -785,8 +785,8 @@ class ExamTemplateRead(BaseModel):
 
 
 class ReportScheduleCreate(BaseModel):
-    name: str
-    report_type: str
+    name: str = Field(max_length=255)
+    report_type: str = Field(max_length=100)
     schedule_cron: Optional[str] = None
     recipients: Optional[list[str]] = None
     is_active: bool = True
