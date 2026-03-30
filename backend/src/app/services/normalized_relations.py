@@ -494,10 +494,14 @@ def serialize_user_group_member_ids(group: UserGroup) -> list[str]:
 def replace_user_group_members(group: UserGroup, member_ids: Iterable[str]) -> None:
     normalized = [str(member_id) for member_id in member_ids]
     group.member_ids = normalized
-    group.member_links = [
-        UserGroupMember(user_id=member_id, position=index)
-        for index, member_id in enumerate(normalized, start=1)
-    ]
+    # Clear existing links first to avoid unique-constraint collisions on
+    # (group_id, position) when SQLAlchemy processes deletes and inserts
+    # in the same flush.
+    group.member_links.clear()
+    for index, member_id in enumerate(normalized, start=1):
+        group.member_links.append(
+            UserGroupMember(user_id=member_id, position=index)
+        )
 
 
 def exam_ui_config(exam: Exam) -> dict[str, Any]:
