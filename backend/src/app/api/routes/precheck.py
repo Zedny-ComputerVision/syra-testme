@@ -564,20 +564,20 @@ async def precheck(
 
         match_score = 1.0
         face_match = False
-        # ID-vs-selfie threshold: same-person DeepFace distances typically land
-        # at 0.25–0.42 even with age/lighting/quality differences.  0.55 was too
-        # lenient — it allowed clearly different people (different gender, etc.) to
-        # pass.  0.42 rejects different-person pairs while still accepting the
-        # normal same-person ID-vs-selfie variance.
-        raw_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.42))
+        # ID-vs-selfie threshold: real-world same-person distances range from
+        # 0.25 (studio photos) to 0.55 (dim webcam vs old printed ID card).
+        # Different-person pairs typically land at 0.8–1.0.  A threshold of
+        # 0.58 accepts genuine same-person variance from low-quality webcam
+        # captures while still rejecting different people comfortably.
+        raw_threshold = float((proctoring_payload or {}).get("face_verify_id_threshold", 0.58))
         if selfie_sig_mode == id_sig_mode == "mediapipe":
-            threshold = min(raw_threshold, 0.25)
+            threshold = min(raw_threshold, 0.30)
         elif selfie_sig_mode == id_sig_mode == "haar":
-            threshold = max(raw_threshold, 0.50)
+            threshold = max(raw_threshold, 0.55)
         else:
-            # Cap at 0.42 — strict enough to block different people, lenient
-            # enough for the same person's ID photo vs live selfie.
-            threshold = min(raw_threshold, 0.42)
+            # DeepFace 512-D: use the configured threshold directly.
+            # Real-world same-person: 0.25–0.55, different-person: 0.8–1.0.
+            threshold = raw_threshold
         if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
             match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
             face_match = match_score <= threshold
