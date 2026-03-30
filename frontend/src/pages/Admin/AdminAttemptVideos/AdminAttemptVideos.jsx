@@ -96,6 +96,22 @@ function describeVideoAvailability(video) {
   return 'Loading recording...'
 }
 
+function summarizeVideoState(video) {
+  if (!video) return 'Not saved'
+  if (isVideoPlayable(video)) {
+    const seconds = readVideoDurationValue(video)
+    return seconds > 0 ? formatSeconds(seconds) : 'Saved'
+  }
+  const status = normalizeVideoStatus(video)
+  if (status === 'processing' || status === 'uploading' || status === 'queued' || status === 'pending' || status === 'inprogress') {
+    return 'Processing'
+  }
+  if (status === 'error' || status === 'failed') {
+    return 'Failed'
+  }
+  return 'Saved'
+}
+
 function isAbortError(err) {
   return err?.name === 'AbortError' || err?.code === 'ERR_CANCELED'
 }
@@ -274,12 +290,11 @@ export default function AdminAttemptVideos() {
     () => isHlsPlaybackUrl(selectedVideoUrl || selectedVideo?.url, selectedVideo?.playback_type),
     [selectedVideo?.playback_type, selectedVideo?.url, selectedVideoUrl],
   )
-  const latestPlayableVideosBySource = useMemo(() => {
+  const latestVideosBySource = useMemo(() => {
     const bySource = new Map()
     for (const video of videos) {
       if (!video?.source || bySource.has(video.source)) continue
-      const isPlayable = isVideoPlayable(video)
-      if (isPlayable) bySource.set(video.source, video)
+      bySource.set(video.source, video)
     }
     return bySource
   }, [videos])
@@ -772,7 +787,8 @@ export default function AdminAttemptVideos() {
               <div className={styles.recordingControls}>
                 <div className={styles.sourceSwitchRow}>
                   {['camera', 'screen'].map((source) => {
-                    const sourceVideo = latestPlayableVideosBySource.get(source)
+                    const sourceVideo = latestVideosBySource.get(source)
+                    const sourcePlayable = isVideoPlayable(sourceVideo)
                     const isActive = sourceVideo?.name && sourceVideo.name === selectedVideo?.name
                     return (
                       <button
@@ -784,12 +800,12 @@ export default function AdminAttemptVideos() {
                           if (!sourceVideo) return
                           setSelectedVideoName(sourceVideo.name)
                           setCurrentTime(0)
-                          setDuration(readVideoDurationValue(sourceVideo))
+                          setDuration(sourcePlayable ? readVideoDurationValue(sourceVideo) : 0)
                         }}
                       >
                         <span className={styles.sourceSwitchLabel}>{formatVideoSource(source)}</span>
                         <span className={styles.sourceSwitchMeta}>
-                          {sourceVideo ? formatSeconds(readVideoDurationValue(sourceVideo)) : 'Not saved'}
+                          {summarizeVideoState(sourceVideo)}
                         </span>
                       </button>
                     )

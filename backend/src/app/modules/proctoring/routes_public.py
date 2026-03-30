@@ -146,6 +146,29 @@ async def _hydrate_video_file_info(item: dict[str, object]) -> dict[str, object]
     provider = str(hydrated.get("provider") or "").strip().lower()
 
     if provider == "cloudflare":
+        status = str(hydrated.get("status") or "").strip().lower()
+        if (
+            hydrated.get("ready_to_stream") is False
+            or status in {"queued", "pending", "uploading", "processing", "inprogress"}
+        ):
+            refreshed = await get_cloudflare_video_details(
+                uid=str(hydrated.get("uid") or "").strip() or None,
+                filename=str(hydrated.get("name") or "").strip() or None,
+                source=_normalize_video_source(hydrated.get("source")),
+                fallback_size=_coerce_non_negative_int(hydrated.get("size")),
+            )
+            if refreshed:
+                preserved_fields = (
+                    "session_id",
+                    "recording_started_at",
+                    "recording_stopped_at",
+                    "source",
+                )
+                merged = {**hydrated, **refreshed}
+                for key in preserved_fields:
+                    if merged.get(key) in (None, "") and hydrated.get(key) not in (None, ""):
+                        merged[key] = hydrated.get(key)
+                hydrated = merged
         # Sign Cloudflare Stream URLs so videos with require_signed_urls work
         for key in ("url", "playback_url"):
             raw_url = str(hydrated.get(key) or "").strip()
