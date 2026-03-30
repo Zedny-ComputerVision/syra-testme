@@ -901,9 +901,15 @@ def set_exam_proctoring(exam: Exam, payload: dict[str, Any] | None) -> None:
     config = _ensure_proctoring_config(exam)
     merged = deepcopy(DEFAULT_PROCTORING)
     merged.update({key: value for key, value in data.items() if key in merged or key == "access_mode"})
+    _BOOL_PROCTORING_KEYS = {
+        k for k, v in DEFAULT_PROCTORING.items() if isinstance(v, bool)
+    }
     for key in _PROCTORING_SCALAR_FIELDS:
         if key in merged:
-            setattr(config, key, merged.get(key))
+            value = merged.get(key)
+            if key in _BOOL_PROCTORING_KEYS and not isinstance(value, bool):
+                value = str(value).lower() in ("true", "1", "yes")
+            setattr(config, key, value)
 
     rules = []
     for index, rule in enumerate(merged.get("alert_rules") or [], start=1):

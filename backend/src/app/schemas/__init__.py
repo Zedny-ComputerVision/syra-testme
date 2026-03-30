@@ -466,6 +466,13 @@ class AttemptAnswerBase(BaseModel):
     question_id: UUID
     answer: Optional[str | list | dict] = None
 
+    @field_validator("answer")
+    @classmethod
+    def validate_answer_length(cls, v):
+        if isinstance(v, str) and len(v) > 2048:
+            raise ValueError("Answer must not exceed 2048 characters")
+        return v
+
 
 class AttemptCertificateReviewUpdate(BaseModel):
     decision: Literal["APPROVED", "REJECTED"]
