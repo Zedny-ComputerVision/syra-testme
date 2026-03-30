@@ -491,17 +491,26 @@ def serialize_user_group_member_ids(group: UserGroup) -> list[str]:
     return [str(member_id) for member_id in raw] if isinstance(raw, list) else []
 
 
-def replace_user_group_members(group: UserGroup, member_ids: Iterable[str]) -> None:
+def replace_user_group_members(group: UserGroup, member_ids: Iterable[str], *, db=None) -> None:
+    from sqlalchemy import delete as sa_delete
+
     normalized = [str(member_id) for member_id in member_ids]
     group.member_ids = normalized
-    # Clear existing links first to avoid unique-constraint collisions on
-    # (group_id, position) when SQLAlchemy processes deletes and inserts
-    # in the same flush.
-    group.member_links.clear()
-    for index, member_id in enumerate(normalized, start=1):
-        group.member_links.append(
+
+    # Explicitly delete old rows and flush before inserting new ones to
+    # avoid UniqueConstraint collisions on (group_id, position).
+    if db is not None and group.id is not None:
+        db.execute(sa_delete(UserGroupMember).where(UserGroupMember.group_id == group.id))
+        db.flush()
+        group.member_links = [
             UserGroupMember(user_id=member_id, position=index)
-        )
+            for index, member_id in enumerate(normalized, start=1)
+        ]
+    else:
+        group.member_links = [
+            UserGroupMember(user_id=member_id, position=index)
+            for index, member_id in enumerate(normalized, start=1)
+        ]
 
 
 def exam_ui_config(exam: Exam) -> dict[str, Any]:

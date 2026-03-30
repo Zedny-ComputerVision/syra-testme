@@ -87,7 +87,7 @@ def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), curre
     _ensure_unique_group_name(db, payload["name"])
     member_ids = payload.pop("member_ids", [])
     group = UserGroup(**payload)
-    replace_user_group_members(group, member_ids)
+    replace_user_group_members(group, member_ids, db=db)
     db.add(group)
     db.commit()
     db.refresh(group)
@@ -112,7 +112,7 @@ def update_group(group_id: str, body: UserGroupCreate, db: Session = Depends(get
     _ensure_unique_group_name(db, payload["name"], existing_group_id=group.id)
     group.name = payload["name"]
     group.description = payload["description"]
-    replace_user_group_members(group, payload["member_ids"])
+    replace_user_group_members(group, payload["member_ids"], db=db)
     db.add(group)
     db.commit()
     db.refresh(group)
@@ -168,7 +168,7 @@ def add_group_member(
     if normalized_user_id in member_ids:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already in group")
     member_ids.append(normalized_user_id)
-    replace_user_group_members(group, member_ids)
+    replace_user_group_members(group, member_ids, db=db)
     db.add(group)
     db.commit()
     return Message(detail="Member added")
@@ -198,7 +198,7 @@ def add_group_members_bulk(
         if normalized_user_id not in member_ids:
             member_ids.append(normalized_user_id)
             added += 1
-    replace_user_group_members(group, member_ids)
+    replace_user_group_members(group, member_ids, db=db)
     db.add(group)
     db.commit()
     return Message(detail=f"{added} member{'s' if added != 1 else ''} added")
@@ -217,7 +217,7 @@ def remove_group_member(
     normalized_user_id = str(user_pk)
     if normalized_user_id not in member_ids:
         raise HTTPException(status_code=404, detail="Member not found")
-    replace_user_group_members(group, [member_id for member_id in member_ids if member_id != normalized_user_id])
+    replace_user_group_members(group, [member_id for member_id in member_ids if member_id != normalized_user_id], db=db)
     db.add(group)
     db.commit()
     return Message(detail="Member removed")
