@@ -563,9 +563,9 @@ async def precheck(
         elif selfie_sig_mode == id_sig_mode == "haar":
             threshold = max(raw_threshold, 0.50)
         else:
-            # Floor of 0.42 — strict enough to block different people, lenient
+            # Cap at 0.42 — strict enough to block different people, lenient
             # enough for the same person's ID photo vs live selfie.
-            threshold = max(raw_threshold, 0.42)
+            threshold = min(raw_threshold, 0.42)
         if selfie_vec is not None and id_vec is not None and len(selfie_vec) == len(id_vec):
             match_score = cosine_distance(np.array(selfie_vec, dtype=np.float32), np.array(id_vec, dtype=np.float32))
             face_match = match_score <= threshold
