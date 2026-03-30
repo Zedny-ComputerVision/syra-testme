@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...models import Category, Exam, RoleEnum
@@ -50,7 +51,11 @@ def create_category(
     _ensure_unique_category_name(db, payload["name"])
     cat = Category(**payload)
     db.add(cat)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Category exists")
     db.refresh(cat)
     write_audit_log(
         db,
