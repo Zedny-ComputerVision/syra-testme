@@ -1,4 +1,4 @@
-"""Create the learner catalog indexes that the earlier no-op revisions skipped.
+"""Create the missing learner schedule index that the earlier no-op revisions skipped.
 
 Revision ID: 202603301030
 Revises: 202603291300
@@ -28,15 +28,6 @@ def upgrade() -> None:
                     """
                 )
             )
-            op.execute(
-                sa.text(
-                    """
-                    CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_exam_learner_catalog
-                    ON exams (updated_at, created_at)
-                    WHERE status = 'OPEN' AND library_pool_id IS NULL
-                    """
-                )
-            )
         return
 
     op.execute(
@@ -47,23 +38,13 @@ def upgrade() -> None:
             """
         )
     )
-    op.execute(
-        sa.text(
-            """
-            CREATE INDEX IF NOT EXISTS ix_exam_learner_catalog
-            ON exams (status, library_pool_id, updated_at, created_at)
-            """
-        )
-    )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         with op.get_context().autocommit_block():
-            op.execute(sa.text("DROP INDEX CONCURRENTLY IF EXISTS ix_exam_learner_catalog"))
             op.execute(sa.text("DROP INDEX CONCURRENTLY IF EXISTS ix_schedule_user_exam_scheduled"))
         return
 
-    op.execute(sa.text("DROP INDEX IF EXISTS ix_exam_learner_catalog"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_schedule_user_exam_scheduled"))
