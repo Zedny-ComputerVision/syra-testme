@@ -409,8 +409,14 @@ function shouldBootstrapRowVideoUploadStatus(row) {
   const attemptStatus = String(row?.status || '').trim().toUpperCase()
   if (!['IN_PROGRESS', 'SUBMITTED', 'GRADED'].includes(attemptStatus)) return false
 
+  // Always bootstrap for attempts that haven't fetched upload status yet.
+  // The initial render creates rows with uploadStatus='not_started' which
+  // may be wrong — the only way to know the real status is to ask the API.
+  const currentUploadStatus = String(row?.uploadStatus || '').trim().toLowerCase()
+  if (currentUploadStatus === 'not_started' || !currentUploadStatus) return true
+
   const referenceMs = new Date(row?.submittedAt || row?.startedAt || 0).getTime()
-  if (!Number.isFinite(referenceMs) || referenceMs <= 0) return attemptStatus === 'IN_PROGRESS'
+  if (!Number.isFinite(referenceMs) || referenceMs <= 0) return true
   return (Date.now() - referenceMs) <= VIDEO_UPLOAD_POLL_GRACE_WINDOW_MS
 }
 
