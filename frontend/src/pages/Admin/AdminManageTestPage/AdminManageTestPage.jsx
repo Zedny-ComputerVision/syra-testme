@@ -21,20 +21,47 @@ import SessionsTab from './tabs/SessionsTab'
 import SettingsTab from './tabs/SettingsTab'
 import styles from './AdminManageTestPage.module.scss'
 
-const TABS = [
-  { id: 'settings', label: 'Settings' },
-  { id: 'sections', label: 'Test sections' },
-  { id: 'sessions', label: 'Testing sessions' },
-  { id: 'candidates', label: 'Candidates' },
-  { id: 'proctoring', label: 'Proctoring' },
-  { id: 'administration', label: 'Test administration' },
-  { id: 'reports', label: 'Reports' },
-]
+const TAB_IDS = ['settings', 'sections', 'sessions', 'candidates', 'proctoring', 'administration', 'reports']
+const TAB_LABEL_KEYS = {
+  settings: 'admin_manage_tab_settings',
+  sections: 'admin_manage_tab_sections',
+  sessions: 'admin_manage_tab_sessions',
+  candidates: 'admin_manage_tab_candidates',
+  proctoring: 'admin_manage_tab_proctoring',
+  administration: 'admin_manage_tab_administration',
+  reports: 'admin_manage_tab_reports',
+}
+const TABS = TAB_IDS.map((id) => ({ id, label: id }))
 
 const VIDEO_UPLOAD_STATUS_POLL_INTERVAL_MS = 15000
 const ACTIVE_VIDEO_UPLOAD_STATUSES = new Set(['queued', 'uploading', 'processing', 'waiting'])
 const VIDEO_UPLOAD_POLL_GRACE_WINDOW_MS = 20 * 60 * 1000
 
+
+const SETTINGS_MENU_GROUP_KEYS = {
+  'General': 'admin_manage_group_general',
+  'Policies': 'admin_manage_group_policies',
+  'Results': 'admin_manage_group_results',
+  'Extras': 'admin_manage_group_extras',
+}
+
+const SETTINGS_MENU_ITEM_KEYS = {
+  'Basic information': 'admin_manage_menu_basic_info',
+  'Test instructions dialog settings': 'admin_manage_menu_instructions',
+  'Duration and layout': 'admin_manage_menu_duration',
+  'Security settings': 'admin_manage_menu_security',
+  'Pause, retake and reschedule settings': 'admin_manage_menu_retake',
+  'Language settings': 'admin_manage_menu_language',
+  'Result validity settings': 'admin_manage_menu_result_validity',
+  'Grading configuration': 'admin_manage_menu_grading',
+  'Personal report settings': 'admin_manage_menu_personal_report',
+  'Score report settings': 'admin_manage_menu_score_report',
+  'Certificates': 'admin_manage_menu_certificates',
+  'Coupons': 'admin_manage_menu_coupons',
+  'Attachments': 'admin_manage_menu_attachments',
+  'External attributes': 'admin_manage_menu_external_attrs',
+  'Test categories': 'admin_manage_menu_categories',
+}
 
 const SETTINGS_MENU_GROUPS = [
   {
@@ -435,9 +462,9 @@ function sanitizeFilename(v) {
 }
 
 function formatMetadataDate(value) {
-  if (!value) return 'Unavailable'
+  if (!value) return '—'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Unavailable'
+  if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleString('en-US', {
     month: 'short',
     day: '2-digit',
@@ -1167,7 +1194,7 @@ export default function AdminManageTestPage() {
       }
     } catch (e) {
       if (!isCanceledRequest(e)) {
-        setLoadError(readRequestError(e, 'Failed to load test data.'))
+        setLoadError(readRequestError(e, 'Failed to load test data'))
       }
     } finally {
       if (!controller.signal.aborted && loadAbortRef.current === controller) {
@@ -1495,7 +1522,7 @@ export default function AdminManageTestPage() {
 
   const handlePauseResume = async (row) => {
     if (!row.attemptIdFull) {
-      withError('This learner has not started the test yet.')
+      withError(t('admin_manage_err_not_started'))
       return
     }
     try {
@@ -1505,13 +1532,13 @@ export default function AdminManageTestPage() {
       })
       await loadAll(false)
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to pause/resume attempt.')
+      withError(e.response?.data?.detail || t('admin_manage_err_pause_resume'))
     }
   }
 
   const handleOpenReport = async (row) => {
     if (!row.attemptIdFull) {
-      withError('No attempt report is available until the learner starts the test.')
+      withError(t('admin_manage_err_no_report'))
       return
     }
     try {
@@ -1523,7 +1550,7 @@ export default function AdminManageTestPage() {
         setTimeout(() => URL.revokeObjectURL(url), 30000)
       })
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to open report.')
+      withError(e.response?.data?.detail || t('admin_manage_err_open_report'))
     }
   }
 
@@ -1543,21 +1570,21 @@ export default function AdminManageTestPage() {
 
   const handleSaveGrade = async (row) => {
     if (!row.attemptIdFull) {
-      withError('This learner has not started the test yet.')
+      withError(t('admin_manage_err_not_started'))
       return
     }
     if (row.status === 'IN_PROGRESS') {
-      withError('Submit the attempt before grading it.')
+      withError(t('admin_manage_err_submit_first'))
       return
     }
     const rawValue = `${gradeDrafts[row.id] ?? ''}`.trim()
     if (!rawValue) {
-      withError('Enter a score between 0 and 100.')
+      withError(t('admin_manage_err_score_range'))
       return
     }
     const nextScore = Number(rawValue)
     if (!Number.isFinite(nextScore) || nextScore < 0 || nextScore > 100) {
-      withError('Grade must be between 0 and 100.')
+      withError(t('admin_manage_err_grade_range'))
       return
     }
     try {
@@ -1565,9 +1592,9 @@ export default function AdminManageTestPage() {
         await adminApi.gradeAttempt(row.attemptIdFull, nextScore)
       })
       await loadAll(false)
-      withNotice(row.status === 'GRADED' ? 'Grade updated.' : 'Attempt graded.')
+      withNotice(row.status === 'GRADED' ? t('admin_manage_grade_updated') : t('admin_manage_attempt_graded'))
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to save grade.')
+      withError(e.response?.data?.detail || t('admin_manage_err_save_grade'))
     }
   }
 
@@ -1582,9 +1609,9 @@ export default function AdminManageTestPage() {
         if (!toPause && r.paused) await adminApi.resumeAttempt(r.attemptIdFull)
       }
       await loadAll(false)
-      withNotice(toPause ? 'Filtered attempts paused.' : 'Filtered attempts resumed.')
+      withNotice(toPause ? t('admin_manage_filtered_paused') : t('admin_manage_filtered_resumed'))
     } catch (e) {
-      withError(e.response?.data?.detail || 'Bulk action failed.')
+      withError(e.response?.data?.detail || t('admin_manage_err_bulk_action'))
     } finally {
       setBulkBusy(false)
       setBulkAction('')
@@ -1593,13 +1620,13 @@ export default function AdminManageTestPage() {
 
   const handleSettingsSave = async () => {
     if (!exam) return
-    if (isArchived) return withError('Archived tests are read-only.')
+    if (isArchived) return withError(t('admin_manage_archived_readonly'))
     await Promise.resolve()
     const form = settingsFormRef.current
     const trimmedTitle = form.title.trim()
     const trimmedCode = form.code.trim()
     const parsedSettings = safeJsonParse(form.settings_json, null)
-    if (parsedSettings === '__INVALID__') return withError('Invalid JSON in settings block.')
+    if (parsedSettings === '__INVALID__') return withError(t('admin_manage_err_invalid_json'))
 
     const timeLimit = form.time_limit_minutes === '' ? null : Number(form.time_limit_minutes)
     const maxAttempts = form.max_attempts === '' ? 1 : Number(form.max_attempts)
@@ -1637,29 +1664,29 @@ export default function AdminManageTestPage() {
       include_pass_fail_badge: form.score_report_include_pass_fail_badge,
     })
 
-    if (!trimmedTitle) return withError('Title is required.')
-    if (timeLimit != null && (!Number.isFinite(timeLimit) || timeLimit <= 0)) return withError('Time limit must be positive.')
-    if (!Number.isFinite(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) return withError('Max attempts must be between 1 and 20.')
-    if (maxAttempts > 1 && !form.allow_retake) return withError('Enable retakes or reduce max attempts to 1.')
-    if (passingScore != null && (!Number.isFinite(passingScore) || passingScore < 0 || passingScore > 100)) return withError('Passing score must be between 0 and 100.')
-    if (!Number.isFinite(sectionCount) || sectionCount < 0 || sectionCount > 99) return withError('Test sections must be between 0 and 99.')
+    if (!trimmedTitle) return withError(t('admin_manage_err_title_required'))
+    if (timeLimit != null && (!Number.isFinite(timeLimit) || timeLimit <= 0)) return withError(t('admin_manage_err_time_limit'))
+    if (!Number.isFinite(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) return withError(t('admin_manage_err_max_attempts'))
+    if (maxAttempts > 1 && !form.allow_retake) return withError(t('admin_manage_err_enable_retakes'))
+    if (passingScore != null && (!Number.isFinite(passingScore) || passingScore < 0 || passingScore > 100)) return withError(t('admin_manage_err_passing_score'))
+    if (!Number.isFinite(sectionCount) || sectionCount < 0 || sectionCount > 99) return withError(t('admin_manage_err_section_range'))
     if (form.allow_pause && pauseDurationMinutes != null && (!Number.isFinite(pauseDurationMinutes) || pauseDurationMinutes <= 0)) {
-      return withError('Pause duration must be a positive number of minutes.')
+      return withError(t('admin_manage_err_pause_duration'))
     }
     if (form.allow_retake && retakeCooldownHours != null && (!Number.isFinite(retakeCooldownHours) || retakeCooldownHours < 0)) {
-      return withError('Retake cooldown must be zero or greater.')
+      return withError(t('admin_manage_err_retake_cooldown'))
     }
     if (form.result_validity_period_enabled && resultValidityDays != null && (!Number.isFinite(resultValidityDays) || resultValidityDays <= 0)) {
-      return withError('Result validity days must be a positive number.')
+      return withError(t('admin_manage_err_validity_days'))
     }
 
     let parsedExternalAttrs = null
     if (form.external_attributes_json) {
       try { parsedExternalAttrs = JSON.parse(form.external_attributes_json) }
-      catch { return withError('Invalid JSON in external attributes.') }
+      catch { return withError(t('admin_manage_err_external_json')) }
     }
     if (parsedExternalAttrs != null && (typeof parsedExternalAttrs !== 'object' || Array.isArray(parsedExternalAttrs))) {
-      return withError('External attributes must be a JSON object.')
+      return withError(t('admin_manage_err_external_object'))
     }
     if (form.external_id.trim()) {
       parsedExternalAttrs = { ...(parsedExternalAttrs || {}), external_id: form.external_id.trim() }
@@ -1764,9 +1791,9 @@ export default function AdminManageTestPage() {
     try {
       await adminApi.updateTest(exam.id, adminPayload)
       saved = true
-      withNotice('Settings saved.')
+      withNotice(t('admin_manage_settings_saved'))
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to save settings.')
+      withError(e.response?.data?.detail || t('admin_manage_err_save_settings'))
     } finally {
       setSavingSettings(false)
     }
@@ -1780,9 +1807,9 @@ export default function AdminManageTestPage() {
     try {
       await adminApi.publishTest(exam.id)
       await loadAll(false)
-      withNotice('Test published.')
+      withNotice(t('admin_manage_test_published'))
     } catch (e) {
-      withError(e.response?.data?.detail || 'Unable to publish test.')
+      withError(e.response?.data?.detail || t('admin_manage_err_publish'))
     }
   }
 
@@ -1791,20 +1818,20 @@ export default function AdminManageTestPage() {
     try {
       if (isArchived) {
         await adminApi.unarchiveTest(exam.id)
-        withNotice('Test unarchived.')
+        withNotice(t('admin_manage_test_unarchived'))
       } else {
         await adminApi.archiveTest(exam.id)
-        withNotice('Test archived.')
+        withNotice(t('admin_manage_test_archived'))
       }
       await loadAll(false)
     } catch (e) {
-      withError(e.response?.data?.detail || 'Unable to change test status.')
+      withError(e.response?.data?.detail || t('admin_manage_err_status_change'))
     }
   }
 
   const handlePreview = () => {
     if (!exam) return
-    if (!isPublished) return withError('Publish/open the test first, then preview.')
+    if (!isPublished) return withError(t('admin_manage_err_publish_first'))
     navigate(`/tests/${exam.id}`)
   }
 
@@ -1812,10 +1839,10 @@ export default function AdminManageTestPage() {
     if (!exam) return
     try {
       const { data: newExam } = await adminApi.duplicateTest(exam.id)
-      withNotice('Test duplicated.')
+      withNotice(t('admin_manage_test_duplicated'))
       navigate(`/admin/tests/${newExam.id}/manage`)
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to duplicate test.')
+      withError(e.response?.data?.detail || t('admin_manage_err_duplicate'))
     }
   }
 
@@ -1828,7 +1855,7 @@ export default function AdminManageTestPage() {
       await adminApi.deleteTest(exam.id)
       navigate('/admin/tests')
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to delete test.')
+      withError(e.response?.data?.detail || t('admin_manage_err_delete_test'))
     } finally {
       setDeletingExamBusy(false)
     }
@@ -1849,7 +1876,7 @@ export default function AdminManageTestPage() {
   }
 
   const handleSaveAccom = async (sessionId) => {
-    if (!editingAccomForm.scheduled_at) return withError('Scheduled date/time is required.')
+    if (!editingAccomForm.scheduled_at) return withError(t('admin_manage_err_schedule_required'))
     setSavingAccomId(sessionId)
     try {
       await adminApi.updateSchedule(sessionId, {
@@ -1859,9 +1886,9 @@ export default function AdminManageTestPage() {
       })
       setEditingAccomId(null)
       await loadAll(false)
-      withNotice('Accommodation updated.')
+      withNotice(t('admin_manage_accommodation_updated'))
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to update accommodation.')
+      withError(e.response?.data?.detail || t('admin_manage_err_update_accommodation'))
     } finally {
       setSavingAccomId(null)
     }
@@ -1912,16 +1939,16 @@ export default function AdminManageTestPage() {
 
       if (editingQuestionId) {
         await adminApi.updateQuestion(editingQuestionId, payload)
-        withNotice('Question updated.')
+        withNotice(t('admin_manage_question_updated'))
       } else {
         await adminApi.addQuestion({ ...payload, exam_id: id })
-        withNotice('Question added.')
+        withNotice(t('admin_manage_question_added'))
       }
       const { data } = await adminApi.getQuestions(id)
       setQuestions(data || [])
       resetQuestionForm()
     } catch (e2) {
-      withError(e2.response?.data?.detail || e2.message || 'Failed to save question.')
+      withError(e2.response?.data?.detail || e2.message || t('admin_manage_err_save_question'))
     } finally {
       setQuestionBusy(false)
     }
@@ -1936,9 +1963,9 @@ export default function AdminManageTestPage() {
       setQuestions(data || [])
       if (editingQuestionId === String(qid)) resetQuestionForm()
       setDeleteQuestionId(null)
-      withNotice('Question deleted.')
+      withNotice(t('admin_manage_question_deleted'))
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to delete question.')
+      withError(e.response?.data?.detail || t('admin_manage_err_delete_question'))
     } finally {
       setDeletingQuestionBusyId(null)
     }
@@ -1946,8 +1973,8 @@ export default function AdminManageTestPage() {
 
   const handleCreateSession = async (e) => {
     e.preventDefault()
-    if (!sessionForm.user_id) return withError('Select a learner.')
-    if (!sessionForm.scheduled_at) return withError('Pick a schedule date/time.')
+    if (!sessionForm.user_id) return withError(t('admin_manage_err_select_learner'))
+    if (!sessionForm.scheduled_at) return withError(t('admin_manage_err_pick_schedule'))
     setSessionBusy(true)
     try {
       const existing = sessions.find((session) => String(session.user_id) === String(sessionForm.user_id))
@@ -1967,9 +1994,9 @@ export default function AdminManageTestPage() {
       }
       setSessionForm(EMPTY_SESSION_FORM)
       await loadAll(false)
-      withNotice(existing?.id ? 'Testing session updated.' : 'Testing session created.')
+      withNotice(existing?.id ? t('admin_manage_session_updated') : t('admin_manage_session_created'))
     } catch (e2) {
-      withError(e2.response?.data?.detail || 'Failed to save session.')
+      withError(e2.response?.data?.detail || t('admin_manage_err_save_session'))
     } finally {
       setSessionBusy(false)
     }
@@ -1982,9 +2009,9 @@ export default function AdminManageTestPage() {
       await adminApi.deleteSchedule(sessionId)
       setDeleteSessionId(null)
       await loadAll(false)
-      withNotice('Session deleted.')
+      withNotice(t('admin_manage_session_deleted'))
     } catch (e) {
-      withError(e.response?.data?.detail || 'Failed to delete session.')
+      withError(e.response?.data?.detail || t('admin_manage_err_delete_session'))
     } finally {
       setDeletingSessionBusyId(null)
     }
@@ -2007,9 +2034,9 @@ export default function AdminManageTestPage() {
     try {
       const { data } = await adminApi.testReportCsv(exam.id)
       downloadBlob(new Blob([data], { type: 'text/csv' }), `${sanitizeFilename(exam.title)}_report.csv`)
-      withNotice('CSV report downloaded.')
+      withNotice(t('admin_manage_csv_downloaded'))
     } catch (e) {
-      withError(await readBlobErrorMessage(e, 'Failed to download CSV report.'))
+      withError(await readBlobErrorMessage(e, t('admin_manage_err_csv')))
     } finally {
       setReportsBusy(false)
     }
@@ -2021,9 +2048,9 @@ export default function AdminManageTestPage() {
     try {
       const { data } = await adminApi.generateTestReportPdf(exam.id)
       downloadBlob(new Blob([data], { type: 'application/pdf' }), `${sanitizeFilename(exam.title)}_report.pdf`)
-      withNotice('PDF report downloaded.')
+      withNotice(t('admin_manage_pdf_downloaded'))
     } catch (e) {
-      withError(await readBlobErrorMessage(e, 'Failed to download PDF report.'))
+      withError(await readBlobErrorMessage(e, t('admin_manage_err_pdf')))
     } finally {
       setReportsBusy(false)
     }
@@ -2033,14 +2060,14 @@ export default function AdminManageTestPage() {
 
   useUnsavedChanges(tab === 'settings' && settingsDirty && !savingSettings)
 
-  if (loading && !exam) return <div className={styles.page}>Loading...</div>
+  if (loading && !exam) return <div className={styles.page}>{t('admin_manage_loading')}</div>
   if (!exam) {
     return (
       <div className={styles.page}>
-        <div className={styles.error}>{loadError || 'Test not found.'}</div>
+        <div className={styles.error}>{loadError || t('admin_manage_test_not_found')}</div>
         <div className={styles.inlineActions}>
-          <button type="button" className={styles.blueBtn} onClick={() => loadAll(true)}>Retry</button>
-          <button type="button" className={styles.ghostBtn} onClick={() => navigate('/admin/tests')}>Back to tests</button>
+          <button type="button" className={styles.blueBtn} onClick={() => loadAll(true)}>{t('retry')}</button>
+          <button type="button" className={styles.ghostBtn} onClick={() => navigate('/admin/tests')}>{t('admin_manage_back_to_tests')}</button>
         </div>
       </div>
     )
@@ -2224,7 +2251,7 @@ export default function AdminManageTestPage() {
       id: editingTranslationId || buildLocalId('translation'),
     })
     if (!normalized) {
-      setTranslationError('Choose a language and add at least one translated field.')
+      setTranslationError(t('admin_manage_err_translation_lang'))
       return
     }
     const duplicateLanguage = translationRows.some((entry) => (
@@ -2232,7 +2259,7 @@ export default function AdminManageTestPage() {
       && String(entry.language).toLowerCase() === String(normalized.language).toLowerCase()
     ))
     if (duplicateLanguage) {
-      setTranslationError('A translation for this language already exists.')
+      setTranslationError(t('admin_manage_err_translation_duplicate'))
       return
     }
     setSettingsForm((prev) => {
@@ -2243,7 +2270,7 @@ export default function AdminManageTestPage() {
       return { ...prev, test_translations: nextTranslations }
     })
     cancelTranslationEditor()
-    withNotice('Translation updated. Save settings to persist it.')
+    withNotice(t('admin_manage_translation_updated'))
   }
   const removeTranslationEntry = (translationId) => {
     setSettingsForm((prev) => ({
@@ -2254,7 +2281,7 @@ export default function AdminManageTestPage() {
     if (editingTranslationId === translationId) {
       cancelTranslationEditor()
     }
-    withNotice('Translation removed from this draft.')
+    withNotice(t('admin_manage_translation_removed'))
   }
   const startCreateAttachment = () => {
     setAttachmentDraft(EMPTY_ATTACHMENT_DRAFT)
@@ -2284,7 +2311,7 @@ export default function AdminManageTestPage() {
       id: editingAttachmentId || buildLocalId('attachment'),
     }, attachmentRows.length + 1)
     if (!normalized) {
-      setAttachmentError('Attachment URL is required.')
+      setAttachmentError(t('admin_manage_err_attachment_url'))
       return
     }
     setSettingsForm((prev) => {
@@ -2299,7 +2326,7 @@ export default function AdminManageTestPage() {
       }
     })
     cancelAttachmentEditor()
-    withNotice('Attachment updated. Save settings to persist it.')
+    withNotice(t('admin_manage_attachment_updated'))
   }
   const removeAttachmentItem = (attachmentId) => {
     setSettingsForm((prev) => {
@@ -2314,7 +2341,7 @@ export default function AdminManageTestPage() {
     if (editingAttachmentId === attachmentId) {
       cancelAttachmentEditor()
     }
-    withNotice('Attachment removed from this draft.')
+    withNotice(t('admin_manage_attachment_removed'))
   }
   const importAttachmentRows = () => {
     const lines = attachmentImportText
@@ -2360,15 +2387,15 @@ export default function AdminManageTestPage() {
     const count = Number(couponGenerator.count)
     const amount = Number(couponGenerator.amount)
     if (!Number.isFinite(count) || count < 1 || count > 100) {
-      setCouponError('Coupon count must be between 1 and 100.')
+      setCouponError(t('admin_manage_err_coupon_count'))
       return
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      setCouponError('Coupon amount must be greater than 0.')
+      setCouponError(t('admin_manage_err_coupon_amount'))
       return
     }
     if (couponGenerator.discount_type === 'percentage' && amount > 100) {
-      setCouponError('Percentage discounts cannot exceed 100.')
+      setCouponError(t('admin_manage_err_coupon_percentage'))
       return
     }
     const nextRows = Array.from({ length: count }).map((_, index) => normalizeCouponEntry({
@@ -2412,7 +2439,7 @@ export default function AdminManageTestPage() {
         coupon_discount_value: merged[0]?.amount != null ? String(merged[0].amount) : '',
       }
     })
-    withNotice('Coupon removed from this draft.')
+    withNotice(t('admin_manage_coupon_removed'))
   }
   const clearCertificateDraft = () => {
     setSettingsForm((prev) => ({
@@ -2425,7 +2452,7 @@ export default function AdminManageTestPage() {
       certificate_json: '',
     }))
     setShowCertificateEditor(false)
-    withNotice('Certificate cleared from this draft.')
+    withNotice(t('admin_manage_cert_cleared'))
   }
   const toggleCertificateSync = async () => {
     if (showCertificateSync) {
@@ -2445,10 +2472,10 @@ export default function AdminManageTestPage() {
         setCertificateSyncSourceId(String(options[0].id))
       }
       if (!options.length) {
-        setCertificateSyncError('No other tests with certificate settings were found.')
+        setCertificateSyncError(t('admin_manage_err_no_cert_sources'))
       }
     } catch (e) {
-      setCertificateSyncError(e.response?.data?.detail || 'Failed to load certificate sources.')
+      setCertificateSyncError(e.response?.data?.detail || t('admin_manage_err_cert_sources'))
     } finally {
       setCertificateSyncLoading(false)
     }
@@ -2457,7 +2484,7 @@ export default function AdminManageTestPage() {
     const source = certificateSyncOptions.find((item) => String(item.id) === String(certificateSyncSourceId))
     const normalized = normalizeCertificatePayload(source?.certificate)
     if (!normalized) {
-      setCertificateSyncError('Choose a test with a valid certificate configuration.')
+      setCertificateSyncError(t('admin_manage_err_choose_cert'))
       return
     }
     setSettingsForm((prev) => ({
@@ -2481,7 +2508,7 @@ export default function AdminManageTestPage() {
       description: categoryDraft.description.trim(),
     }
     if (!payload.name) {
-      setCategoryError('Category name is required.')
+      setCategoryError(t('admin_manage_err_category_name'))
       return
     }
     setCategoryBusy(true)
@@ -2500,9 +2527,9 @@ export default function AdminManageTestPage() {
       setSettingsForm((prev) => ({ ...prev, category_id: String(resolvedCategory?.id || '') }))
       setShowCategoryPicker(true)
       setCategoryDraft(EMPTY_CATEGORY_DRAFT)
-      withNotice('Category created and assigned to this test draft.')
+      withNotice(t('admin_manage_category_created'))
     } catch (e) {
-      setCategoryError(e.response?.data?.detail || 'Failed to create category.')
+      setCategoryError(e.response?.data?.detail || t('admin_manage_err_create_category'))
     } finally {
       setCategoryBusy(false)
     }
@@ -2526,12 +2553,12 @@ export default function AdminManageTestPage() {
       {actions ? <div className={styles.settingsPageActions}>{actions}</div> : null}
     </div>
   )
-  const renderSettingsFooter = (saveLabel = 'Save') => (
+  const renderSettingsFooter = (saveLabel) => (
     <div className={styles.settingsPageFooter}>
       <button type="button" className={styles.blueBtn} disabled={savingSettings || isArchived} onClick={handleSettingsSave}>
-        {savingSettings ? 'Saving...' : saveLabel}
+        {savingSettings ? t('admin_manage_saving') : (saveLabel || t('save'))}
       </button>
-      <button type="button" className={styles.ghostBtn} onClick={handleSettingsCancel}>Cancel</button>
+      <button type="button" className={styles.ghostBtn} onClick={handleSettingsCancel}>{t('cancel')}</button>
     </div>
   )
 
@@ -3797,12 +3824,12 @@ export default function AdminManageTestPage() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
-          All Tests
+          {t('admin_manage_all_tests')}
         </button>
         <span className={styles.breadcrumbSep}>›</span>
         <span className={styles.breadcrumbCurrent}>{exam.title}</span>
         <span className={`${styles.statusBadge} ${isPublished ? styles.statusPublished : isArchived ? styles.statusArchived : styles.statusDraft}`}>
-          {isPublished ? 'Published' : isArchived ? 'Archived' : 'Draft'}
+          {isPublished ? t('published') : isArchived ? t('archived') : t('draft')}
         </span>
       </div>
 
@@ -3811,7 +3838,7 @@ export default function AdminManageTestPage() {
         <div className={styles.error}>
           <div className={styles.bannerActions}>
             <span>{loadError}</span>
-            <button type="button" className={styles.retryBtn} onClick={() => loadAll(false)}>Retry</button>
+            <button type="button" className={styles.retryBtn} onClick={() => loadAll(false)}>{t('retry')}</button>
           </div>
         </div>
       ) : null}
@@ -3864,14 +3891,14 @@ export default function AdminManageTestPage() {
       )}
 
       <div className={styles.tabs}>
-        {TABS.map((t) => (
+        {TABS.map((tabItem) => (
           <button
-            key={t.id}
+            key={tabItem.id}
             type="button"
-            className={tab === t.id ? styles.tabActive : ''}
-            onClick={() => handleTabChange(t.id)}
+            className={tab === tabItem.id ? styles.tabActive : ''}
+            onClick={() => handleTabChange(tabItem.id)}
           >
-            {t.label}
+            {t(TAB_LABEL_KEYS[tabItem.id])}
           </button>
         ))}
       </div>
