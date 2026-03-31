@@ -108,7 +108,7 @@
   box-shadow: var(--card-shadow);
   backdrop-filter: blur(var(--card-blur));
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 
   &:hover {
@@ -262,7 +262,7 @@
 
 .table th {
   padding: 0.6rem 1rem;
-  text-align: left;
+  text-align: start;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -587,7 +587,7 @@
 }
 
 .attentionValue {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 1rem;
 }
 
@@ -680,7 +680,7 @@
   font-size: 0.8rem;
 
   strong {
-    margin-left: auto;
+    margin-inline-start: auto;
     color: var(--color-text);
   }
 }
@@ -795,7 +795,7 @@
   background: color-mix(in srgb, var(--card-bg) 88%, var(--color-surface));
   color: var(--color-text);
   font: inherit;
-  text-align: left;
+  text-align: start;
   padding: 1rem;
   cursor: pointer;
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
@@ -1092,7 +1092,7 @@
   font-size: 1.05rem;
   font-weight: 800;
   color: var(--color-text);
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
 }
 

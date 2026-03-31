@@ -24,7 +24,7 @@
 .list { display: flex; flex-direction: column; gap: 0.5rem; }
 .row { display: flex; justify-content: space-between; border: 1px solid var(--color-border); border-radius: 10px; padding: 0.6rem 0.7rem; }
 .rowBroken { border-color: color-mix(in srgb, var(--color-danger) 35%, transparent); background: rgba(239, 68, 68, 0.06); }
-.linkBtn { text-align: left; border: none; background: transparent; color: inherit; padding: 0; cursor: pointer; flex: 1; &:disabled { cursor: not-allowed; opacity: 0.75; } }
+.linkBtn { text-align: start; border: none; background: transparent; color: inherit; padding: 0; cursor: pointer; flex: 1; &:disabled { cursor: not-allowed; opacity: 0.75; } }
 .rowTitle { font-weight: 700; display: flex; align-items: center; gap: 0.45rem; }
 .rowSub { color: var(--color-muted); font-size: 0.9rem; }
 .rowMeta { color: var(--color-muted); font-size: 0.78rem; margin-top: 0.25rem; }

@@ -89,7 +89,7 @@
   position: relative;
 
   input {
-    padding-right: 4.6rem;
+    padding-inline-end: 4.6rem;
     width: 100%;
   }
 }
@@ -97,7 +97,7 @@
 .passwordToggle {
   position: absolute;
   top: 50%;
-  right: 0.55rem;
+  inset-inline-end: 0.55rem;
   transform: translateY(-50%);
   border: none;
   background: transparent;
@@ -199,7 +199,7 @@
   line-height: 1.5;
 
   code {
-    margin-left: 0.35rem;
+    margin-inline-start: 0.35rem;
     background: color-mix(in srgb, var(--color-border) 35%, transparent);
     padding: 0.15em 0.35em;
     border-radius: 4px;

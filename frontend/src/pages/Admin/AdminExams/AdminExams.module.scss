@@ -162,7 +162,7 @@
 
 .table th {
   padding: 0.75rem 1rem;
-  text-align: left;
+  text-align: start;
   font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -210,7 +210,7 @@
   color: var(--color-text);
   font: inherit;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -320,7 +320,7 @@
 
 .menu {
   position: absolute;
-  right: 0;
+  inset-inline-end: 0;
   top: calc(100% + 0.35rem);
   min-width: 180px;
   border: 1px solid var(--color-border);
@@ -339,7 +339,7 @@
   background: transparent;
   color: var(--color-text);
   font-size: 0.82rem;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 
   &:last-child {

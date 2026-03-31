@@ -60,7 +60,7 @@
 .toolbarActions {
   display: flex;
   gap: 0.5rem;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .filterMeta {
@@ -323,7 +323,7 @@
 }
 
 .pageInfo {
-  margin-right: auto;
+  margin-inline-end: auto;
   font-size: 0.82rem;
   color: var(--color-muted);
 }
@@ -579,7 +579,7 @@
   }
 
   .toolbarActions {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .search {
@@ -592,7 +592,7 @@
   }
 
   .pageInfo {
-    margin-right: 0;
+    margin-inline-end: 0;
   }
 
   .detailRow {

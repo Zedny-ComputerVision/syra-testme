@@ -65,7 +65,7 @@
 }
 
 .linkCard {
-  text-align: left;
+  text-align: start;
   padding: 0.9rem 1rem;
   border-radius: 12px;
   border: 1px solid var(--color-border);
@@ -88,7 +88,7 @@
 .table td {
   border-bottom: 1px solid var(--color-border);
   padding: 0.65rem 0.5rem;
-  text-align: left;
+  text-align: start;
 }
 
 .input {

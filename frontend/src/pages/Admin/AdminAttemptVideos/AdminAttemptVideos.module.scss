@@ -644,7 +644,7 @@
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-  padding-right: 0.2rem;
+  padding-inline-end: 0.2rem;
 }
 
 .eventBtn {
@@ -652,7 +652,7 @@
   background: color-mix(in srgb, var(--color-bg) 48%, transparent);
   border-radius: 16px;
   color: var(--color-text);
-  text-align: left;
+  text-align: start;
   padding: 0.72rem 0.78rem;
   cursor: pointer;
   display: flex;
@@ -703,7 +703,7 @@
 }
 
 .eventTimestamp {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 0.78rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -741,7 +741,7 @@
 .inspectorTime {
   font-size: 0.78rem;
   color: var(--color-muted);
-  text-align: right;
+  text-align: end;
 }
 
 .inspectorTitle {
@@ -856,7 +856,7 @@
   }
 
   .headActions {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 
   .error,

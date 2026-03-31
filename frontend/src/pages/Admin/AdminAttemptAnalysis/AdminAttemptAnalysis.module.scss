@@ -395,7 +395,7 @@
 
 .violationsTable th {
   padding: 0.6rem 0.85rem;
-  text-align: left;
+  text-align: start;
   font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -423,19 +423,19 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  border-left: 3px solid var(--color-border);
+  border-inline-start: 3px solid var(--color-border);
 }
 
 .eventHigh {
-  border-left-color: var(--color-danger-text);
+  border-inline-start-color: var(--color-danger-text);
 }
 
 .eventMedium {
-  border-left-color: var(--color-warning-text);
+  border-inline-start-color: var(--color-warning-text);
 }
 
 .eventLow {
-  border-left-color: var(--color-info-text);
+  border-inline-start-color: var(--color-info-text);
 }
 
 .eventTime {
@@ -584,7 +584,7 @@
 .evidenceCard {
   display: block;
   width: 100%;
-  text-align: left;
+  text-align: start;
   padding: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -651,7 +651,7 @@
 
 .lightboxClose {
   display: inline-flex;
-  margin-left: auto;
+  margin-inline-start: auto;
   margin-bottom: 0.85rem;
   padding: 0.45rem 0.8rem;
   border: 1px solid var(--color-border);

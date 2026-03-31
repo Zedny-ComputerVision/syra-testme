@@ -225,7 +225,7 @@
 
 .table th {
   padding: 0.7rem 0.85rem;
-  text-align: left;
+  text-align: start;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -316,7 +316,7 @@
   justify-content: flex-end;
 }
 
-.pageInfo { font-size: 0.82rem; color: var(--color-muted); margin-right: auto; }
+.pageInfo { font-size: 0.82rem; color: var(--color-muted); margin-inline-end: auto; }
 
 .pageBtn {
   padding: 0.4rem 0.8rem;

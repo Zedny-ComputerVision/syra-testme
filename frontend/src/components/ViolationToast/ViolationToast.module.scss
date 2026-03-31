@@ -1,7 +1,7 @@
 .toastWrap {
   position: fixed;
   bottom: 1.5rem;
-  right: 1.5rem;
+  inset-inline-end: 1.5rem;
   z-index: 140;
   min-width: 280px;
   max-width: 420px;
@@ -53,8 +53,8 @@
   align-items: flex-start;
   gap: 0.6rem;
   width: 100%;
-  padding-left: 0.2rem;
-  padding-right: 0.25rem;
+  padding-inline-start: 0.2rem;
+  padding-inline-end: 0.25rem;
   flex-wrap: wrap;
 }
 
@@ -87,9 +87,9 @@
   font-weight: 500;
   color: rgba(245, 249, 255, 0.96);
   line-height: 1.45;
-  margin-left: 0.2rem;
+  margin-inline-start: 0.2rem;
   padding: 0.7rem 0.9rem;
-  padding-right: 1.1rem;
+  padding-inline-end: 1.1rem;
   background: var(--toast-detail-bg);
   border: 1px solid var(--toast-detail-border);
   border-radius: 12px;
@@ -99,7 +99,7 @@
 .closeBtn {
   position: absolute;
   top: 0.65rem;
-  right: 0.7rem;
+  inset-inline-end: 0.7rem;
   width: 1.7rem;
   height: 1.7rem;
   border-radius: 999px;
@@ -174,7 +174,7 @@
 
   .confidence {
     width: 100%;
-    text-align: left;
+    text-align: start;
   }
 }
 

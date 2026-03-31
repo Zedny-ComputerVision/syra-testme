@@ -10,7 +10,7 @@
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.5rem;
-  text-align: left;
+  text-align: start;
 }
 
 .title {
@@ -237,7 +237,7 @@
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--color-muted);
-  margin-left: 0.1rem;
+  margin-inline-start: 0.1rem;
 }
 
 .scoreUnit {
@@ -465,8 +465,8 @@
   font-weight: 700;
   color: var(--color-text);
   margin-bottom: 1rem;
-  padding-left: 0.75rem;
-  border-left: 3px solid var(--color-primary);
+  padding-inline-start: 0.75rem;
+  border-inline-start: 3px solid var(--color-primary);
 }
 
 .answerCard {

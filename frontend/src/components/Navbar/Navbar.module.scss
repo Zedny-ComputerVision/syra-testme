@@ -151,7 +151,7 @@
 
 .resultRow {
   width: 100%;
-  text-align: left;
+  text-align: start;
   display: grid;
   grid-template-columns: 60px 1fr auto;
   gap: 0.4rem;
@@ -183,7 +183,7 @@
 .resultMeta {
   font-size: 0.75rem;
   color: var(--color-muted);
-  text-align: right;
+  text-align: end;
 }
 
 @media (max-width: 600px) {
@@ -299,7 +299,7 @@
 .badge {
   position: absolute;
   top: -4px;
-  right: -4px;
+  inset-inline-end: -4px;
   min-width: 17px;
   height: 17px;
   border-radius: 9px;
@@ -368,7 +368,7 @@
 }
 
 .userChevron {
-  margin-left: 0.25rem;
+  margin-inline-start: 0.25rem;
   opacity: 0.5;
 }
 
@@ -397,7 +397,7 @@
 .dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  inset-inline-end: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -464,7 +464,7 @@
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: background 0.12s;
 
   &:hover {
@@ -488,7 +488,7 @@
 .notifDropdown {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  inset-inline-end: 0;
   width: min(360px, calc(100vw - 1.5rem));
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -556,13 +556,13 @@
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
-  text-align: left;
+  text-align: start;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--color-border);
   transition: background 0.1s;
   background: transparent;
-  border-left: 3px solid transparent;
-  border-right: none;
+  border-inline-start: 3px solid transparent;
+  border-inline-end: none;
   border-top: none;
   color: inherit;
   cursor: default;
@@ -576,22 +576,22 @@
 }
 
 .notifUnread {
-  border-left-color: var(--color-primary);
+  border-inline-start-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 6%, transparent);
 }
 
 .notifType_result.notifUnread {
-  border-left-color: var(--color-success);
+  border-inline-start-color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 6%, transparent);
 }
 
 .notifType_warning.notifUnread {
-  border-left-color: var(--color-warning);
+  border-inline-start-color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 6%, transparent);
 }
 
 .notifType_proctoring.notifUnread {
-  border-left-color: var(--color-danger);
+  border-inline-start-color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 6%, transparent);
 }
 

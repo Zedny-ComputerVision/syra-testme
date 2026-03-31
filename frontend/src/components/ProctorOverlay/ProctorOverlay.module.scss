@@ -173,7 +173,7 @@
   gap: 0.4rem;
   flex: 1;
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding-inline-end: 0.25rem;
 }
 
 .alertsLabel {
@@ -202,28 +202,28 @@
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-surface) 80%, transparent);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border);
+  border-inline-start: 3px solid var(--color-border);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
   animation: alertSlideIn 0.25s ease;
 }
 
 .alertHIGH {
   border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
-  border-left-color: var(--color-danger);
+  border-inline-start-color: var(--color-danger);
   background: linear-gradient(135deg, var(--color-danger-bg), color-mix(in srgb, var(--color-danger-bg) 70%, transparent));
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-danger) 15%, transparent);
 }
 
 .alertMEDIUM {
   border-color: color-mix(in srgb, var(--color-warning) 40%, var(--color-border));
-  border-left-color: var(--color-warning);
+  border-inline-start-color: var(--color-warning);
   background: linear-gradient(135deg, var(--color-warning-bg), color-mix(in srgb, var(--color-warning-bg) 70%, transparent));
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
 .alertLOW {
   border-color: color-mix(in srgb, var(--color-info) 40%, var(--color-border));
-  border-left-color: var(--color-info);
+  border-inline-start-color: var(--color-info);
   background: linear-gradient(135deg, var(--color-info-bg), color-mix(in srgb, var(--color-info-bg) 70%, transparent));
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-info) 10%, transparent);
 }

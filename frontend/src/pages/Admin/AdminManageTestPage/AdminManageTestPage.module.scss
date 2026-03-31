@@ -167,7 +167,7 @@
   color: var(--color-text);
   margin: 0 0 0.85rem;
   padding: 0 0 0.55rem 0.75rem;
-  border-left: 3px solid var(--color-primary);
+  border-inline-start: 3px solid var(--color-primary);
   border-bottom: 1px solid var(--color-border);
   letter-spacing: 0.01em;
 }
@@ -317,10 +317,10 @@
 
   button {
     width: 100%;
-    text-align: left;
+    text-align: start;
     border: 0;
     border-bottom: 1px solid var(--color-border);
-    border-left: 3px solid transparent;
+    border-inline-start: 3px solid transparent;
     padding: 0.7rem 0.85rem;
     background: transparent;
     color: var(--color-text);
@@ -341,7 +341,7 @@
 
 .leftActive {
   background: color-mix(in srgb, var(--color-primary) 10%, transparent) !important;
-  border-left-color: var(--color-primary) !important;
+  border-inline-start-color: var(--color-primary) !important;
   color: var(--color-primary) !important;
   font-weight: 700 !important;
 }
@@ -902,7 +902,7 @@
 
   ol {
     margin: 1rem 0 0 1.2rem;
-    padding-left: 1rem;
+    padding-inline-start: 1rem;
   }
 
   li {
@@ -953,7 +953,7 @@
       content: '';
       position: absolute;
       top: 4px;
-      left: 4px;
+      inset-inline-start: 4px;
       width: 22px;
       height: 22px;
       border-radius: 999px;
@@ -1042,7 +1042,7 @@
 
   ul {
     margin: 0.55rem 0 0;
-    padding-left: 1.2rem;
+    padding-inline-start: 1.2rem;
     color: var(--color-muted);
     line-height: 1.6;
   }
@@ -1525,7 +1525,7 @@
     border-bottom: 1px solid var(--color-border);
     padding: 0.6rem 0.75rem;
     font-size: 0.84rem;
-    text-align: left;
+    text-align: start;
   }
 
   th {
@@ -1634,7 +1634,7 @@
   position: absolute;
   z-index: 50;
   top: 100%;
-  left: 0;
+  inset-inline-start: 0;
   margin-top: 0.35rem;
   display: flex;
   gap: 0.75rem;

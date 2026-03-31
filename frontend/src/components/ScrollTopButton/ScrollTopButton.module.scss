@@ -1,6 +1,6 @@
 .button {
   position: fixed;
-  right: clamp(1rem, 2vw, 1.6rem);
+  inset-inline-end: clamp(1rem, 2vw, 1.6rem);
   bottom: clamp(1rem, 2vw, 1.5rem);
   z-index: 80;
   width: 3rem;
@@ -53,7 +53,7 @@
   .button {
     width: 2.8rem;
     height: 2.8rem;
-    right: 0.9rem;
+    inset-inline-end: 0.9rem;
     bottom: 0.9rem;
   }
 }

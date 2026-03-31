@@ -97,14 +97,14 @@
   background: color-mix(in srgb, var(--color-border) 24%, transparent);
 }
 
-.matrix th:first-child { text-align: left; }
+.matrix th:first-child { text-align: start; }
 
 .matrix td {
   padding: 0.65rem 1rem; font-size: 0.85rem; color: var(--color-text);
   border-bottom: 1px solid var(--color-border); text-align: center;
 }
 
-.matrix td:first-child { text-align: left; font-weight: 600; }
+.matrix td:first-child { text-align: start; font-weight: 600; }
 .matrix tbody tr:last-child td { border-bottom: none; }
 
 .checkmark { color: var(--color-primary); font-size: 1.1rem; }
