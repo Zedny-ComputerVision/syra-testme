@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...models import Attempt, Course, CourseStatus, Exam, Node, RoleEnum
@@ -99,7 +100,11 @@ def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), current
         updated_at=now,
     )
     db.add(course)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Course title already exists")
     db.refresh(course)
     return course
 
@@ -131,7 +136,11 @@ def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db
         setattr(course, field, value)
     course.updated_at = datetime.now(timezone.utc)
     db.add(course)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Course title already exists")
     db.refresh(course)
     return course
 

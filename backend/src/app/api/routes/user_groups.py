@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...models import User, UserGroup, RoleEnum
@@ -89,7 +90,11 @@ def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), curre
     group = UserGroup(**payload)
     replace_user_group_members(group, member_ids, db=db)
     db.add(group)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Group name already exists")
     db.refresh(group)
     return _build_group_read(group)
 
@@ -170,7 +175,11 @@ def add_group_member(
     member_ids.append(normalized_user_id)
     replace_user_group_members(group, member_ids, db=db)
     db.add(group)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="User already in group")
     return Message(detail="Member added")
 
 

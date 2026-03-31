@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...models import Survey, SurveyResponse, RoleEnum
@@ -105,7 +106,11 @@ def create_survey(body: SurveyCreate, db: Session = Depends(get_db_dep), current
     survey = Survey(created_by_id=current.id, **payload)
     replace_survey_questions(survey, questions)
     db.add(survey)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Survey already exists")
     db.refresh(survey)
     return _build_survey_read(survey)
 
@@ -190,7 +195,11 @@ def submit_response(survey_id: str, body: SurveyResponseCreate, db: Session = De
     answers = _validate_response_payload(survey, survey_pk, body)
     resp = SurveyResponse(survey_id=survey_pk, user_id=current.id, answers=answers)
     db.add(resp)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Already responded")
     db.refresh(resp)
     return resp
 

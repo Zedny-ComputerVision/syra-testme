@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...models import Exam, GradingScale, RoleEnum
@@ -75,7 +76,11 @@ def create_scale(
     _ensure_unique_scale_name(db, payload["name"])
     scale = GradingScale(**payload)
     db.add(scale)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Grading scale name already exists")
     db.refresh(scale)
     write_audit_log(
         db,
