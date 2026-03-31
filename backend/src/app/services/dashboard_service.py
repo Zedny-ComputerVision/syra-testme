@@ -81,6 +81,10 @@ def _build_learner_dashboard(*, db: Session, current, now: datetime) -> Dashboar
         )
         or 0
     )
+    # Show both future schedules AND available-now schedules (scheduled
+    # within the last 24 hours) so learners see their exam on the dashboard
+    # even after the scheduled time has passed.
+    upcoming_cutoff = now - timedelta(hours=24)
     upcoming = db.scalars(
         select(Schedule)
         .options(
@@ -108,7 +112,7 @@ def _build_learner_dashboard(*, db: Session, current, now: datetime) -> Dashboar
         )
         .where(
             Schedule.user_id == current.id,
-            Schedule.scheduled_at >= now,
+            Schedule.scheduled_at >= upcoming_cutoff,
         )
         .order_by(Schedule.scheduled_at.asc())
     ).all()
