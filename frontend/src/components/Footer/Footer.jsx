@@ -1,12 +1,14 @@
 import React from 'react'
 import useAuth from '../../hooks/useAuth'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './Footer.module.scss'
 
 export default function Footer() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const isAdmin = user?.role === 'ADMIN'
   const isInstructor = user?.role === 'INSTRUCTOR'
-  const workspaceLabel = isAdmin ? 'Admin workspace' : isInstructor ? 'Instructor workspace' : 'Learner workspace'
+  const workspaceLabel = isAdmin ? t('footer_admin_workspace') : isInstructor ? t('footer_instructor_workspace') : t('footer_learner_workspace')
 
   return (
     <footer className={styles.footer}>
@@ -20,7 +22,7 @@ export default function Footer() {
           </div>
           <span className={styles.copyright}>syra &copy; {new Date().getFullYear()}</span>
           <span className={styles.caption}>
-            {isAdmin || isInstructor ? 'Manage delivery, reports, and learner progress from one workspace.' : 'Keep your schedule, attempts, and upcoming tests in one place.'}
+            {isAdmin || isInstructor ? t('footer_admin_desc') : t('footer_learner_desc')}
           </span>
         </div>
       </div>
