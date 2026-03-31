@@ -27,6 +27,23 @@ function normalizeDashboardResponse(response) {
   return typeof response.data === 'object' && response.data !== null ? response.data : null
 }
 
+function getUrgency(scheduledAt) {
+  if (!scheduledAt) return 'upcoming'
+  const diff = new Date(scheduledAt).getTime() - Date.now()
+  if (diff < 0) return 'overdue'
+  if (diff < 24 * 60 * 60 * 1000) return 'today'
+  if (diff < 3 * 24 * 60 * 60 * 1000) return 'soon'
+  return 'upcoming'
+}
+
+function formatExamDate(iso) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function formatRelativeSchedule(iso) {
   if (!iso) return 'No upcoming deadline'
   const diff = new Date(iso).getTime() - Date.now()
@@ -237,7 +254,68 @@ export default function Home() {
         </div>
       )}
 
-      <ScrollReveal className={styles.statsRow} delay={60}>
+      <ScrollReveal className={styles.examSection} delay={60}>
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>
+            Your Upcoming Exams
+            {(dash?.upcoming_count || 0) > 0 && (
+              <span className={styles.countBadge}>{dash.upcoming_count}</span>
+            )}
+          </h2>
+          <PrefetchLink to="/schedule" className={styles.viewAll}>View full schedule</PrefetchLink>
+        </div>
+        {!dash?.upcoming_schedules?.length ? (
+          <div className={styles.emptySchedule}>
+            <div>No upcoming exams scheduled yet.</div>
+            <PrefetchLink to="/tests" className={styles.emptyAction}>Browse available tests</PrefetchLink>
+          </div>
+        ) : (
+          <div className={styles.scheduleGrid}>
+            {dash.upcoming_schedules.map((schedule) => {
+              const urgency = getUrgency(schedule.scheduled_at)
+              const schedulePath = schedule.test_id || schedule.exam_id
+                ? `/tests/${schedule.test_id || schedule.exam_id}`
+                : '/schedule'
+              const takenAttempts = recentAttempts.filter(
+                (a) => String(a.exam_id || a.test_id) === String(schedule.exam_id || schedule.test_id),
+              ).length
+              return (
+                <div
+                  key={schedule.id}
+                  className={`${styles.scheduleCard} ${urgency === 'today' ? styles.schedCardToday : ''} ${urgency === 'soon' ? styles.schedCardSoon : ''}`}
+                >
+                  <div className={styles.schedCardTop}>
+                    <span className={`${styles.urgencyBadge} ${styles[`urgency_${urgency}`] || ''}`}>
+                      {urgency === 'today' ? 'TODAY' : urgency === 'soon' ? 'SOON' : urgency === 'overdue' ? 'PAST DUE' : 'UPCOMING'}
+                    </span>
+                    {takenAttempts > 0 && (
+                      <span className={styles.attemptChip}>{takenAttempts} attempt{takenAttempts !== 1 ? 's' : ''} taken</span>
+                    )}
+                  </div>
+                  <div className={styles.schedExamTitle}>{schedule.test_title || schedule.exam_title || 'Test'}</div>
+                  <div className={styles.schedDateRow}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>{formatExamDate(schedule.scheduled_at)}</span>
+                  </div>
+                  <div className={styles.schedMeta}>
+                    <span>{schedule.test_type || schedule.exam_type || 'Test'}</span>
+                    <span>{(schedule.test_time_limit ?? schedule.exam_time_limit) ? `${schedule.test_time_limit ?? schedule.exam_time_limit} min` : 'No limit'}</span>
+                  </div>
+                  <div className={styles.schedCountdown}>{formatRelativeSchedule(schedule.scheduled_at)}</div>
+                  <PrefetchLink
+                    to={schedulePath}
+                    className={`${styles.schedCta} ${urgency === 'today' || urgency === 'soon' ? styles.schedCtaUrgent : ''}`}
+                  >
+                    {urgency === 'today' ? 'Start Test Now' : urgency === 'soon' ? 'View & Prepare' : 'View Test'}
+                  </PrefetchLink>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </ScrollReveal>
+
+      <ScrollReveal className={styles.statsRow} delay={120}>
         {stats.map((stat) => (
           <div key={stat.label} className={styles.statCard}>
             <span className={styles.statIcon}>{stat.icon}</span>
@@ -249,7 +327,7 @@ export default function Home() {
         ))}
       </ScrollReveal>
 
-      <ScrollReveal className={styles.focusGrid} delay={120}>
+      <ScrollReveal className={styles.focusGrid} delay={180}>
         {progressCards.map((card) => (
           <div key={card.title} className={styles.focusCard}>
             <div className={styles.focusTitle}>{card.title}</div>
@@ -258,66 +336,6 @@ export default function Home() {
           </div>
         ))}
       </ScrollReveal>
-
-      {dash?.upcoming_schedules?.length > 0 && (
-        <ScrollReveal className={styles.section} delay={160}>
-          <h2 className={styles.sectionTitle}>Upcoming Tests ({dash.upcoming_count})</h2>
-          <div className={styles.scheduleGrid}>
-            {dash.upcoming_schedules.map((schedule) => {
-              const takenAttempts = recentAttempts.filter(
-                (attempt) => String(attempt.exam_id || attempt.test_id) === String(schedule.exam_id || schedule.test_id),
-              ).length
-              const schedulePath = schedule.test_id || schedule.exam_id
-                ? `/tests/${schedule.test_id || schedule.exam_id}`
-                : null
-              const cardContent = (
-                <>
-                  <div className={styles.schedExamTitle}>{schedule.test_title || schedule.exam_title || 'Test'}</div>
-                  <div className={styles.schedMeta}>
-                    <span>{schedule.test_type || schedule.exam_type}</span>
-                    <span>{(schedule.test_time_limit ?? schedule.exam_time_limit) ? `${schedule.test_time_limit ?? schedule.exam_time_limit} min` : 'No limit'}</span>
-                  </div>
-                  <div className={styles.schedMeta}>
-                    <span>{new Date(schedule.scheduled_at).toLocaleDateString()}</span>
-                    <span>{new Date(schedule.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div className={styles.schedHint}>{formatRelativeSchedule(schedule.scheduled_at)}</div>
-                  <div className={styles.schedFooter}>
-                    <span className={styles.accessBadge}>{schedule.access_mode}</span>
-                    {takenAttempts > 0 && (
-                      <span className={styles.attemptChip}>{takenAttempts} attempt{takenAttempts !== 1 ? 's' : ''} taken</span>
-                    )}
-                  </div>
-                </>
-              )
-
-              if (!schedulePath) {
-                return (
-                  <div key={schedule.id} className={styles.scheduleCard}>
-                    {cardContent}
-                  </div>
-                )
-              }
-
-              return (
-                <PrefetchLink key={schedule.id} to={schedulePath} className={styles.scheduleCard}>
-                  {cardContent}
-                </PrefetchLink>
-              )
-            })}
-          </div>
-        </ScrollReveal>
-      )}
-
-      {dash?.upcoming_schedules?.length === 0 && (
-        <ScrollReveal className={styles.section} delay={160}>
-          <h2 className={styles.sectionTitle}>Upcoming Tests</h2>
-          <div className={styles.emptySchedule}>
-            <div>No upcoming scheduled tests.</div>
-            <PrefetchLink to="/tests" className={styles.emptyAction}>Browse available tests</PrefetchLink>
-          </div>
-        </ScrollReveal>
-      )}
 
       {(recentAttempts.length > 0 || attemptsError) && (
         <ScrollReveal className={styles.section} delay={200}>

@@ -3,16 +3,39 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
 import { ThemeContext } from '../../context/ThemeContext'
-import { getUnreadCount, markAllRead, listNotifications } from '../../services/notification.service'
+import { getUnreadCount, markAllRead, listNotifications, markRead } from '../../services/notification.service'
 import { searchAll } from '../../services/search.service'
 import styles from './Navbar.module.scss'
 
-const UNREAD_COUNT_CACHE_TTL_MS = 120000
-const UNREAD_COUNT_REFRESH_INTERVAL_MS = 120000
+const UNREAD_COUNT_CACHE_TTL_MS = 45000
+const UNREAD_COUNT_REFRESH_INTERVAL_MS = 45000
 let unreadCountCache = {
   count: 0,
   fetchedAt: 0,
   inflight: null,
+}
+
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days}d ago`
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function getNotifType(notification) {
+  const t = (notification.title || '').toLowerCase()
+  if (t.startsWith('schedule') || t.includes('scheduled')) return 'exam'
+  if (t.includes('published')) return 'exam'
+  if (t.includes('cancelled') || t.includes('removed')) return 'warning'
+  if (t.includes('result') || t.includes('score') || t.includes('graded')) return 'result'
+  if (t.includes('proctoring') || t.includes('alert') || t.includes('violation')) return 'proctoring'
+  return 'default'
 }
 
 function getErrorMessage(error, fallback) {
@@ -320,7 +343,16 @@ export default function Navbar({ onMenuToggle }) {
     navigate(target)
   }
 
-  const handleNotificationClick = (notification) => {
+  const handleNotificationClick = async (notification) => {
+    if (!notification.is_read) {
+      try {
+        await markRead(notification.id)
+        setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n))
+        setUnread(prev => Math.max(0, prev - 1))
+        unreadCountCache.count = Math.max(0, unreadCountCache.count - 1)
+        unreadCountCache.fetchedAt = Date.now()
+      } catch { /* silent — badge will self-correct on next poll */ }
+    }
     if (!notification?.link) return
     setNotifOpen(false)
     navigate(notification.link)
@@ -515,22 +547,30 @@ export default function Navbar({ onMenuToggle }) {
                 ) : notifications.length === 0 ? (
                   <div className={styles.notifEmpty}>No notifications</div>
                 ) : (
-                  notifications.map((n, i) => (
-                    <button
-                      key={n.id || i}
-                      type="button"
-                      className={`${styles.notifItem} ${!n.is_read ? styles.notifUnread : ''} ${n.link ? styles.notifItemLinked : ''}`}
-                      onClick={() => handleNotificationClick(n)}
-                      disabled={!n.link}
-                    >
-                      <div className={styles.notifMsg}>{n.message || n.title || 'Notification'}</div>
-                      {n.created_at && (
-                        <div className={styles.notifTime}>
-                          {new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  notifications.map((n, i) => {
+                    const type = getNotifType(n)
+                    return (
+                      <button
+                        key={n.id || i}
+                        type="button"
+                        className={`${styles.notifItem} ${!n.is_read ? styles.notifUnread : ''} ${styles[`notifType_${type}`] || ''} ${n.link ? styles.notifItemLinked : ''}`}
+                        onClick={() => handleNotificationClick(n)}
+                      >
+                        <span className={`${styles.notifIcon} ${styles[`notifIcon_${type}`] || ''}`} aria-hidden="true">
+                          {type === 'exam' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+                          {type === 'result' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>}
+                          {type === 'warning' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
+                          {type === 'proctoring' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>}
+                          {type === 'default' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>}
+                        </span>
+                        <div className={styles.notifContent}>
+                          {n.title && <div className={styles.notifItemTitle}>{n.title}</div>}
+                          <div className={styles.notifMsg}>{n.message || n.title || 'Notification'}</div>
+                          {n.created_at && <div className={styles.notifTime}>{timeAgo(n.created_at)}</div>}
                         </div>
-                      )}
-                    </button>
-                  ))
+                      </button>
+                    )
+                  })
                 )}
               </div>
               <div className={styles.notifFooter}>
