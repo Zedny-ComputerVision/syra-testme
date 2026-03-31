@@ -18,37 +18,37 @@ import ExamQuestionPanel from '../ExamQuestionPanel/ExamQuestionPanel'
 import styles from './AdminNewTestWizard.module.scss'
 
 const STEPS = [
-  { id: 0, label: 'Information' },
-  { id: 1, label: 'Method' },
-  { id: 2, label: 'Proctoring' },
-  { id: 3, label: 'Questions' },
-  { id: 4, label: 'Grading' },
-  { id: 5, label: 'Certificates' },
-  { id: 6, label: 'Review' },
-  { id: 7, label: 'Sessions' },
-  { id: 8, label: 'Save Test' },
+  { id: 0, labelKey: 'admin_wizard_step_information' },
+  { id: 1, labelKey: 'admin_wizard_step_method' },
+  { id: 2, labelKey: 'admin_wizard_step_proctoring' },
+  { id: 3, labelKey: 'admin_wizard_step_questions' },
+  { id: 4, labelKey: 'admin_wizard_step_grading' },
+  { id: 5, labelKey: 'admin_wizard_step_certificates' },
+  { id: 6, labelKey: 'admin_wizard_step_review' },
+  { id: 7, labelKey: 'admin_wizard_step_sessions' },
+  { id: 8, labelKey: 'admin_wizard_step_save_test' },
 ]
 
 const QUESTION_TYPES = [
-  { value: 'MCQ', label: 'Single Choice' },
-  { value: 'MULTI', label: 'Multiple Choice' },
-  { value: 'TEXT', label: 'Essay' },
-  { value: 'TRUEFALSE', label: 'True / False' },
-  { value: 'ORDERING', label: 'Ordering' },
-  { value: 'FILLINBLANK', label: 'Fill in the Blanks' },
-  { value: 'MATCHING', label: 'Matching' },
+  { value: 'MCQ', labelKey: 'admin_wizard_qtype_single_choice' },
+  { value: 'MULTI', labelKey: 'admin_wizard_qtype_multiple_choice' },
+  { value: 'TEXT', labelKey: 'admin_wizard_qtype_essay' },
+  { value: 'TRUEFALSE', labelKey: 'admin_wizard_qtype_true_false' },
+  { value: 'ORDERING', labelKey: 'admin_wizard_qtype_ordering' },
+  { value: 'FILLINBLANK', labelKey: 'admin_wizard_qtype_fill_blanks' },
+  { value: 'MATCHING', labelKey: 'admin_wizard_qtype_matching' },
 ]
 
 const CERTIFICATE_TEMPLATES = ['Classic', 'Modern', 'Simple']
 
 const DETECTORS = [
-  { key: 'face_detection', label: 'Face Detection', desc: 'Detect presence and count of faces' },
-  { key: 'multi_face', label: 'Multi-Face Alert', desc: 'Alert when multiple faces detected' },
-  { key: 'audio_detection', label: 'Audio Detection', desc: 'Detect speech and noise' },
-  { key: 'object_detection', label: 'Object Detection', desc: 'Detect forbidden objects (phone, book)' },
-  { key: 'eye_tracking', label: 'Eye Tracking', desc: 'Detect gaze deviation from screen' },
-  { key: 'head_pose_detection', label: 'Head Pose Detection', desc: 'Detect sustained head turns and posture changes' },
-  { key: 'mouth_detection', label: 'Mouth Movement', desc: 'Detect talking during exam' },
+  { key: 'face_detection', labelKey: 'admin_wizard_detector_face', descKey: 'admin_wizard_detector_face_desc' },
+  { key: 'multi_face', labelKey: 'admin_wizard_detector_multi_face', descKey: 'admin_wizard_detector_multi_face_desc' },
+  { key: 'audio_detection', labelKey: 'admin_wizard_detector_audio', descKey: 'admin_wizard_detector_audio_desc' },
+  { key: 'object_detection', labelKey: 'admin_wizard_detector_object', descKey: 'admin_wizard_detector_object_desc' },
+  { key: 'eye_tracking', labelKey: 'admin_wizard_detector_eye', descKey: 'admin_wizard_detector_eye_desc' },
+  { key: 'head_pose_detection', labelKey: 'admin_wizard_detector_head', descKey: 'admin_wizard_detector_head_desc' },
+  { key: 'mouth_detection', labelKey: 'admin_wizard_detector_mouth', descKey: 'admin_wizard_detector_mouth_desc' },
 ]
 
 const DEFAULT_PROCTORING_CONFIG = normalizeProctoringConfig({
@@ -98,73 +98,73 @@ const DEFAULT_PROCTORING_CONFIG = normalizeProctoringConfig({
 })
 
 const PROCTORING_REQUIREMENTS = [
-  { key: 'identity_required', label: 'Identity verification', desc: 'Require selfie and ID checks before the learner enters the attempt.' },
-  { key: 'camera_required', label: 'Camera required', desc: 'Block the journey if the camera is unavailable.' },
-  { key: 'mic_required', label: 'Microphone required', desc: 'Block the journey if the microphone is unavailable.' },
-  { key: 'lighting_required', label: 'Lighting check', desc: 'Require the webcam feed to pass the minimum lighting score.' },
-  { key: 'fullscreen_enforce', label: 'Fullscreen lock', desc: 'Require fullscreen during the active attempt.' },
-  { key: 'tab_switch_detect', label: 'Tab / blur detection', desc: 'Track focus loss, tab switches, and hidden pages.' },
-  { key: 'copy_paste_block', label: 'Clipboard blocking', desc: 'Disable copy and paste shortcuts during the attempt.' },
-  { key: 'screen_capture', label: 'Screen recording', desc: 'Request screen share and save a screen recording with timed snapshots for later review.' },
+  { key: 'identity_required', labelKey: 'admin_wizard_req_identity', descKey: 'admin_wizard_req_identity_desc' },
+  { key: 'camera_required', labelKey: 'admin_wizard_req_camera', descKey: 'admin_wizard_req_camera_desc' },
+  { key: 'mic_required', labelKey: 'admin_wizard_req_mic', descKey: 'admin_wizard_req_mic_desc' },
+  { key: 'lighting_required', labelKey: 'admin_wizard_req_lighting', descKey: 'admin_wizard_req_lighting_desc' },
+  { key: 'fullscreen_enforce', labelKey: 'admin_wizard_req_fullscreen', descKey: 'admin_wizard_req_fullscreen_desc' },
+  { key: 'tab_switch_detect', labelKey: 'admin_wizard_req_tab', descKey: 'admin_wizard_req_tab_desc' },
+  { key: 'copy_paste_block', labelKey: 'admin_wizard_req_clipboard', descKey: 'admin_wizard_req_clipboard_desc' },
+  { key: 'screen_capture', labelKey: 'admin_wizard_req_screen', descKey: 'admin_wizard_req_screen_desc' },
 ]
 
 const PROCTORING_CONTROL_GROUPS = [
   {
     key: 'identity',
-    title: 'Identity & environment thresholds',
-    description: 'Tune how strict the journey checks are before the learner can start.',
+    titleKey: 'admin_wizard_pcg_identity_title',
+    descriptionKey: 'admin_wizard_pcg_identity_desc',
     controls: [
-      { key: 'max_face_absence_sec', label: 'Face absence grace period', desc: 'Lower is stricter. Missing faces trigger alerts sooner.', min: 0.5, max: 15, step: 0.5, unit: 'sec', enabledBy: 'face_detection' },
-      { key: 'lighting_min_score', label: 'Minimum lighting score', desc: 'Higher is stricter. Darker rooms will fail the precheck.', min: 0.1, max: 0.8, step: 0.05, unit: 'score', enabledBy: 'lighting_required' },
-      { key: 'face_verify_id_threshold', label: 'ID verification distance', desc: 'Lower is stricter. Tightens selfie-to-ID matching.', min: 0.3, max: 0.7, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
-      { key: 'face_verify_threshold', label: 'Live face verification distance', desc: 'Lower is stricter. Tightens ongoing face verification.', min: 0.05, max: 0.35, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
-      { key: 'object_confidence_threshold', label: 'Forbidden object confidence', desc: 'Higher is stricter. Require stronger model confidence before flagging objects.', min: 0.1, max: 0.95, step: 0.05, unit: 'confidence', enabledBy: 'object_detection' },
-      { key: 'multi_face_min_area_ratio', label: 'Secondary face size floor', desc: 'Higher is stricter about ignoring tiny false-positive faces before raising a multiple-face alert.', min: 0.002, max: 0.03, step: 0.001, unit: 'ratio', enabledBy: 'multi_face' },
-      { key: 'camera_cover_hard_luma', label: 'Camera cover hard darkness', desc: 'Frames darker than this trigger an immediate camera-covered streak.', min: 5, max: 60, step: 1, unit: 'luma', enabledBy: 'camera_required' },
-      { key: 'camera_cover_soft_luma', label: 'Camera cover soft darkness', desc: 'Dark flat frames below this luma can trigger a softer camera-covered streak.', min: 10, max: 90, step: 1, unit: 'luma', enabledBy: 'camera_required' },
-      { key: 'camera_cover_stddev_max', label: 'Camera cover texture ceiling', desc: 'Lower values require the frame to be flatter before it counts as softly covered.', min: 4, max: 32, step: 1, unit: 'stddev', enabledBy: 'camera_required' },
-      { key: 'camera_cover_hard_consecutive_frames', label: 'Hard cover consecutive frames', desc: 'How many fully blocked frames are needed before warning immediately.', min: 1, max: 4, step: 1, unit: 'frames', enabledBy: 'camera_required' },
-      { key: 'camera_cover_soft_consecutive_frames', label: 'Soft cover consecutive frames', desc: 'How many dark flat frames are needed before warning for a covered camera.', min: 1, max: 6, step: 1, unit: 'frames', enabledBy: 'camera_required' },
+      { key: 'max_face_absence_sec', labelKey: 'admin_wizard_ctrl_face_absence_label', descKey: 'admin_wizard_ctrl_face_absence_desc', min: 0.5, max: 15, step: 0.5, unit: 'sec', enabledBy: 'face_detection' },
+      { key: 'lighting_min_score', labelKey: 'admin_wizard_ctrl_lighting_min_label', descKey: 'admin_wizard_ctrl_lighting_min_desc', min: 0.1, max: 0.8, step: 0.05, unit: 'score', enabledBy: 'lighting_required' },
+      { key: 'face_verify_id_threshold', labelKey: 'admin_wizard_ctrl_face_verify_id_label', descKey: 'admin_wizard_ctrl_face_verify_id_desc', min: 0.3, max: 0.7, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
+      { key: 'face_verify_threshold', labelKey: 'admin_wizard_ctrl_face_verify_label', descKey: 'admin_wizard_ctrl_face_verify_desc', min: 0.05, max: 0.35, step: 0.01, unit: 'distance', enabledBy: 'identity_required' },
+      { key: 'object_confidence_threshold', labelKey: 'admin_wizard_ctrl_object_conf_label', descKey: 'admin_wizard_ctrl_object_conf_desc', min: 0.1, max: 0.95, step: 0.05, unit: 'confidence', enabledBy: 'object_detection' },
+      { key: 'multi_face_min_area_ratio', labelKey: 'admin_wizard_ctrl_multi_face_area_label', descKey: 'admin_wizard_ctrl_multi_face_area_desc', min: 0.002, max: 0.03, step: 0.001, unit: 'ratio', enabledBy: 'multi_face' },
+      { key: 'camera_cover_hard_luma', labelKey: 'admin_wizard_ctrl_cam_cover_hard_label', descKey: 'admin_wizard_ctrl_cam_cover_hard_desc', min: 5, max: 60, step: 1, unit: 'luma', enabledBy: 'camera_required' },
+      { key: 'camera_cover_soft_luma', labelKey: 'admin_wizard_ctrl_cam_cover_soft_label', descKey: 'admin_wizard_ctrl_cam_cover_soft_desc', min: 10, max: 90, step: 1, unit: 'luma', enabledBy: 'camera_required' },
+      { key: 'camera_cover_stddev_max', labelKey: 'admin_wizard_ctrl_cam_stddev_label', descKey: 'admin_wizard_ctrl_cam_stddev_desc', min: 4, max: 32, step: 1, unit: 'stddev', enabledBy: 'camera_required' },
+      { key: 'camera_cover_hard_consecutive_frames', labelKey: 'admin_wizard_ctrl_cam_hard_frames_label', descKey: 'admin_wizard_ctrl_cam_hard_frames_desc', min: 1, max: 4, step: 1, unit: 'frames', enabledBy: 'camera_required' },
+      { key: 'camera_cover_soft_consecutive_frames', labelKey: 'admin_wizard_ctrl_cam_soft_frames_label', descKey: 'admin_wizard_ctrl_cam_soft_frames_desc', min: 1, max: 6, step: 1, unit: 'frames', enabledBy: 'camera_required' },
     ],
   },
   {
     key: 'attention',
-    title: 'Attention & movement sensitivity',
-    description: 'Control how aggressively gaze, posture, speech, and mouth movement are flagged.',
+    titleKey: 'admin_wizard_pcg_attention_title',
+    descriptionKey: 'admin_wizard_pcg_attention_desc',
     controls: [
-      { key: 'eye_deviation_deg', label: 'Eye deviation angle', desc: 'Lower is stricter. Smaller gaze drift triggers alerts.', min: 6, max: 25, step: 1, unit: 'deg', enabledBy: 'eye_tracking' },
-      { key: 'eye_consecutive', label: 'Eye consecutive frames', desc: 'Lower is stricter. Fewer frames are needed before flagging.', min: 1, max: 12, step: 1, unit: 'frames', enabledBy: 'eye_tracking' },
-      { key: 'head_pose_yaw_deg', label: 'Head yaw tolerance', desc: 'Lower is stricter. Smaller side turns count as suspicious.', min: 8, max: 35, step: 1, unit: 'deg', enabledBy: 'head_pose_detection' },
-      { key: 'head_pose_pitch_deg', label: 'Head pitch tolerance', desc: 'Lower is stricter. Smaller up/down head motion is flagged.', min: 8, max: 35, step: 1, unit: 'deg', enabledBy: 'head_pose_detection' },
-      { key: 'head_pose_consecutive', label: 'Head pose consecutive frames', desc: 'Lower is stricter. Head pose changes trigger sooner.', min: 1, max: 12, step: 1, unit: 'frames', enabledBy: 'head_pose_detection' },
-      { key: 'mouth_open_threshold', label: 'Mouth movement threshold', desc: 'Lower is stricter. Smaller mouth motion can trigger talking alerts.', min: 0.1, max: 0.8, step: 0.05, unit: 'ratio', enabledBy: 'mouth_detection' },
-      { key: 'audio_rms_threshold', label: 'Audio RMS threshold', desc: 'Lower is stricter. Quieter noise can trigger audio alerts.', min: 0.02, max: 0.25, step: 0.01, unit: 'rms', enabledBy: 'audio_detection' },
-      { key: 'audio_consecutive_chunks', label: 'Audio consecutive chunks', desc: 'Lower is stricter. Fewer noisy chunks are needed before alerting.', min: 1, max: 6, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
-      { key: 'audio_speech_consecutive_chunks', label: 'Speech consecutive chunks', desc: 'Lower is stricter. Fewer speech-like chunks are needed before the anomaly path fires.', min: 1, max: 6, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
-      { key: 'audio_speech_min_rms', label: 'Speech minimum RMS', desc: 'Raise this to ignore quieter background noise when speech detection is enabled.', min: 0.01, max: 0.12, step: 0.005, unit: 'rms', enabledBy: 'audio_detection' },
-      { key: 'audio_speech_baseline_multiplier', label: 'Speech baseline multiplier', desc: 'Higher values require speech-like audio to stand out more clearly above the rolling baseline.', min: 1, max: 2.5, step: 0.05, unit: 'x', enabledBy: 'audio_detection' },
-      { key: 'audio_window', label: 'Audio anomaly window', desc: 'How many recent chunks are considered when detecting sustained audio anomalies.', min: 3, max: 10, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
+      { key: 'eye_deviation_deg', labelKey: 'admin_wizard_ctrl_eye_angle_label', descKey: 'admin_wizard_ctrl_eye_angle_desc', min: 6, max: 25, step: 1, unit: 'deg', enabledBy: 'eye_tracking' },
+      { key: 'eye_consecutive', labelKey: 'admin_wizard_ctrl_eye_frames_label', descKey: 'admin_wizard_ctrl_eye_frames_desc', min: 1, max: 12, step: 1, unit: 'frames', enabledBy: 'eye_tracking' },
+      { key: 'head_pose_yaw_deg', labelKey: 'admin_wizard_ctrl_head_yaw_label', descKey: 'admin_wizard_ctrl_head_yaw_desc', min: 8, max: 35, step: 1, unit: 'deg', enabledBy: 'head_pose_detection' },
+      { key: 'head_pose_pitch_deg', labelKey: 'admin_wizard_ctrl_head_pitch_label', descKey: 'admin_wizard_ctrl_head_pitch_desc', min: 8, max: 35, step: 1, unit: 'deg', enabledBy: 'head_pose_detection' },
+      { key: 'head_pose_consecutive', labelKey: 'admin_wizard_ctrl_head_frames_label', descKey: 'admin_wizard_ctrl_head_frames_desc', min: 1, max: 12, step: 1, unit: 'frames', enabledBy: 'head_pose_detection' },
+      { key: 'mouth_open_threshold', labelKey: 'admin_wizard_ctrl_mouth_thresh_label', descKey: 'admin_wizard_ctrl_mouth_thresh_desc', min: 0.1, max: 0.8, step: 0.05, unit: 'ratio', enabledBy: 'mouth_detection' },
+      { key: 'audio_rms_threshold', labelKey: 'admin_wizard_ctrl_audio_rms_label', descKey: 'admin_wizard_ctrl_audio_rms_desc', min: 0.02, max: 0.25, step: 0.01, unit: 'rms', enabledBy: 'audio_detection' },
+      { key: 'audio_consecutive_chunks', labelKey: 'admin_wizard_ctrl_audio_chunks_label', descKey: 'admin_wizard_ctrl_audio_chunks_desc', min: 1, max: 6, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
+      { key: 'audio_speech_consecutive_chunks', labelKey: 'admin_wizard_ctrl_speech_chunks_label', descKey: 'admin_wizard_ctrl_speech_chunks_desc', min: 1, max: 6, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
+      { key: 'audio_speech_min_rms', labelKey: 'admin_wizard_ctrl_speech_rms_label', descKey: 'admin_wizard_ctrl_speech_rms_desc', min: 0.01, max: 0.12, step: 0.005, unit: 'rms', enabledBy: 'audio_detection' },
+      { key: 'audio_speech_baseline_multiplier', labelKey: 'admin_wizard_ctrl_speech_mult_label', descKey: 'admin_wizard_ctrl_speech_mult_desc', min: 1, max: 2.5, step: 0.05, unit: 'x', enabledBy: 'audio_detection' },
+      { key: 'audio_window', labelKey: 'admin_wizard_ctrl_audio_window_label', descKey: 'admin_wizard_ctrl_audio_window_desc', min: 3, max: 10, step: 1, unit: 'chunks', enabledBy: 'audio_detection' },
     ],
   },
   {
     key: 'enforcement',
-    title: 'Enforcement & auto-submit',
-    description: 'Define when repeated violations should escalate to an automatic submission.',
+    titleKey: 'admin_wizard_pcg_enforcement_title',
+    descriptionKey: 'admin_wizard_pcg_enforcement_desc',
     controls: [
-      { key: 'max_tab_blurs', label: 'Maximum tab switches', desc: 'Lower is stricter. The attempt can auto-submit after fewer focus losses.', min: 1, max: 10, step: 1, unit: 'switches', enabledBy: 'tab_switch_detect' },
-      { key: 'max_alerts_before_autosubmit', label: 'Maximum alert count', desc: 'Auto-submit after this many alerts are logged.', min: 1, max: 20, step: 1, unit: 'alerts' },
-      { key: 'max_score_before_autosubmit', label: 'Maximum violation score', desc: 'Auto-submit after the weighted violation score crosses this number.', min: 3, max: 40, step: 1, unit: 'score' },
-      { key: 'cheating_consecutive_frames', label: 'Base consecutive-frame fallback', desc: 'Fallback consecutive frame count shared by sustained detectors.', min: 1, max: 12, step: 1, unit: 'frames' },
+      { key: 'max_tab_blurs', labelKey: 'admin_wizard_ctrl_max_tab_label', descKey: 'admin_wizard_ctrl_max_tab_desc', min: 1, max: 10, step: 1, unit: 'switches', enabledBy: 'tab_switch_detect' },
+      { key: 'max_alerts_before_autosubmit', labelKey: 'admin_wizard_ctrl_max_alerts_label', descKey: 'admin_wizard_ctrl_max_alerts_desc', min: 1, max: 20, step: 1, unit: 'alerts' },
+      { key: 'max_score_before_autosubmit', labelKey: 'admin_wizard_ctrl_max_score_label', descKey: 'admin_wizard_ctrl_max_score_desc', min: 3, max: 40, step: 1, unit: 'score' },
+      { key: 'cheating_consecutive_frames', labelKey: 'admin_wizard_ctrl_consec_frames_label', descKey: 'admin_wizard_ctrl_consec_frames_desc', min: 1, max: 12, step: 1, unit: 'frames' },
     ],
   },
   {
     key: 'capture',
-    title: 'Capture cadence & evidence',
-    description: 'Control how often visual/audio evidence is sampled and sent for analysis.',
+    titleKey: 'admin_wizard_pcg_capture_title',
+    descriptionKey: 'admin_wizard_pcg_capture_desc',
     controls: [
-      { key: 'frame_interval_ms', label: 'Frame analysis interval', desc: 'Higher saves bandwidth. Lower gives denser monitoring.', min: 750, max: 6000, step: 150, unit: 'ms' },
-      { key: 'audio_chunk_ms', label: 'Audio chunk interval', desc: 'Higher sends fewer but larger audio chunks.', min: 750, max: 6000, step: 250, unit: 'ms', enabledBy: 'audio_detection' },
-      { key: 'screenshot_interval_sec', label: 'Screen capture interval', desc: 'Only used when screen recording is enabled.', min: 15, max: 180, step: 5, unit: 'sec', enabledBy: 'screen_capture' },
+      { key: 'frame_interval_ms', labelKey: 'admin_wizard_ctrl_frame_interval_label', descKey: 'admin_wizard_ctrl_frame_interval_desc', min: 750, max: 6000, step: 150, unit: 'ms' },
+      { key: 'audio_chunk_ms', labelKey: 'admin_wizard_ctrl_audio_chunk_label', descKey: 'admin_wizard_ctrl_audio_chunk_desc', min: 750, max: 6000, step: 250, unit: 'ms', enabledBy: 'audio_detection' },
+      { key: 'screenshot_interval_sec', labelKey: 'admin_wizard_ctrl_screenshot_label', descKey: 'admin_wizard_ctrl_screenshot_desc', min: 15, max: 180, step: 5, unit: 'sec', enabledBy: 'screen_capture' },
     ],
   },
 ]
@@ -178,38 +178,38 @@ const normalizeScheduleComparisonValue = (value) => {
   }
 }
 
-const PROCTORING_LABELS = Object.fromEntries([
-  ...DETECTORS.map((detector) => [detector.key, detector.label]),
-  ...PROCTORING_REQUIREMENTS.map((control) => [control.key, control.label]),
+const PROCTORING_LABEL_KEYS = Object.fromEntries([
+  ...DETECTORS.map((detector) => [detector.key, detector.labelKey]),
+  ...PROCTORING_REQUIREMENTS.map((control) => [control.key, control.labelKey]),
 ])
 
 const ALERT_RULE_EVENT_OPTIONS = [
-  { value: 'FULLSCREEN_EXIT', label: 'Fullscreen exit', desc: 'Learner exits fullscreen during the attempt.', requires: ['fullscreen_enforce'] },
-  { value: 'ALT_TAB', label: 'Tab switch', desc: 'Browser loses focus because the learner switched tabs or apps.', requires: ['tab_switch_detect'] },
-  { value: 'FOCUS_LOSS', label: 'Focus loss', desc: 'The test window loses focus or becomes hidden.', requires: ['tab_switch_detect'] },
-  { value: 'CAMERA_COVERED', label: 'Camera covered', desc: 'The webcam feed is blocked or too dark.', requires: ['camera_required'] },
-  { value: 'FACE_DISAPPEARED', label: 'No face detected', desc: 'The learner moves out of frame for too long.', requires: ['face_detection'] },
-  { value: 'MULTIPLE_FACES', label: 'Multiple faces', desc: 'More than one face appears in the camera view.', requires: ['multi_face'] },
-  { value: 'FACE_MISMATCH', label: 'Face mismatch', desc: 'Live face does not match the verified identity sample.', requires: ['face_verify'] },
-  { value: 'LOUD_AUDIO', label: 'Loud audio', desc: 'Sudden loud noise or speech is detected.', requires: ['audio_detection'] },
-  { value: 'AUDIO_ANOMALY', label: 'Audio anomaly', desc: 'Repeated suspicious audio activity is detected.', requires: ['audio_detection'] },
-  { value: 'FORBIDDEN_OBJECT', label: 'Forbidden object', desc: 'Phone, book, or other forbidden object is detected.', requires: ['object_detection'] },
-  { value: 'EYE_MOVEMENT', label: 'Eye movement', desc: 'Gaze deviates away from the screen for too long.', requires: ['eye_tracking'] },
-  { value: 'HEAD_POSE', label: 'Head pose', desc: 'The learner turns away or changes head pose suspiciously.', requires: ['head_pose_detection'] },
-  { value: 'MOUTH_MOVEMENT', label: 'Mouth movement', desc: 'Talking or sustained mouth movement is detected.', requires: ['mouth_detection'] },
+  { value: 'FULLSCREEN_EXIT', labelKey: 'admin_wizard_alert_fullscreen_exit', descKey: 'admin_wizard_alert_fullscreen_exit_desc', requires: ['fullscreen_enforce'] },
+  { value: 'ALT_TAB', labelKey: 'admin_wizard_alert_tab_switch', descKey: 'admin_wizard_alert_tab_switch_desc', requires: ['tab_switch_detect'] },
+  { value: 'FOCUS_LOSS', labelKey: 'admin_wizard_alert_focus_loss', descKey: 'admin_wizard_alert_focus_loss_desc', requires: ['tab_switch_detect'] },
+  { value: 'CAMERA_COVERED', labelKey: 'admin_wizard_alert_camera_covered', descKey: 'admin_wizard_alert_camera_covered_desc', requires: ['camera_required'] },
+  { value: 'FACE_DISAPPEARED', labelKey: 'admin_wizard_alert_no_face', descKey: 'admin_wizard_alert_no_face_desc', requires: ['face_detection'] },
+  { value: 'MULTIPLE_FACES', labelKey: 'admin_wizard_alert_multiple_faces', descKey: 'admin_wizard_alert_multiple_faces_desc', requires: ['multi_face'] },
+  { value: 'FACE_MISMATCH', labelKey: 'admin_wizard_alert_face_mismatch', descKey: 'admin_wizard_alert_face_mismatch_desc', requires: ['face_verify'] },
+  { value: 'LOUD_AUDIO', labelKey: 'admin_wizard_alert_loud_audio', descKey: 'admin_wizard_alert_loud_audio_desc', requires: ['audio_detection'] },
+  { value: 'AUDIO_ANOMALY', labelKey: 'admin_wizard_alert_audio_anomaly', descKey: 'admin_wizard_alert_audio_anomaly_desc', requires: ['audio_detection'] },
+  { value: 'FORBIDDEN_OBJECT', labelKey: 'admin_wizard_alert_forbidden_obj', descKey: 'admin_wizard_alert_forbidden_obj_desc', requires: ['object_detection'] },
+  { value: 'EYE_MOVEMENT', labelKey: 'admin_wizard_alert_eye_movement', descKey: 'admin_wizard_alert_eye_movement_desc', requires: ['eye_tracking'] },
+  { value: 'HEAD_POSE', labelKey: 'admin_wizard_alert_head_pose', descKey: 'admin_wizard_alert_head_pose_desc', requires: ['head_pose_detection'] },
+  { value: 'MOUTH_MOVEMENT', labelKey: 'admin_wizard_alert_mouth_movement', descKey: 'admin_wizard_alert_mouth_movement_desc', requires: ['mouth_detection'] },
 ]
 
 const ALERT_RULE_ACTIONS = [
-  { value: 'FLAG_REVIEW', label: 'Flag for review' },
-  { value: 'WARN', label: 'Warn learner' },
-  { value: 'AUTO_SUBMIT', label: 'Auto-submit exam' },
+  { value: 'FLAG_REVIEW', labelKey: 'admin_wizard_action_flag_review' },
+  { value: 'WARN', labelKey: 'admin_wizard_action_warn' },
+  { value: 'AUTO_SUBMIT', labelKey: 'admin_wizard_action_auto_submit' },
 ]
 
 const ALERT_RULE_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH']
-const ALERT_RULE_ACTION_HELPERS = {
-  FLAG_REVIEW: 'Creates a proctoring escalation event for admins to review later.',
-  WARN: 'Shows a live warning to the learner and keeps the exam running.',
-  AUTO_SUBMIT: 'Immediately submits the exam when the rule threshold is reached.',
+const ALERT_RULE_ACTION_HELPER_KEYS = {
+  FLAG_REVIEW: 'admin_wizard_action_flag_helper',
+  WARN: 'admin_wizard_action_warn_helper',
+  AUTO_SUBMIT: 'admin_wizard_action_submit_helper',
 }
 
 function humanizeSettingLabel(value) {
@@ -232,7 +232,7 @@ function formatApiErrorMessage(error, fallback) {
         const loc = Array.isArray(item.loc)
           ? item.loc.filter((segment) => !['body', 'query', 'path'].includes(String(segment))).join('.')
           : ''
-        const message = item.msg || item.message || 'Request validation failed'
+        const message = item.msg || item.message || 'request validation failed'
         return loc ? `${loc}: ${message}` : message
       }
       return 'Request validation failed'
@@ -256,10 +256,10 @@ function createAlertRule(seed = {}) {
   }
 }
 
-function describeAlertRule(rule) {
+function describeAlertRule(rule, t) {
   const option = ALERT_RULE_EVENT_OPTIONS.find((item) => item.value === rule.event_type)
   const action = ALERT_RULE_ACTIONS.find((item) => item.value === rule.action)
-  return `${option?.label || humanizeSettingLabel(rule.event_type || 'Alert')} x${rule.threshold} -> ${action?.label || rule.action} (${rule.severity})`
+  return `${option ? t(option.labelKey) : humanizeSettingLabel(rule.event_type || 'Alert')} x${rule.threshold} -> ${action ? t(action.labelKey) : rule.action} (${rule.severity})`
 }
 
 export default function AdminNewTestWizard() {
@@ -510,7 +510,7 @@ export default function AdminNewTestWizard() {
 
   const handleCreateCourseInline = async () => {
     if (!newCourseTitle.trim()) {
-      setPanelError('Enter a course title before creating one.')
+      setPanelError(t('admin_wizard_val_course_title_required'))
       return
     }
     setCreatingCourse(true)
@@ -535,7 +535,7 @@ export default function AdminNewTestWizard() {
       setNewCourseDescription('')
       setNewModuleTitle('Module 1')
     } catch (e) {
-      setPanelError(formatApiErrorMessage(e, 'Failed to create the course. Please try again.'))
+      setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_course_create_failed')))
     } finally {
       setCreatingCourse(false)
     }
@@ -578,11 +578,11 @@ export default function AdminNewTestWizard() {
 
       const failedBootstrap = results.some((result) => result.status === 'rejected')
       if (failedBootstrap) {
-        setPanelError((current) => current || 'Some setup data failed to load. The wizard is still usable with the data that is available.')
+        setPanelError((current) => current || t('admin_wizard_val_setup_partial'))
       }
     }).catch(() => {
       if (!cancelled) {
-        setPanelError((current) => current || 'Failed to load setup data. Retry the page to continue.')
+        setPanelError((current) => current || t('admin_wizard_val_setup_failed'))
       }
     })
 
@@ -915,7 +915,7 @@ export default function AdminNewTestWizard() {
       }
       return newId
     } catch (e) {
-      setQuestionInitError('Could not create the test yet. Please check required fields and try again.')
+      setQuestionInitError(t('admin_wizard_val_create_test_failed'))
       return null
     } finally {
       setSaving(false)
@@ -940,7 +940,7 @@ export default function AdminNewTestWizard() {
       try {
         await saveExamRef.current?.()
       } catch {
-        setPanelError('Autosave failed. Check your connection and try again.')
+        setPanelError(t('admin_wizard_val_autosave_failed'))
       } finally {
         autosavingRef.current = false
       }
@@ -950,7 +950,7 @@ export default function AdminNewTestWizard() {
   const handleNext = async () => {
     setPanelError('')
     if (editorLocked) {
-      setPanelError('Published and archived tests must be edited from Manage Tests.')
+      setPanelError(t('admin_wizard_val_locked'))
       return
     }
     if (step === 0 && courseId && !nodeId) {
@@ -960,7 +960,7 @@ export default function AdminNewTestWizard() {
         setNodes([node])
         setNodeId(node.id)
       } catch (e) {
-        setPanelError(formatApiErrorMessage(e, 'Could not create module. Please try again.'))
+        setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_module_failed')))
       } finally {
         setSaving(false)
       }
@@ -979,7 +979,7 @@ export default function AdminNewTestWizard() {
         await saveExam()
       } catch (e) {
         saveSucceeded = false
-        setPanelError(formatApiErrorMessage(e, 'Could not save. Please check required fields and try again.'))
+        setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_save_failed')))
       } finally {
         setSaving(false)
       }
@@ -994,7 +994,7 @@ export default function AdminNewTestWizard() {
     if (!selectedPool || !examId) return
     const selectedPoolRecord = pools.find((pool) => String(pool.id) === String(selectedPool))
     if (selectedPoolRecord && Number(selectedPoolRecord.question_count || 0) < 1) {
-      setPanelError('This pool has no questions yet. Open the pool and add questions before seeding this test.')
+      setPanelError(t('admin_wizard_val_pool_empty'))
       return
     }
     setPanelError('')
@@ -1002,12 +1002,12 @@ export default function AdminNewTestWizard() {
       await adminApi.seedExamFromPool(selectedPool, examId, seedCount)
       const { data } = await adminApi.getQuestions(examId)
       setQuestions(data || [])
-    } catch (e) { setPanelError(formatApiErrorMessage(e, 'Failed to seed questions from pool.')) }
+    } catch (e) { setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_pool_seed_failed'))) }
   }
 
   const handleAIGenerate = async () => {
     if (!aiTopic.trim()) {
-      setPanelError('Enter a topic for AI generation.')
+      setPanelError(t('admin_wizard_val_ai_topic_required'))
       return
     }
     const ensuredId = await ensureExamCreated()
@@ -1036,7 +1036,7 @@ export default function AdminNewTestWizard() {
       const refreshed = await adminApi.getQuestions(ensuredId)
       setQuestions(refreshed.data || [])
     } catch (e) {
-      setPanelError(formatApiErrorMessage(e, 'AI generation failed'))
+      setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_ai_failed')))
     } finally {
       setAiLoading(false)
     }
@@ -1045,7 +1045,7 @@ export default function AdminNewTestWizard() {
   const handleAssignSessions = async () => {
     if (!examId || (selectedUsers.length === 0 && assignedSessions.length === 0)) return
     if (accessMode === 'RESTRICTED' && !scheduledAt) {
-      setPanelError('Restricted access requires a scheduled date and time.')
+      setPanelError(t('admin_wizard_val_schedule_required'))
       return
     }
     setPanelError('')
@@ -1123,7 +1123,7 @@ export default function AdminNewTestWizard() {
       await loadAssignedSessions(examId)
       setWizardBaselineVersion((current) => current + 1)
     } catch (e) {
-      setPanelError(formatApiErrorMessage(e, 'Failed to assign sessions. Please try again.'))
+      setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_assign_failed')))
     } finally {
       setSessionBusy(false)
     }
@@ -1148,7 +1148,7 @@ export default function AdminNewTestWizard() {
       }
       setWizardBaselineVersion((current) => current + 1)
     } catch (e) {
-      setPanelError(formatApiErrorMessage(e, 'Failed to remove the session.'))
+      setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_remove_failed')))
     } finally {
       setSessionBusy(false)
     }
@@ -1157,7 +1157,7 @@ export default function AdminNewTestWizard() {
   const handlePublish = async () => {
     const targetPublishStatus = publishStatusRef.current
     if (editorLocked) {
-      setPanelError('Published and archived tests must be edited from Manage Tests.')
+      setPanelError(t('admin_wizard_val_locked'))
       return
     }
     if (targetPublishStatus === 'OPEN') {
@@ -1181,7 +1181,7 @@ export default function AdminNewTestWizard() {
         setExitingWizard(true)
       })
       navigate('/admin/tests', { replace: true, state: { bypassUnsavedChanges: true } })
-    } catch (e) { setPanelError(formatApiErrorMessage(e, 'Could not save. Please add questions and try again.')) } finally { setSaving(false) }
+    } catch (e) { setPanelError(formatApiErrorMessage(e, t('admin_wizard_val_publish_failed'))) } finally { setSaving(false) }
   }
 
   const toggleDetector = (key) => {
@@ -1391,44 +1391,44 @@ export default function AdminNewTestWizard() {
 
   const validateStep = (targetStep, { forPublish = false } = {}) => {
     if (targetStep === 0) {
-      if (!title.trim()) return 'Test name is required.'
+      if (!title.trim()) return t('admin_wizard_val_test_name_required')
       if (examCode.trim() && (examCode.trim().length < 6 || examCode.trim().length > 12)) {
-        return 'External code / ID must be between 6 and 12 characters.'
+        return t('admin_wizard_val_code_length')
       }
-      if (courseId && !nodeId) return 'Select or create a module before continuing.'
+      if (courseId && !nodeId) return t('admin_wizard_val_select_module')
     }
     if (targetStep === 1 && method === 'generator') {
-      if (!generatorCount || Number(generatorCount) < 1) return 'Please set a total question count for the generator.'
-      if (generatorMixTotal !== 100) return 'Generator difficulty mix must total exactly 100%.'
+      if (!generatorCount || Number(generatorCount) < 1) return t('admin_wizard_val_generator_count')
+      if (generatorMixTotal !== 100) return t('admin_wizard_val_generator_mix')
     }
     if (targetStep === 2) {
       if (!unlimitedTime && (!Number.isFinite(Number(timeLimitMinutes)) || Number(timeLimitMinutes) <= 0)) {
-        return 'Provide a valid time limit or enable unlimited time.'
+        return t('admin_wizard_val_time_limit')
       }
     }
     if (targetStep === 4) {
       if (!Number.isFinite(Number(passingScore)) || Number(passingScore) < 0 || Number(passingScore) > 100) {
-        return 'Passing score must be between 0 and 100.'
+        return t('admin_wizard_val_passing_score')
       }
       if (!Number.isFinite(Number(maxAttempts)) || Number(maxAttempts) < 1) {
-        return 'Max attempts must be at least 1.'
+        return t('admin_wizard_val_max_attempts')
       }
       if (negativeMarking && (!Number.isFinite(Number(negMarkValue)) || Number(negMarkValue) < 0)) {
-        return 'Negative marking must be zero or higher.'
+        return t('admin_wizard_val_neg_marking')
       }
     }
     if (targetStep === 5 && certEnabled) {
-      if (!certTitle.trim()) return 'Enter a certificate title or disable certificates.'
-      if (!certSigner.trim()) return 'Enter a certificate signer or disable certificates.'
+      if (!certTitle.trim()) return t('admin_wizard_val_cert_title')
+      if (!certSigner.trim()) return t('admin_wizard_val_cert_signer')
     }
     if (targetStep === 7 && accessMode === 'RESTRICTED' && selectedUsers.length > 0 && !scheduledAt) {
-      return 'Restricted assignments require a scheduled date and time.'
+      return t('admin_wizard_val_restricted_schedule')
     }
     if (targetStep === 7 && hasPendingSessionChanges) {
-      return 'Save learner assignment changes before continuing.'
+      return t('admin_wizard_val_save_assignments')
     }
     if (forPublish && questions.length === 0) {
-      return 'Add at least one question before publishing.'
+      return t('admin_wizard_val_add_question')
     }
     return ''
   }
@@ -1453,33 +1453,33 @@ export default function AdminNewTestWizard() {
     || (step === 7 && (sessionBusy || Boolean(currentStepValidation)))
   const cycleOverviewCards = [
     {
-      label: 'Current step',
+      label: t('admin_wizard_card_current_step'),
       value: `${step + 1} / ${STEPS.length}`,
-      helper: currentStepValidation || 'Ready to continue',
+      helper: currentStepValidation || t('admin_wizard_card_ready'),
       tone: currentStepValidation ? 'attention' : 'ready',
     },
     {
-      label: 'Questions',
+      label: t('admin_wizard_card_questions'),
       value: String(questions.length),
-      helper: questions.length > 0 ? `${method === 'generator' ? 'Generated / seeded' : 'Manually curated'} question bank ready` : 'Questions still need to be added',
+      helper: questions.length > 0 ? `${method === 'generator' ? t('admin_wizard_card_gen_ready') : t('admin_wizard_card_manual_ready')} ${t('admin_wizard_card_question_bank_ready')}` : t('admin_wizard_card_questions_needed'),
       tone: questions.length > 0 ? 'ready' : 'attention',
     },
     {
-      label: 'Sessions',
+      label: t('admin_wizard_card_sessions'),
       value: String(assignedSessions.length),
-      helper: assignedSessions.length > 0 ? `${accessMode === 'RESTRICTED' ? 'Restricted schedule saved' : 'Open access saved'}` : 'No learners assigned yet',
+      helper: assignedSessions.length > 0 ? `${accessMode === 'RESTRICTED' ? t('admin_wizard_card_restricted_saved') : t('admin_wizard_card_open_saved')}` : t('admin_wizard_card_no_learners'),
       tone: assignedSessions.length > 0 ? 'ready' : 'info',
     },
     {
-      label: 'Proctoring',
-      value: `${activeDetectorCount} checks`,
-      helper: `Fullscreen ${proctoring.fullscreen_enforce ? 'on' : 'off'} | Tabs ${proctoring.tab_switch_detect ? 'tracked' : 'not tracked'} | Rules ${alertRuleCount}`,
+      label: t('admin_wizard_card_proctoring'),
+      value: `${activeDetectorCount} ${t('admin_wizard_card_checks')}`,
+      helper: `${t('admin_wizard_card_fullscreen')} ${proctoring.fullscreen_enforce ? t('admin_wizard_card_on') : t('admin_wizard_card_off')} | ${t('admin_wizard_card_tabs')} ${proctoring.tab_switch_detect ? t('admin_wizard_card_tracked') : t('admin_wizard_card_not_tracked')} | ${t('admin_wizard_card_rules')} ${alertRuleCount}`,
       tone: activeDetectorCount > 0 ? 'ready' : 'attention',
     },
     {
-      label: 'Readiness',
-      value: infoReady && settingsReady && gradingReady && certificatesReady ? 'Healthy' : 'Needs review',
-      helper: `${infoReady ? 'Info ok' : 'Info missing'} | ${settingsReady ? 'Settings ok' : 'Settings missing'} | ${gradingReady ? 'Grading ok' : 'Grading missing'}`,
+      label: t('admin_wizard_card_readiness'),
+      value: infoReady && settingsReady && gradingReady && certificatesReady ? t('admin_wizard_card_healthy') : t('admin_wizard_card_needs_review'),
+      helper: `${infoReady ? t('admin_wizard_card_info_ok') : t('admin_wizard_card_info_missing')} | ${settingsReady ? t('admin_wizard_card_settings_ok') : t('admin_wizard_card_settings_missing')} | ${gradingReady ? t('admin_wizard_card_grading_ok') : t('admin_wizard_card_grading_missing')}`,
       tone: infoReady && settingsReady && gradingReady && certificatesReady ? 'ready' : 'attention',
     },
   ]
@@ -1487,91 +1487,91 @@ export default function AdminNewTestWizard() {
   const reviewSections = [
     {
       key: 'information',
-      title: 'Information',
+      title: t('admin_wizard_review_information'),
       editStep: 0,
       items: [
-        ['Test Title', title || '-'],
-        ['Description', description || 'None'],
-        ['Category', categories.find((category) => category.id === categoryId)?.name || 'None'],
-        ['Course', courses.find((course) => String(course.id) === String(courseId))?.title || 'None'],
-        ['Module', nodes.find((node) => String(node.id) === String(nodeId))?.title || 'None'],
-        ['Code', examCode || 'Auto-generated'],
+        [t('admin_wizard_review_test_title'), title || '-'],
+        [t('admin_wizard_review_description'), description || t('admin_wizard_review_none')],
+        [t('admin_wizard_review_category'), categories.find((category) => category.id === categoryId)?.name || t('admin_wizard_review_none')],
+        [t('admin_wizard_review_course'), courses.find((course) => String(course.id) === String(courseId))?.title || t('admin_wizard_review_none')],
+        [t('admin_wizard_review_module'), nodes.find((node) => String(node.id) === String(nodeId))?.title || t('admin_wizard_review_none')],
+        [t('admin_wizard_review_code'), examCode || t('admin_wizard_review_auto_generated')],
       ],
     },
     {
       key: 'question-design',
-      title: 'Question Design',
+      title: t('admin_wizard_review_question_design'),
       editStep: 1,
       items: [
-        ['Creation Method', method === 'manual' ? 'Manual selection' : `Generator (${generatorBy})`],
+        [t('admin_wizard_review_creation_method'), method === 'manual' ? t('admin_wizard_review_manual_selection') : `${t('admin_wizard_review_generator')} (${generatorBy})`],
         ...(method === 'generator'
           ? [
-              ['Total Questions', generatorCount],
-              ['Difficulty Mix', `${generatorDifficultyMix.easy}% easy | ${generatorDifficultyMix.medium}% medium | ${generatorDifficultyMix.hard}% hard`],
-              ['Generator Categories', generatorCategories.length ? String(generatorCategories.length) : 'All'],
-              ['Generator Pools', generatorPools.length ? String(generatorPools.length) : 'All'],
-              ['Tags Include', generatorTagsInclude || 'None'],
-              ['Tags Exclude', generatorTagsExclude || 'None'],
+              [t('admin_wizard_review_total_questions'), generatorCount],
+              [t('admin_wizard_review_difficulty_mix'), `${generatorDifficultyMix.easy}% ${t('admin_wizard_review_easy')} | ${generatorDifficultyMix.medium}% ${t('admin_wizard_review_medium')} | ${generatorDifficultyMix.hard}% ${t('admin_wizard_review_hard')}`],
+              [t('admin_wizard_review_gen_categories'), generatorCategories.length ? String(generatorCategories.length) : t('admin_wizard_review_all')],
+              [t('admin_wizard_review_gen_pools'), generatorPools.length ? String(generatorPools.length) : t('admin_wizard_review_all')],
+              [t('admin_wizard_review_tags_include'), generatorTagsInclude || t('admin_wizard_review_none')],
+              [t('admin_wizard_review_tags_exclude'), generatorTagsExclude || t('admin_wizard_review_none')],
             ]
           : [
-              ['Question Bank', `${questions.length} question(s) currently authored`],
-              ['Seed Pool', selectedPoolRecord ? `${selectedPoolRecord.name} (${selectedPoolCount} question${selectedPoolCount === 1 ? '' : 's'})` : 'None'],
+              [t('admin_wizard_review_question_bank'), `${questions.length} ${t('admin_wizard_review_questions_authored')}`],
+              [t('admin_wizard_review_seed_pool'), selectedPoolRecord ? `${selectedPoolRecord.name} (${selectedPoolCount} question${selectedPoolCount === 1 ? '' : 's'})` : t('admin_wizard_review_none')],
             ]),
       ],
     },
     {
       key: 'delivery',
-      title: 'Delivery & Security',
+      title: t('admin_wizard_review_delivery'),
       editStep: 2,
       items: [
-        ['Question Type', examType],
-        ['Page Format', pageFormat],
-        ['Calculator', calculatorType],
-        ['Time Limit', unlimitedTime ? 'Unlimited' : `${timeLimitMinutes} minutes`],
-        ['Randomize Questions', randomizeQuestions ? 'Yes' : 'No'],
-        ['Randomize Answers', randomizeAnswers ? 'Yes' : 'No'],
-        ['Show Progress Bar', showProgressBar ? 'Yes' : 'No'],
-        ['Enabled Proctoring Checks', enabledProctoringChecks.join(', ') || 'None'],
-        ['Alert Escalation Rules', alertRuleCount > 0 ? proctoring.alert_rules.map((rule) => describeAlertRule(rule)).join(' | ') : 'None'],
-        ['Special Accommodations', specialAccommodations || 'None'],
-        ['Special Requests', specialRequests || 'None'],
+        [t('admin_wizard_review_question_type'), examType],
+        [t('admin_wizard_review_page_format'), pageFormat],
+        [t('admin_wizard_review_calculator'), calculatorType],
+        [t('admin_wizard_review_time_limit'), unlimitedTime ? t('admin_wizard_review_unlimited') : `${timeLimitMinutes} ${t('admin_wizard_review_minutes')}`],
+        [t('admin_wizard_review_randomize_q'), randomizeQuestions ? t('admin_wizard_review_yes') : t('admin_wizard_review_no')],
+        [t('admin_wizard_review_randomize_a'), randomizeAnswers ? t('admin_wizard_review_yes') : t('admin_wizard_review_no')],
+        [t('admin_wizard_review_show_progress'), showProgressBar ? t('admin_wizard_review_yes') : t('admin_wizard_review_no')],
+        [t('admin_wizard_review_proctoring_checks'), enabledProctoringChecks.join(', ') || t('admin_wizard_review_none')],
+        [t('admin_wizard_review_alert_rules'), alertRuleCount > 0 ? proctoring.alert_rules.map((rule) => describeAlertRule(rule, t)).join(' | ') : t('admin_wizard_review_none')],
+        [t('admin_wizard_review_special_acc'), specialAccommodations || t('admin_wizard_review_none')],
+        [t('admin_wizard_review_special_req'), specialRequests || t('admin_wizard_review_none')],
       ],
     },
     {
       key: 'grading',
-      title: 'Scoring & Results',
+      title: t('admin_wizard_review_scoring'),
       editStep: 4,
       items: [
-        ['Passing Score', `${passingScore}%`],
-        ['Max Attempts', maxAttempts],
-        ['Grading Scale', gradingScales.find((gradingScale) => gradingScale.id === gradingScaleId)?.name || 'None'],
-        ['Negative Marking', negativeMarking ? `Yes (${negMarkValue} ${negMarkType})` : 'No'],
-        ['Show Final Score', showFinalScore ? 'Yes' : 'No'],
-        ['Show Question Scores', showQuestionScores ? 'Yes' : 'No'],
+        [t('admin_wizard_review_passing_score'), `${passingScore}%`],
+        [t('admin_wizard_review_max_attempts'), maxAttempts],
+        [t('admin_wizard_review_grading_scale'), gradingScales.find((gradingScale) => gradingScale.id === gradingScaleId)?.name || t('admin_wizard_review_none')],
+        [t('admin_wizard_review_neg_marking'), negativeMarking ? `${t('admin_wizard_review_yes')} (${negMarkValue} ${negMarkType})` : t('admin_wizard_review_no')],
+        [t('admin_wizard_review_show_final'), showFinalScore ? t('admin_wizard_review_yes') : t('admin_wizard_review_no')],
+        [t('admin_wizard_review_show_question'), showQuestionScores ? t('admin_wizard_review_yes') : t('admin_wizard_review_no')],
       ],
     },
     {
       key: 'certificates',
-      title: 'Certificates',
+      title: t('admin_wizard_review_certificates'),
       editStep: 5,
       items: [
-        ['Certificate', certEnabled ? `${certTemplate} (${certOrientation})` : 'Disabled'],
-        ['Issue Rule', certEnabled ? certificateIssueRuleLabel(certIssueRule) : 'Disabled'],
-        ['Certificate Title', certEnabled ? certTitle || 'None' : 'Disabled'],
-        ['Subtitle', certEnabled ? certSubtitle || 'None' : 'Disabled'],
-        ['Issuer', certEnabled ? certCompany || 'None' : 'Disabled'],
-        ['Signer', certEnabled ? certSigner || 'None' : 'Disabled'],
+        [t('admin_wizard_review_certificate'), certEnabled ? `${certTemplate} (${certOrientation})` : t('admin_wizard_review_disabled')],
+        [t('admin_wizard_review_issue_rule'), certEnabled ? certificateIssueRuleLabel(certIssueRule) : t('admin_wizard_review_disabled')],
+        [t('admin_wizard_review_cert_title'), certEnabled ? certTitle || t('admin_wizard_review_none') : t('admin_wizard_review_disabled')],
+        [t('admin_wizard_review_subtitle'), certEnabled ? certSubtitle || t('admin_wizard_review_none') : t('admin_wizard_review_disabled')],
+        [t('admin_wizard_review_issuer'), certEnabled ? certCompany || t('admin_wizard_review_none') : t('admin_wizard_review_disabled')],
+        [t('admin_wizard_review_signer'), certEnabled ? certSigner || t('admin_wizard_review_none') : t('admin_wizard_review_disabled')],
       ],
     },
     {
       key: 'readiness',
-      title: 'Final Readiness',
+      title: t('admin_wizard_review_final_readiness'),
       editStep: 3,
       items: [
-        ['Questions Authored', `${questions.length} question(s)`],
-        ['Ready for Publishing', questions.length > 0 ? 'Yes' : 'Add at least one question first'],
-        ['Sessions Assigned', `${assignedSessions.length} session(s)`],
-        ['Next Phase', 'Assign learners and schedule access in Step 7'],
+        [t('admin_wizard_review_questions_authored_count'), `${questions.length} ${t('admin_wizard_review_questions_count')}`],
+        [t('admin_wizard_review_ready_publish'), questions.length > 0 ? t('admin_wizard_review_yes') : t('admin_wizard_review_add_first')],
+        [t('admin_wizard_review_sessions_assigned'), `${assignedSessions.length} ${t('admin_wizard_review_sessions_count')}`],
+        [t('admin_wizard_review_next_phase'), t('admin_wizard_review_next_phase_desc')],
       ],
     },
   ]
@@ -1582,28 +1582,28 @@ export default function AdminNewTestWizard() {
 
   const handleSelectAllLearners = () => {
     if (users.length === 0) {
-      setBulkLearnerFeedback('There are no learners available to assign yet.')
+      setBulkLearnerFeedback(t('admin_wizard_val_no_learners'))
       return
     }
     setPanelError('')
-    setBulkLearnerFeedback(`Selected all ${users.length} learner${users.length === 1 ? '' : 's'}.`)
+    setBulkLearnerFeedback(`${t('admin_wizard_selected_all')} ${users.length} learner${users.length === 1 ? '' : 's'}.`)
     setSelectedUsers(users.map((user) => String(user.id)))
   }
 
   const handleSelectVisibleLearners = () => {
     if (filteredUsers.length === 0) {
-      setBulkLearnerFeedback('No learners match the current search.')
+      setBulkLearnerFeedback(t('admin_wizard_val_no_search_match'))
       return
     }
     setPanelError('')
     mergeLearnerSelection(filteredUsers.map((user) => String(user.id)))
-    setBulkLearnerFeedback(`Selected ${filteredUsers.length} learner${filteredUsers.length === 1 ? '' : 's'} from the filtered list.`)
+    setBulkLearnerFeedback(`${t('admin_wizard_matched')} ${filteredUsers.length} learner${filteredUsers.length === 1 ? '' : 's'} ${t('admin_wizard_selected_from_filtered')}`)
   }
 
   const handleClearLearnerSelection = () => {
     setPanelError('')
     setSelectedUsers([])
-    setBulkLearnerFeedback('Cleared the learner selection.')
+    setBulkLearnerFeedback(t('admin_wizard_cleared_selection'))
   }
 
   const handleBulkLearnerMatch = () => {
@@ -1614,7 +1614,7 @@ export default function AdminNewTestWizard() {
         .filter(Boolean),
     ))
     if (tokens.length === 0) {
-      setBulkLearnerFeedback('Paste learner IDs, emails, or user IDs first.')
+      setBulkLearnerFeedback(t('admin_wizard_val_paste_first'))
       return
     }
 
@@ -1625,8 +1625,8 @@ export default function AdminNewTestWizard() {
       return tokens.some((token) => keys.includes(token))
     })
     if (matchedLearners.length === 0) {
-      setPanelError('None of the pasted learners matched the current learner list.')
-      setBulkLearnerFeedback(`Matched 0 of ${tokens.length} entries.`)
+      setPanelError(t('admin_wizard_val_no_learners_match'))
+      setBulkLearnerFeedback(`${t('admin_wizard_matched')} 0 ${t('admin_wizard_matched_of')} ${tokens.length} ${t('admin_wizard_entries')}`)
       return
     }
 
@@ -1641,8 +1641,8 @@ export default function AdminNewTestWizard() {
     })
     const unmatchedCount = tokens.filter((token) => !matchedKeys.has(token)).length
     setBulkLearnerFeedback(
-      `Matched ${matchedLearners.length} learner${matchedLearners.length === 1 ? '' : 's'}`
-      + (unmatchedCount > 0 ? `, ${unmatchedCount} entr${unmatchedCount === 1 ? 'y was' : 'ies were'} not found.` : '.'),
+      `${t('admin_wizard_matched')} ${matchedLearners.length} learner${matchedLearners.length === 1 ? '' : 's'}`
+      + (unmatchedCount > 0 ? `, ${unmatchedCount} ${unmatchedCount === 1 ? t('admin_wizard_entry_not_found') : t('admin_wizard_entries_not_found')}` : '.'),
     )
   }
 
@@ -1671,7 +1671,7 @@ export default function AdminNewTestWizard() {
             status: a.status || '-',
             startedAt: a.started_at,
             userGroup: '-',
-            comment: a.status === 'GRADED' ? 'Reviewed' : '',
+            comment: a.status === 'GRADED' ? t('admin_wizard_reviewed') : '',
             proctorRate: '-',
             sessionId: session?.id || '',
           }
@@ -1742,30 +1742,30 @@ export default function AdminNewTestWizard() {
     switch (step) {
       case 0: return (
         <>
-          <h3 className={styles.panelTitle}>Test Information</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_test_information')}</h3>
           {examTemplates.length > 0 && (
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-template">Start from Template</label>
+              <label className={styles.label} htmlFor="wizard-template">{t('admin_wizard_start_template')}</label>
               <div className={styles.templateRow}>
                 <select id="wizard-template" className={styles.select} value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}>
-                  <option value="">Select template...</option>
-                  {examTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  <option value="">{t('admin_wizard_select_template')}</option>
+                  {examTemplates.map(tpl => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
                 </select>
-                <button className={styles.btnSecondary} type="button" disabled={!selectedTemplate} onClick={() => applyTemplate(selectedTemplate)}>Apply</button>
+                <button className={styles.btnSecondary} type="button" disabled={!selectedTemplate} onClick={() => applyTemplate(selectedTemplate)}>{t('admin_wizard_apply')}</button>
               </div>
             </div>
           )}
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="wizard-title">Test Name <span className={styles.requiredMark}>*</span></label>
-            <input id="wizard-title" name="title" className={styles.input} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Midterm Examination - Computer Science" />
+            <label className={styles.label} htmlFor="wizard-title">{t('admin_wizard_test_name')} <span className={styles.requiredMark}>*</span></label>
+            <input id="wizard-title" name="title" className={styles.input} value={title} onChange={e => setTitle(e.target.value)} placeholder={t('admin_wizard_test_name_placeholder')} />
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="wizard-description">Description</label>
-            <textarea id="wizard-description" name="description" className={styles.textarea} value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="Describe the test purpose, scope, and any special instructions..." />
+            <label className={styles.label} htmlFor="wizard-description">{t('admin_wizard_description_label')}</label>
+            <textarea id="wizard-description" name="description" className={styles.textarea} value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder={t('admin_wizard_description_placeholder')} />
           </div>
           <div className={styles.inputRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-course">Course</label>
+              <label className={styles.label} htmlFor="wizard-course">{t('admin_wizard_course_label')}</label>
               <select
                 id="wizard-course"
                 name="course"
@@ -1778,32 +1778,32 @@ export default function AdminNewTestWizard() {
                   loadNodesForCourse(nextCourseId, { createIfEmpty: true })
                 }}
               >
-                <option value="">Select course...</option>
+                <option value="">{t('admin_wizard_select_course')}</option>
                 {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
               <div className={styles.inlineActions}>
                 <button className={styles.btnSecondary} type="button" onClick={() => setShowCourseCreator((current) => !current)}>
-                  {showCourseCreator ? 'Cancel New Course' : 'Create Course'}
+                  {showCourseCreator ? t('admin_wizard_cancel_new_course') : t('admin_wizard_create_course')}
                 </button>
               </div>
-              {!courses.length && <p className={styles.helper}>No courses yet. Create one here and the wizard will keep going.</p>}
+              {!courses.length && <p className={styles.helper}>{t('admin_wizard_no_courses_hint')}</p>}
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-node">Module</label>
+              <label className={styles.label} htmlFor="wizard-node">{t('admin_wizard_module_label')}</label>
               <select id="wizard-node" name="node" className={styles.select} value={nodeId} onChange={e => setNodeId(e.target.value)}>
-                <option value="">Select module...</option>
+                <option value="">{t('admin_wizard_select_module')}</option>
                 {nodes.map(n => <option key={n.id} value={n.id}>{n.title}</option>)}
               </select>
-              {!nodes.length && courseId && <p className={styles.helper}>No modules in this course. The wizard will create Module 1 automatically.</p>}
+              {!nodes.length && courseId && <p className={styles.helper}>{t('admin_wizard_no_modules_hint')}</p>}
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-exam-code">External Code / ID</label>
-              <input id="wizard-exam-code" name="exam_code" className={styles.input} value={examCode} onChange={e => setExamCode(e.target.value)} placeholder="e.g. CS-101-MT" />
+              <label className={styles.label} htmlFor="wizard-exam-code">{t('admin_wizard_external_code')}</label>
+              <input id="wizard-exam-code" name="exam_code" className={styles.input} value={examCode} onChange={e => setExamCode(e.target.value)} placeholder={t('admin_wizard_code_placeholder')} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-category">Category</label>
+              <label className={styles.label} htmlFor="wizard-category">{t('admin_wizard_category_label')}</label>
               <select id="wizard-category" name="category" className={styles.select} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
-                <option value="">No Category</option>
+                <option value="">{t('admin_wizard_no_category')}</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
@@ -1812,27 +1812,27 @@ export default function AdminNewTestWizard() {
             <div className={styles.inlineCard}>
               <div className={styles.inlineCardHead}>
                 <div>
-                  <div className={styles.label}>Create course inline</div>
-                  <div className={styles.helper}>This creates a draft course and its first module without leaving the wizard.</div>
+                  <div className={styles.label}>{t('admin_wizard_create_course_inline')}</div>
+                  <div className={styles.helper}>{t('admin_wizard_create_course_hint')}</div>
                 </div>
               </div>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-new-course-title">Course title</label>
-                  <input id="wizard-new-course-title" className={styles.input} value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)} placeholder="e.g. Computer Science 101" />
+                  <label className={styles.label} htmlFor="wizard-new-course-title">{t('admin_wizard_course_title')}</label>
+                  <input id="wizard-new-course-title" className={styles.input} value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)} placeholder={t('admin_wizard_course_title_placeholder')} />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-new-module-title">First module</label>
+                  <label className={styles.label} htmlFor="wizard-new-module-title">{t('admin_wizard_first_module')}</label>
                   <input id="wizard-new-module-title" className={styles.input} value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)} placeholder="Module 1" />
                 </div>
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-new-course-description">Course description</label>
-                <textarea id="wizard-new-course-description" className={styles.textarea} rows={3} value={newCourseDescription} onChange={(e) => setNewCourseDescription(e.target.value)} placeholder="Optional description for the training course..." />
+                <label className={styles.label} htmlFor="wizard-new-course-description">{t('admin_wizard_course_desc_label')}</label>
+                <textarea id="wizard-new-course-description" className={styles.textarea} rows={3} value={newCourseDescription} onChange={(e) => setNewCourseDescription(e.target.value)} placeholder={t('admin_wizard_course_desc_placeholder')} />
               </div>
               <div className={styles.inlineActions}>
                 <button className={styles.btnSecondary} type="button" onClick={handleCreateCourseInline} disabled={creatingCourse || !newCourseTitle.trim()}>
-                  {creatingCourse ? 'Creating...' : 'Create Course and Module'}
+                  {creatingCourse ? t('admin_wizard_creating') : t('admin_wizard_create_course_module')}
                 </button>
               </div>
             </div>
@@ -1842,20 +1842,20 @@ export default function AdminNewTestWizard() {
 
       case 1: return (
         <>
-          <h3 className={styles.panelTitle}>Test Creation Method</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_creation_method')}</h3>
           <div className={styles.methodCards}>
             <div className={`${styles.methodCard} ${method === 'manual' ? styles.methodCardActive : ''}`} onClick={() => setMethod('manual')}>
-              <div className={styles.methodIcon}>Edit</div>
-              <div className={styles.methodLabel}>Manual Selection</div>
-              <div className={styles.methodDesc}>Pick questions from pools or create them manually. Define exactly which questions appear in each test version.</div>
+              <div className={styles.methodIcon}>{t('edit')}</div>
+              <div className={styles.methodLabel}>{t('admin_wizard_method_manual_label')}</div>
+              <div className={styles.methodDesc}>{t('admin_wizard_method_manual_desc')}</div>
               <div className={styles.methodRadio}>
                 <input type="radio" checked={method === 'manual'} readOnly />
               </div>
             </div>
             <div className={`${styles.methodCard} ${method === 'generator' ? styles.methodCardActive : ''}`} onClick={() => setMethod('generator')}>
               <div className={styles.methodIcon}>AI</div>
-              <div className={styles.methodLabel}>Generator Mode</div>
-              <div className={styles.methodDesc}>Let the system automatically select questions based on your criteria. Creates unique test versions per candidate.</div>
+              <div className={styles.methodLabel}>{t('admin_wizard_method_generator_label')}</div>
+              <div className={styles.methodDesc}>{t('admin_wizard_method_generator_desc')}</div>
               <div className={styles.methodRadio}>
                 <input type="radio" checked={method === 'generator'} readOnly />
               </div>
@@ -1865,45 +1865,45 @@ export default function AdminNewTestWizard() {
             <div className={styles.generatorOptions}>
               <div className={styles.aiBar}>
                 <div>
-                  <div className={styles.label}>AI-assisted generation</div>
-                  <div className={styles.helper}>Enter a topic and let the model draft questions, then we save them into this test.</div>
+                  <div className={styles.label}>{t('admin_wizard_ai_generation')}</div>
+                  <div className={styles.helper}>{t('admin_wizard_ai_hint')}</div>
                 </div>
                 <div className={styles.aiControls}>
-                  <input aria-label="AI topic or chapter" className={`${styles.input} ${styles.aiTopicInput}`} placeholder="Topic or chapter" value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
+                  <input aria-label="AI topic or chapter" className={`${styles.input} ${styles.aiTopicInput}`} placeholder={t('admin_wizard_ai_topic_placeholder')} value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
                   <input aria-label="AI question count" className={styles.inputMini} type="number" min={1} max={15} value={aiCount} onChange={e => setAiCount(Number(e.target.value))} />
                   <select aria-label="AI difficulty" className={styles.selectMini} value={aiDifficulty} onChange={e => setAiDifficulty(e.target.value)}>
-                    <option value="mixed">Mixed</option>
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
+                    <option value="mixed">{t('admin_wizard_ai_mixed')}</option>
+                    <option value="easy">{t('admin_wizard_ai_easy')}</option>
+                    <option value="medium">{t('admin_wizard_ai_medium')}</option>
+                    <option value="hard">{t('admin_wizard_ai_hard')}</option>
                   </select>
                   <button type="button" className={styles.btnSeed} onClick={handleAIGenerate} disabled={aiLoading}>
-                    {aiLoading ? 'Generating...' : 'Generate with AI'}
+                    {aiLoading ? t('admin_wizard_ai_generating') : t('admin_wizard_ai_generate')}
                   </button>
                 </div>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label}>Select Questions Based On</label>
+                <label className={styles.label}>{t('admin_wizard_select_based_on')}</label>
                 <div className={styles.generatorChoiceRow}>
                   <label className={styles.generatorChoiceLabel}>
                     <input type="radio" checked={generatorBy === 'difficulty'} onChange={() => setGeneratorBy('difficulty')} />
-                    Difficulty mix
+                    {t('admin_wizard_difficulty_mix')}
                   </label>
                   <label className={styles.generatorChoiceLabel}>
                     <input type="radio" checked={generatorBy === 'category'} onChange={() => setGeneratorBy('category')} />
-                    Category quotas
+                    {t('admin_wizard_category_quotas')}
                   </label>
                 </div>
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-generator-count">Total Questions</label>
+                <label className={styles.label} htmlFor="wizard-generator-count">{t('admin_wizard_total_questions')}</label>
                 <input id="wizard-generator-count" className={`${styles.input} ${styles.generatorCountInput}`} type="number" min={1} max={200} value={generatorCount} onChange={e => setGeneratorCount(Number(e.target.value))} />
               </div>
 
               <div className={styles.generatorGrid}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Difficulty Mix (%)</label>
+                  <label className={styles.label}>{t('admin_wizard_difficulty_pct')}</label>
                   {['easy','medium','hard'].map(key => (
                     <div key={key} className={styles.sliderRow}>
                       <span className={styles.sliderLabel}>{key.toUpperCase()}</span>
@@ -1925,11 +1925,11 @@ export default function AdminNewTestWizard() {
                       />
                     </div>
                   ))}
-                  <div className={styles.helper}>Totals can exceed or fall below 100. They are normalized during generation.</div>
+                  <div className={styles.helper}>{t('admin_wizard_mix_hint')}</div>
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Restrict by Categories</label>
+                  <label className={styles.label}>{t('admin_wizard_restrict_categories')}</label>
                   <div className={styles.chipRow}>
                     {categories.map(c => (
                       <button
@@ -1942,11 +1942,11 @@ export default function AdminNewTestWizard() {
                       </button>
                     ))}
                   </div>
-                  <div className={styles.helper}>Leave empty to allow all categories.</div>
+                  <div className={styles.helper}>{t('admin_wizard_categories_hint')}</div>
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Allowed Pools</label>
+                  <label className={styles.label}>{t('admin_wizard_allowed_pools')}</label>
                   <div className={styles.chipRow}>
                     {pools.map(p => (
                       <button
@@ -1959,50 +1959,50 @@ export default function AdminNewTestWizard() {
                       </button>
                     ))}
                   </div>
-                  <div className={styles.helper}>If none selected, generator can draw from any pool.</div>
+                  <div className={styles.helper}>{t('admin_wizard_pools_hint')}</div>
                 </div>
               </div>
 
               <div className={styles.generatorGrid}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-generator-tags-include">Include Tags (comma separated)</label>
-                  <input id="wizard-generator-tags-include" className={styles.input} value={generatorTagsInclude} onChange={e => setGeneratorTagsInclude(e.target.value)} placeholder="math, algebra, fundamentals" />
+                  <label className={styles.label} htmlFor="wizard-generator-tags-include">{t('admin_wizard_include_tags')}</label>
+                  <input id="wizard-generator-tags-include" className={styles.input} value={generatorTagsInclude} onChange={e => setGeneratorTagsInclude(e.target.value)} placeholder={t('admin_wizard_include_tags_placeholder')} />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-generator-tags-exclude">Exclude Tags (comma separated)</label>
-                  <input id="wizard-generator-tags-exclude" className={styles.input} value={generatorTagsExclude} onChange={e => setGeneratorTagsExclude(e.target.value)} placeholder="archived, beta" />
+                  <label className={styles.label} htmlFor="wizard-generator-tags-exclude">{t('admin_wizard_exclude_tags')}</label>
+                  <input id="wizard-generator-tags-exclude" className={styles.input} value={generatorTagsExclude} onChange={e => setGeneratorTagsExclude(e.target.value)} placeholder={t('admin_wizard_exclude_tags_placeholder')} />
                 </div>
               </div>
 
               <div className={styles.generatorGrid}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Versioning & Randomness</label>
+                  <label className={styles.label}>{t('admin_wizard_versioning')}</label>
                   <div className={styles.toggleRow}>
                     <label className={styles.checkItem}>
                       <input type="checkbox" checked={generatorUniquePerCandidate} onChange={e => setGeneratorUniquePerCandidate(e.target.checked)} />
-                      Unique paper per candidate
+                      {t('admin_wizard_unique_per_candidate')}
                     </label>
                     <label className={styles.checkItem}>
                       <input type="checkbox" checked={generatorPreventReuse} onChange={e => setGeneratorPreventReuse(e.target.checked)} />
-                      Prevent reusing same question across versions
+                      {t('admin_wizard_prevent_reuse')}
                     </label>
                     <label className={styles.checkItem}>
                       <input type="checkbox" checked={generatorShuffleAnswers} onChange={e => setGeneratorShuffleAnswers(e.target.checked)} />
-                      Shuffle answers per version
+                      {t('admin_wizard_shuffle_answers')}
                     </label>
                     <label className={styles.checkItem}>
                       <input type="checkbox" checked={generatorAdaptive} onChange={e => setGeneratorAdaptive(e.target.checked)} />
-                      Adaptive (increase difficulty on streaks)
+                      {t('admin_wizard_adaptive')}
                     </label>
                   </div>
                   <div className={styles.inputRow}>
                     <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="wizard-generator-version-count">Versions to pre-generate</label>
+                      <label className={styles.label} htmlFor="wizard-generator-version-count">{t('admin_wizard_versions_count')}</label>
                       <input id="wizard-generator-version-count" className={styles.input} type="number" min={1} max={20} value={generatorVersionCount} onChange={e => setGeneratorVersionCount(Number(e.target.value))} />
                     </div>
                     <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="wizard-generator-random-seed">Random Seed (optional)</label>
-                      <input id="wizard-generator-random-seed" className={styles.input} value={generatorRandomSeed} onChange={e => setGeneratorRandomSeed(e.target.value)} placeholder="Leave blank for random" />
+                      <label className={styles.label} htmlFor="wizard-generator-random-seed">{t('admin_wizard_random_seed')}</label>
+                      <input id="wizard-generator-random-seed" className={styles.input} value={generatorRandomSeed} onChange={e => setGeneratorRandomSeed(e.target.value)} placeholder={t('admin_wizard_random_seed_placeholder')} />
                     </div>
                   </div>
                 </div>
@@ -2014,50 +2014,50 @@ export default function AdminNewTestWizard() {
 
       case 2: return (
         <>
-          <h3 className={styles.panelTitle}>Proctoring & Test Settings</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_proctoring_settings')}</h3>
           <div className={styles.summaryChips}>
-            <span className={styles.chip}>Phase 3 of 9</span>
-            <span className={styles.chip}>Checks enabled: {activeDetectorCount}</span>
-            <span className={styles.chip}>Escalation rules: {alertRuleCount}</span>
-            <span className={styles.chip}>Fullscreen: {proctoring.fullscreen_enforce ? 'On' : 'Off'}</span>
-            <span className={styles.chip}>Tabs: {proctoring.tab_switch_detect ? 'Tracked' : 'Ignored'}</span>
+            <span className={styles.chip}>{t('admin_wizard_phase_3')}</span>
+            <span className={styles.chip}>{t('admin_wizard_checks_enabled')}: {activeDetectorCount}</span>
+            <span className={styles.chip}>{t('admin_wizard_escalation_rules')}: {alertRuleCount}</span>
+            <span className={styles.chip}>{t('admin_wizard_fullscreen_label')}: {proctoring.fullscreen_enforce ? t('admin_wizard_on_label') : t('admin_wizard_off_label')}</span>
+            <span className={styles.chip}>{t('admin_wizard_tabs_label')}: {proctoring.tab_switch_detect ? t('admin_wizard_tracked_label') : t('admin_wizard_ignored_label')}</span>
           </div>
           <p className={styles.phaseIntro}>
-            This is the dedicated proctoring phase. Configure delivery rules, AI monitoring, special accommodations, and live candidate controls here before you publish.
+            {t('admin_wizard_proctoring_intro')}
           </p>
-          <div className={styles.sectionDivider}>Delivery settings</div>
+          <div className={styles.sectionDivider}>{t('admin_wizard_delivery_settings')}</div>
           <div className={styles.inputRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-exam-type">Question Type</label>
+              <label className={styles.label} htmlFor="wizard-exam-type">{t('admin_wizard_question_type')}</label>
               <select id="wizard-exam-type" className={styles.select} value={examType} onChange={e => setExamType(e.target.value)}>
-                <option value="MCQ">Multiple Choice (MCQ)</option>
-                <option value="TEXT">Essay / Text</option>
+                <option value="MCQ">{t('admin_wizard_mcq_option')}</option>
+                <option value="TEXT">{t('admin_wizard_text_option')}</option>
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-page-format">Page Format</label>
+              <label className={styles.label} htmlFor="wizard-page-format">{t('admin_wizard_page_format')}</label>
               <select id="wizard-page-format" className={styles.select} value={pageFormat} onChange={e => setPageFormat(e.target.value)}>
-                <option value="one_per_page">One question per page</option>
-                <option value="all_per_page">All questions on one page</option>
-                <option value="section_per_page">One section per page</option>
+                <option value="one_per_page">{t('admin_wizard_one_per_page')}</option>
+                <option value="all_per_page">{t('admin_wizard_all_per_page')}</option>
+                <option value="section_per_page">{t('admin_wizard_section_per_page')}</option>
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-calculator-type">Calculator</label>
+              <label className={styles.label} htmlFor="wizard-calculator-type">{t('admin_wizard_calculator')}</label>
               <select id="wizard-calculator-type" className={styles.select} value={calculatorType} onChange={e => setCalculatorType(e.target.value)}>
-                <option value="none">No calculator</option>
-                <option value="basic">Basic calculator</option>
-                <option value="scientific">Scientific calculator</option>
+                <option value="none">{t('admin_wizard_no_calculator')}</option>
+                <option value="basic">{t('admin_wizard_basic_calc')}</option>
+                <option value="scientific">{t('admin_wizard_scientific_calc')}</option>
               </select>
             </div>
           </div>
 
           <div className={styles.checkboxGroup}>
             {[
-              { key: 'hideMetadata', label: 'Hide metadata from candidates', state: hideMetadata, set: setHideMetadata },
-              { key: 'randomize_q', label: 'Randomize question order', state: randomizeQuestions, set: setRandomizeQuestions },
-              { key: 'randomize_a', label: 'Randomize answer choices', state: randomizeAnswers, set: setRandomizeAnswers },
-              { key: 'progress', label: 'Show progress bar', state: showProgressBar, set: setShowProgressBar },
+              { key: 'hideMetadata', label: t('admin_wizard_hide_metadata'), state: hideMetadata, set: setHideMetadata },
+              { key: 'randomize_q', label: t('admin_wizard_randomize_questions'), state: randomizeQuestions, set: setRandomizeQuestions },
+              { key: 'randomize_a', label: t('admin_wizard_randomize_answers'), state: randomizeAnswers, set: setRandomizeAnswers },
+              { key: 'progress', label: t('admin_wizard_show_progress'), state: showProgressBar, set: setShowProgressBar },
             ].map(item => (
               <label key={item.key} className={styles.checkItem}>
                 <input type="checkbox" checked={item.state} onChange={e => item.set(e.target.checked)} />
@@ -2066,29 +2066,29 @@ export default function AdminNewTestWizard() {
             ))}
           </div>
 
-          <div className={styles.sectionDivider}>Proctoring</div>
+          <div className={styles.sectionDivider}>{t('admin_wizard_proctoring_label')}</div>
           <div className={styles.proctoringShell}>
             <div className={styles.proctoringHead}>
-              <h4 className={styles.proctoringTitle}>Proctoring</h4>
+              <h4 className={styles.proctoringTitle}>{t('admin_wizard_proctoring_label')}</h4>
               <div className={styles.proctoringViews}>
-                <button type="button" className={`${styles.viewTab} ${proctoringView === 'candidate_monitoring' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('candidate_monitoring')}>Candidate monitoring</button>
-                <button type="button" className={`${styles.viewTab} ${proctoringView === 'special_accommodations' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('special_accommodations')}>Special accommodations</button>
-                <button type="button" className={`${styles.viewTab} ${proctoringView === 'special_requests' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('special_requests')}>Special requests</button>
+                <button type="button" className={`${styles.viewTab} ${proctoringView === 'candidate_monitoring' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('candidate_monitoring')}>{t('admin_wizard_candidate_monitoring')}</button>
+                <button type="button" className={`${styles.viewTab} ${proctoringView === 'special_accommodations' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('special_accommodations')}>{t('admin_wizard_special_accommodations')}</button>
+                <button type="button" className={`${styles.viewTab} ${proctoringView === 'special_requests' ? styles.viewTabActive : ''}`} onClick={() => setProctoringView('special_requests')}>{t('admin_wizard_special_requests')}</button>
               </div>
             </div>
 
             <div className={styles.inputRow}>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-proctoring-test">Test</label>
-                <input id="wizard-proctoring-test" className={styles.input} value={title || 'Untitled test'} readOnly />
+                <label className={styles.label} htmlFor="wizard-proctoring-test">{t('admin_wizard_test_label')}</label>
+                <input id="wizard-proctoring-test" className={styles.input} value={title || t('admin_wizard_untitled_test')} readOnly />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-proctoring-session">Testing session</label>
+                <label className={styles.label} htmlFor="wizard-proctoring-session">{t('admin_wizard_testing_session')}</label>
                 <select id="wizard-proctoring-session" className={styles.select} value={proctoringSessionId} onChange={(e) => setProctoringSessionId(e.target.value)}>
-                  <option value="">All testing sessions</option>
+                  <option value="">{t('admin_wizard_all_sessions')}</option>
                   {proctoringSessions.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {`Session ${String(s.id).slice(0, 6)} - ${fmtDateTime(s.scheduled_at)}`}
+                      {`${t('admin_wizard_session_prefix')} ${String(s.id).slice(0, 6)} - ${fmtDateTime(s.scheduled_at)}`}
                     </option>
                   ))}
                 </select>
@@ -2098,69 +2098,69 @@ export default function AdminNewTestWizard() {
             {proctoringView === 'candidate_monitoring' && (
               <div className={styles.monitoringTableCard}>
                 <div className={styles.monitoringActions}>
-                  <button type="button" className={styles.btnSecondary} disabled={proctoringBulkBusy} onClick={() => handleProctoringBulkPause(true)}>Pause filtered</button>
-                  <button type="button" className={styles.btnSecondary} disabled={proctoringBulkBusy} onClick={() => handleProctoringBulkPause(false)}>Resume filtered</button>
-                  <button type="button" className={styles.btnPrimarySolid} onClick={() => examId && navigate(`/admin/videos?exam_id=${examId}`)}>Open supervision mode</button>
-                  {examId && <button type="button" className={styles.btnSecondary} onClick={() => navigate(`/admin/tests/${examId}/manage?tab=proctoring`)}>Full proctoring view</button>}
+                  <button type="button" className={styles.btnSecondary} disabled={proctoringBulkBusy} onClick={() => handleProctoringBulkPause(true)}>{t('admin_wizard_pause_filtered')}</button>
+                  <button type="button" className={styles.btnSecondary} disabled={proctoringBulkBusy} onClick={() => handleProctoringBulkPause(false)}>{t('admin_wizard_resume_filtered')}</button>
+                  <button type="button" className={styles.btnPrimarySolid} onClick={() => examId && navigate(`/admin/videos?exam_id=${examId}`)}>{t('admin_wizard_open_supervision')}</button>
+                  {examId && <button type="button" className={styles.btnSecondary} onClick={() => navigate(`/admin/tests/${examId}/manage?tab=proctoring`)}>{t('admin_wizard_full_proctoring')}</button>}
                 </div>
 
                 <div className={styles.monitoringTableWrap}>
                   <table className={styles.monitoringTable}>
                     <thead>
                       <tr>
-                        <th>Actions</th>
-                        <th>Attempt ID</th>
-                        <th>Username</th>
-                        <th>Testing session name</th>
-                        <th>Attempt status</th>
-                        <th>Test started</th>
-                        <th>User group</th>
-                        <th>Comment</th>
-                        <th>Proctor rate</th>
+                        <th>{t('admin_wizard_th_actions')}</th>
+                        <th>{t('admin_wizard_th_attempt_id')}</th>
+                        <th>{t('admin_wizard_th_username')}</th>
+                        <th>{t('admin_wizard_th_session_name')}</th>
+                        <th>{t('admin_wizard_th_attempt_status')}</th>
+                        <th>{t('admin_wizard_th_test_started')}</th>
+                        <th>{t('admin_wizard_th_user_group')}</th>
+                        <th>{t('admin_wizard_th_comment')}</th>
+                        <th>{t('admin_wizard_th_proctor_rate')}</th>
                       </tr>
                       <tr className={styles.monitoringSearchRow}>
                         <th></th>
-                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.attemptId} onChange={(e) => setProctoringSearch((p) => ({ ...p, attemptId: e.target.value }))} /></th>
-                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.username} onChange={(e) => setProctoringSearch((p) => ({ ...p, username: e.target.value }))} /></th>
-                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.sessionName} onChange={(e) => setProctoringSearch((p) => ({ ...p, sessionName: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder={t('admin_wizard_search_placeholder')} value={proctoringSearch.attemptId} onChange={(e) => setProctoringSearch((p) => ({ ...p, attemptId: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder={t('admin_wizard_search_placeholder')} value={proctoringSearch.username} onChange={(e) => setProctoringSearch((p) => ({ ...p, username: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder={t('admin_wizard_search_placeholder')} value={proctoringSearch.sessionName} onChange={(e) => setProctoringSearch((p) => ({ ...p, sessionName: e.target.value }))} /></th>
                         <th>
                           <select className={styles.tableFilter} value={proctoringSearch.status} onChange={(e) => setProctoringSearch((p) => ({ ...p, status: e.target.value }))}>
-                            <option value="">Select one</option>
+                            <option value="">{t('admin_wizard_select_one')}</option>
                             <option value="IN_PROGRESS">IN_PROGRESS</option>
                             <option value="SUBMITTED">SUBMITTED</option>
                             <option value="GRADED">GRADED</option>
                           </select>
                         </th>
                         <th></th>
-                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.userGroup} onChange={(e) => setProctoringSearch((p) => ({ ...p, userGroup: e.target.value }))} /></th>
-                        <th><input className={styles.tableFilter} placeholder="Search" value={proctoringSearch.comment} onChange={(e) => setProctoringSearch((p) => ({ ...p, comment: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder={t('admin_wizard_search_placeholder')} value={proctoringSearch.userGroup} onChange={(e) => setProctoringSearch((p) => ({ ...p, userGroup: e.target.value }))} /></th>
+                        <th><input className={styles.tableFilter} placeholder={t('admin_wizard_search_placeholder')} value={proctoringSearch.comment} onChange={(e) => setProctoringSearch((p) => ({ ...p, comment: e.target.value }))} /></th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {proctoringLoading ? (
-                        <tr><td colSpan={9}>Loading attempts...</td></tr>
+                        <tr><td colSpan={9}>{t('admin_wizard_loading_attempts')}</td></tr>
                       ) : filteredProctoringRows.length === 0 ? (
-                        <tr><td colSpan={9}>There are no test attempts</td></tr>
+                        <tr><td colSpan={9}>{t('admin_wizard_no_attempts')}</td></tr>
                       ) : (
                         filteredProctoringRows.map((row) => (
                           <tr key={row.id}>
                             <td>
                               <div className={styles.rowActionGroup}>
-                                <button type="button" className={styles.rowIconBtn} title={row.paused ? 'Resume attempt' : 'Pause attempt'} aria-label={row.paused ? 'Resume attempt' : 'Pause attempt'} disabled={proctoringRowBusy[row.id]} onClick={() => handleProctoringPauseResume(row)}>
+                                <button type="button" className={styles.rowIconBtn} title={row.paused ? t('admin_wizard_resume_attempt') : t('admin_wizard_pause_attempt')} aria-label={row.paused ? t('admin_wizard_resume_attempt') : t('admin_wizard_pause_attempt')} disabled={proctoringRowBusy[row.id]} onClick={() => handleProctoringPauseResume(row)}>
                                   {row.paused ? (
                                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3" /></svg>
                                   ) : (
                                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 5v14M16 5v14" /></svg>
                                   )}
                                 </button>
-                                <button type="button" className={styles.rowIconBtn} title="Analyze attempt" aria-label="Analyze attempt" onClick={() => navigate(`/admin/attempt-analysis?id=${row.id}`)}>
+                                <button type="button" className={styles.rowIconBtn} title={t('admin_wizard_analyze_attempt')} aria-label={t('admin_wizard_analyze_attempt')} onClick={() => navigate(`/admin/attempt-analysis?id=${row.id}`)}>
                                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                     <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
                                   </svg>
                                 </button>
-                                <button type="button" className={styles.rowIconBtn} title="Open video recordings" aria-label="Open video recordings" onClick={() => navigate(`/admin/videos/${row.id}`)}>
+                                <button type="button" className={styles.rowIconBtn} title={t('admin_wizard_open_recordings')} aria-label={t('admin_wizard_open_recordings')} onClick={() => navigate(`/admin/videos/${row.id}`)}>
                                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M23 7l-7 5 7 5V7z" />
                                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
@@ -2184,15 +2184,15 @@ export default function AdminNewTestWizard() {
                 </div>
 
                 <div className={styles.monitoringFooter}>
-                  <span>Save displayed column set</span>
-                  <span>Rows: {filteredProctoringRows.length}</span>
+                  <span>{t('admin_wizard_save_columns')}</span>
+                  <span>{t('admin_wizard_rows_label')}: {filteredProctoringRows.length}</span>
                 </div>
               </div>
             )}
 
             {proctoringView === 'special_accommodations' && (
               <div className={styles.proctoringNotes}>
-                <label className={styles.label} htmlFor="wizard-special-accommodations">Special accommodations</label>
+                <label className={styles.label} htmlFor="wizard-special-accommodations">{t('admin_wizard_special_accommodations')}</label>
                 <textarea
                   id="wizard-special-accommodations"
                   className={styles.textarea}
@@ -2208,7 +2208,7 @@ export default function AdminNewTestWizard() {
 
             {proctoringView === 'special_requests' && (
               <div className={styles.proctoringNotes}>
-                <label className={styles.label} htmlFor="wizard-special-requests">Special requests</label>
+                <label className={styles.label} htmlFor="wizard-special-requests">{t('admin_wizard_special_requests')}</label>
                 <textarea
                   id="wizard-special-requests"
                   className={styles.textarea}
@@ -2222,7 +2222,7 @@ export default function AdminNewTestWizard() {
               </div>
             )}
 
-            <div className={styles.sectionDivider}>Journey requirements</div>
+            <div className={styles.sectionDivider}>{t('admin_wizard_journey_requirements')}</div>
             <div className={styles.requirementGrid}>
               {PROCTORING_REQUIREMENTS.map((item) => (
                 <button
@@ -2232,31 +2232,31 @@ export default function AdminNewTestWizard() {
                   onClick={() => updateProctoringFlag(item.key, !proctoring[item.key])}
                 >
                   <div className={styles.requirementCardHead}>
-                    <div className={styles.requirementCardTitle}>{item.label}</div>
+                    <div className={styles.requirementCardTitle}>{t(item.labelKey)}</div>
                     <div className={`${styles.toggleTrack} ${proctoring[item.key] ? styles.toggleTrackOn : ''}`}>
                       <div className={styles.toggleThumb} />
                     </div>
                   </div>
-                  <div className={styles.requirementCardDesc}>{item.desc}</div>
+                  <div className={styles.requirementCardDesc}>{t(item.descKey)}</div>
                 </button>
               ))}
             </div>
 
-            <div className={styles.sectionDivider}>Alert escalation rules</div>
+            <div className={styles.sectionDivider}>{t('admin_wizard_alert_rules_title')}</div>
             <div className={styles.alertRuleShell}>
               <div className={styles.alertRuleHead}>
                 <div>
-                  <div className={styles.alertRuleTitle}>Escalate specific proctoring alerts</div>
+                  <div className={styles.alertRuleTitle}>{t('admin_wizard_escalate_desc')}</div>
                   <div className={styles.alertRuleDesc}>
-                    Choose which alert matters, how many repeats are allowed, what severity gets logged, and what the exam should do when the threshold is reached.
+                    {t('admin_wizard_escalate_hint')}
                   </div>
                 </div>
-                <button type="button" className={styles.btnSecondary} onClick={addAlertRule}>Add rule</button>
+                <button type="button" className={styles.btnSecondary} onClick={addAlertRule}>{t('admin_wizard_add_rule')}</button>
               </div>
 
               {alertRuleCount === 0 ? (
                 <div className={styles.alertRuleEmpty}>
-                  No custom alert rules yet. The global auto-submit thresholds still apply until you add a rule here.
+                  {t('admin_wizard_no_rules')}
                 </div>
               ) : (
                 <div className={styles.alertRuleList}>
@@ -2264,19 +2264,19 @@ export default function AdminNewTestWizard() {
                     const option = ALERT_RULE_EVENT_OPTIONS.find((item) => item.value === rule.event_type) || ALERT_RULE_EVENT_OPTIONS[0]
                     const dependencies = Array.isArray(option.requires) ? option.requires : []
                     const missingDependencies = dependencies.filter((dep) => !proctoring[dep])
-                    const dependencyLabel = missingDependencies.map((dep) => PROCTORING_LABELS[dep] || humanizeSettingLabel(dep)).join(', ')
+                    const dependencyLabel = missingDependencies.map((dep) => PROCTORING_LABEL_KEYS[dep] ? t(PROCTORING_LABEL_KEYS[dep]) : humanizeSettingLabel(dep)).join(', ')
                     return (
                       <div key={rule.id} className={styles.alertRuleCard}>
                         <div className={styles.alertRuleCardHead}>
                           <div>
-                            <div className={styles.alertRuleCardTitle}>Rule {index + 1}</div>
-                            <div className={styles.alertRuleCardMeta}>{describeAlertRule(rule)}</div>
+                            <div className={styles.alertRuleCardTitle}>{t('admin_wizard_rule_label')} {index + 1}</div>
+                            <div className={styles.alertRuleCardMeta}>{describeAlertRule(rule, t)}</div>
                           </div>
-                          <button type="button" className={styles.reviewEditBtn} onClick={() => removeAlertRule(rule.id)}>Remove</button>
+                          <button type="button" className={styles.reviewEditBtn} onClick={() => removeAlertRule(rule.id)}>{t('admin_wizard_remove')}</button>
                         </div>
                         <div className={styles.alertRuleGrid}>
                           <div className={styles.formGroup}>
-                            <label className={styles.label}>Alert type</label>
+                            <label className={styles.label}>{t('admin_wizard_alert_type')}</label>
                             <select
                               aria-label={`Alert type ${index + 1}`}
                               className={styles.select}
@@ -2284,13 +2284,13 @@ export default function AdminNewTestWizard() {
                               onChange={(e) => updateAlertRule(rule.id, 'event_type', e.target.value)}
                             >
                               {ALERT_RULE_EVENT_OPTIONS.map((item) => (
-                                <option key={item.value} value={item.value}>{item.label}</option>
+                                <option key={item.value} value={item.value}>{t(item.labelKey)}</option>
                               ))}
                             </select>
-                            <div className={styles.helper}>{option.desc}</div>
+                            <div className={styles.helper}>{t(option.descKey)}</div>
                           </div>
                           <div className={styles.formGroup}>
-                            <label className={styles.label}>Trigger after</label>
+                            <label className={styles.label}>{t('admin_wizard_trigger_after')}</label>
                             <input
                               aria-label={`Trigger after ${index + 1}`}
                               className={styles.input}
@@ -2300,10 +2300,10 @@ export default function AdminNewTestWizard() {
                               value={rule.threshold}
                               onChange={(e) => updateAlertRule(rule.id, 'threshold', e.target.value)}
                             />
-                            <div className={styles.helper}>Count of matching alerts before this rule fires.</div>
+                            <div className={styles.helper}>{t('admin_wizard_trigger_hint')}</div>
                           </div>
                           <div className={styles.formGroup}>
-                            <label className={styles.label}>Escalation severity</label>
+                            <label className={styles.label}>{t('admin_wizard_escalation_severity')}</label>
                             <select
                               aria-label={`Escalation severity ${index + 1}`}
                               className={styles.select}
@@ -2314,10 +2314,10 @@ export default function AdminNewTestWizard() {
                                 <option key={value} value={value}>{value}</option>
                               ))}
                             </select>
-                            <div className={styles.helper}>Severity stored on the escalation event for review and reporting.</div>
+                            <div className={styles.helper}>{t('admin_wizard_severity_hint')}</div>
                           </div>
                           <div className={styles.formGroup}>
-                            <label className={styles.label}>What happens</label>
+                            <label className={styles.label}>{t('admin_wizard_what_happens')}</label>
                             <select
                               aria-label={`What happens ${index + 1}`}
                               className={styles.select}
@@ -2328,22 +2328,22 @@ export default function AdminNewTestWizard() {
                                 <option key={item.value} value={item.value}>{item.label}</option>
                               ))}
                             </select>
-                            <div className={styles.helper}>{ALERT_RULE_ACTION_HELPERS[rule.action] || ALERT_RULE_ACTION_HELPERS.WARN}</div>
+                            <div className={styles.helper}>{t(ALERT_RULE_ACTION_HELPER_KEYS[rule.action] || ALERT_RULE_ACTION_HELPER_KEYS.WARN)}</div>
                           </div>
                         </div>
                         <div className={styles.formGroup}>
-                          <label className={styles.label}>Optional escalation message</label>
+                          <label className={styles.label}>{t('admin_wizard_optional_message')}</label>
                           <input
                             aria-label={`Escalation message ${index + 1}`}
                             className={styles.input}
                             value={rule.message || ''}
                             onChange={(e) => updateAlertRule(rule.id, 'message', e.target.value)}
-                            placeholder="Optional custom message shown when this rule fires"
+                            placeholder={t('admin_wizard_message_placeholder')}
                           />
                         </div>
                         {missingDependencies.length > 0 && (
                           <div className={styles.alertRuleDependencyWarning}>
-                            This rule depends on {dependencyLabel}. Enable it above or the rule will never fire.
+                            {t('admin_wizard_rule_depends')} {dependencyLabel}. {t('admin_wizard_enable_above')}
                           </div>
                         )}
                       </div>
@@ -2353,11 +2353,11 @@ export default function AdminNewTestWizard() {
               )}
             </div>
 
-            <div className={styles.sectionDivider}>Detector switches</div>
+            <div className={styles.sectionDivider}>{t('admin_wizard_detector_switches')}</div>
             <div className={styles.presetRow}>
-              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('lenient')}>Lenient</button>
-              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('standard')}>Standard</button>
-              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('strict')}>Strict</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('lenient')}>{t('admin_wizard_lenient')}</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('standard')}>{t('admin_wizard_standard')}</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => applyProctoringPreset('strict')}>{t('admin_wizard_strict')}</button>
             </div>
             <div className={styles.detectorsGrid}>
               {DETECTORS.map(d => (
@@ -2368,20 +2368,20 @@ export default function AdminNewTestWizard() {
                     </div>
                   </div>
                   <div>
-                    <div className={styles.detectorName}>{d.label}</div>
-                    <div className={styles.detectorDesc}>{d.desc}</div>
+                    <div className={styles.detectorName}>{t(d.labelKey)}</div>
+                    <div className={styles.detectorDesc}>{t(d.descKey)}</div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className={styles.sectionDivider}>Advanced detector tuning</div>
+            <div className={styles.sectionDivider}>{t('admin_wizard_advanced_tuning')}</div>
             <div className={styles.advancedSectionStack}>
               {PROCTORING_CONTROL_GROUPS.map((group) => (
                 <div key={group.key} className={styles.advancedSectionCard}>
                   <div className={styles.advancedSectionHead}>
-                    <div className={styles.advancedSectionTitle}>{group.title}</div>
-                    <div className={styles.advancedSectionDesc}>{group.description}</div>
+                    <div className={styles.advancedSectionTitle}>{t(group.titleKey)}</div>
+                    <div className={styles.advancedSectionDesc}>{t(group.descriptionKey)}</div>
                   </div>
                   <div className={styles.advancedControlGrid}>
                     {group.controls.map((control) => {
@@ -2391,7 +2391,7 @@ export default function AdminNewTestWizard() {
                           ? [control.enabledBy]
                           : []
                       const controlEnabled = dependencies.length === 0 || dependencies.every((dep) => Boolean(proctoring[dep]))
-                      const dependencyLabel = dependencies.map((dep) => PROCTORING_LABELS[dep] || humanizeSettingLabel(dep)).join(' and ')
+                      const dependencyLabel = dependencies.map((dep) => PROCTORING_LABEL_KEYS[dep] ? t(PROCTORING_LABEL_KEYS[dep]) : humanizeSettingLabel(dep)).join(' and ')
                       const numericValue = proctoring[control.key] ?? control.min
                       return (
                         <div
@@ -2400,8 +2400,8 @@ export default function AdminNewTestWizard() {
                         >
                           <div className={styles.advancedControlHead}>
                             <div>
-                              <div className={styles.advancedControlLabel}>{control.label}</div>
-                              <div className={styles.advancedControlDesc}>{control.desc}</div>
+                              <div className={styles.advancedControlLabel}>{t(control.labelKey)}</div>
+                              <div className={styles.advancedControlDesc}>{t(control.descKey)}</div>
                             </div>
                             <div className={styles.advancedControlMeta}>
                               {numericValue}
@@ -2430,7 +2430,7 @@ export default function AdminNewTestWizard() {
                               onChange={(e) => updateProctoringNumber(control.key, e.target.value, { integer: Number.isInteger(control.step) })}
                             />
                             <span className={styles.advancedInputHint}>
-                              {controlEnabled ? `Recommended range: ${control.min} to ${control.max} ${control.unit}` : `Enable ${dependencyLabel} first`}
+                              {controlEnabled ? `${t('admin_wizard_recommended_range')} ${control.min} ${t('admin_wizard_to')} ${control.max} ${control.unit}` : `${t('admin_wizard_enable_first')} ${dependencyLabel} ${t('admin_wizard_enable_first_suffix')}`}
                             </span>
                           </div>
                         </div>
@@ -2442,14 +2442,14 @@ export default function AdminNewTestWizard() {
             </div>
           </div>
 
-          <div className={styles.sectionDivider}>Time Limit</div>
+          <div className={styles.sectionDivider}>{t('admin_wizard_time_limit_section')}</div>
           <label className={styles.checkItem}>
             <input type="checkbox" checked={unlimitedTime} onChange={e => setUnlimitedTime(e.target.checked)} />
-            <span>Unlimited time (no timer)</span>
+            <span>{t('admin_wizard_unlimited_time')}</span>
           </label>
           {!unlimitedTime && (
             <div className={`${styles.formGroup} ${styles.timeLimitWrap}`}>
-              <label className={styles.label} htmlFor="wizard-time-limit">Duration (minutes)</label>
+              <label className={styles.label} htmlFor="wizard-time-limit">{t('admin_wizard_duration_label')}</label>
               <input id="wizard-time-limit" name="time_limit" className={`${styles.input} ${styles.timeLimitInput}`} type="number" min={1} max={600} value={timeLimitMinutes} onFocus={e => e.target.select()} onChange={e => setTimeLimitMinutes(Number(e.target.value))} />
             </div>
           )}
@@ -2458,29 +2458,29 @@ export default function AdminNewTestWizard() {
 
       case 3: return (
         <>
-          <h3 className={styles.panelTitle}>Questions</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_questions_title')}</h3>
           <p className={styles.questionsIntro}>
-            Add questions directly or seed from a question pool.
+            {t('admin_wizard_questions_intro')}
           </p>
 
           {method === 'manual' && examId && (
             <>
               <div className={styles.poolSeed}>
-                <span className={styles.poolSeedLabel}>Seed from pool:</span>
+                <span className={styles.poolSeedLabel}>{t('admin_wizard_seed_from_pool')}</span>
                 <select className={`${styles.select} ${styles.poolSeedSelect}`} value={selectedPool} onChange={e => setSelectedPool(e.target.value)}>
-                  <option value="">Select pool...</option>
+                  <option value="">{t('admin_wizard_select_pool')}</option>
                   {pools.map(p => <option key={p.id} value={p.id}>{p.name} ({Number(p.question_count || 0)})</option>)}
                 </select>
                 <input className={`${styles.input} ${styles.poolSeedCountInput}`} type="number" min={1} max={100} value={seedCount} onChange={e => setSeedCount(Number(e.target.value))} />
                 <button className={styles.btnSeed} onClick={handleSeedPool} disabled={!selectedPool || !examId || saving || selectedPoolCount < 1}>
-                  {saving ? 'Saving...' : 'Seed'}
+                  {saving ? t('saving') : t('admin_wizard_seed')}
                 </button>
               </div>
               {selectedPool && (
                 <div className={styles.helper}>
                   {selectedPoolCount > 0
-                    ? `${selectedPoolCount} question${selectedPoolCount === 1 ? '' : 's'} available in this pool for seeding.`
-                    : 'This pool is empty. Open Question Pools and add questions before seeding.'}
+                    ? `${selectedPoolCount} ${t('admin_wizard_pool_available')}`
+                    : t('admin_wizard_pool_empty_hint')}
                 </div>
               )}
               <ExamQuestionPanel examId={examId} questions={questions} onUpdate={setQuestions} questionTypes={QUESTION_TYPES} />
@@ -2489,12 +2489,12 @@ export default function AdminNewTestWizard() {
           {!examId && (
             <div className={styles.questionInitCard}>
               <div className={styles.questionInitLead}>
-                {saving ? 'Creating the test so you can add questions...' : 'Hang tight while we create the test so you can start adding questions right away.'}
+                {saving ? t('admin_wizard_creating_test') : t('admin_wizard_hang_tight')}
               </div>
               {questionInitError && <div className={styles.questionInitError}>{questionInitError}</div>}
               {!saving && (
                 <button className={styles.btnSeed} onClick={ensureExamCreated}>
-                  Retry create
+                  {t('admin_wizard_retry_create')}
                 </button>
               )}
             </div>
@@ -2504,83 +2504,83 @@ export default function AdminNewTestWizard() {
 
       case 4: return (
         <>
-          <h3 className={styles.panelTitle}>Grading Configuration</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_grading_config')}</h3>
           <div className={styles.inputRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-passing-score">Passing Mark (%)</label>
+              <label className={styles.label} htmlFor="wizard-passing-score">{t('admin_wizard_passing_mark')}</label>
               <input id="wizard-passing-score" className={styles.input} type="number" min={0} max={100} value={passingScore} onChange={e => { setPassingScore(Number(e.target.value)); if (examId) autoPersist() }} />
               <span className={styles.metricHelper}>
-                Achieve more than {passingScore}% on the entire test to pass.
+                {t('admin_wizard_passing_hint')} {passingScore}{t('admin_wizard_passing_hint_suffix')}
               </span>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-max-attempts">Max Attempts Allowed</label>
+              <label className={styles.label} htmlFor="wizard-max-attempts">{t('admin_wizard_max_attempts_label')}</label>
               <input id="wizard-max-attempts" className={styles.input} type="number" min={1} max={20} value={maxAttempts} onChange={e => { setMaxAttempts(Number(e.target.value)); if (examId) autoPersist() }} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="wizard-grading-scale">Grading Scale</label>
+              <label className={styles.label} htmlFor="wizard-grading-scale">{t('admin_wizard_grading_scale_label')}</label>
               <select id="wizard-grading-scale" className={styles.select} value={gradingScaleId} onChange={e => { setGradingScaleId(e.target.value); if (examId) autoPersist() }}>
-                <option value="">No scale</option>
+                <option value="">{t('admin_wizard_no_scale')}</option>
                 {gradingScales.map(gs => <option key={gs.id} value={gs.id}>{gs.name}</option>)}
               </select>
             </div>
           </div>
 
-          <div className={styles.sectionDivider}>Negative Marking</div>
+          <div className={styles.sectionDivider}>{t('admin_wizard_neg_marking_section')}</div>
           <label className={styles.checkItem}>
             <input type="checkbox" checked={negativeMarking} onChange={e => { setNegativeMarking(e.target.checked); if (examId) autoPersist() }} />
-            <span>Enable negative marking for wrong answers</span>
+            <span>{t('admin_wizard_enable_neg_marking')}</span>
           </label>
           {negativeMarking && (
             <div className={`${styles.inputRow} ${styles.negativeMarkRow}`}>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-negative-mark-value">Deduction per Wrong Answer</label>
+                <label className={styles.label} htmlFor="wizard-negative-mark-value">{t('admin_wizard_deduction_value')}</label>
                 <input id="wizard-negative-mark-value" className={styles.input} type="number" min={0} step={0.25} value={negMarkValue} onChange={e => { setNegMarkValue(Number(e.target.value)); if (examId) autoPersist() }} />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-negative-mark-type">Deduction Type</label>
+                <label className={styles.label} htmlFor="wizard-negative-mark-type">{t('admin_wizard_deduction_type')}</label>
                 <select id="wizard-negative-mark-type" className={styles.select} value={negMarkType} onChange={e => { setNegMarkType(e.target.value); if (examId) autoPersist() }}>
-                  <option value="points">Fixed Points</option>
-                  <option value="percentage">Percentage of Question</option>
+                  <option value="points">{t('admin_wizard_fixed_points')}</option>
+                  <option value="percentage">{t('admin_wizard_pct_question')}</option>
                 </select>
               </div>
             </div>
           )}
 
-          <div className={styles.sectionDivider}>Score Display</div>
+          <div className={styles.sectionDivider}>{t('admin_wizard_score_display')}</div>
           <div className={styles.checkboxGroup}>
             <label className={styles.checkItem}>
               <input type="checkbox" checked={showFinalScore} onChange={e => { setShowFinalScore(e.target.checked); if (examId) autoPersist() }} />
-              <span>Show final score to candidate after submission</span>
+              <span>{t('admin_wizard_show_final_score')}</span>
             </label>
             <label className={styles.checkItem}>
               <input type="checkbox" checked={showQuestionScores} onChange={e => { setShowQuestionScores(e.target.checked); if (examId) autoPersist() }} />
-              <span>Show per-question score breakdown</span>
+              <span>{t('admin_wizard_show_per_question')}</span>
             </label>
             </div>
 
           <div className={styles.conductGrid}>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Test conduct controls</label>
+              <label className={styles.label}>{t('admin_wizard_conduct_controls')}</label>
               <div className={styles.toggleRow}>
                 <label className={styles.checkItem}>
                   <input type="checkbox" checked={proctoring.fullscreen_enforce} onChange={e => { setProctoring(p => ({ ...p, fullscreen_enforce: e.target.checked })); if (examId) autoPersist() }} />
-                  Enforce fullscreen
+                  {t('admin_wizard_enforce_fullscreen')}
                 </label>
                 <label className={styles.checkItem}>
                   <input type="checkbox" checked={proctoring.tab_switch_detect} onChange={e => { setProctoring(p => ({ ...p, tab_switch_detect: e.target.checked })); if (examId) autoPersist() }} />
-                  Detect tab switches
+                  {t('admin_wizard_detect_tab_switches')}
                 </label>
                 <label className={styles.checkItem}>
                   <input type="checkbox" checked={proctoring.screen_capture} onChange={e => { setProctoring(p => ({ ...p, screen_capture: e.target.checked })); if (examId) autoPersist() }} />
-                  Capture screen periodically
+                  {t('admin_wizard_capture_screen')}
                 </label>
                 <label className={styles.checkItem}>
                   <input type="checkbox" checked={proctoring.copy_paste_block} onChange={e => { setProctoring(p => ({ ...p, copy_paste_block: e.target.checked })); if (examId) autoPersist() }} />
-                  Block copy / paste
+                  {t('admin_wizard_block_copy_paste')}
                 </label>
               </div>
-              <div className={styles.helper}>These map to runtime enforcement: fullscreen prompts, visibility/tab pings, optional screen grabs, and clipboard locking.</div>
+              <div className={styles.helper}>{t('admin_wizard_conduct_hint')}</div>
             </div>
           </div>
         </>
@@ -2588,7 +2588,7 @@ export default function AdminNewTestWizard() {
 
       case 5: return (
         <>
-          <h3 className={styles.panelTitle}>Certificates</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_certificates_title')}</h3>
           <label className={`${styles.checkItem} ${styles.certToggleRow}`}>
             <div
               className={`${styles.toggleTrack} ${certEnabled ? styles.toggleTrackOn : ''}`}
@@ -2596,12 +2596,12 @@ export default function AdminNewTestWizard() {
             >
               <div className={styles.toggleThumb} />
             </div>
-            <span className={styles.toggleLabelStrong}>Enable certificate builder</span>
+            <span className={styles.toggleLabelStrong}>{t('admin_wizard_enable_cert_builder')}</span>
           </label>
           {certEnabled && (
             <>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Certificate Release Rule</label>
+                <label className={styles.label}>{t('admin_wizard_cert_release_rule')}</label>
                 <div className={styles.certRuleList}>
                   {CERTIFICATE_ISSUE_RULE_OPTIONS.map((option) => (
                     <label key={option.value} className={`${styles.certRuleCard} ${certIssueRule === option.value ? styles.certRuleCardActive : ''}`}>
@@ -2620,21 +2620,21 @@ export default function AdminNewTestWizard() {
                 </div>
                 <div className={styles.helper}>
                   {certIssueRule === 'AFTER_PROCTORING_REVIEW'
-                    ? 'Learners can download the certificate only after an admin or instructor approves it from Attempt Analysis.'
+                    ? t('admin_wizard_cert_after_review')
                     : certIssueRule === 'POSITIVE_PROCTORING'
-                      ? 'Medium and high proctoring alerts will block certificate download.'
-                      : 'The certificate becomes available as soon as the learner passes.'}
+                      ? t('admin_wizard_cert_positive_proctoring')
+                      : t('admin_wizard_cert_after_pass')}
                 </div>
               </div>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-certificate-template">Template</label>
+                  <label className={styles.label} htmlFor="wizard-certificate-template">{t('admin_wizard_template_label')}</label>
                   <select id="wizard-certificate-template" className={styles.select} value={certTemplate} onChange={e => { setCertTemplate(e.target.value); if (examId) autoPersist() }}>
                     {CERTIFICATE_TEMPLATES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Orientation</label>
+                  <label className={styles.label}>{t('admin_wizard_orientation_label')}</label>
                   <div className={styles.orientationRow}>
                     {['landscape', 'portrait'].map(o => (
                       <label key={o} className={styles.orientationOption}>
@@ -2647,34 +2647,34 @@ export default function AdminNewTestWizard() {
               </div>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-certificate-title">Certificate Title</label>
+                  <label className={styles.label} htmlFor="wizard-certificate-title">{t('admin_wizard_cert_title_label')}</label>
                   <input id="wizard-certificate-title" className={styles.input} value={certTitle} onChange={e => { setCertTitle(e.target.value); if (examId) autoPersist() }} />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-certificate-subtitle">Subtitle</label>
-                  <input id="wizard-certificate-subtitle" className={styles.input} value={certSubtitle} onChange={e => { setCertSubtitle(e.target.value); if (examId) autoPersist() }} placeholder="e.g. with Distinction" />
+                  <label className={styles.label} htmlFor="wizard-certificate-subtitle">{t('admin_wizard_subtitle_label')}</label>
+                  <input id="wizard-certificate-subtitle" className={styles.input} value={certSubtitle} onChange={e => { setCertSubtitle(e.target.value); if (examId) autoPersist() }} placeholder={t('admin_wizard_subtitle_placeholder')} />
                 </div>
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-certificate-company">Company / Institution Name</label>
-                <input id="wizard-certificate-company" className={styles.input} value={certCompany} onChange={e => { setCertCompany(e.target.value); if (examId) autoPersist() }} placeholder="e.g. SYRA Learning Institute" />
+                <label className={styles.label} htmlFor="wizard-certificate-company">{t('admin_wizard_company_label')}</label>
+                <input id="wizard-certificate-company" className={styles.input} value={certCompany} onChange={e => { setCertCompany(e.target.value); if (examId) autoPersist() }} placeholder={t('admin_wizard_company_placeholder')} />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-certificate-signer">Signer Name</label>
-                <input id="wizard-certificate-signer" className={styles.input} value={certSigner} onChange={e => { setCertSigner(e.target.value); if (examId) autoPersist() }} placeholder="e.g. Dr. Jane Doe" />
+                <label className={styles.label} htmlFor="wizard-certificate-signer">{t('admin_wizard_signer_label')}</label>
+                <input id="wizard-certificate-signer" className={styles.input} value={certSigner} onChange={e => { setCertSigner(e.target.value); if (examId) autoPersist() }} placeholder={t('admin_wizard_signer_placeholder')} />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="wizard-certificate-description">Certificate Body Text</label>
+                <label className={styles.label} htmlFor="wizard-certificate-description">{t('admin_wizard_cert_body')}</label>
                 <textarea id="wizard-certificate-description" className={styles.textarea} rows={3} value={certDescription} onChange={e => { setCertDescription(e.target.value); if (examId) autoPersist() }} />
               </div>
               <div className={styles.certPreview}>
                 <div className={styles.certPreviewLabel}>{certTemplate} - {certOrientation}</div>
                 <div className={`${styles.certPreviewBox} ${certOrientation === 'landscape' ? styles.certPreviewLandscape : styles.certPreviewPortrait}`}>
                   <div className={styles.certPreviewBadge}>{certificateIssueRuleLabel(certIssueRule)}</div>
-                  <div className={styles.certPreviewTitle}>{certTitle || 'Certificate Title'}</div>
+                  <div className={styles.certPreviewTitle}>{certTitle || t('admin_wizard_cert_preview_title')}</div>
                   {certSubtitle && <div className={styles.certPreviewSub}>{certSubtitle}</div>}
                   {certCompany && <div className={styles.certPreviewCompany}>{certCompany}</div>}
-                  {certSigner && <div className={styles.certPreviewCompany}>Signed by {certSigner}</div>}
+                  {certSigner && <div className={styles.certPreviewCompany}>{t('admin_wizard_signed_by')} {certSigner}</div>}
                 </div>
               </div>
             </>
@@ -2684,14 +2684,14 @@ export default function AdminNewTestWizard() {
 
       case 6: return (
         <>
-          <h3 className={styles.panelTitle}>Review</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_review_title')}</h3>
           <div className={styles.reviewGrid}>
             {reviewSections.map((section) => (
               <div key={section.key} className={styles.reviewCard}>
                 <div className={styles.reviewCardHeader}>
                   <div className={styles.reviewCardTitle}>{section.title}</div>
                   <button type="button" className={styles.reviewEditBtn} onClick={() => goToStep(section.editStep)}>
-                    Edit Step {section.editStep + 1}
+                    {t('admin_wizard_review_edit_step')} {section.editStep + 1}
                   </button>
                 </div>
                 <div className={styles.reviewCardList}>
@@ -2710,57 +2710,57 @@ export default function AdminNewTestWizard() {
 
       case 7: return (
         <>
-          <h3 className={styles.panelTitle}>Testing Sessions</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_sessions_title')}</h3>
           <p className={styles.sessionIntro}>
-            Assign this test to learners with a scheduled date and time.
+            {t('admin_wizard_sessions_intro')}
           </p>
           {!examId ? (
-            <p className={styles.sessionEmpty}>Save the test first (go back and advance through steps).</p>
+            <p className={styles.sessionEmpty}>{t('admin_wizard_save_first')}</p>
           ) : (
             <>
               <div className={styles.inputRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-access-mode">Access Mode</label>
+                  <label className={styles.label} htmlFor="wizard-access-mode">{t('admin_wizard_access_mode')}</label>
                   <select id="wizard-access-mode" className={styles.select} value={accessMode} onChange={e => setAccessMode(e.target.value)}>
-                    <option value="OPEN">Open (anytime)</option>
-                    <option value="RESTRICTED">Restricted (by schedule)</option>
+                    <option value="OPEN">{t('admin_wizard_open_anytime')}</option>
+                    <option value="RESTRICTED">{t('admin_wizard_restricted_schedule')}</option>
                   </select>
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="wizard-scheduled-at">Scheduled Date & Time</label>
+                  <label className={styles.label} htmlFor="wizard-scheduled-at">{t('admin_wizard_scheduled_datetime')}</label>
                   <input id="wizard-scheduled-at" className={styles.input} type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
                 </div>
               </div>
               {sessionRequiresSchedule && !scheduledAt && (
-                <div className={styles.sessionWarning}>Restricted access requires a scheduled date and time before assignments can be saved.</div>
+                <div className={styles.sessionWarning}>{t('admin_wizard_restricted_warning')}</div>
               )}
               {hasPendingSessionChanges && (
-                <div className={styles.sessionWarning}>Save assignments to persist the current learner selection before continuing.</div>
+                <div className={styles.sessionWarning}>{t('admin_wizard_save_warning')}</div>
               )}
 
-              <label className={`${styles.label} ${styles.sectionLabel}`}>Select Learners</label>
-              <div className={styles.helper}>Existing assigned learners are preselected. Save assignments to update their access mode or scheduled time.</div>
+              <label className={`${styles.label} ${styles.sectionLabel}`}>{t('admin_wizard_select_learners')}</label>
+              <div className={styles.helper}>{t('admin_wizard_assigned_preselected')}</div>
               <div className={styles.summaryChips}>
-                <span className={styles.chip}>Learners: {totalLearners}</span>
-                <span className={styles.chip}>Visible: {filteredUsers.length}</span>
-                <span className={styles.chip}>Selected: {selectedUsers.length}</span>
-                <span className={styles.chip}>Visible selected: {selectedVisibleLearners}</span>
+                <span className={styles.chip}>{t('admin_wizard_learners_label')}: {totalLearners}</span>
+                <span className={styles.chip}>{t('admin_wizard_visible_label')}: {filteredUsers.length}</span>
+                <span className={styles.chip}>{t('admin_wizard_selected_label')}: {selectedUsers.length}</span>
+                <span className={styles.chip}>{t('admin_wizard_visible_selected')}: {selectedVisibleLearners}</span>
               </div>
               <div className={styles.sessionBulkBar}>
                 <button type="button" className={styles.btnSecondary} onClick={handleSelectAllLearners} disabled={sessionBusy || totalLearners === 0 || allLearnersSelected}>
-                  {allLearnersSelected ? 'All learners selected' : `Select all learners (${totalLearners})`}
+                  {allLearnersSelected ? t('admin_wizard_all_selected') : `${t('admin_wizard_select_all')} (${totalLearners})`}
                 </button>
                 <button type="button" className={styles.btnSecondary} onClick={handleSelectVisibleLearners} disabled={sessionBusy || filteredUsers.length === 0 || allVisibleLearnersSelected}>
-                  {allVisibleLearnersSelected ? 'Visible learners selected' : `Select visible (${filteredUsers.length})`}
+                  {allVisibleLearnersSelected ? t('admin_wizard_visible_selected_btn') : `${t('admin_wizard_select_visible')} (${filteredUsers.length})`}
                 </button>
                 <button type="button" className={styles.btnSecondary} onClick={handleClearLearnerSelection} disabled={sessionBusy || selectedUsers.length === 0}>
-                  Clear selection
+                  {t('admin_wizard_clear_selection')}
                 </button>
               </div>
               <div className={styles.inlineCard}>
                 <div className={styles.inlineCardHead}>
-                  <div className={styles.label}>Bulk add learners</div>
-                  <div className={styles.helper}>Paste learner IDs, emails, or internal IDs separated by commas or new lines.</div>
+                  <div className={styles.label}>{t('admin_wizard_bulk_add')}</div>
+                  <div className={styles.helper}>{t('admin_wizard_bulk_hint')}</div>
                 </div>
                 <textarea
                   className={styles.textarea}
@@ -2772,37 +2772,37 @@ export default function AdminNewTestWizard() {
                 />
                 <div className={styles.inlineActions}>
                   <button type="button" className={styles.btnSecondary} onClick={handleBulkLearnerMatch} disabled={sessionBusy || !bulkLearnerInput.trim()}>
-                    Add pasted learners
+                    {t('admin_wizard_add_pasted')}
                   </button>
                 </div>
                 {bulkLearnerFeedback && <div className={styles.bulkSelectionMessage}>{bulkLearnerFeedback}</div>}
               </div>
-              <label className={styles.label} htmlFor="wizard-learner-search">Search learners</label>
-              <input id="wizard-learner-search" className={styles.userSearch} placeholder="Search learners..." value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+              <label className={styles.label} htmlFor="wizard-learner-search">{t('admin_wizard_search_learners')}</label>
+              <input id="wizard-learner-search" className={styles.userSearch} placeholder={t('admin_wizard_search_learners_placeholder')} value={userSearch} onChange={e => setUserSearch(e.target.value)} />
               <div className={styles.userList}>
                 {filteredUsers.map(u => (
                   <label key={u.id} className={styles.userItem}>
                     <input type="checkbox" checked={selectedLearnerKeys.has(String(u.id))} onChange={() => toggleUser(u.id)} />
-                    <span>{u.user_id} - {u.name || u.email || 'Learner'}</span>
+                    <span>{u.user_id} - {u.name || u.email || t('admin_wizard_learner_fallback')}</span>
                   </label>
                 ))}
-                {filteredUsers.length === 0 && <div className={`${styles.userItem} ${styles.emptyUserItem}`}>No learners found.</div>}
+                {filteredUsers.length === 0 && <div className={`${styles.userItem} ${styles.emptyUserItem}`}>{t('admin_wizard_no_learners_found')}</div>}
               </div>
               <button
                 className={styles.btnSeed}
                 onClick={handleAssignSessions}
                 disabled={!canSaveAssignments}
               >
-                {sessionBusy ? 'Saving...' : `Save assignments${selectedUsers.length > 0 ? ` (${selectedUsers.length})` : assignedSessions.length > 0 ? ' (clear/update)' : ''}`}
+                {sessionBusy ? t('saving') : `${t('admin_wizard_save_assignments')}${selectedUsers.length > 0 ? ` (${selectedUsers.length})` : assignedSessions.length > 0 ? ` (${t('admin_wizard_clear_update')})` : ''}`}
               </button>
               {assignedSessions.length > 0 && (
                 <div className={styles.sessionActions}>
-                  <div className={`${styles.label} ${styles.sessionActionsTitle}`}>Assigned sessions ({assignedSessions.length})</div>
+                  <div className={`${styles.label} ${styles.sessionActionsTitle}`}>{t('admin_wizard_assigned_sessions')} ({assignedSessions.length})</div>
                   {assignedSessions.map((s, i) => (
                     <div key={`action-${i}`} className={styles.sessionRow}>
                       <span>{s.user} - {s.mode}{s.at ? ` @ ${new Date(s.at).toLocaleString()}` : ''}</span>
                       <button type="button" className={styles.sessionRemove} onClick={() => handleRemoveSession(s.id, s.userId)} disabled={sessionBusy}>
-                        Remove
+                        {t('admin_wizard_remove')}
                       </button>
                     </div>
                   ))}
@@ -2815,42 +2815,42 @@ export default function AdminNewTestWizard() {
 
       case 8: return (
         <>
-          <h3 className={styles.panelTitle}>Save Test</h3>
+          <h3 className={styles.panelTitle}>{t('admin_wizard_save_test_title')}</h3>
           <p className={styles.sessionIntro}>
-            Choose the initial status for this test. You can change it later from the Manage Tests page.
+            {t('admin_wizard_save_intro')}
           </p>
           <div className={styles.summaryChips}>
-            <span className={styles.chip}>Questions: {questions.length}</span>
-            <span className={styles.chip}>Seed Pools: {selectedPool ? 1 : 0}</span>
-            <span className={styles.chip}>Scheduled: {assignedSessions.length}</span>
-            <span className={styles.chip}>Status: {publishStatus === 'OPEN' ? 'Published' : 'Draft'}</span>
+            <span className={styles.chip}>{t('admin_wizard_card_questions')}: {questions.length}</span>
+            <span className={styles.chip}>{t('admin_wizard_seed_pools')}: {selectedPool ? 1 : 0}</span>
+            <span className={styles.chip}>{t('admin_wizard_scheduled_label')}: {assignedSessions.length}</span>
+            <span className={styles.chip}>{t('admin_wizard_status_label')}: {publishStatus === 'OPEN' ? t('admin_wizard_published') : t('admin_wizard_draft')}</span>
           </div>
           {questions.length === 0 && (
             <div className={styles.publishWarning}>
-              Drafts can be saved without questions. Publishing still requires at least one question.
+              {t('admin_wizard_publish_warning')}
             </div>
           )}
           <div className={styles.formGroup}>
-            <label className={styles.label}>Publication Status</label>
+            <label className={styles.label}>{t('admin_wizard_pub_status')}</label>
             <div className={styles.publishOptions}>
               <label className={`${styles.publishOption} ${publishStatus === 'CLOSED' ? styles.publishOptionActive : ''}`}>
                 <input type="radio" checked={publishStatus === 'CLOSED'} onChange={() => updatePublishStatus('CLOSED')} />
                 <div className={styles.publishOptionCopy}>
-                  <div className={styles.publishOptionTitle}>Draft</div>
-                  <div className={styles.publishOptionSubtitle}>Not visible to candidates</div>
+                  <div className={styles.publishOptionTitle}>{t('admin_wizard_draft')}</div>
+                  <div className={styles.publishOptionSubtitle}>{t('admin_wizard_not_visible')}</div>
                 </div>
               </label>
               <label className={`${styles.publishOption} ${publishStatus === 'OPEN' ? styles.publishOptionActive : ''}`}>
                 <input type="radio" checked={publishStatus === 'OPEN'} onChange={() => updatePublishStatus('OPEN')} />
                 <div className={styles.publishOptionCopy}>
-                  <div className={styles.publishOptionTitle}>Published</div>
-                  <div className={styles.publishOptionSubtitle}>Visible and active for candidates</div>
+                  <div className={styles.publishOptionTitle}>{t('admin_wizard_published')}</div>
+                  <div className={styles.publishOptionSubtitle}>{t('admin_wizard_visible_active')}</div>
                 </div>
               </label>
             </div>
           </div>
           <div className={styles.publishSummary}>
-            <strong className={styles.publishSummaryStrong}>Summary:</strong> &quot;{title || 'Unnamed Test'}&quot; with {questions.length} questions, {assignedSessions.length} sessions assigned.
+            <strong className={styles.publishSummaryStrong}>{t('admin_wizard_summary')}</strong> &quot;{title || t('admin_wizard_unnamed_test')}&quot; {t('admin_wizard_with')} {questions.length} {t('admin_wizard_questions_comma')} {assignedSessions.length} {t('admin_wizard_sessions_assigned_suffix')}
           </div>
         </>
       )
@@ -2861,7 +2861,7 @@ export default function AdminNewTestWizard() {
 
   return (
     <div className={styles.page}>
-      <h2 className={styles.title}>{editId ? 'Edit Test' : 'New Test Wizard'}</h2>
+      <h2 className={styles.title}>{editId ? t('admin_wizard_edit_test') : t('admin_wizard_new_test')}</h2>
 
       {/* Steps bar */}
       <div className={styles.stepsBar}>
@@ -2874,7 +2874,7 @@ export default function AdminNewTestWizard() {
             <span className={`${styles.stepNum} ${s.id === step ? styles.stepNumActive : ''} ${s.id < step ? styles.stepNumCompleted : ''}`}>
               {s.id < step ? 'OK' : s.id + 1}
             </span>
-            {s.label}
+            {t(s.labelKey)}
           </div>
         ))}
       </div>
@@ -2920,15 +2920,15 @@ export default function AdminNewTestWizard() {
           onClick={() => startTransition(() => setStep((current) => current - 1))}
           disabled={step === 0}
         >
-          Back
+          {t('back')}
         </button>
         {step < STEPS.length - 1 ? (
           <button className={styles.btnNext} onClick={handleNext} disabled={nextDisabled}>
-            {saving ? 'Saving...' : 'Next'}
+            {saving ? t('saving') : t('next')}
           </button>
         ) : (
           <button className={styles.btnPublish} onClick={handlePublish} disabled={saving || editorLocked || (publishStatus === 'OPEN' && questions.length === 0)}>
-            {saving ? 'Saving...' : publishStatus === 'OPEN' ? 'Publish Test' : 'Save as Draft'}
+            {saving ? t('saving') : publishStatus === 'OPEN' ? t('admin_wizard_publish_test') : t('admin_wizard_save_draft')}
           </button>
         )}
       </div>
