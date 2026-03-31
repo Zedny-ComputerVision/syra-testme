@@ -2,6 +2,7 @@ import React, { useContext, useState, useRef, useEffect, useCallback } from 'rea
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
+import useLanguage from '../../hooks/useLanguage'
 import { ThemeContext } from '../../context/ThemeContext'
 import { getUnreadCount, markAllRead, listNotifications, markRead } from '../../services/notification.service'
 import { searchAll } from '../../services/search.service'
@@ -75,6 +76,7 @@ async function readUnreadCount({ force = false } = {}) {
 
 export default function Navbar({ onMenuToggle }) {
   const { user, logout, hasPermission } = useAuth()
+  const { lang, setLanguage, languages: availableLanguages } = useLanguage()
   const { theme, toggleTheme, accent, setAccent } = useContext(ThemeContext)
   const navigate = useNavigate()
   const isDark = theme === 'dark'
@@ -484,6 +486,22 @@ export default function Navbar({ onMenuToggle }) {
               type="button"
             />
           ))}
+        </div>
+
+        {/* Language Switcher */}
+        <div className={styles.langSwitcher}>
+          <select
+            value={lang}
+            onChange={(e) => setLanguage(e.target.value)}
+            className={styles.langSelect}
+            aria-label="Language"
+          >
+            {availableLanguages.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.nativeName}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Theme toggle */}
