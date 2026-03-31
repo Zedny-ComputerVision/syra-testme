@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     BACKEND_BASE_URL: str = Field(default="http://127.0.0.1:8000")
 
     CORS_ORIGINS: str = Field(default="")
-    RATE_LIMIT_LOGIN: str = Field(default="10/minute")
+    RATE_LIMIT_LOGIN: str = Field(default="120/minute")
     RATE_LIMIT_REFRESH: str = Field(default="60/minute")
     RATE_LIMIT_FORGOT: str = Field(default="5/minute")
     E2E_SEED_ENABLED: bool = False

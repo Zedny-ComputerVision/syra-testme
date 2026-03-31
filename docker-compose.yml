@@ -47,8 +47,8 @@ services:
     environment:
       AUTO_APPLY_MIGRATIONS: "${AUTO_APPLY_MIGRATIONS:-false}"
       WORKERS: "${WORKERS:-4}"
-      DB_POOL_SIZE: "3"
-      DB_MAX_OVERFLOW: "7"
+      DB_POOL_SIZE: "8"
+      DB_MAX_OVERFLOW: "12"
       PROCTORING_INFERENCE_MODE: "celery"
       PROCTORING_INFERENCE_QUEUE: "proctoring-inference"
       PROCTORING_INFERENCE_OPEN_TIMEOUT_SECONDS: "180"
