@@ -30,7 +30,7 @@ export async function requestEntireScreenShare() {
     video: {
       displaySurface: 'monitor',
     },
-    audio: false,
+    audio: true,
   })
   return ensureEntireScreenSelection(stream)
 }
