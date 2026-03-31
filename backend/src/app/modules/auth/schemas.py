@@ -15,7 +15,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 class SignupRequest(BaseModel):
     email: EmailStr
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     user_id: str = Field(max_length=50)
     password: str
 

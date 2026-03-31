@@ -77,7 +77,7 @@ class ReportScheduleRunResult(BaseModel):
 
 class UserBase(BaseModel):
     email: EmailStr
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     user_id: str = Field(max_length=50)
     role: RoleEnum
     is_active: bool = True
@@ -152,7 +152,7 @@ class AdminPasswordResetRequest(BaseModel):
 
 
 class CourseBase(BaseModel):
-    title: str = Field(max_length=255)
+    title: str = Field(min_length=1, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1024)
     status: CourseStatus = CourseStatus.DRAFT
 
@@ -171,7 +171,7 @@ class CourseRead(CourseBase):
 
 
 class NodeBase(BaseModel):
-    title: str = Field(max_length=255)
+    title: str = Field(min_length=1, max_length=255)
     order: int = 0
 
 
@@ -189,7 +189,7 @@ class NodeRead(NodeBase):
 
 
 class CategoryBase(BaseModel):
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     type: CategoryType = CategoryType.TEST
     description: Optional[str] = Field(default=None, max_length=1024)
 
@@ -201,7 +201,7 @@ class CategoryRead(CategoryBase):
 
 
 class GradingScaleBase(BaseModel):
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     labels: list[dict]
 
     @field_validator("labels")
@@ -319,7 +319,7 @@ class ExamBase(BaseModel):
 
     # Frontend sends exam_type and time_limit_minutes; keep friendly aliases.
     node_id: Optional[UUID] = None
-    title: str = Field(max_length=255)
+    title: str = Field(min_length=1, max_length=255)
     type: ExamType = Field(default=ExamType.MCQ, alias="exam_type")
     status: ExamStatus = ExamStatus.CLOSED
     time_limit: Optional[int] = Field(default=None, alias="time_limit_minutes")
@@ -539,7 +539,7 @@ class ScheduleRead(ScheduleBase):
 
 
 class QuestionPoolBase(BaseModel):
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1024)
 
 
@@ -716,7 +716,7 @@ class AuditLogRead(BaseModel):
 
 
 class SurveyCreate(BaseModel):
-    title: str = Field(max_length=255)
+    title: str = Field(min_length=1, max_length=255)
     description: Optional[str] = Field(default=None, max_length=2048)
     questions: Optional[list[dict]] = None
 
@@ -757,7 +757,7 @@ class SurveyResponseRead(BaseModel):
 
 
 class UserGroupCreate(BaseModel):
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1024)
     member_ids: Optional[list[str]] = None
 
@@ -774,7 +774,7 @@ class UserGroupRead(BaseModel):
 
 
 class ExamTemplateCreate(BaseModel):
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1024)
     config: Optional[dict] = None
 
@@ -792,7 +792,7 @@ class ExamTemplateRead(BaseModel):
 
 
 class ReportScheduleCreate(BaseModel):
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     report_type: str = Field(max_length=100)
     schedule_cron: Optional[str] = None
     recipients: Optional[list[str]] = None
