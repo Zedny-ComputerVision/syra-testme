@@ -17,8 +17,8 @@ RUN rm -f /etc/nginx/conf.d/default.conf
 COPY frontend/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Ensure nginx cache/pid dirs are writable
-RUN chown -R nginx:nginx /var/cache/nginx /var/run /usr/share/nginx/html && \
+# Ensure nginx cache/pid/conf dirs are writable by non-root
+RUN chown -R nginx:nginx /var/cache/nginx /var/run /run /etc/nginx/conf.d /usr/share/nginx/html && \
     chmod -R 755 /usr/share/nginx/html
 
 EXPOSE 80
