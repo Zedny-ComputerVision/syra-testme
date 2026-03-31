@@ -8,12 +8,14 @@ import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import { readTestAccessError } from '../../utils/testAccessError'
 import { ENTIRE_SCREEN_REQUIRED, requestEntireScreenShare } from '../../utils/screenCapture'
 import { clearScreenStream, peekScreenStream, storeScreenStream } from '../../utils/screenShareState'
+import useLanguage from '../../hooks/useLanguage'
 
 import styles from './SystemCheckPage.module.scss'
 
 export default function SystemCheckPage() {
   const { testId } = useParams()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const videoRef = useRef(null)
   const streamRef = useRef(null)
 
@@ -81,12 +83,12 @@ export default function SystemCheckPage() {
     }
     if (micAudioCtxRef.current) {
       micAudioCtxRef.current.close().catch(() => {
-        setConfigError('The microphone monitor could not be released cleanly. Refresh the page if the mic stays unavailable.')
+        setConfigError(t('syscheck_mic_release_error'))
       })
       micAudioCtxRef.current = null
     }
     setMicLevel(0)
-  }, [])
+  }, [t])
 
   const checkCamera = useCallback(async (required) => {
     stopCamera()
@@ -201,22 +203,22 @@ export default function SystemCheckPage() {
       clearScreenStream()
       setScreen('failed')
       if (error?.code === ENTIRE_SCREEN_REQUIRED) {
-        setScreenError('You must share your entire screen, not a single window or browser tab.')
+        setScreenError(t('syscheck_entire_screen_error'))
         return
       }
       if (error?.name === 'NotAllowedError') {
-        setScreenError('Screen sharing was denied. Share your entire screen to continue.')
+        setScreenError(t('syscheck_screen_denied'))
         return
       }
-      setScreenError(error?.message || 'Screen sharing could not start. Try again.')
+      setScreenError(error?.message || t('syscheck_screen_start_error'))
     }
-  }, [requirements.screenRequired])
+  }, [requirements.screenRequired, t])
 
   const loadConfig = useCallback(async () => {
     setConfigLoading(true)
     setConfigError('')
     if (!testId) {
-      setConfigError('Invalid test link. Return to the available tests list and try again.')
+      setConfigError(t('syscheck_invalid_link'))
       setProctorCfg({})
       setRequirements(getJourneyRequirements({}))
       setConfigLoading(false)
@@ -229,13 +231,13 @@ export default function SystemCheckPage() {
       setProctorCfg(cfg)
       setRequirements(getJourneyRequirements(cfg))
     } catch (error) {
-      setConfigError(readTestAccessError(error, 'Failed to load test configuration. Please refresh and try again.'))
+      setConfigError(readTestAccessError(error, t('syscheck_load_config_error')))
       setProctorCfg({})
       setRequirements(getJourneyRequirements({}))
     } finally {
       setConfigLoading(false)
     }
-  }, [testId])
+  }, [testId, t])
 
   const rerunChecks = useCallback(async () => {
     if (checksBusy || configLoading || configError) return
@@ -282,7 +284,7 @@ export default function SystemCheckPage() {
     checkCamera(requirements.cameraRequired)
     checkMic(requirements.micRequired)
     checkScreenShare(requirements.screenRequired)
-    // When screen capture is required, skip fullscreen here — the exam page
+    // When screen capture is required, skip fullscreen here -- the exam page
     // enters fullscreen after the screen share gate (the picker exits fullscreen).
     checkFullscreen(requirements.screenRequired ? false : requirements.fullscreenRequired)
     if (!requirements.lightingRequired) {
@@ -410,7 +412,7 @@ export default function SystemCheckPage() {
     navigate(nextRoute)
   }
 
-  const continueLabel = requirements.identityRequired ? 'Continue to identity verification' : 'Continue to rules'
+  const continueLabel = requirements.identityRequired ? t('syscheck_continue_identity') : t('syscheck_continue_rules')
 
   return (
     <div className={styles.page}>
@@ -422,13 +424,13 @@ export default function SystemCheckPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: 'easeOut' }}
       >
-        <h1 className={styles.title}>System Check</h1>
-        <p className={styles.sub}>We need to verify your system meets the requirements</p>
+        <h1 className={styles.title}>{t('syscheck_title')}</h1>
+        <p className={styles.sub}>{t('syscheck_subtitle')}</p>
         {configError && (
           <div className={styles.helperRow}>
             <p className={styles.errorBanner}>{configError}</p>
             <button type="button" className={styles.secondaryBtn} onClick={() => void loadConfig()} disabled={configLoading}>
-              {configLoading ? 'Retrying requirements...' : 'Retry loading requirements'}
+              {configLoading ? t('syscheck_retrying_requirements') : t('syscheck_retry_loading')}
             </button>
           </div>
         )}
@@ -441,15 +443,15 @@ export default function SystemCheckPage() {
           >
             <div className={styles.checkInfo}>
               {renderIcon(camera)}
-              <span>Camera Access</span>
+              <span>{t('syscheck_camera_access')}</span>
             </div>
             {requirements.cameraRequired && camera === 'passed' && (
               <div className={styles.preview}>
                 <video ref={videoRef} className={styles.video} autoPlay muted playsInline />
               </div>
             )}
-            {!requirements.cameraRequired && <p className={styles.hint}>Not required for this test.</p>}
-            {requirements.cameraRequired && camera === 'failed' && <p className={styles.hint}>Please allow camera access and refresh.</p>}
+            {!requirements.cameraRequired && <p className={styles.hint}>{t('syscheck_not_required')}</p>}
+            {requirements.cameraRequired && camera === 'failed' && <p className={styles.hint}>{t('syscheck_allow_camera')}</p>}
           </motion.div>
 
           <motion.div
@@ -459,15 +461,15 @@ export default function SystemCheckPage() {
           >
             <div className={styles.checkInfo}>
               {renderIcon(mic)}
-              <span>Microphone Access</span>
+              <span>{t('syscheck_mic_access')}</span>
             </div>
-            {!requirements.micRequired && <p className={styles.hint}>Not required for this test.</p>}
+            {!requirements.micRequired && <p className={styles.hint}>{t('syscheck_not_required')}</p>}
             {requirements.micRequired && mic === 'passed' && (
               <>
                 <div className={styles.levelBar}>
                   <div className={styles.levelFill} style={{ width: `${micLevel}%` }} />
                 </div>
-                <p className={styles.hint}>Speak to confirm microphone level.</p>
+                <p className={styles.hint}>{t('syscheck_speak_confirm')}</p>
               </>
             )}
           </motion.div>
@@ -479,12 +481,12 @@ export default function SystemCheckPage() {
           >
             <div className={styles.checkInfo}>
               {renderIcon(screen)}
-              <span>Entire Screen Share</span>
+              <span>{t('syscheck_screen_share')}</span>
             </div>
             {!requirements.screenRequired ? (
-              <p className={styles.hint}>Not required for this test.</p>
+              <p className={styles.hint}>{t('syscheck_not_required')}</p>
             ) : screen === 'passed' ? (
-              <div className={styles.statusPill}>Entire screen shared</div>
+              <div className={styles.statusPill}>{t('syscheck_screen_shared')}</div>
             ) : (
               <button
                 type="button"
@@ -492,11 +494,11 @@ export default function SystemCheckPage() {
                 onClick={() => void requestScreenShare()}
                 disabled={screen === 'checking' || checksBusy || continueBusy}
               >
-                {screen === 'checking' ? 'Requesting screen share...' : 'Share entire screen'}
+                {screen === 'checking' ? t('syscheck_requesting_screen') : t('syscheck_share_screen')}
               </button>
             )}
             {requirements.screenRequired && screen === 'pending' && (
-              <p className={styles.hint}>Share your entire screen now so the live attempt can start without another permission prompt.</p>
+              <p className={styles.hint}>{t('syscheck_share_screen_hint')}</p>
             )}
             {requirements.screenRequired && screenError && <p className={styles.hint}>{screenError}</p>}
           </motion.div>
@@ -508,12 +510,12 @@ export default function SystemCheckPage() {
           >
             <div className={styles.checkInfo}>
               {renderIcon(fullscreenRequiredHere ? fullscreen : 'passed')}
-              <span>Fullscreen Entry</span>
+              <span>{t('syscheck_fullscreen_entry')}</span>
             </div>
             {!fullscreenRequiredHere ? (
-              <div className={styles.statusPill}>{requirements.screenRequired ? 'Handled on exam page' : 'Not required'}</div>
+              <div className={styles.statusPill}>{requirements.screenRequired ? t('syscheck_handled_exam_page') : t('syscheck_not_required_short')}</div>
             ) : fullscreen === 'passed' ? (
-              <div className={styles.statusPill}>Fullscreen active</div>
+              <div className={styles.statusPill}>{t('syscheck_fullscreen_active')}</div>
             ) : (
               <button
                 type="button"
@@ -521,11 +523,11 @@ export default function SystemCheckPage() {
                 onClick={requestFullscreen}
                 disabled={fullscreen === 'checking'}
               >
-                {fullscreen === 'checking' ? 'Checking fullscreen...' : 'Enter fullscreen'}
+                {fullscreen === 'checking' ? t('syscheck_checking_fullscreen') : t('syscheck_enter_fullscreen')}
               </button>
             )}
-            {fullscreenRequiredHere && fullscreen === 'pending' && <p className={styles.hint}>Enter fullscreen to continue.</p>}
-            {fullscreenRequiredHere && fullscreen === 'failed' && <p className={styles.hint}>Fullscreen is required for this test.</p>}
+            {fullscreenRequiredHere && fullscreen === 'pending' && <p className={styles.hint}>{t('syscheck_enter_fullscreen_hint')}</p>}
+            {fullscreenRequiredHere && fullscreen === 'failed' && <p className={styles.hint}>{t('syscheck_fullscreen_required')}</p>}
           </motion.div>
 
           <motion.div
@@ -535,10 +537,10 @@ export default function SystemCheckPage() {
           >
             <div className={styles.checkInfo}>
               {renderIcon(lighting)}
-              <span>Lighting Quality</span>
+              <span>{t('syscheck_lighting_quality')}</span>
             </div>
-            {!requirements.lightingRequired && <p className={styles.hint}>Not required for this test.</p>}
-            {requirements.lightingRequired && <p className={styles.hint}>Brightness: {(lightingScore * 100).toFixed(0)}%</p>}
+            {!requirements.lightingRequired && <p className={styles.hint}>{t('syscheck_not_required')}</p>}
+            {requirements.lightingRequired && <p className={styles.hint}>{t('syscheck_brightness')}: {(lightingScore * 100).toFixed(0)}%</p>}
           </motion.div>
 
         </div>
@@ -546,10 +548,10 @@ export default function SystemCheckPage() {
         {!configError && !configLoading && (
           <div className={styles.actionsRow}>
             <button type="button" className={styles.secondaryBtn} onClick={() => navigate(`/tests/${testId}`)} disabled={checksBusy || continueBusy}>
-              Back to instructions
+              {t('syscheck_back_to_instructions')}
             </button>
             <button type="button" className={styles.secondaryBtn} onClick={() => void rerunChecks()} disabled={checksBusy || continueBusy}>
-              {checksBusy ? 'Re-running checks...' : 'Re-run checks'}
+              {checksBusy ? t('syscheck_rerunning') : t('syscheck_rerun_checks')}
             </button>
           </div>
         )}
@@ -561,7 +563,7 @@ export default function SystemCheckPage() {
           whileTap={{ scale: allPassed && !continueBusy ? 0.98 : 1 }}
           onClick={handleContinue}
         >
-          {configLoading ? 'Loading requirements...' : configError ? 'Cannot continue' : allPassed ? continueLabel : 'Waiting for checks...'}
+          {configLoading ? t('syscheck_loading_requirements') : configError ? t('syscheck_cannot_continue') : allPassed ? continueLabel : t('syscheck_waiting_checks')}
         </motion.button>
       </motion.div>
     </div>

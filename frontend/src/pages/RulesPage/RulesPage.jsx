@@ -7,18 +7,9 @@ import { resolveAttempt } from '../../utils/journeyAttempt'
 import ExamJourneyStepper from '../../components/ExamJourneyStepper/ExamJourneyStepper'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import { readTestAccessError } from '../../utils/testAccessError'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './RulesPage.module.scss'
 
-const DEFAULT_RULES = [
-  'Do not use any external resources, books, or notes during the test.',
-  'Do not communicate with others during the test.',
-  'Keep your face visible in the camera at all times.',
-  'Do not use a mobile phone or any other electronic device.',
-  'Stay in fullscreen mode throughout the test.',
-  'Do not navigate away from the test window.',
-  'Any suspicious behavior will be flagged and recorded.',
-  'Violations may result in test termination or score invalidation.',
-]
 const START_ERROR_STORAGE_PREFIX = 'journey_start_error:'
 
 function consumeJourneyStartError(testId) {
@@ -35,6 +26,19 @@ function consumeJourneyStartError(testId) {
 export default function RulesPage() {
   const { testId } = useParams()
   const navigate = useNavigate()
+  const { t } = useLanguage()
+
+  const DEFAULT_RULES = useMemo(() => [
+    t('rules_no_external_resources'),
+    t('rules_no_communication'),
+    t('rules_face_visible'),
+    t('rules_no_mobile'),
+    t('rules_stay_fullscreen'),
+    t('rules_no_navigate_away'),
+    t('rules_suspicious_flagged'),
+    t('rules_violations_termination'),
+  ], [t])
+
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [configLoading, setConfigLoading] = useState(true)
@@ -55,53 +59,51 @@ export default function RulesPage() {
     const cards = []
     if (requirements.systemCheckRequired) {
       cards.push({
-        label: 'System check',
-        value: systemCheckSatisfied ? 'Completed' : 'Pending',
+        label: t('rules_system_check'),
+        value: systemCheckSatisfied ? t('rules_completed') : t('rules_pending'),
         helper: systemCheckSatisfied
-          ? 'This browser session already passed the required device checks.'
-          : 'Return to the system check before entering the live attempt.',
+          ? t('rules_system_check_passed')
+          : t('rules_system_check_pending'),
       })
     }
     if (requirements.cameraRequired) {
       cards.push({
-        label: 'Camera',
-        value: 'Required',
-        helper: 'Your camera will record you during the test.',
+        label: t('rules_camera'),
+        value: t('required'),
+        helper: t('rules_camera_helper'),
       })
     }
     if (requirements.micRequired) {
       cards.push({
-        label: 'Microphone',
-        value: 'Required',
-        helper: 'Your microphone will be monitored for audio during the test.',
+        label: t('rules_microphone'),
+        value: t('required'),
+        helper: t('rules_mic_helper'),
       })
     }
     if (requirements.screenRequired) {
       cards.push({
-        label: 'Screen recording',
-        value: 'Required',
-        helper: 'Your entire screen must be shared before the live attempt starts. If the share stops, you will be prompted again on the test page.',
+        label: t('rules_screen_recording'),
+        value: t('required'),
+        helper: t('rules_screen_helper'),
       })
     }
     if (requirements.fullscreenRequired) {
       cards.push({
-        label: 'Fullscreen',
-        value: 'Enforced',
-        helper: 'The test will run in fullscreen mode. Exiting fullscreen will be flagged.',
+        label: t('rules_fullscreen'),
+        value: t('rules_enforced'),
+        helper: t('rules_fullscreen_helper'),
       })
     }
     if (requirements.identityRequired) {
       cards.push({
-        label: 'Identity',
-        value: 'Required',
-        helper: 'Identity verification is checked before you enter the attempt.',
+        label: t('rules_identity'),
+        value: t('required'),
+        helper: t('rules_identity_helper'),
       })
     }
     return cards
-  }, [requirements, systemCheckSatisfied])
-  const startActionLabel = requirements.fullscreenRequired || requirements.cameraRequired || requirements.micRequired || requirements.screenRequired
-    ? 'Start test'
-    : 'Start test'
+  }, [requirements, systemCheckSatisfied, t])
+  const startActionLabel = t('rules_start_test')
 
   const loadRules = useCallback(async () => {
     setConfigLoading(true)
@@ -110,7 +112,7 @@ export default function RulesPage() {
     if (!testId) {
       setRules([])
       setRequirements(getJourneyRequirements({}))
-      setConfigError('Invalid test link. Return to the available tests list and try again.')
+      setConfigError(t('rules_invalid_link'))
       setConfigLoading(false)
       return
     }
@@ -122,11 +124,11 @@ export default function RulesPage() {
     } catch (loadError) {
       setRules([])
       setRequirements(getJourneyRequirements({}))
-      setConfigError(readTestAccessError(loadError, 'Failed to load the test rules and requirements. Retry before starting.'))
+      setConfigError(readTestAccessError(loadError, t('rules_load_error')))
     } finally {
       setConfigLoading(false)
     }
-  }, [testId])
+  }, [testId, t, DEFAULT_RULES])
 
   useEffect(() => {
     void loadRules()
@@ -142,16 +144,16 @@ export default function RulesPage() {
 
   const handleStart = async () => {
     if (!systemCheckSatisfied) {
-      setError('Complete the system check in this browser session before starting the test.')
+      setError(t('rules_complete_system_check'))
       navigate(`/tests/${testId}/system-check`)
       return
     }
     if (configLoading || configError) {
-      setError('Test rules are not ready yet. Retry loading the rules before starting.')
+      setError(t('rules_not_ready'))
       return
     }
     if (!agreed) {
-      setError('You must accept the rules before starting.')
+      setError(t('rules_must_accept'))
       return
     }
 
@@ -163,7 +165,7 @@ export default function RulesPage() {
       try {
         attemptId = await resolveAttempt(testId)
       } catch (resolveErr) {
-        setError(resolveErr.response?.data?.detail || resolveErr.message || 'Failed to create or find an active attempt for this test.')
+        setError(resolveErr.response?.data?.detail || resolveErr.message || t('rules_attempt_error'))
         setLoading(false)
         return
       }
@@ -195,7 +197,7 @@ export default function RulesPage() {
         try {
           await document.documentElement.requestFullscreen()
         } catch {
-          setError('Fullscreen is required before the test can start. Please allow fullscreen and try again.')
+          setError(t('rules_fullscreen_required'))
           setLoading(false)
           return
         }
@@ -203,7 +205,7 @@ export default function RulesPage() {
 
       navigate(`/attempts/${attemptId}/take`)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to start test')
+      setError(err.response?.data?.detail || t('rules_start_failed'))
     } finally {
       setLoading(false)
     }
@@ -214,14 +216,14 @@ export default function RulesPage() {
       <ExamJourneyStepper currentStep={3} />
 
       <div className={styles.card}>
-        <h1 className={styles.title}>Test Rules</h1>
-        <p className={styles.sub}>Please read and accept the following rules before starting</p>
+        <h1 className={styles.title}>{t('rules_title')}</h1>
+        <p className={styles.sub}>{t('rules_subtitle')}</p>
 
         {configError && (
           <div className={styles.helperRow}>
             <div className={styles.errorBanner}>{configError}</div>
             <button type="button" className={styles.retryBtn} onClick={() => void loadRules()} disabled={configLoading || loading}>
-              {configLoading ? 'Retrying rules...' : 'Retry loading rules'}
+              {configLoading ? t('rules_retrying_rules') : t('rules_retry_loading')}
             </button>
           </div>
         )}
@@ -239,7 +241,7 @@ export default function RulesPage() {
 
         {requirements.systemCheckRequired && !systemCheckSatisfied && (
           <div className={styles.prereqWarning}>
-            System check has not been completed in this browser session yet. Return to the checks screen before starting the live attempt.
+            {t('rules_system_check_warning')}
           </div>
         )}
 
@@ -253,7 +255,7 @@ export default function RulesPage() {
             ))
           ) : (
             <div className={styles.prereqWarning}>
-              Rules are unavailable until the test configuration is loaded successfully.
+              {t('rules_unavailable')}
             </div>
           )}
         </div>
@@ -266,21 +268,21 @@ export default function RulesPage() {
             id="agree"
             disabled={configLoading || Boolean(configError) || loading}
           />
-          <label className={styles.agreeLabel} htmlFor="agree">I have read and agree to all test rules and consent to the monitoring described above</label>
+          <label className={styles.agreeLabel} htmlFor="agree">{t('rules_agree_label')}</label>
         </div>
 
         <div className={styles.actions}>
           {requirements.systemCheckRequired && !systemCheckSatisfied ? (
             <button type="button" className={styles.secondaryBtn} onClick={() => navigate(`/tests/${testId}/system-check`)}>
-              Back to system check
+              {t('rules_back_to_system_check')}
             </button>
           ) : (
             <button type="button" className={styles.secondaryBtn} onClick={() => navigate(`/tests/${testId}`)}>
-              Back to instructions
+              {t('rules_back_to_instructions')}
             </button>
           )}
           <button className={styles.btn} type="button" disabled={!agreed || loading || configLoading || Boolean(configError) || !systemCheckSatisfied} onClick={handleStart}>
-            {loading ? 'Starting...' : configLoading ? 'Loading requirements...' : !systemCheckSatisfied ? 'Complete system check first' : startActionLabel}
+            {loading ? t('rules_starting') : configLoading ? t('rules_loading_requirements') : !systemCheckSatisfied ? t('rules_complete_system_check_first') : startActionLabel}
           </button>
         </div>
       </div>

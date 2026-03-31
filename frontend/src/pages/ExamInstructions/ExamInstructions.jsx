@@ -6,11 +6,13 @@ import Loader from '../../components/common/Loader/Loader'
 import { normalizeTest } from '../../utils/assessmentAdapters'
 import { getJourneyRequirements } from '../../utils/proctoringRequirements'
 import { readTestAccessError } from '../../utils/testAccessError'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './ExamInstructions.module.scss'
 
 export default function ExamInstructions() {
   const { testId } = useParams()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [test, setTest] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -19,7 +21,7 @@ export default function ExamInstructions() {
     setLoading(true)
     setError('')
     if (!testId) {
-      setError('Invalid test link. Return to the available tests list and try again.')
+      setError(t('instructions_invalid_link'))
       setLoading(false)
       return
     }
@@ -28,10 +30,10 @@ export default function ExamInstructions() {
         try {
           setTest(normalizeTest(data))
         } catch (parseErr) {
-          setError('Failed to parse test data. The test may be misconfigured.')
+          setError(t('instructions_parse_error'))
         }
       })
-      .catch((err) => setError(readTestAccessError(err, 'Failed to load test details.')))
+      .catch((err) => setError(readTestAccessError(err, t('instructions_load_error'))))
       .finally(() => setLoading(false))
   }
 
@@ -45,14 +47,14 @@ export default function ExamInstructions() {
       <div className={styles.page}>
         <ExamJourneyStepper currentStep={0} />
         <div className={styles.errorCard}>
-          <div className={styles.errorTitle}>Could not prepare this test</div>
+          <div className={styles.errorTitle}>{t('instructions_could_not_prepare')}</div>
           <div className={styles.error}>{error}</div>
           <div className={styles.errorActions}>
             <button type="button" className={styles.secondaryBtn} onClick={loadTest}>
-              Retry
+              {t('retry')}
             </button>
             <button type="button" className={styles.secondaryBtn} onClick={() => navigate('/tests')}>
-              Back to available tests
+              {t('instructions_back_to_tests')}
             </button>
           </div>
         </div>
@@ -63,22 +65,22 @@ export default function ExamInstructions() {
 
   const requirements = getJourneyRequirements(test.proctoring_config || {})
   const testSettings = test.settings || {}
-  const instructionsHeading = testSettings.instructions_heading || 'Before you begin:'
-  const instructionsBody = testSettings.instructions_body || testSettings.instructions || 'Review the guidance below before you start so the attempt can continue without interruptions.'
+  const instructionsHeading = testSettings.instructions_heading || t('instructions_before_begin')
+  const instructionsBody = testSettings.instructions_body || testSettings.instructions || t('instructions_review_guidance')
   const instructionItems = Array.isArray(testSettings.instructions_list)
     ? testSettings.instructions_list
     : [
-        'Ensure a stable internet connection',
-        'Close all other browser tabs and applications',
-        'Have your ID ready for identity verification',
+        t('instructions_stable_connection'),
+        t('instructions_close_tabs'),
+        t('instructions_id_ready'),
         ...((requirements.systemCheckRequired || requirements.identityRequired)
           ? [
               requirements.screenRequired
-                ? 'Allow camera, microphone, and entire-screen sharing when prompted'
-                : 'Allow camera and microphone access when prompted',
+                ? t('instructions_allow_cam_mic_screen')
+                : t('instructions_allow_cam_mic'),
             ]
           : []),
-        'Do not navigate away from the test page',
+        t('instructions_no_navigate_away'),
       ]
 
   const hasProctoring = requirements.systemCheckRequired || requirements.identityRequired
@@ -89,40 +91,40 @@ export default function ExamInstructions() {
       : `/tests/${testId}/rules`
   const journeyCards = [
     {
-      label: 'Next step',
-      value: requirements.systemCheckRequired ? 'System check' : requirements.identityRequired ? 'Identity check' : 'Rules',
+      label: t('instructions_next_step'),
+      value: requirements.systemCheckRequired ? t('instructions_system_check') : requirements.identityRequired ? t('instructions_identity_check') : t('instructions_rules'),
       helper: requirements.systemCheckRequired
-        ? 'Camera, microphone, and device checks run before you can continue.'
+        ? t('instructions_system_check_helper')
         : requirements.identityRequired
-          ? 'Identity capture is required before entering the rules screen.'
-          : 'You can continue straight to the rules acknowledgement.',
+          ? t('instructions_identity_check_helper')
+          : t('instructions_rules_helper'),
     },
     {
-      label: 'Monitoring',
-      value: hasProctoring ? 'Proctored' : 'Standard',
+      label: t('instructions_monitoring'),
+      value: hasProctoring ? t('instructions_proctored') : t('instructions_standard'),
       helper: hasProctoring
         ? requirements.screenRequired
-          ? 'Camera, microphone, and entire-screen sharing will be requested.'
-          : 'Camera and microphone permissions will be requested.'
-        : 'No proctoring checks are enabled for this test.',
+          ? t('instructions_cam_mic_screen_requested')
+          : t('instructions_cam_mic_requested')
+        : t('instructions_no_proctoring'),
     },
     {
-      label: 'Attempt policy',
-      value: `${test.max_attempts} allowed`,
-      helper: test.passing_score != null ? `Passing score: ${test.passing_score}%` : 'No passing threshold is configured.',
+      label: t('instructions_attempt_policy'),
+      value: `${test.max_attempts} ${t('instructions_allowed')}`,
+      helper: test.passing_score != null ? `${t('instructions_passing_score')}: ${test.passing_score}%` : t('instructions_no_passing_threshold'),
     },
   ]
   const requirementItems = [
-    requirements.systemCheckRequired ? 'System check before entry' : null,
-    requirements.identityRequired ? 'Identity verification before rules' : null,
-    'Rules acknowledgement before starting',
-    test.time_limit_minutes ? `Countdown timer for ${test.time_limit_minutes} minutes` : 'Untimed attempt',
+    requirements.systemCheckRequired ? t('instructions_req_system_check') : null,
+    requirements.identityRequired ? t('instructions_req_identity') : null,
+    t('instructions_req_rules'),
+    test.time_limit_minutes ? `${t('instructions_countdown_timer')} ${test.time_limit_minutes} ${t('instructions_minutes')}` : t('instructions_untimed'),
   ].filter(Boolean)
   const primaryActionLabel = requirements.systemCheckRequired
-    ? 'Continue to system check'
+    ? t('instructions_continue_system_check')
     : requirements.identityRequired
-      ? 'Continue to identity check'
-      : 'Continue to rules'
+      ? t('instructions_continue_identity')
+      : t('instructions_continue_rules')
 
   return (
     <div className={styles.page}>
@@ -146,20 +148,20 @@ export default function ExamInstructions() {
 
         <div className={styles.detailsGrid}>
           <div className={styles.detailItem}>
-            <span className={styles.detailLabel}>Type</span>
+            <span className={styles.detailLabel}>{t('type')}</span>
             <span className={styles.detailValue}>{test.exam_type}</span>
           </div>
           <div className={styles.detailItem}>
-            <span className={styles.detailLabel}>Time Limit</span>
-            <span className={styles.detailValue}>{test.time_limit_minutes ? `${test.time_limit_minutes} min` : 'Unlimited'}</span>
+            <span className={styles.detailLabel}>{t('instructions_time_limit')}</span>
+            <span className={styles.detailValue}>{test.time_limit_minutes ? `${test.time_limit_minutes} ${t('time_min')}` : t('instructions_unlimited')}</span>
           </div>
           <div className={styles.detailItem}>
-            <span className={styles.detailLabel}>Max Attempts</span>
+            <span className={styles.detailLabel}>{t('instructions_max_attempts')}</span>
             <span className={styles.detailValue}>{test.max_attempts}</span>
           </div>
           {test.passing_score != null && (
             <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Passing Score</span>
+              <span className={styles.detailLabel}>{t('instructions_passing_score_label')}</span>
               <span className={styles.detailValue}>{test.passing_score}%</span>
             </div>
           )}
@@ -171,9 +173,9 @@ export default function ExamInstructions() {
               <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           <div>
-              <strong>This test is proctored.</strong> Your camera and microphone will be monitored.
-              {requirements.screenRequired ? ' Entire-screen sharing is also required.' : ''}
-              Make sure you are in a quiet, well-lit environment.
+              <strong>{t('instructions_proctored_notice')}</strong> {t('instructions_cam_mic_monitored')}
+              {requirements.screenRequired ? ` ${t('instructions_screen_required')}` : ''}
+              {' '}{t('instructions_quiet_environment')}
           </div>
         </div>
         )}
@@ -190,7 +192,7 @@ export default function ExamInstructions() {
           </div>
 
           <div className={styles.readinessCard}>
-            <div className={styles.readinessTitle}>Journey checklist</div>
+            <div className={styles.readinessTitle}>{t('instructions_journey_checklist')}</div>
             <ul className={styles.readinessList}>
               {requirementItems.map((item) => (
                 <li key={item}>{item}</li>
@@ -201,7 +203,7 @@ export default function ExamInstructions() {
 
         <div className={styles.actions}>
           <button type="button" className={styles.secondaryBtn} onClick={() => navigate('/tests')}>
-            Back to available tests
+            {t('instructions_back_to_tests')}
           </button>
           <button className={styles.btn} type="button" onClick={() => navigate(startRoute)}>
             {primaryActionLabel}

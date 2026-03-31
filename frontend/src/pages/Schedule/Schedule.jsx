@@ -2,21 +2,23 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listSchedules } from '../../services/schedule.service'
 import { normalizeSchedule } from '../../utils/assessmentAdapters'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './Schedule.module.scss'
 
-function getCountdown(scheduledAt) {
+function getCountdown(scheduledAt, t) {
   const diff = new Date(scheduledAt) - new Date()
   if (diff <= 0) return null
   const days = Math.floor(diff / 86400000)
   const hours = Math.floor((diff % 86400000) / 3600000)
   const mins = Math.floor((diff % 3600000) / 60000)
-  if (days > 0) return `in ${days}d ${hours}h`
-  if (hours > 0) return `in ${hours}h ${mins}m`
-  return `in ${mins}m`
+  if (days > 0) return `${t('schedule_in')} ${days}${t('schedule_unit_d')} ${hours}${t('schedule_unit_h')}`
+  if (hours > 0) return `${t('schedule_in')} ${hours}${t('schedule_unit_h')} ${mins}${t('schedule_unit_m')}`
+  return `${t('schedule_in')} ${mins}${t('schedule_unit_m')}`
 }
 
 export default function Schedule() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [schedules, setSchedules] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -31,7 +33,7 @@ export default function Schedule() {
       setSchedules((data || []).map(normalizeSchedule))
       setError('')
     } catch {
-      setError('Failed to load schedule.')
+      setError(t('schedule_load_error'))
     } finally {
       setLoading(false)
     }
@@ -66,9 +68,9 @@ export default function Schedule() {
     return (
       <div className={styles.page}>
         <div className={styles.pageHeader}>
-          <h2 className={styles.title}>Test Schedule</h2>
+          <h2 className={styles.title}>{t('schedule_title')}</h2>
         </div>
-        <div className={styles.loading}>Loading schedules...</div>
+        <div className={styles.loading}>{t('schedule_loading')}</div>
       </div>
     )
   }
@@ -76,12 +78,12 @@ export default function Schedule() {
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
-        <h2 className={styles.title}>Test Schedule</h2>
+        <h2 className={styles.title}>{t('schedule_title')}</h2>
         {schedules.length > 0 && (
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Search tests..."
+            placeholder={t('schedule_search_placeholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -92,34 +94,34 @@ export default function Schedule() {
         <div className={styles.errorRow}>
           <div className={styles.error}>{error}</div>
           <button type="button" className={styles.secondaryBtn} onClick={() => void loadSchedules()} disabled={loading}>
-            {loading ? 'Retrying...' : 'Retry'}
+            {loading ? t('schedule_retrying') : t('retry')}
           </button>
         </div>
       )}
 
       {!error && schedules.length === 0 && (
-        <div className={styles.empty}>No scheduled tests.</div>
+        <div className={styles.empty}>{t('schedule_no_tests')}</div>
       )}
       {!error && schedules.length > 0 && filtered.length === 0 && search && (
-        <div className={styles.empty}>No tests match your search.</div>
+        <div className={styles.empty}>{t('schedule_no_match')}</div>
       )}
       {!error && schedules.length > 0 && (
         <>
           {upcoming.length > 0 && (
             <>
               <div className={styles.sectionLabel}>
-                Upcoming
+                {t('schedule_upcoming')}
                 <span className={styles.sectionCount}>{upcoming.length}</span>
               </div>
               <div className={styles.list}>
                 {upcoming.map(s => {
                   const startsAt = new Date(s.scheduled_at)
                   const canStart = Boolean(s.exam_id) && startsAt <= now
-                  const countdown = getCountdown(s.scheduled_at)
+                  const countdown = getCountdown(s.scheduled_at, t)
                   return (
                     <div key={s.id} className={styles.card}>
                       <div className={styles.cardLeft}>
-                        <span className={styles.examTitle}>{s.test_title || s.exam_title || 'Test'}</span>
+                        <span className={styles.examTitle}>{s.test_title || s.exam_title || t('schedule_test_fallback')}</span>
                         <div className={styles.cardMeta}>
                           <span className={styles.dateText}>{formatDate(s.scheduled_at)}</span>
                           {countdown && <span className={styles.countdownChip}>{countdown}</span>}
@@ -128,7 +130,7 @@ export default function Schedule() {
                       </div>
                       <div className={styles.cardRight}>
                         <span className={`${styles.modeBadge} ${s.access_mode === 'OPEN' ? styles.modeOpen : styles.modeScheduled}`}>
-                          {s.access_mode || 'Scheduled'}
+                          {s.access_mode || t('schedule_mode_scheduled')}
                         </span>
                         {canStart ? (
                           <button
@@ -136,14 +138,14 @@ export default function Schedule() {
                             className={styles.takeBtn}
                             onClick={() => navigate(`/tests/${s.exam_id}`)}
                           >
-                            Take Test
+                            {t('schedule_take_test')}
                           </button>
                         ) : s.exam_id ? (
                           <button className={`${styles.takeBtn} ${styles.takeBtnDisabled}`} type="button" disabled>
-                            Starts at scheduled time
+                            {t('schedule_starts_at_scheduled')}
                           </button>
                         ) : (
-                          <span className={styles.helperText}>Not linked</span>
+                          <span className={styles.helperText}>{t('schedule_not_linked')}</span>
                         )}
                       </div>
                     </div>
@@ -156,18 +158,18 @@ export default function Schedule() {
           {past.length > 0 && (
             <>
               <div className={styles.sectionLabel}>
-                Past
+                {t('schedule_past')}
                 <span className={styles.sectionCount}>{past.length}</span>
               </div>
               <div className={styles.list}>
                 {past.map(s => (
                   <div key={s.id} className={`${styles.card} ${styles.pastCard}`}>
                     <div className={styles.cardLeft}>
-                      <span className={styles.examTitle}>{s.test_title || s.exam_title || 'Test'}</span>
+                      <span className={styles.examTitle}>{s.test_title || s.exam_title || t('schedule_test_fallback')}</span>
                       <span className={styles.dateText}>{formatDate(s.scheduled_at)}</span>
                     </div>
                     <span className={`${styles.modeBadge} ${styles.modePast}`}>
-                      Past
+                      {t('schedule_past')}
                     </span>
                   </div>
                 ))}

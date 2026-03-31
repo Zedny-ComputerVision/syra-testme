@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import useAuth from '../../hooks/useAuth'
 import useUnsavedChanges from '../../hooks/useUnsavedChanges'
+import useLanguage from '../../hooks/useLanguage'
 import { changePassword, updateProfile } from '../../services/auth.service'
 import styles from './Profile.module.scss'
 
 export default function Profile() {
   const { user, setUser } = useAuth()
+  const { t } = useLanguage()
   const [editing, setEditing] = useState(false)
   const [profileForm, setProfileForm] = useState({ name: user?.name || '', email: user?.email || '' })
   const [profileSaving, setProfileSaving] = useState(false)
@@ -46,13 +48,13 @@ export default function Profile() {
     e.preventDefault()
     setProfileError('')
     setProfileSuccess('')
-    if (!normalizedProfile.name) { setProfileError('Name is required.'); return }
-    if (!normalizedProfile.email) { setProfileError('Email is required.'); return }
+    if (!normalizedProfile.name) { setProfileError(t('profile_name_required')); return }
+    if (!normalizedProfile.email) { setProfileError(t('profile_email_required')); return }
     if (
       normalizedProfile.name === (user?.name || '').trim()
       && normalizedProfile.email === String(user?.email || '').trim().toLowerCase()
     ) {
-      setProfileSuccess('No profile changes to save.')
+      setProfileSuccess(t('profile_no_changes'))
       setEditing(false)
       return
     }
@@ -60,10 +62,10 @@ export default function Profile() {
     try {
       const { data } = await updateProfile(normalizedProfile)
       if (setUser) setUser(prev => ({ ...prev, name: data.name, email: data.email }))
-      setProfileSuccess('Profile updated successfully.')
+      setProfileSuccess(t('profile_updated'))
       setEditing(false)
     } catch (err) {
-      setProfileError(err.response?.data?.detail || 'Failed to update profile.')
+      setProfileError(err.response?.data?.detail || t('profile_update_failed'))
     } finally {
       setProfileSaving(false)
     }
@@ -74,26 +76,26 @@ export default function Profile() {
     setError('')
     setSuccess('')
     if (!currentPw.trim()) {
-      setError('Current password is required.')
+      setError(t('profile_current_pw_required'))
       return
     }
     if (newPw !== confirmPw) {
-      setError('Passwords do not match.')
+      setError(t('validation_passwords_mismatch'))
       return
     }
     if (newPw.length < 8) {
-      setError('Password must be at least 8 characters.')
+      setError(t('validation_password_min_length'))
       return
     }
     setSaving(true)
     try {
       await changePassword(currentPw, newPw)
-      setSuccess('Password changed successfully.')
+      setSuccess(t('profile_password_changed'))
       setCurrentPw('')
       setNewPw('')
       setConfirmPw('')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to change password.')
+      setError(err.response?.data?.detail || t('profile_password_change_failed'))
     } finally {
       setSaving(false)
     }
@@ -104,9 +106,9 @@ export default function Profile() {
   if (!user) {
     return (
       <div className={styles.page}>
-        <h2 className={styles.title}>Profile</h2>
+        <h2 className={styles.title}>{t('profile_title')}</h2>
         <div className={styles.card}>
-          <div className={styles.errorMsg}>Unable to load your account details right now.</div>
+          <div className={styles.errorMsg}>{t('profile_load_error')}</div>
         </div>
       </div>
     )
@@ -114,7 +116,7 @@ export default function Profile() {
 
   return (
     <div className={styles.page}>
-      <h2 className={styles.title}>Profile</h2>
+      <h2 className={styles.title}>{t('profile_title')}</h2>
 
       <div className={styles.card}>
         <div className={styles.avatar}>{initials}</div>
@@ -122,30 +124,30 @@ export default function Profile() {
         {!editing ? (
           <>
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Name</span>
+              <span className={styles.infoLabel}>{t('name')}</span>
               <span className={styles.infoValue}>{user?.name || user?.user_id || '-'}</span>
             </div>
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Email</span>
+              <span className={styles.infoLabel}>{t('email')}</span>
               <span className={styles.infoValue}>{user?.email || '-'}</span>
             </div>
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>User ID</span>
+              <span className={styles.infoLabel}>{t('profile_user_id')}</span>
               <span className={styles.infoValue}>{user?.user_id || '-'}</span>
             </div>
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Role</span>
+              <span className={styles.infoLabel}>{t('profile_role')}</span>
               <span className={styles.roleBadge}>{user?.role || '-'}</span>
             </div>
             {profileSuccess && <div className={styles.successMsg}>{profileSuccess}</div>}
-            <button className={styles.btnOutline} type="button" onClick={handleEditToggle}>Edit Profile</button>
+            <button className={styles.btnOutline} type="button" onClick={handleEditToggle}>{t('profile_edit')}</button>
           </>
         ) : (
           <form onSubmit={handleProfileSave} noValidate>
-            <h3 className={styles.sectionTitle}>Edit Profile</h3>
+            <h3 className={styles.sectionTitle}>{t('profile_edit')}</h3>
             {profileError && <div className={styles.errorMsg}>{profileError}</div>}
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="profile-name">Name</label>
+              <label className={styles.label} htmlFor="profile-name">{t('name')}</label>
               <input
                 id="profile-name"
                 className={styles.input}
@@ -156,7 +158,7 @@ export default function Profile() {
               />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="profile-email">Email</label>
+              <label className={styles.label} htmlFor="profile-email">{t('email')}</label>
               <input
                 id="profile-email"
                 type="email"
@@ -168,30 +170,30 @@ export default function Profile() {
               />
             </div>
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>User ID</span>
+              <span className={styles.infoLabel}>{t('profile_user_id')}</span>
               <span className={styles.infoValue}>{user?.user_id || '-'}</span>
             </div>
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Role</span>
+              <span className={styles.infoLabel}>{t('profile_role')}</span>
               <span className={styles.roleBadge}>{user?.role || '-'}</span>
             </div>
             <div className={styles.actionRow}>
               <button className={styles.btn} type="submit" disabled={profileSaving}>
-                {profileSaving ? 'Saving...' : 'Save Changes'}
+                {profileSaving ? t('saving') : t('profile_save_changes')}
               </button>
-              <button className={styles.btnOutline} type="button" onClick={handleEditToggle} disabled={profileSaving}>Cancel</button>
+              <button className={styles.btnOutline} type="button" onClick={handleEditToggle} disabled={profileSaving}>{t('cancel')}</button>
             </div>
           </form>
         )}
       </div>
 
       <div className={styles.card}>
-        <h3 className={styles.sectionTitle}>Change Password</h3>
+        <h3 className={styles.sectionTitle}>{t('profile_change_password')}</h3>
         {success && <div className={styles.successMsg}>{success}</div>}
         {error && <div className={styles.errorMsg}>{error}</div>}
         <form onSubmit={handleChangePw} noValidate>
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="current-password">Current Password</label>
+            <label className={styles.label} htmlFor="current-password">{t('profile_current_password')}</label>
             <input
               id="current-password"
               type="password"
@@ -203,7 +205,7 @@ export default function Profile() {
             />
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="new-password">New Password</label>
+            <label className={styles.label} htmlFor="new-password">{t('profile_new_password')}</label>
             <input
               id="new-password"
               type="password"
@@ -215,7 +217,7 @@ export default function Profile() {
             />
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="confirm-password">Confirm New Password</label>
+            <label className={styles.label} htmlFor="confirm-password">{t('profile_confirm_new_password')}</label>
             <input
               id="confirm-password"
               type="password"
@@ -227,7 +229,7 @@ export default function Profile() {
             />
           </div>
           <button className={styles.btn} type="submit" disabled={saving}>
-            {saving ? 'Saving...' : 'Update Password'}
+            {saving ? t('saving') : t('profile_update_password')}
           </button>
         </form>
       </div>
