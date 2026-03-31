@@ -1457,7 +1457,8 @@
 .tableCard {
   border: 1px solid var(--card-border);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: var(--card-shadow);
 }
 

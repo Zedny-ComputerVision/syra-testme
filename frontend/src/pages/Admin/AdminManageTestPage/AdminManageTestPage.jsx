@@ -4265,6 +4265,7 @@ export default function AdminManageTestPage() {
                     )}
                   </div>
                 ) : (
+                  <div className={styles.tableCard}>
                   <table className={styles.table}>
                     <thead>
                       <tr><th>Actions</th><th>Attempt ID</th><th>Username</th><th>Testing session</th><th>Status</th><th>Started</th><th>Access</th><th>Comment</th><th>Proctor rate</th></tr>
@@ -4296,6 +4297,7 @@ export default function AdminManageTestPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             )}
