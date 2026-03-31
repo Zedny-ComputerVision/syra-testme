@@ -10,13 +10,13 @@ from ...schemas import (
     UserCreate,
     UserRead,
 )
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class SignupRequest(BaseModel):
     email: EmailStr
-    name: str
-    user_id: str
+    name: str = Field(max_length=255)
+    user_id: str = Field(max_length=50)
     password: str
 
     @field_validator("email", mode="before")

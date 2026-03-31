@@ -227,13 +227,13 @@ class GradingScaleRead(GradingScaleBase):
 class QuestionBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    text: str
+    text: str = Field(max_length=2048)
     type: ExamType = Field(
         validation_alias=AliasChoices("question_type", "type"),
         serialization_alias="question_type",
     )
     options: Optional[list[str]] = None
-    correct_answer: Optional[str] = None
+    correct_answer: Optional[str] = Field(default=None, max_length=255)
     points: float = 1.0
     order: int = 0
     pool_id: Optional[UUID] = None
@@ -857,4 +857,4 @@ class SystemSettingRead(BaseModel):
 
 
 class SystemSettingUpdate(BaseModel):
-    value: Optional[str] = None
+    value: Optional[str] = Field(default=None, max_length=4096)

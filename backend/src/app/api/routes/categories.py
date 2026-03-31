@@ -100,7 +100,11 @@ def update_category(
     for field, value in payload.items():
         setattr(cat, field, value)
     db.add(cat)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Category name already exists")
     db.refresh(cat)
     write_audit_log(
         db,

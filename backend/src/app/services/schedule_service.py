@@ -272,7 +272,7 @@ def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, acto
     except Exception:
         db.rollback()
         logger.exception("Failed to update schedule %s", schedule_id)
-        raise
+        raise HTTPException(status_code=409, detail="Failed to update schedule due to a conflict")
     db.refresh(schedule)
     scheduled_at_str = schedule.scheduled_at.isoformat() if schedule.scheduled_at else "unset"
     write_audit_log(
@@ -315,7 +315,7 @@ def delete_schedule(*, db: Session, schedule_id: str, actor) -> Message:
     except Exception:
         db.rollback()
         logger.exception("Failed to delete schedule %s", schedule_id)
-        raise
+        raise HTTPException(status_code=409, detail="Failed to delete schedule due to a conflict")
     write_audit_log(
         db,
         getattr(actor, "id", None),

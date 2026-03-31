@@ -20,5 +20,5 @@ def health_db(db: Session = Depends(get_db_dep)):
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Database unavailable: {exc}",
+            detail="Database unavailable",
         ) from exc

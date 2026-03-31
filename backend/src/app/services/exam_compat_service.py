@@ -309,7 +309,7 @@ def create_test(*, db: Session, body: ExamCreate, current) -> ExamRead:
         raise HTTPException(status_code=409, detail="A test with this title already exists for this module")
     except OperationalError as exc:
         db.rollback()
-        raise HTTPException(status_code=503, detail=f"Database unavailable: {exc.orig}")
+        raise HTTPException(status_code=503, detail="Database unavailable")
     db.refresh(test)
     _invalidate_learner_exam_list_cache()
     return serialize_legacy_test(test)
@@ -386,7 +386,7 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
     except Exception:
         db.rollback()
         logger.exception("Failed to update legacy test %s", test_id)
-        raise
+        raise HTTPException(status_code=409, detail="Failed to update test due to a conflict")
     db.refresh(test)
     _invalidate_learner_exam_list_cache()
     return serialize_legacy_test(test)
