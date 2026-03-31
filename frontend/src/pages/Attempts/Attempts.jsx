@@ -136,20 +136,40 @@ export default function Attempts() {
 
       <div className={styles.statsRow}>
         <div className={styles.stat}>
-          <div className={styles.statValue} aria-label={STAT_LABELS.total}>{attempts.length}</div>
-          <div className={styles.statLabel}>Total</div>
+          <span className={styles.statIcon}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </span>
+          <div className={styles.statBody}>
+            <div className={styles.statValue} aria-label={STAT_LABELS.total}>{attempts.length}</div>
+            <div className={styles.statLabel}>Total</div>
+          </div>
         </div>
-        <div className={styles.stat}>
-          <div className={styles.statValue} aria-label={STAT_LABELS.completed}>{completed.length}</div>
-          <div className={styles.statLabel}>Completed</div>
+        <div className={`${styles.stat} ${styles.statSuccess}`}>
+          <span className={`${styles.statIcon} ${styles.statIconSuccess}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </span>
+          <div className={styles.statBody}>
+            <div className={styles.statValue} aria-label={STAT_LABELS.completed}>{completed.length}</div>
+            <div className={styles.statLabel}>Completed</div>
+          </div>
         </div>
-        <div className={styles.stat}>
-          <div className={styles.statValue} aria-label={STAT_LABELS.average}>{avgScore}%</div>
-          <div className={styles.statLabel}>Avg Score</div>
+        <div className={`${styles.stat} ${styles.statBlue}`}>
+          <span className={`${styles.statIcon} ${styles.statIconBlue}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </span>
+          <div className={styles.statBody}>
+            <div className={styles.statValue} aria-label={STAT_LABELS.average}>{avgScore}%</div>
+            <div className={styles.statLabel}>Avg Score</div>
+          </div>
         </div>
-        <div className={styles.stat}>
-          <div className={styles.statValue} aria-label={STAT_LABELS.best}>{bestScore}%</div>
-          <div className={styles.statLabel}>Best</div>
+        <div className={`${styles.stat} ${styles.statWarning}`}>
+          <span className={`${styles.statIcon} ${styles.statIconWarning}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+          </span>
+          <div className={styles.statBody}>
+            <div className={styles.statValue} aria-label={STAT_LABELS.best}>{bestScore}%</div>
+            <div className={styles.statLabel}>Best Score</div>
+          </div>
         </div>
       </div>
 
@@ -215,7 +235,7 @@ export default function Attempts() {
             </thead>
             <tbody>
               {paginated.map((attempt) => (
-                <tr key={attempt.id}>
+                <tr key={attempt.id} data-status={attempt.status}>
                   <td>
                     <span className={styles.testName}>{attempt.test_title || attempt.exam_title || 'Test'}</span>
                     {attempt.certificate_eligible && <span className={styles.certBadge} title="Certificate eligible">CERT</span>}
@@ -225,15 +245,27 @@ export default function Attempts() {
                       {attempt.status?.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className={attempt.score != null && attempt.score < 60 ? styles.scoreFail : attempt.score != null ? styles.scorePass : ''}>
-                    {attempt.score != null ? `${attempt.score}%` : '-'}
+                  <td>
+                    {attempt.score != null ? (
+                      <div className={styles.scoreCell}>
+                        <span className={attempt.score < 60 ? styles.scoreFail : styles.scorePass}>
+                          {attempt.score}%
+                        </span>
+                        <div className={styles.scoreTrack}>
+                          <div
+                            className={attempt.score < 60 ? styles.scoreBarFail : styles.scoreBarPass}
+                            style={{ width: `${Math.min(attempt.score, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : <span className={styles.mutedCell}>—</span>}
                   </td>
                   <td className={styles.mutedCell}>{formatDate(attempt.started_at)}</td>
                   <td className={styles.mutedCell}>{formatDuration(attempt.started_at, attempt.submitted_at)}</td>
                   <td>
                     <button
                       type="button"
-                      className={styles.actionBtn}
+                      className={`${styles.actionBtn} ${attempt.status === 'IN_PROGRESS' ? styles.actionBtnResume : ''}`}
                       onClick={() => openAttempt(attempt)}
                       aria-label={`${attempt.status === 'IN_PROGRESS' ? 'Resume attempt for' : 'Open result for'} ${attempt.test_title || attempt.exam_title || 'this test'}`}
                       title={`${attempt.status === 'IN_PROGRESS' ? 'Resume attempt for' : 'Open result for'} ${attempt.test_title || attempt.exam_title || 'this test'}`}
