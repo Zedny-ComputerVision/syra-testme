@@ -13,7 +13,7 @@ export const uploadProctoringVideo = (attemptId, session_id, source, filename, b
       recording_stopped_at: metadata.recording_stopped_at,
     },
     headers: { 'Content-Type': blob?.type || 'application/octet-stream' },
-    timeout: 300000, // 5 min — backend streams to Cloudflare which can be slow for large recordings
+    timeout: 600000, // 10 min — backend streams to Cloudflare which can be slow for large recordings on slow networks
     onUploadProgress: options.onUploadProgress,
   })
 

@@ -821,7 +821,7 @@ export default function Proctoring() {
     await sendUploadProgress({ uploadedBytes: 0, progressPercent: 0, status: 'uploading' })
 
     let lastError = null
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < 5; i += 1) {
       try {
         const uploadResponse = await uploadProctoringVideo(uploadAttemptId, sessionId, source, filename, blob, metadata, {
           onUploadProgress: (event) => {
@@ -864,6 +864,8 @@ export default function Proctoring() {
       }
     }
     if (lastError) {
+      // Clear stale cache so retry uses fresh recording, not the failed blob
+      delete preparedRecordingUploadsRef.current[source]
       await sendUploadProgress({
         uploadedBytes: 0,
         progressPercent: progressState.lastReportedPercent ?? 0,
