@@ -40,7 +40,7 @@ export default function ForgotPassword() {
         <p className={styles.sub}>Enter your email to receive a reset link.</p>
         {success && <div className={styles.info}>{success}</div>}
         {error && <div className={styles.error}>{error}</div>}
-        <input className={styles.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required disabled={loading} />
+        <input className={styles.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required disabled={loading} aria-label="Email address" />
         <button className={styles.btn} type="button" disabled={loading} onClick={requestFormSubmit}>{loading ? 'Sending...' : 'Send Reset Link'}</button>
         <p className={styles.loginLink}>Back to <Link className={styles.link} to="/login">login</Link></p>
       </form>

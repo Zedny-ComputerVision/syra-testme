@@ -49,9 +49,9 @@ export default function ResetPassword() {
         <h1 className={styles.title}>Reset Password</h1>
         {success && <div className={styles.info}>{success}</div>}
         {error && <div className={styles.error}>{error}</div>}
-        <input className={styles.input} value={token} onChange={e => setToken(e.target.value)} placeholder="Reset token" required disabled={loading} />
-        <input className={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New password" required disabled={loading} />
-        <input className={styles.input} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" required disabled={loading} />
+        <input className={styles.input} value={token} onChange={e => setToken(e.target.value)} placeholder="Reset token" required disabled={loading} aria-label="Reset token" />
+        <input className={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New password" required disabled={loading} aria-label="New password" />
+        <input className={styles.input} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" required disabled={loading} aria-label="Confirm new password" />
         <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Resetting...' : 'Reset Password'}</button>
         <p className={styles.loginLink}>Back to <Link className={styles.link} to="/login">login</Link></p>
       </form>

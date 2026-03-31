@@ -43,9 +43,9 @@ export default function ChangePassword() {
         <h1 className={styles.title}>Change Password</h1>
         {success && <div className={styles.info}>{success}</div>}
         {error && <div className={styles.error}>{error}</div>}
-        <input className={styles.input} type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="Current password" required disabled={loading} />
-        <input className={styles.input} type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="New password" required disabled={loading} />
-        <input className={styles.input} type="password" value={confirmNext} onChange={e => setConfirmNext(e.target.value)} placeholder="Confirm new password" required disabled={loading} />
+        <input className={styles.input} type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="Current password" required disabled={loading} aria-label="Current password" />
+        <input className={styles.input} type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="New password" required disabled={loading} aria-label="New password" />
+        <input className={styles.input} type="password" value={confirmNext} onChange={e => setConfirmNext(e.target.value)} placeholder="Confirm new password" required disabled={loading} aria-label="Confirm new password" />
         <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Updating...' : 'Update Password'}</button>
         <p className={styles.loginLink}>Back to <Link className={styles.link} to="/profile">profile</Link></p>
       </form>

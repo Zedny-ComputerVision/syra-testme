@@ -284,7 +284,16 @@ class QuestionBase(BaseModel):
         q_type: ExamType = values.get("type")
         options = values.get("options")
         correct = values.get("correct_answer")
-        if q_type in (ExamType.MCQ, ExamType.MULTI, ExamType.TRUEFALSE):
+        if q_type == ExamType.TRUEFALSE:
+            if not options or len(options) < 2:
+                values["options"] = ["True", "False"]
+                options = values["options"]
+            if not correct:
+                raise ValueError("TRUEFALSE requires a correct_answer")
+            valid_letters = {chr(65 + i) for i in range(len(options))}
+            if correct not in valid_letters and correct not in options:
+                raise ValueError("correct_answer must be a choice letter (A, B, ...) or option value")
+        elif q_type in (ExamType.MCQ, ExamType.MULTI):
             if not options or len(options) < 2:
                 raise ValueError("MCQ requires at least two options")
             if not correct:
@@ -298,6 +307,8 @@ class QuestionBase(BaseModel):
     def validate_mcq_after(self):
         data = self.model_dump()
         self._validate_mcq(data)
+        if data.get("options") != self.options:
+            self.options = data["options"]
         return self
 
 

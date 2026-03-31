@@ -365,11 +365,11 @@ function HomeRoute() {
 
 const router = createBrowserRouter(
   [
-    { path: '/login', element: <Login /> },
-    { path: '/signup', element: <SignUp /> },
-    { path: '/forgot-password', element: <ForgotPassword /> },
-    { path: '/reset-password', element: <ResetPassword /> },
-    { path: '/maintenance', element: <Maintenance /> },
+    { path: '/login', element: <ErrorBoundary><Login /></ErrorBoundary> },
+    { path: '/signup', element: <ErrorBoundary><SignUp /></ErrorBoundary> },
+    { path: '/forgot-password', element: <ErrorBoundary><ForgotPassword /></ErrorBoundary> },
+    { path: '/reset-password', element: <ErrorBoundary><ResetPassword /></ErrorBoundary> },
+    { path: '/maintenance', element: <ErrorBoundary><Maintenance /></ErrorBoundary> },
     { path: '/exams', element: <LegacyLearnerTestsRedirect /> },
     { path: '/exams/:examId', element: <LegacyLearnerTestDetailRedirect /> },
     { path: '/system-check/:examId', element: <LegacyLearnerSystemCheckRedirect /> },

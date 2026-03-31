@@ -27,6 +27,8 @@ def generate_questions(
     body: GenerateRequest,
     _=Depends(require_permission("Create Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
+    if not body.topic or not body.topic.strip():
+        raise HTTPException(status_code=422, detail="Topic is required")
     settings = get_settings()
     # Offline-friendly fallback: if no OpenAI key, synthesize simple questions locally.
     if not settings.OPENAI_API_KEY:
