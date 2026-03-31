@@ -13,6 +13,7 @@ import {
 } from '../../../utils/certificates'
 import { normalizeProctoringConfig } from '../../../utils/proctoringRequirements'
 import { readPaginatedItems } from '../../../utils/pagination'
+import useLanguage from '../../../hooks/useLanguage'
 import ExamQuestionPanel from '../ExamQuestionPanel/ExamQuestionPanel'
 import styles from './AdminNewTestWizard.module.scss'
 
@@ -263,6 +264,7 @@ function describeAlertRule(rule) {
 
 export default function AdminNewTestWizard() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [searchParams] = useSearchParams()
   const { id: paramId } = useParams()
   const editId = searchParams.get('edit') || paramId

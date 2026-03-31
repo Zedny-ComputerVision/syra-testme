@@ -7,6 +7,7 @@ import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import DashboardAnalytics from './DashboardAnalytics'
 import DashboardOperations from './DashboardOperations'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import {
   EMPTY_DASHBOARD,
   formatCompact,
@@ -25,6 +26,7 @@ const KpiSvg = ({ d, size = 20 }) => (
 export default function AdminDashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD)
   const [auditLog, setAuditLog] = useState([])
   const [loading, setLoading] = useState(true)
@@ -66,13 +68,13 @@ export default function AdminDashboard() {
       setAuditLog(auditRes.status === 'fulfilled' ? readPaginatedItems(auditRes.value.data) : [])
 
       if (failedPanels === results.length) {
-        setError('Failed to load dashboard data.')
+        setError(t('admin_dash_failed_load'))
       } else if (failedPanels > 0) {
-        setWarning('Some dashboard panels could not be loaded in time. Refresh to retry.')
+        setWarning(t('admin_dash_partial_load'))
       }
     } catch {
       if (!mountedRef.current || loadSequence !== loadSequenceRef.current) return
-      setError('Failed to load dashboard data.')
+      setError(t('admin_dash_failed_load'))
     } finally {
       if (!mountedRef.current || loadSequence !== loadSequenceRef.current) return
       setLoading(false)
@@ -89,28 +91,28 @@ export default function AdminDashboard() {
   }, [])
 
   const attentionItems = [
-    { label: 'Needs review', value: dashboard.awaiting_review_attempts, to: '/admin/attempt-analysis', tone: styles.attentionAmber },
-    { label: 'High risk', value: dashboard.high_risk_attempts, to: '/admin/candidates', tone: styles.attentionRose },
-    { label: 'Open tests', value: dashboard.open_tests || dashboard.published_tests, to: '/admin/tests', tone: styles.attentionCyan },
-    { label: 'Upcoming', value: dashboard.upcoming_count, to: '/admin/sessions', tone: styles.attentionViolet },
+    { label: t('admin_dash_needs_review'), value: dashboard.awaiting_review_attempts, to: '/admin/attempt-analysis', tone: styles.attentionAmber },
+    { label: t('admin_dash_high_risk'), value: dashboard.high_risk_attempts, to: '/admin/candidates', tone: styles.attentionRose },
+    { label: t('admin_dash_open_tests'), value: dashboard.open_tests || dashboard.published_tests, to: '/admin/tests', tone: styles.attentionCyan },
+    { label: t('admin_dash_upcoming'), value: dashboard.upcoming_count, to: '/admin/sessions', tone: styles.attentionViolet },
   ]
 
   const kpiCards = [
-    { label: 'Platform accounts', value: formatCompact(dashboard.total_users), helper: `${dashboard.active_users} active right now`, iconKey: 'users', tone: 'Blue', to: '/admin/users' },
-    { label: 'Learners', value: formatCompact(dashboard.total_learners), helper: `${dashboard.total_instructors} instructors supporting delivery`, iconKey: 'learners', tone: 'Green', to: '/admin/candidates' },
-    { label: 'Open tests', value: formatCompact(dashboard.open_tests || dashboard.published_tests), helper: `${dashboard.closed_tests} closed or unpublished`, iconKey: 'tests', tone: 'Violet', to: '/admin/tests' },
-    { label: 'Total attempts', value: formatCompact(dashboard.total_attempts), helper: `${dashboard.in_progress_attempts} currently in progress`, iconKey: 'attempts', tone: 'Cyan', to: '/admin/attempt-analysis' },
-    { label: 'Average score', value: formatPercent(dashboard.average_score, 1), helper: `Best score ${formatPercent(dashboard.best_score, 1)}`, iconKey: 'score', tone: 'Amber', to: '/admin/attempt-analysis' },
-    { label: 'Pass rate', value: formatPercent(dashboard.pass_rate, 1), helper: `${dashboard.completed_attempts} completed attempts`, iconKey: 'passRate', tone: 'Green', to: '/admin/reports' },
-    { label: 'Submitted backlog', value: formatCompact(dashboard.awaiting_review_attempts), helper: 'Attempts waiting for review', iconKey: 'alert', tone: 'Amber', to: '/admin/attempt-analysis' },
-    { label: 'Admin team', value: formatCompact(dashboard.total_admins), helper: 'Administrative operators', iconKey: 'users', tone: 'Rose', to: '/admin/users' },
+    { label: t('admin_dash_platform_accounts'), value: formatCompact(dashboard.total_users), helper: `${dashboard.active_users} ${t('admin_dash_active_right_now')}`, iconKey: 'users', tone: 'Blue', to: '/admin/users' },
+    { label: t('admin_dash_learners'), value: formatCompact(dashboard.total_learners), helper: `${dashboard.total_instructors} ${t('admin_dash_instructors_supporting')}`, iconKey: 'learners', tone: 'Green', to: '/admin/candidates' },
+    { label: t('admin_dash_open_tests'), value: formatCompact(dashboard.open_tests || dashboard.published_tests), helper: `${dashboard.closed_tests} ${t('admin_dash_closed_unpublished')}`, iconKey: 'tests', tone: 'Violet', to: '/admin/tests' },
+    { label: t('admin_dash_total_attempts'), value: formatCompact(dashboard.total_attempts), helper: `${dashboard.in_progress_attempts} ${t('admin_dash_currently_in_progress')}`, iconKey: 'attempts', tone: 'Cyan', to: '/admin/attempt-analysis' },
+    { label: t('admin_dash_average_score'), value: formatPercent(dashboard.average_score, 1), helper: `${t('admin_dash_best_score')} ${formatPercent(dashboard.best_score, 1)}`, iconKey: 'score', tone: 'Amber', to: '/admin/attempt-analysis' },
+    { label: t('admin_dash_pass_rate'), value: formatPercent(dashboard.pass_rate, 1), helper: `${dashboard.completed_attempts} ${t('admin_dash_completed_attempts')}`, iconKey: 'passRate', tone: 'Green', to: '/admin/reports' },
+    { label: t('admin_dash_submitted_backlog'), value: formatCompact(dashboard.awaiting_review_attempts), helper: t('admin_dash_awaiting_review'), iconKey: 'alert', tone: 'Amber', to: '/admin/attempt-analysis' },
+    { label: t('admin_dash_admin_team'), value: formatCompact(dashboard.total_admins), helper: t('admin_dash_admin_operators'), iconKey: 'users', tone: 'Rose', to: '/admin/users' },
   ]
 
   if (loading && !hasAnyData) {
     return (
       <div className={styles.page}>
-        <AdminPageHeader title="Admin Dashboard" subtitle="Platform health, risk monitoring, and performance analytics">
-          <button type="button" className={styles.refreshButton} disabled>Refresh</button>
+        <AdminPageHeader title={t('admin_dash_title')} subtitle={t('admin_dash_subtitle')}>
+          <button type="button" className={styles.refreshButton} disabled>{t('refresh')}</button>
         </AdminPageHeader>
         <div className={styles.heroSkeleton}>
           <Skeleton variant="card" className={styles.heroSkeletonMain} />
@@ -131,49 +133,49 @@ export default function AdminDashboard() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Admin Dashboard" subtitle="Platform health, risk monitoring, and performance analytics">
+      <AdminPageHeader title={t('admin_dash_title')} subtitle={t('admin_dash_subtitle')}>
         <button type="button" className={styles.refreshButton} onClick={() => void loadDashboard({ preserveData: hasAnyData })} disabled={loading || refreshing}>
-          {refreshing ? 'Refreshing...' : 'Refresh'}
+          {refreshing ? t('refreshing') : t('refresh')}
         </button>
       </AdminPageHeader>
 
       {error && (
         <div className={`${styles.alert} ${styles.alertError}`}>
           <span>{error}</span>
-          <button type="button" className={styles.alertButton} onClick={() => void loadDashboard({ preserveData: hasAnyData })} disabled={loading || refreshing}>Retry</button>
+          <button type="button" className={styles.alertButton} onClick={() => void loadDashboard({ preserveData: hasAnyData })} disabled={loading || refreshing}>{t('retry')}</button>
         </div>
       )}
       {warning && (
         <div className={`${styles.alert} ${styles.alertWarning}`}>
           <span>{warning}</span>
-          <button type="button" className={styles.alertButton} onClick={() => void loadDashboard({ preserveData: hasAnyData })} disabled={loading || refreshing}>Refresh</button>
+          <button type="button" className={styles.alertButton} onClick={() => void loadDashboard({ preserveData: hasAnyData })} disabled={loading || refreshing}>{t('refresh')}</button>
         </div>
       )}
 
       <section className={styles.hero}>
         <div className={styles.heroMain}>
-          <div className={styles.heroEyebrow}>Operations cockpit</div>
+          <div className={styles.heroEyebrow}>{t('admin_dash_operations_cockpit')}</div>
           <h2 className={styles.heroTitle}>{heroName}</h2>
-          <p className={styles.heroSubtitle}>Monitor platform growth, learner throughput, proctoring risk, and which tests or sessions need attention next.</p>
+          <p className={styles.heroSubtitle}>{t('admin_dash_hero_subtitle')}</p>
           <div className={styles.heroMeta}>
-            <span>Last refreshed {dashboard.generated_at ? formatTime(dashboard.generated_at) : 'just now'}</span>
-            <span>{dashboard.total_attempts} attempts tracked</span>
-            <span>{dashboard.total_tests} tests in scope</span>
+            <span>{t('admin_dash_last_refreshed')} {dashboard.generated_at ? formatTime(dashboard.generated_at) : t('admin_dash_just_now')}</span>
+            <span>{dashboard.total_attempts} {t('admin_dash_attempts_tracked')}</span>
+            <span>{dashboard.total_tests} {t('admin_dash_tests_in_scope')}</span>
           </div>
           <div className={styles.heroActions}>
             {['/admin/candidates', '/admin/tests', '/admin/sessions', '/admin/audit-log'].map((to, index) => (
               <button key={to} type="button" className={styles.heroAction} onClick={() => navigate(to)}>
-                {['Candidates', 'Tests', 'Sessions', 'Audit Log'][index]}
+                {[t('admin_dash_candidates'), t('admin_dash_tests'), t('admin_dash_sessions'), t('admin_dash_audit_log')][index]}
               </button>
             ))}
           </div>
         </div>
         <div className={styles.heroPanel}>
           {[
-            { label: 'Pass rate', value: formatPercent(dashboard.pass_rate, 1), tone: 'Cyan', sub: `${dashboard.completed_attempts} completed attempts` },
-            { label: 'Awaiting review', value: dashboard.awaiting_review_attempts, tone: 'Amber', sub: 'Submitted attempts needing follow-up' },
-            { label: 'High risk', value: dashboard.high_risk_attempts, tone: 'Rose', sub: `${dashboard.medium_risk_attempts} medium-risk attempts` },
-            { label: 'Upcoming sessions', value: dashboard.upcoming_count, tone: 'Violet', sub: 'Scheduled learners in the pipeline' },
+            { label: t('admin_dash_pass_rate'), value: formatPercent(dashboard.pass_rate, 1), tone: 'Cyan', sub: `${dashboard.completed_attempts} ${t('admin_dash_completed_attempts')}` },
+            { label: t('admin_dash_needs_review'), value: dashboard.awaiting_review_attempts, tone: 'Amber', sub: t('admin_dash_submitted_needing_followup') },
+            { label: t('admin_dash_high_risk'), value: dashboard.high_risk_attempts, tone: 'Rose', sub: `${dashboard.medium_risk_attempts} ${t('admin_dash_medium_risk_attempts')}` },
+            { label: t('admin_dash_upcoming_sessions'), value: dashboard.upcoming_count, tone: 'Violet', sub: t('admin_dash_scheduled_pipeline') },
           ].map((stat) => (
             <div key={stat.label} className={styles.heroStat}>
               <div className={`${styles.heroStatValue} ${styles[`heroStat${stat.tone}`]}`}>{stat.value}</div>

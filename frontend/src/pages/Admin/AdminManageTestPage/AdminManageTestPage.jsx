@@ -11,6 +11,7 @@ import {
 import { readBlobErrorMessage } from '../../../utils/httpErrors'
 import { normalizeProctoringConfig } from '../../../utils/proctoringRequirements'
 import { readPaginatedItems } from '../../../utils/pagination'
+import useLanguage from '../../../hooks/useLanguage'
 import AdministrationTab from './tabs/AdministrationTab'
 import CandidatesTab from './tabs/CandidatesTab'
 import ProctoringTab from './tabs/ProctoringTab'
@@ -640,6 +641,7 @@ export default function AdminManageTestPage() {
   const { id } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
+  const { t } = useLanguage()
 
   const [tab, setTab] = useState(() => normalizeTabParam(location.search))
   const [settingsSection, setSettingsSection] = useState(() => normalizeSettingsSectionParam(location.search))

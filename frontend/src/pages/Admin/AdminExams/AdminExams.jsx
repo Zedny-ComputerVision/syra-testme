@@ -4,6 +4,7 @@ import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import Skeleton from '../../../components/Skeleton/Skeleton'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminExams.module.scss'
 
 const COLUMN_STORAGE_KEY = 'admin-tests-columns'
@@ -20,11 +21,11 @@ const DEFAULT_PAGE_SIZE = 20
 const PAGE_SIZE_OPTIONS = [10, 20, 50]
 const STATUS_REFLECTION_TIMEOUT_MS = 10000
 const STATUS_REFLECTION_POLL_MS = 500
-const SORT_OPTIONS = [
-  { value: 'created_at:desc', label: 'Newest first' },
-  { value: 'updated_at:desc', label: 'Recently updated' },
-  { value: 'name:asc', label: 'Name A-Z' },
-  { value: 'name:desc', label: 'Name Z-A' },
+const SORT_OPTIONS_RAW = [
+  { value: 'created_at:desc', labelKey: 'admin_exams_newest_first' },
+  { value: 'updated_at:desc', labelKey: 'admin_exams_recently_updated' },
+  { value: 'name:asc', labelKey: 'admin_exams_name_az' },
+  { value: 'name:desc', labelKey: 'admin_exams_name_za' },
 ]
 
 function buildSortParams(value) {
@@ -45,10 +46,10 @@ function loadStoredColumns() {
   }
 }
 
-function statusLabel(status) {
-  if (status === 'PUBLISHED') return 'Published'
-  if (status === 'ARCHIVED') return 'Archived'
-  return 'Draft'
+function statusLabel(status, t) {
+  if (status === 'PUBLISHED') return t('published')
+  if (status === 'ARCHIVED') return t('archived')
+  return t('draft')
 }
 
 function resolveError(err) {
@@ -56,7 +57,7 @@ function resolveError(err) {
     err.response?.data?.detail ||
     err.response?.data?.error?.message ||
     err.response?.data?.error?.detail ||
-    'Action failed.'
+    null
   )
 }
 
@@ -69,6 +70,7 @@ function visibleRange(page, pageSize, total) {
 
 export default function AdminExams() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [tests, setTests] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -82,7 +84,8 @@ export default function AdminExams() {
   const [filterDraft, setFilterDraft] = useState({ status: '', type: '' })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
-  const [sort, setSort] = useState(SORT_OPTIONS[0].value)
+  const SORT_OPTIONS = useMemo(() => SORT_OPTIONS_RAW.map((opt) => ({ value: opt.value, label: t(opt.labelKey) })), [t])
+  const [sort, setSort] = useState(SORT_OPTIONS_RAW[0].value)
   const [total, setTotal] = useState(0)
   const [busyId, setBusyId] = useState('')
   const [busyAction, setBusyAction] = useState('')
@@ -120,7 +123,7 @@ export default function AdminExams() {
       setTotal(data?.total || 0)
     } catch (err) {
       if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return
-      setError(resolveError(err) || 'Failed to load tests.')
+      setError(resolveError(err) || t('admin_exams_failed_load'))
       setTests([])
       setTotal(0)
     } finally {
@@ -189,7 +192,7 @@ export default function AdminExams() {
       await load()
       return result
     } catch (err) {
-      setError(resolveError(err))
+      setError(resolveError(err) || t('admin_exams_action_failed'))
       return null
     } finally {
       setBusyId('')
@@ -245,7 +248,7 @@ export default function AdminExams() {
   }
 
   const handleDelete = async (test) => {
-    const result = await withBusy(test.id, 'delete', () => adminApi.deleteTest(test.id), 'Test deleted.')
+    const result = await withBusy(test.id, 'delete', () => adminApi.deleteTest(test.id), t('admin_exams_test_deleted'))
     if (result) {
       setDeleteConfirmId('')
       setOpenMenuId('')
@@ -253,7 +256,7 @@ export default function AdminExams() {
   }
 
   const handleDuplicate = async (test) => {
-    const result = await withBusy(test.id, 'duplicate', () => adminApi.duplicateTest(test.id), 'Test duplicated.')
+    const result = await withBusy(test.id, 'duplicate', () => adminApi.duplicateTest(test.id), t('admin_exams_test_duplicated'))
     const duplicated = result?.data
     if (duplicated?.id) {
       setOpenMenuId('')
@@ -272,13 +275,13 @@ export default function AdminExams() {
       const reportWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer')
       if (!reportWindow) {
         URL.revokeObjectURL(blobUrl)
-        setError('Popup blocked. Allow pop-ups to open the report preview.')
+        setError(t('admin_exams_popup_blocked'))
         return
       }
       // Revoke after a short delay so the browser has time to load the blob
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
     } catch (err) {
-      setError(resolveError(err) || 'Failed to open report.')
+      setError(resolveError(err) || t('admin_exams_failed_open_report'))
     } finally {
       setReportBusyId('')
     }
@@ -293,20 +296,20 @@ export default function AdminExams() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Tests" subtitle="Manage all tests">
+      <AdminPageHeader title={t('admin_exams_title')} subtitle={t('admin_exams_subtitle')}>
         <button
           className={styles.primaryBtn}
           type="button"
           onClick={() => navigate('/admin/tests/new')}
         >
-          + New Test
+          {t('admin_exams_new_test')}
         </button>
       </AdminPageHeader>
 
       <div className={styles.toolbar}>
         <input
           className={styles.search}
-          placeholder="Search by name or code..."
+          placeholder={t('admin_exams_search_placeholder')}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value)
@@ -315,7 +318,7 @@ export default function AdminExams() {
         />
         <div className={styles.toolbarGroup}>
           <label className={styles.filterField}>
-            <span>Sort</span>
+            <span>{t('admin_exams_sort')}</span>
             <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1) }}>
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -323,7 +326,7 @@ export default function AdminExams() {
             </select>
           </label>
           <label className={styles.filterField}>
-            <span>Rows</span>
+            <span>{t('admin_exams_rows')}</span>
             <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}>
               {PAGE_SIZE_OPTIONS.map((option) => (
                 <option key={option} value={option}>{option}</option>
@@ -332,33 +335,33 @@ export default function AdminExams() {
           </label>
         </div>
         <button type="button" className={styles.actionBtn} onClick={() => setShowColumns((prev) => !prev)}>
-          {showColumns ? 'Hide columns' : 'Edit columns'}
+          {showColumns ? t('admin_exams_hide_columns') : t('admin_exams_edit_columns')}
         </button>
         <button type="button" className={styles.actionBtn} onClick={() => setShowFilters((prev) => !prev)}>
-          {showFilters ? 'Hide filters' : 'Show filters'}
+          {showFilters ? t('admin_exams_hide_filters') : t('admin_exams_show_filters')}
         </button>
         <button type="button" className={styles.actionBtn} onClick={() => load()} disabled={loading}>
-          {loading ? 'Loading...' : 'Refresh'}
+          {loading ? t('loading') : t('refresh')}
         </button>
-        {hasActiveFilters && <span className={styles.filterBadge}>{activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}</span>}
+        {hasActiveFilters && <span className={styles.filterBadge}>{activeFilterCount} {activeFilterCount === 1 ? t('admin_exams_active_filters') : t('admin_exams_active_filters_plural')}</span>}
       </div>
 
       {showColumns && (
         <div className={styles.columnsPanel}>
           {Object.keys(DEFAULT_COLUMNS).map((key) => {
             const label = key === 'name'
-              ? 'Name'
+              ? t('admin_exams_col_name')
               : key === 'code'
-                ? 'Code'
+                ? t('admin_exams_col_code')
                 : key === 'type'
-                  ? 'Type'
+                  ? t('admin_exams_col_type')
                   : key === 'status'
-                    ? 'Status'
+                    ? t('admin_exams_col_status')
                     : key === 'time_limit_minutes'
-                      ? 'Time limit'
+                      ? t('admin_exams_col_time_limit_label')
                       : key === 'testing_sessions'
-                        ? 'Testing sessions'
-                        : 'Updated'
+                        ? t('admin_exams_col_testing_sessions')
+                        : t('admin_exams_col_updated')
             return (
               <label key={key} className={styles.checkboxRow}>
                 <input
@@ -372,10 +375,10 @@ export default function AdminExams() {
           })}
           <div className={styles.panelActions}>
             <button type="button" className={styles.actionBtn} onClick={resetColumns}>
-              Reset to default
+              {t('admin_exams_reset_default')}
             </button>
             <button type="button" className={styles.actionBtn} onClick={saveColumns}>
-              Save displayed column set
+              {t('admin_exams_save_columns')}
             </button>
           </div>
         </div>
@@ -384,18 +387,18 @@ export default function AdminExams() {
       {showFilters && (
         <div className={styles.filterPanel}>
           <label className={styles.filterField}>
-            <span>Status</span>
+            <span>{t('status')}</span>
             <select value={filterDraft.status} onChange={(e) => setFilterDraft((prev) => ({ ...prev, status: e.target.value }))}>
-              <option value="">All</option>
-              <option value="DRAFT">Draft</option>
-              <option value="PUBLISHED">Published</option>
-              <option value="ARCHIVED">Archived</option>
+              <option value="">{t('all')}</option>
+              <option value="DRAFT">{t('draft')}</option>
+              <option value="PUBLISHED">{t('published')}</option>
+              <option value="ARCHIVED">{t('archived')}</option>
             </select>
           </label>
           <label className={styles.filterField}>
-            <span>Type</span>
+            <span>{t('type')}</span>
             <select value={filterDraft.type} onChange={(e) => setFilterDraft((prev) => ({ ...prev, type: e.target.value }))}>
-              <option value="">All</option>
+              <option value="">{t('all')}</option>
               <option value="MCQ">MCQ</option>
               <option value="MULTI">MULTI</option>
               <option value="TRUEFALSE">TRUEFALSE</option>
@@ -404,9 +407,9 @@ export default function AdminExams() {
           </label>
           <div className={styles.panelActions}>
             <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-              Clear
+              {t('admin_exams_clear')}
             </button>
-            <button type="button" className={styles.actionBtn} onClick={applyFilters}>Apply</button>
+            <button type="button" className={styles.actionBtn} onClick={applyFilters}>{t('admin_exams_apply')}</button>
           </div>
         </div>
       )}
@@ -417,11 +420,11 @@ export default function AdminExams() {
           <div className={styles.error}>{error}</div>
           <div className={styles.errorActions}>
             <button type="button" className={styles.actionBtn} onClick={() => load()} disabled={loading}>
-              Retry
+              {t('retry')}
             </button>
             {hasActiveFilters && (
               <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={loading}>
-                Clear filters
+                {t('clear_filters')}
               </button>
             )}
           </div>
@@ -435,16 +438,16 @@ export default function AdminExams() {
           </div>
         ) : tests.length === 0 ? (
           <div className={styles.empty}>
-            <strong>{hasActiveFilters ? 'No tests match the current filters.' : 'No tests created yet.'}</strong>
-            <span>{hasActiveFilters ? 'Adjust or clear the filters to widen the list.' : 'Create the first test to start assigning sessions and candidates.'}</span>
+            <strong>{hasActiveFilters ? t('admin_exams_no_match') : t('admin_exams_no_tests_yet')}</strong>
+            <span>{hasActiveFilters ? t('admin_exams_adjust_filters') : t('admin_exams_create_first')}</span>
             <div className={styles.emptyActions}>
               {hasActiveFilters ? (
                 <button type="button" className={styles.actionBtn} onClick={clearFilters}>
-                  Clear filters
+                  {t('clear_filters')}
                 </button>
               ) : (
                 <button type="button" className={styles.primaryBtn} onClick={() => navigate('/admin/tests/new')}>
-                  + New Test
+                  {t('admin_exams_new_test')}
                 </button>
               )}
             </div>
@@ -453,14 +456,14 @@ export default function AdminExams() {
           <table className={styles.table}>
             <thead>
               <tr>
-                {columns.name && <th>Name</th>}
-                {columns.code && <th>Code</th>}
-                {columns.type && <th>Type</th>}
-                {columns.status && <th>Status</th>}
-                {columns.time_limit_minutes && <th>Time Limit</th>}
-                {columns.testing_sessions && <th>Sessions</th>}
-                {columns.updated_at && <th>Updated</th>}
-                <th>Actions</th>
+                {columns.name && <th>{t('admin_exams_col_name')}</th>}
+                {columns.code && <th>{t('admin_exams_col_code')}</th>}
+                {columns.type && <th>{t('admin_exams_col_type')}</th>}
+                {columns.status && <th>{t('admin_exams_col_status')}</th>}
+                {columns.time_limit_minutes && <th>{t('admin_exams_col_time_limit')}</th>}
+                {columns.testing_sessions && <th>{t('admin_exams_col_sessions')}</th>}
+                {columns.updated_at && <th>{t('admin_exams_col_updated')}</th>}
+                <th>{t('actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -478,8 +481,8 @@ export default function AdminExams() {
                           {test.name}
                         </button>
                         <div className={styles.testMeta}>
-                          <span className={styles.metaPill}>{test.question_count ?? 0} question{Number(test.question_count ?? 0) === 1 ? '' : 's'}</span>
-                          <span className={styles.metaPill}>{test.testing_sessions ?? 0} session{Number(test.testing_sessions ?? 0) === 1 ? '' : 's'}</span>
+                          <span className={styles.metaPill}>{test.question_count ?? 0} {Number(test.question_count ?? 0) === 1 ? t('admin_exams_question_singular') : t('admin_exams_questions_plural')}</span>
+                          <span className={styles.metaPill}>{test.testing_sessions ?? 0} {Number(test.testing_sessions ?? 0) === 1 ? t('admin_exams_session_singular') : t('admin_exams_sessions_plural')}</span>
                           {test.course_title && <span className={styles.metaPill}>{test.course_title}</span>}
                         </div>
                       </div>
@@ -490,11 +493,11 @@ export default function AdminExams() {
                   {columns.status && (
                     <td className={styles.compactCell}>
                       <span className={`${styles.badge} ${styles[`status${test.status}`]}`}>
-                        {statusLabel(test.status)}
+                        {statusLabel(test.status, t)}
                       </span>
                     </td>
                   )}
-                  {columns.time_limit_minutes && <td className={styles.compactCell}>{test.time_limit_minutes ? `${test.time_limit_minutes} min` : '-'}</td>}
+                  {columns.time_limit_minutes && <td className={styles.compactCell}>{test.time_limit_minutes ? `${test.time_limit_minutes} ${t('admin_exams_min')}` : '-'}</td>}
                   {columns.testing_sessions && <td className={styles.compactCell}>{test.testing_sessions ?? 0}</td>}
                   {columns.updated_at && (
                     <td className={styles.compactCell}>
@@ -513,15 +516,15 @@ export default function AdminExams() {
                         className={`${styles.actionBtn} ${styles.manageBtn}`}
                         disabled={busyId === test.id}
                         onClick={() => navigate(`/admin/tests/${test.id}/manage`)}
-                        aria-label={`Manage test ${test.name}`}
+                        aria-label={`${t('admin_exams_manage_test')} ${test.name}`}
                       >
-                        Manage test
+                        {t('admin_exams_manage_test')}
                       </button>
                       <div className={styles.menuWrap} data-admin-test-menu>
                         <button
                           type="button"
                           className={styles.menuToggle}
-                          aria-label={`More actions for ${test.name}`}
+                          aria-label={`${t('admin_exams_more_actions_for')} ${test.name}`}
                           aria-haspopup="true"
                           aria-expanded={openMenuId === test.id}
                           onClick={() => {
@@ -529,44 +532,44 @@ export default function AdminExams() {
                             setOpenMenuId((current) => (current === test.id ? '' : test.id))
                           }}
                         >
-                          Actions
+                          {t('actions')}
                         </button>
                         {openMenuId === test.id && (
                           <div className={styles.menu}>
                             <button type="button" className={styles.menuItem} onClick={() => { setOpenMenuId(''); navigate(`/admin/tests/${test.id}/manage?tab=sessions`) }}>
-                              Testing sessions
+                              {t('admin_exams_col_testing_sessions')}
                             </button>
                             <button type="button" className={styles.menuItem} onClick={() => { setOpenMenuId(''); navigate(`/admin/tests/${test.id}/manage?tab=candidates`) }}>
-                              Candidates
+                              {t('admin_dash_candidates')}
                             </button>
                             <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => handleDuplicate(test)}>
-                              {busyId === test.id && busyAction === 'duplicate' ? 'Duplicating...' : 'Duplicate'}
+                              {busyId === test.id && busyAction === 'duplicate' ? t('admin_exams_duplicating') : t('admin_exams_duplicate')}
                             </button>
                             <button type="button" className={styles.menuItem} disabled={reportBusyId === test.id || busyId === test.id} onClick={() => handleOpenReport(test)}>
-                              {reportBusyId === test.id ? 'Opening report...' : 'Open report'}
+                              {reportBusyId === test.id ? t('admin_exams_opening_report') : t('admin_exams_open_report')}
                             </button>
                             {test.status === 'DRAFT' && (
-                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'publish', 'PUBLISHED', () => adminApi.publishTest(test.id), 'Test published.') }}>
-                                {busyId === test.id && busyAction === 'publish' ? 'Publishing...' : 'Publish'}
+                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'publish', 'PUBLISHED', () => adminApi.publishTest(test.id), t('admin_exams_test_published')) }}>
+                                {busyId === test.id && busyAction === 'publish' ? t('admin_exams_publishing') : t('admin_exams_publish')}
                               </button>
                             )}
                             {test.status === 'PUBLISHED' && (
-                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'archive', 'ARCHIVED', () => adminApi.archiveTest(test.id), 'Test archived.') }}>
-                                {busyId === test.id && busyAction === 'archive' ? 'Archiving...' : 'Archive'}
+                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'archive', 'ARCHIVED', () => adminApi.archiveTest(test.id), t('admin_exams_test_archived')) }}>
+                                {busyId === test.id && busyAction === 'archive' ? t('admin_exams_archiving') : t('admin_exams_archive')}
                               </button>
                             )}
                             {test.status === 'ARCHIVED' && (
-                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'unarchive', 'PUBLISHED', () => adminApi.unarchiveTest(test.id), 'Test unarchived.') }}>
-                                {busyId === test.id && busyAction === 'unarchive' ? 'Unarchiving...' : 'Unarchive'}
+                              <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => { void runStatusAction(test, 'unarchive', 'PUBLISHED', () => adminApi.unarchiveTest(test.id), t('admin_exams_test_unarchived')) }}>
+                                {busyId === test.id && busyAction === 'unarchive' ? t('admin_exams_unarchiving') : t('admin_exams_unarchive')}
                               </button>
                             )}
                             {deleteConfirmId === test.id ? (
                               <>
                                 <button type="button" className={`${styles.menuItem} ${styles.menuDanger}`} disabled={busyId === test.id} onClick={() => handleDelete(test)}>
-                                  {busyId === test.id && busyAction === 'delete' ? 'Deleting...' : 'Confirm delete'}
+                                  {busyId === test.id && busyAction === 'delete' ? t('admin_exams_deleting') : t('confirm_delete')}
                                 </button>
                                 <button type="button" className={styles.menuItem} disabled={busyId === test.id} onClick={() => setDeleteConfirmId('')}>
-                                  Cancel delete
+                                  {t('cancel_delete')}
                                 </button>
                               </>
                             ) : (
@@ -576,7 +579,7 @@ export default function AdminExams() {
                                 disabled={busyId === test.id}
                                 onClick={() => setDeleteConfirmId(test.id)}
                               >
-                                Delete
+                                {t('delete')}
                               </button>
                             )}
                           </div>
@@ -593,15 +596,15 @@ export default function AdminExams() {
 
       <div className={styles.footer}>
         <span className={styles.pageInfo}>
-          Showing {visibleRange(page, pageSize, total)} of {total} tests
+          {t('admin_exams_showing_range')} {visibleRange(page, pageSize, total)} {t('admin_exams_of_total')} {total} {t('admin_exams_tests_label')}
         </span>
         <div className={styles.pagination}>
           <button type="button" className={styles.actionBtn} onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1 || loading}>
-            Prev
+            {t('admin_exams_prev')}
           </button>
-          <span className={styles.pageInfo}>Page {page} / {totalPages}</span>
+          <span className={styles.pageInfo}>{t('page')} {page} / {totalPages}</span>
           <button type="button" className={styles.actionBtn} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages || loading}>
-            Next
+            {t('next')}
           </button>
         </div>
       </div>
