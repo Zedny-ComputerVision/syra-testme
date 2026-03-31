@@ -15,6 +15,7 @@ import { normalizeQuestion, normalizeTest } from '../../utils/assessmentAdapters
 import { getJourneyRequirements, normalizeProctoringConfig } from '../../utils/proctoringRequirements'
 import { requestEntireScreenShare, ENTIRE_SCREEN_REQUIRED } from '../../utils/screenCapture'
 import { consumeScreenStream } from '../../utils/screenShareState'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './Proctoring.module.scss'
 
 const DEFAULT_PROCTORING = {
@@ -208,6 +209,7 @@ export default function Proctoring() {
   const { attemptId } = useParams()
   const navigate = useNavigate()
   const { tokens } = useAuth()
+  const { t } = useLanguage()
 
   const [exam, setExam] = useState(null)
   const [questions, setQuestions] = useState([])
@@ -1234,13 +1236,13 @@ export default function Proctoring() {
   }
 
   const autosaveLabel = () => {
-    if (saveState === 'saving') return 'Autosave: Saving...'
-    if (saveState === 'pending') return 'Autosave: Pending changes'
+    if (saveState === 'saving') return t('proctor_autosave_saving')
+    if (saveState === 'pending') return t('proctor_autosave_pending')
     if (saveState === 'saved') {
-      return `Autosave: Saved ${lastSavedAt ? lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}`.trim()
+      return `${t('proctor_autosave_saved')} ${lastSavedAt ? lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}`.trim()
     }
-    if (saveState === 'error') return 'Autosave: Save failed'
-    return 'Autosave: Ready'
+    if (saveState === 'error') return t('proctor_autosave_failed')
+    return t('proctor_autosave_ready')
   }
 
   // Tab blur / visibility tracking
@@ -1674,7 +1676,7 @@ export default function Proctoring() {
     return (
       <div className={styles.page}>
         <div className={`${styles.examPane} ${styles.centerState}`}>
-          <p className={styles.stateMessage}>Loading test...</p>
+          <p className={styles.stateMessage}>{t('proctor_loading_test')}</p>
         </div>
       </div>
     )
@@ -1686,7 +1688,7 @@ export default function Proctoring() {
         <div className={`${styles.examPane} ${styles.centerState}`}>
           <div className={styles.errorBanner}>{loadError}</div>
           <button type="button" className={styles.retryBtn} onClick={() => setReloadKey((current) => current + 1)}>
-            Retry loading test
+            {t('proctor_retry_loading')}
           </button>
         </div>
       </div>
@@ -1709,12 +1711,12 @@ export default function Proctoring() {
           border: '1px solid rgba(6,182,212,0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
         }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f1f5f9', marginBottom: '0.5rem' }}>
-            {submittedRef.current ? 'Exam Submitted' : 'Finalizing Your Exam'}
+            {submittedRef.current ? t('proctor_exam_submitted') : t('proctor_finalizing_exam')}
           </div>
           <div style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
             {anyProcessing
-              ? 'Upload finished. Final video processing is still running. Please do not close this page.'
-              : 'Uploading your required proctoring recordings before submission. Please do not close this page.'}
+              ? t('proctor_upload_processing')
+              : t('proctor_upload_in_progress')}
           </div>
           {uploadError && (
             <div style={{
@@ -1733,7 +1735,7 @@ export default function Proctoring() {
           {Object.entries(uploadPercent).map(([src, pct]) => (
             <div key={src} style={{ marginBottom: '1rem', textAlign: 'left' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontSize: '0.9rem', marginBottom: 4 }}>
-                <span>{src.charAt(0).toUpperCase() + src.slice(1)} recording</span>
+                <span>{src.charAt(0).toUpperCase() + src.slice(1)} {t('proctor_recording')}</span>
                 <span>{pct}%</span>
               </div>
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 6, height: 10, overflow: 'hidden' }}>
@@ -1747,7 +1749,7 @@ export default function Proctoring() {
           ))}
           {allDone && (
             <div style={{ color: '#22c55e', fontWeight: 500, marginTop: '1rem' }}>
-              Upload complete! Redirecting...
+              {t('proctor_upload_complete')}
             </div>
           )}
           {uploadError && !allDone && (
@@ -1761,7 +1763,7 @@ export default function Proctoring() {
                 color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: '0.85rem',
               }}
             >
-              {submitting ? 'Retrying upload...' : 'Retry upload'}
+              {submitting ? t('proctor_retrying_upload') : t('proctor_retry_upload')}
             </button>
           )}
         </div>
@@ -1788,7 +1790,7 @@ export default function Proctoring() {
   }
   const proctorPane = (
     proctoringEnabled ? (
-      <aside className={`${styles.proctorPane} glass`} aria-label="Proctoring panel">
+      <aside className={`${styles.proctorPane} glass`} aria-label={t('proctor_panel_aria')}>
         <ProctorOverlay
           attemptId={attemptId}
           token={tokens?.access_token}
@@ -1820,10 +1822,9 @@ export default function Proctoring() {
     return (
       <div className={styles.page}>
         <div className={`${styles.examPane} ${styles.centerState}`}>
-          <h2 className={styles.examTitle}>Screen Sharing Required</h2>
+          <h2 className={styles.examTitle}>{t('proctor_screen_share_required')}</h2>
           <p className={styles.stateMessage}>
-            This test requires you to share your <strong>entire screen</strong> for the duration of the exam.
-            Your screen will be recorded and monitored.
+            {t('proctor_screen_share_message')}
           </p>
           {screenShareGateError && <div className={styles.errorBanner}>{screenShareGateError}</div>}
           <button
@@ -1832,7 +1833,7 @@ export default function Proctoring() {
             disabled={screenShareGateLoading}
             onClick={handleScreenShareGate}
           >
-            {screenShareGateLoading ? 'Requesting screen share...' : 'Share your screen to continue'}
+            {screenShareGateLoading ? t('proctor_requesting_screen') : t('proctor_share_to_continue')}
           </button>
         </div>
       </div>
@@ -1843,9 +1844,9 @@ export default function Proctoring() {
     return (
       <div className={styles.page}>
         <div className={`${styles.examPane} ${styles.centerState}`}>
-          <div className={styles.stateMessage}>No questions are available for this attempt.</div>
+          <div className={styles.stateMessage}>{t('proctor_no_questions')}</div>
           <button type="button" className={styles.retryBtn} onClick={() => navigate('/attempts')}>
-            Back to attempts list
+            {t('proctor_back_to_attempts')}
           </button>
         </div>
         {proctorPane}
@@ -1865,7 +1866,7 @@ export default function Proctoring() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
         >
-          <h2 className={styles.examTitle}>{exam?.title || 'Test'}</h2>
+          <h2 className={styles.examTitle}>{exam?.title || t('proctor_test')}</h2>
           <div className={styles.headerMeta}>
             {violations.HIGH > 0 && (
               <span className={styles.badgeHigh}>{violations.HIGH} HIGH</span>
@@ -1874,21 +1875,21 @@ export default function Proctoring() {
               <span className={styles.badgeMedium}>{violations.MEDIUM} MED</span>
             )}
             <span className={proctoringEnabled && proctorStatus === 'connected' ? styles.badgeConnected : styles.badgeDisconnected}>
-              Proctoring: {proctoringEnabled ? proctorStatus : 'off'}
+              {t('proctor_proctoring')}: {proctoringEnabled ? proctorStatus : t('proctor_off')}
             </span>
             {proctoringEnabled && (
               <span className={recordingBadgeClass(cameraRecordingStatus)}>
-                Camera: {cameraRecordingStatus}
+                {t('proctor_camera')}: {cameraRecordingStatus}
               </span>
             )}
             {proctoringEnabled && proctorCfg.screen_capture && (
               <span className={recordingBadgeClass(screenRecordingStatus)}>
-                Screen: {screenRecordingStatus}
+                {t('proctor_screen')}: {screenRecordingStatus}
               </span>
             )}
             {proctoringEnabled && (
               <span className={styles.recordingHint}>
-                Saved recordings appear after submit in Manage Tests - Proctoring - Video
+                {t('proctor_recording_hint')}
               </span>
             )}
             <span
@@ -1918,11 +1919,11 @@ export default function Proctoring() {
         {autoSubmitState && (
           <div className={styles.autoSubmitBanner} role="alert" aria-live="assertive">
             <div>
-              <div className={styles.autoSubmitTitle}>Auto-submitting in {formatTime(autoSubmitState.secondsLeft)}</div>
+              <div className={styles.autoSubmitTitle}>{t('proctor_auto_submitting_in')} {formatTime(autoSubmitState.secondsLeft)}</div>
               <div className={styles.autoSubmitBody}>{autoSubmitState.detail}</div>
             </div>
             <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
-              Submit now
+              {t('proctor_submit_now')}
             </button>
           </div>
         )}
@@ -1930,14 +1931,14 @@ export default function Proctoring() {
         <div className={styles.progressWrap}>
           <div className={styles.progressHeader}>
             <div>
-              <div className={styles.progressTitle}>Completion progress</div>
+              <div className={styles.progressTitle}>{t('proctor_completion_progress')}</div>
               <div className={styles.progressMeta}>
-                {answeredCount} answered of {questions.length} total
+                {answeredCount} {t('proctor_answered_of')} {questions.length} {t('proctor_total')}
               </div>
             </div>
             <div className={styles.progressStats}>
-              <span className={styles.progressChip}>Current {currentIdx + 1} / {questions.length}</span>
-              <span className={styles.progressChip}>{unansweredCount} unanswered</span>
+              <span className={styles.progressChip}>{t('proctor_current')} {currentIdx + 1} / {questions.length}</span>
+              <span className={styles.progressChip}>{unansweredCount} {t('proctor_unanswered')}</span>
             </div>
           </div>
           {showProgressBar && (
@@ -1945,14 +1946,14 @@ export default function Proctoring() {
               <div
                 className={styles.progressBar}
                 role="progressbar"
-                aria-label="Answered questions progress"
+                aria-label={t('proctor_progress_aria')}
                 aria-valuemin={0}
                 aria-valuemax={questions.length}
                 aria-valuenow={answeredCount}
               >
                 <div className={styles.progressBarFill} style={{ width: `${progressPct}%` }} />
               </div>
-              <div className={styles.progressPercent}>{Math.round(progressPct)}% complete</div>
+              <div className={styles.progressPercent}>{Math.round(progressPct)}% {t('proctor_complete')}</div>
             </>
           )}
         </div>
@@ -1992,7 +1993,7 @@ export default function Proctoring() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.22 }}
           >
-            <div className={styles.qLabel}>Question {currentIdx + 1} of {questions.length}</div>
+            <div className={styles.qLabel}>{t('question')} {currentIdx + 1} {t('of')} {questions.length}</div>
             <div className={styles.qText}>{currentQ.text}</div>
 
             {(currentQType === 'MCQ' || currentQType === 'TRUEFALSE') && (currentQ.options || []).length > 0 ? (
@@ -2052,7 +2053,7 @@ export default function Proctoring() {
             ) : (
               <textarea
                 className={styles.textAnswer}
-                placeholder="Type your answer here..."
+                placeholder={t('proctor_type_answer')}
                 value={answers[currentQ.id] || ''}
                 disabled={interactionLocked}
                 onChange={e => handleAnswer(currentQ.id, e.target.value)}
@@ -2067,25 +2068,25 @@ export default function Proctoring() {
             )}
             {showSubmitConfirm && (
               <div className={styles.submitConfirm}>
-                <div className={styles.submitConfirmTitle}>Ready to submit?</div>
+                <div className={styles.submitConfirmTitle}>{t('proctor_ready_to_submit')}</div>
                 <div className={styles.submitConfirmBody}>
                   {unansweredCount > 0
-                    ? `You still have ${unansweredCount} unanswered ${unansweredCount === 1 ? 'question' : 'questions'}.`
-                    : 'All questions have an answer recorded.'}
+                    ? `${t('proctor_still_have')} ${unansweredCount} ${t('proctor_unanswered')} ${unansweredCount === 1 ? t('question') : t('questions')}.`
+                    : t('proctor_all_answered')}
                   {' '}
-                  Once submitted, this attempt will be locked and sent for review.
+                  {t('proctor_once_submitted')}
                 </div>
                 {submitting && submitPhase && (
                   <div className={styles.submitStatus}>
-                    {submitPhase === 'uploading' ? 'Uploading recordings...' : submitPhase}
+                    {submitPhase === 'uploading' ? t('proctor_uploading_recordings') : submitPhase}
                   </div>
                 )}
                 <div className={styles.submitConfirmActions}>
                   <button type="button" className={styles.btnNav} onClick={() => setShowSubmitConfirm(false)} disabled={submitting}>
-                    Keep Reviewing
+                    {t('proctor_keep_reviewing')}
                   </button>
                   <button type="button" className={styles.btnSubmit} onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? (submitPhase.includes('Submitting') ? 'Submitting...' : 'Saving...') : 'Confirm Submit'}
+                    {submitting ? (submitPhase.includes('Submitting') ? t('proctor_submitting') : t('saving')) : t('proctor_confirm_submit')}
                   </button>
                 </div>
               </div>
@@ -2102,7 +2103,7 @@ export default function Proctoring() {
                 }}
                 whileTap={{ scale: 0.97 }}
               >
-                Previous question
+                {t('proctor_previous_question')}
               </motion.button>
               {currentIdx < questions.length - 1 ? (
                 <motion.button
@@ -2116,7 +2117,7 @@ export default function Proctoring() {
                   disabled={interactionLocked}
                   whileTap={{ scale: 0.97 }}
                 >
-                  Next question
+                  {t('proctor_next_question')}
                 </motion.button>
               ) : (
                 <motion.button
@@ -2127,7 +2128,7 @@ export default function Proctoring() {
                   aria-label={showSubmitConfirm ? 'Review submission summary' : 'Review and submit test'}
                   whileTap={{ scale: submitting ? 1 : 0.97 }}
                 >
-                  {submitting ? 'Submitting...' : autoSubmitState ? 'Auto-submitting...' : showSubmitConfirm ? 'Review Submission' : 'Submit Test'}
+                  {submitting ? t('proctor_submitting') : autoSubmitState ? t('proctor_auto_submitting') : showSubmitConfirm ? t('proctor_review_submission') : t('proctor_submit_test')}
                 </motion.button>
               )}
             </div>

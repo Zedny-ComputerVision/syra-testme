@@ -4,6 +4,7 @@ import { listTests } from '../../services/test.service'
 import api from '../../services/api'
 import { normalizeTest } from '../../utils/assessmentAdapters'
 import { readPaginatedItems } from '../../utils/pagination'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './TrainingCourses.module.scss'
 
 const INTERNAL_POOL_LIBRARY_TITLE = 'Question Pool Library'
@@ -27,6 +28,7 @@ export default function TrainingCourses() {
   const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
+  const { t } = useLanguage()
 
   const load = async () => {
     setLoading(true)
@@ -40,7 +42,7 @@ export default function TrainingCourses() {
       ])
 
       if (courseRes.status !== 'fulfilled') {
-        throw new Error('Failed to load training courses.')
+        throw new Error(t('training_load_error'))
       }
 
       const nextCourses = (courseRes.value.data || []).filter(isVisibleTrainingCourse)
@@ -72,13 +74,13 @@ export default function TrainingCourses() {
       setNodes(nodeMap)
 
       if (partialFailures.length > 0) {
-        setNotice('Some training details are temporarily unavailable. Course information is shown, but module or test links may be incomplete.')
+        setNotice(t('training_partial_notice'))
       }
     } catch {
       setCourses([])
       setTests([])
       setNodes({})
-      setError('Failed to load training courses.')
+      setError(t('training_load_error'))
     } finally {
       setLoading(false)
     }
@@ -115,24 +117,24 @@ export default function TrainingCourses() {
   const hasActiveFilters = Boolean(search.trim())
   const summaryCards = [
     {
-      label: 'Courses',
+      label: t('training_courses'),
       value: courses.length,
-      helper: 'Available training collections',
+      helper: t('training_available_collections'),
     },
     {
-      label: 'Visible now',
+      label: t('training_visible_now'),
       value: filteredCourses.length,
-      helper: hasActiveFilters ? 'Matching the active search' : 'All available courses',
+      helper: hasActiveFilters ? t('training_matching_search') : t('training_all_available'),
     },
     {
-      label: 'Modules',
+      label: t('training_modules'),
       value: totalModules,
-      helper: 'Modules currently loaded across courses',
+      helper: t('training_modules_loaded'),
     },
     {
-      label: 'Linked tests',
+      label: t('training_linked_tests'),
       value: totalTests,
-      helper: 'Tests currently attached to course modules',
+      helper: t('training_tests_attached'),
     },
   ]
 
@@ -144,14 +146,14 @@ export default function TrainingCourses() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>My Training Courses</h1>
+          <h1 className={styles.title}>{t('training_title')}</h1>
           {!loading && !error && (
-            <p className={styles.subtitle}>{courses.length} course{courses.length === 1 ? '' : 's'} available</p>
+            <p className={styles.subtitle}>{courses.length} {courses.length === 1 ? t('training_course_singular') : t('training_course_plural')} {t('training_available_label')}</p>
           )}
         </div>
         {!loading && (
           <button type="button" className={styles.retryBtn} onClick={() => void load()}>
-            Refresh
+            {t('refresh')}
           </button>
         )}
       </div>
@@ -166,12 +168,12 @@ export default function TrainingCourses() {
       </section>
       <div className={styles.toolbar}>
         <div className={styles.searchGroup}>
-          <label className={styles.filterLabel} htmlFor="training-course-search">Search courses</label>
+          <label className={styles.filterLabel} htmlFor="training-course-search">{t('training_search_courses')}</label>
           <input
             id="training-course-search"
             className={styles.searchInput}
             type="text"
-            placeholder="Search course, module, or test..."
+            placeholder={t('training_search_placeholder')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             disabled={loading}
@@ -179,37 +181,37 @@ export default function TrainingCourses() {
         </div>
         <div className={styles.toolbarActions}>
           <button type="button" className={styles.retryBtn} onClick={() => void load()} disabled={loading}>
-            {loading ? 'Refreshing...' : 'Refresh'}
+            {loading ? t('refreshing') : t('refresh')}
           </button>
           <button type="button" className={styles.retryBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-            Clear filters
+            {t('clear_filters')}
           </button>
         </div>
       </div>
       {!loading && !error && (
         <div className={styles.filterMeta}>
-          Showing {filteredCourses.length} course{filteredCourses.length === 1 ? '' : 's'} across {courses.length} available.
+          {t('showing')} {filteredCourses.length} {filteredCourses.length === 1 ? t('training_course_singular') : t('training_course_plural')} {t('training_across')} {courses.length} {t('training_available_label')}.
         </div>
       )}
-      {loading && <div className={styles.empty}>Loading courses...</div>}
+      {loading && <div className={styles.empty}>{t('training_loading')}</div>}
       {!loading && error && <div className={styles.errorBanner}>{error}</div>}
       {!loading && error && (
         <button type="button" className={styles.retryBtn} onClick={() => void load()}>
-          Retry
+          {t('retry')}
         </button>
       )}
       {!loading && !error && notice && <div className={styles.noticeBanner}>{notice}</div>}
       {!loading && !error && filteredCourses.length === 0 && (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>{hasActiveFilters ? 'No courses match the current search.' : 'No courses available.'}</div>
+          <div className={styles.emptyTitle}>{hasActiveFilters ? t('training_no_match') : t('training_no_courses')}</div>
           <div className={styles.emptyText}>
             {hasActiveFilters
-              ? 'Clear the current search to restore the loaded courses, modules, and linked tests.'
-              : 'Assigned training courses will appear here once they are published to your account.'}
+              ? t('training_clear_search_hint')
+              : t('training_assigned_appear')}
           </div>
           {hasActiveFilters && (
             <button type="button" className={styles.retryBtn} onClick={clearFilters}>
-              Clear filters
+              {t('clear_filters')}
             </button>
           )}
         </div>
@@ -220,23 +222,23 @@ export default function TrainingCourses() {
             <div className={styles.cardHeader}>
               <div className={styles.courseTitleRow}>
                 <div className={styles.courseTitle}>{c.title}</div>
-                <span className={styles.countBadge}>{courseTestCount(c.id)} tests</span>
+                <span className={styles.countBadge}>{courseTestCount(c.id)} {t('training_tests')}</span>
               </div>
-              <div className={styles.courseSub}>{c.description || 'No course description provided.'}</div>
+              <div className={styles.courseSub}>{c.description || t('training_no_description')}</div>
               <div className={styles.courseMeta}>
-                <span>{courseModuleCount(c.id)} module{courseModuleCount(c.id) === 1 ? '' : 's'}</span>
-                <span>{courseTestCount(c.id)} linked test{courseTestCount(c.id) === 1 ? '' : 's'}</span>
+                <span>{courseModuleCount(c.id)} {courseModuleCount(c.id) === 1 ? t('training_module_singular') : t('training_module_plural')}</span>
+                <span>{courseTestCount(c.id)} {courseTestCount(c.id) === 1 ? t('training_linked_test_singular') : t('training_linked_test_plural')}</span>
               </div>
             </div>
             <div className={styles.modules}>
               {(nodes[c.id] || []).length === 0 && (
-                <div className={styles.moduleEmpty}>No modules are available for this course right now.</div>
+                <div className={styles.moduleEmpty}>{t('training_no_modules')}</div>
               )}
               {(nodes[c.id] || []).map(n => (
                 <div key={n.id} className={styles.module}>
                   <div className={styles.moduleHeader}>
                     <div className={styles.moduleTitle}>{n.title}</div>
-                    <span className={styles.countBadge}>{testsForNode(n.id).length} tests</span>
+                    <span className={styles.countBadge}>{testsForNode(n.id).length} {t('training_tests')}</span>
                   </div>
                   <div className={styles.exams}>
                     {testsForNode(n.id).map((test) => (
@@ -244,7 +246,7 @@ export default function TrainingCourses() {
                         {test.title}
                       </button>
                     ))}
-                    {testsForNode(n.id).length === 0 && <span className={styles.empty}>No tests available</span>}
+                    {testsForNode(n.id).length === 0 && <span className={styles.empty}>{t('training_no_tests')}</span>}
                   </div>
                 </div>
               ))}

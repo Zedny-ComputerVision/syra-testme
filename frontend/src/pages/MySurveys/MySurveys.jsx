@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { listSurveys, submitResponse } from '../../services/survey.service'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './MySurveys.module.scss'
 
 export default function MySurveys() {
@@ -10,6 +11,7 @@ export default function MySurveys() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [submittingId, setSubmittingId] = useState(null)
+  const { t } = useLanguage()
 
   const loadSurveys = async () => {
     setLoading(true)
@@ -19,7 +21,7 @@ export default function MySurveys() {
       setSurveys(data || [])
     } catch {
       setSurveys([])
-      setError('Failed to load surveys.')
+      setError(t('surveys_load_error'))
     } finally {
       setLoading(false)
     }
@@ -37,12 +39,12 @@ export default function MySurveys() {
     try {
       await submitResponse(surveyId, answers[surveyId] || {})
       setSubmitted((prev) => ({ ...prev, [surveyId]: true }))
-      setNotice('Response submitted successfully.')
+      setNotice(t('surveys_response_submitted'))
     } catch (e) {
       const detail = e.response?.data?.detail || 'Submit failed'
       if (detail === 'Already responded') {
         setSubmitted((prev) => ({ ...prev, [surveyId]: true }))
-        setNotice('You already submitted this survey.')
+        setNotice(t('surveys_already_submitted'))
       } else {
         setError(detail)
       }
@@ -65,41 +67,41 @@ export default function MySurveys() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>My Surveys</h1>
+          <h1 className={styles.title}>{t('surveys_title')}</h1>
           {!loading && surveys.length > 0 && (
-            <span className={styles.surveyCount} aria-label={`${surveys.length} available surveys`}>
+            <span className={styles.surveyCount} aria-label={`${surveys.length} ${t('surveys_available')}`}>
               {surveys.length}
             </span>
           )}
         </div>
         {!loading && submittedCount > 0 && (
           <span className={`${styles.noticeBanner} ${styles.compactBanner}`}>
-            {submittedCount}/{surveys.length} completed
+            {submittedCount}/{surveys.length} {t('surveys_completed')}
           </span>
         )}
       </div>
-      {loading && <div className={styles.loadingText}>Loading surveys...</div>}
+      {loading && <div className={styles.loadingText}>{t('surveys_loading')}</div>}
       {!loading && error && <div className={styles.errorBanner}>{error}</div>}
       {!loading && error && (
         <button type="button" className={styles.retryBtn} onClick={() => void loadSurveys()}>
-          Retry
+          {t('retry')}
         </button>
       )}
       {notice && <div className={styles.noticeBanner}>{notice}</div>}
-      {!loading && !error && surveys.length === 0 && <div className={styles.emptyState}>No surveys available right now.</div>}
+      {!loading && !error && surveys.length === 0 && <div className={styles.emptyState}>{t('surveys_no_surveys')}</div>}
       <div className={styles.list}>
         {surveys.map(s => (
           <div key={s.id} className={styles.card}>
             <div className={styles.cardHeader}>
               <div className={styles.cardTitleRow}>
                 <div className={styles.cardTitle}>{s.title}</div>
-                <span className={styles.progressBadge}>{answeredCount(s)}/{(s.questions || []).length} answered</span>
+                <span className={styles.progressBadge}>{answeredCount(s)}/{(s.questions || []).length} {t('surveys_answered')}</span>
               </div>
               {s.description && <div className={styles.cardSub}>{s.description}</div>}
             </div>
             <div className={styles.questions}>
               {(s.questions || []).length === 0 && (
-                <div className={styles.questionEmpty}>This survey has no questions yet.</div>
+                <div className={styles.questionEmpty}>{t('surveys_no_questions')}</div>
               )}
               {(s.questions || []).map((q, i) => {
                 const val = answers[s.id]?.[q.text] ?? ''
@@ -153,7 +155,7 @@ export default function MySurveys() {
                         className={styles.input}
                         value={val}
                         onChange={e => set(e.target.value)}
-                        placeholder="Your answer"
+                        placeholder={t('surveys_your_answer')}
                       />
                     )}
                   </div>
@@ -161,10 +163,10 @@ export default function MySurveys() {
               })}
             </div>
             {submitted[s.id] ? (
-              <div className={styles.submittedBanner}>Response submitted</div>
+              <div className={styles.submittedBanner}>{t('surveys_response_submitted_label')}</div>
             ) : (
               <button type="button" className={styles.btn} disabled={submittingId === s.id || (s.questions || []).length === 0} onClick={() => handleSubmit(s.id)}>
-                {submittingId === s.id ? 'Submitting...' : 'Submit Response'}
+                {submittingId === s.id ? t('surveys_submitting') : t('surveys_submit_response')}
               </button>
             )}
           </div>
