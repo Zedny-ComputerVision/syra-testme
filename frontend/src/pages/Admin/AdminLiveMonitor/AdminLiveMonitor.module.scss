@@ -15,7 +15,7 @@
 }
 
 .subtitle {
-  color: var(--text-secondary, #666);
+  color: var(--color-muted);
   margin: 0;
 }
 
@@ -32,8 +32,8 @@
   justify-content: space-between;
   padding: 16px;
   border-radius: 10px;
-  background: var(--card-bg, #fff);
-  border: 1px solid var(--border, #e5e7eb);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
@@ -49,17 +49,17 @@
 }
 
 .examTitle {
-  color: var(--text-secondary, #666);
+  color: var(--color-muted);
   font-size: 0.85rem;
 }
 
 .startedAt {
-  color: var(--text-muted, #999);
+  color: var(--color-muted);
   font-size: 0.8rem;
 }
 
 .viewers {
-  color: var(--primary, #4f46e5);
+  color: var(--color-primary);
   font-size: 0.8rem;
   font-weight: 500;
 }
@@ -67,8 +67,8 @@
 .watchBtn {
   padding: 8px 20px;
   border-radius: 8px;
-  background: var(--primary, #4f46e5);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-button-text);
   border: none;
   cursor: pointer;
   font-weight: 500;
@@ -82,9 +82,9 @@
 
 /* Live Viewer */
 .liveViewer {
-  background: var(--card-bg, #fff);
+  background: var(--color-surface);
   border-radius: 12px;
-  border: 1px solid var(--border, #e5e7eb);
+  border: 1px solid var(--color-border);
   overflow: hidden;
 }
 
@@ -93,8 +93,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--surface, #f9fafb);
-  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: color-mix(in srgb, var(--color-border) 20%, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
 }
 
 .viewerTitle {
@@ -111,12 +111,12 @@
   display: inline-block;
 
   &.connected {
-    background: #22c55e;
-    box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+    background: var(--color-success);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--color-success) 40%, transparent);
   }
 
   &.disconnected {
-    background: #ef4444;
+    background: var(--color-danger);
   }
 }
 
@@ -129,7 +129,7 @@
 .forceSubmitBtn {
   padding: 6px 16px;
   border-radius: 6px;
-  background: #ef4444;
+  background: var(--color-danger);
   color: #fff;
   border: none;
   cursor: pointer;
@@ -137,7 +137,7 @@
   font-weight: 500;
 
   &:hover {
-    background: #dc2626;
+    filter: brightness(0.9);
   }
 
   &:disabled {
@@ -149,13 +149,14 @@
 .closeBtn {
   padding: 6px 16px;
   border-radius: 6px;
-  background: var(--surface-hover, #f3f4f6);
-  border: 1px solid var(--border, #e5e7eb);
+  background: color-mix(in srgb, var(--color-border) 30%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   cursor: pointer;
   font-size: 0.85rem;
 
   &:hover {
-    background: var(--surface-active, #e5e7eb);
+    background: var(--color-border);
   }
 }
 
@@ -198,7 +199,7 @@
 }
 
 .sidePanel {
-  border-left: 1px solid var(--border, #e5e7eb);
+  border-left: 1px solid var(--color-border);
   padding: 16px;
   overflow-y: auto;
   max-height: 600px;
@@ -213,7 +214,7 @@
 .summaryBox {
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--border, #e5e7eb);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .statRow {
@@ -223,11 +224,11 @@
   font-size: 0.85rem;
 
   span {
-    color: var(--text-secondary, #666);
+    color: var(--color-muted);
   }
 
   strong {
-    color: var(--text-primary, #111);
+    color: var(--color-text);
   }
 }
 
@@ -238,7 +239,7 @@
 }
 
 .noAlerts {
-  color: var(--text-muted, #999);
+  color: var(--color-muted);
   font-size: 0.85rem;
 }
 
@@ -252,18 +253,18 @@
   border-left: 3px solid;
 
   &.severityHIGH {
-    border-color: #ef4444;
-    background: #fef2f2;
+    border-color: var(--color-danger);
+    background: var(--color-danger-bg);
   }
 
   &.severityMEDIUM {
-    border-color: #f59e0b;
-    background: #fffbeb;
+    border-color: var(--color-warning);
+    background: var(--color-warning-bg);
   }
 
   &.severityLOW {
-    border-color: #6b7280;
-    background: #f9fafb;
+    border-color: var(--color-border);
+    background: color-mix(in srgb, var(--color-border) 20%, var(--color-surface));
   }
 }
 
@@ -273,12 +274,12 @@
 }
 
 .alertDetail {
-  color: var(--text-secondary, #666);
+  color: var(--color-muted);
   font-size: 0.75rem;
 }
 
 .alertTime {
-  color: var(--text-muted, #999);
+  color: var(--color-muted);
   font-size: 0.7rem;
 }
 
