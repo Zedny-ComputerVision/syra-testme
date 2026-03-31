@@ -509,7 +509,7 @@ def _validate_create_payload(body: ExamCreate) -> None:
 
 
 def _validate_update_payload(data: dict) -> None:
-    if "title" in data and not str(data["title"]).strip():
+    if "title" in data and (data["title"] is None or not str(data["title"]).strip()):
         raise HTTPException(status_code=422, detail="Title is required")
     if "title" in data:
         data["title"] = str(data["title"]).strip()
