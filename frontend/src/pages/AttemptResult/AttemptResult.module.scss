@@ -138,19 +138,80 @@
   color: var(--color-muted);
 }
 
+/* Score Hero Card */
+.scoreHero {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--color-primary) 6%, transparent), transparent 55%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 1.75rem 1.5rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.scoreHeroPass {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--color-success) 7%, transparent), transparent 55%),
+    var(--color-surface);
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border));
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--color-success) 10%, transparent);
+}
+
+.scoreHeroFail {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--color-danger) 6%, transparent), transparent 55%),
+    var(--color-surface);
+  border-color: color-mix(in srgb, var(--color-danger) 28%, var(--color-border));
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+/* Pass / Fail Badge */
+.passFailBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.passFailBadgePass {
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success-text);
+  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+
+.passFailBadgeFail {
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger-text);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 28%, transparent);
+}
+
 /* Score Ring */
 .scoreSection {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .scoreRing {
   position: relative;
   width: 160px;
   height: 160px;
-  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--color-primary) 45%, transparent));
+}
+
+.scoreRingPass {
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--color-success) 40%, transparent));
+}
+
+.scoreRingFail {
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--color-danger) 35%, transparent));
 }
 
 .scoreRing svg {
@@ -172,6 +233,13 @@
   line-height: 1;
 }
 
+.scorePercent {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  margin-left: 0.1rem;
+}
+
 .scoreUnit {
   font-size: 0.85rem;
   color: var(--color-muted);
@@ -184,21 +252,73 @@
   color: var(--color-primary);
 }
 
+.passingHint {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
 /* Stats Row */
 .statsRow {
   display: flex;
   gap: 0.75rem;
-  margin-bottom: 1.5rem;
   flex-wrap: wrap;
 }
 
 .stat {
   flex: 1;
-  background: var(--color-surface);
+  min-width: 100px;
+  background: color-mix(in srgb, var(--color-border) 18%, var(--color-surface));
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
   text-align: center;
+}
+
+.statCorrect {
+  background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 25%, var(--color-border));
+}
+
+.statIncorrect {
+  background: color-mix(in srgb, var(--color-danger) 7%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-danger) 22%, var(--color-border));
+}
+
+.statSkipped {
+  background: color-mix(in srgb, var(--color-warning) 7%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 22%, var(--color-border));
+}
+
+.statIconEl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.statCorrect .statIconEl {
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success-text);
+}
+
+.statIncorrect .statIconEl {
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger-text);
+}
+
+.statSkipped .statIconEl {
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  color: var(--color-warning-text);
 }
 
 .statVal {
@@ -207,11 +327,16 @@
   color: var(--color-text);
 }
 
+.statCorrect .statVal { color: var(--color-success-text); }
+.statIncorrect .statVal { color: var(--color-danger-text); }
+.statSkipped .statVal { color: var(--color-warning-text); }
+
 .statLbl {
   font-size: 0.72rem;
   color: var(--color-muted);
-  margin-top: 0.15rem;
+  margin-top: 0.05rem;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .certBtn {
@@ -340,6 +465,8 @@
   font-weight: 700;
   color: var(--color-text);
   margin-bottom: 1rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--color-primary);
 }
 
 .answerCard {
@@ -435,10 +562,6 @@
     filter: brightness(1.05);
   }
 }
-
-.statCorrect .statVal { color: var(--color-success-text); }
-.statIncorrect .statVal { color: var(--color-danger-text); }
-.statSkipped .statVal { color: var(--color-warning-text); }
 
 .severityBadge {
   display: inline-flex;
@@ -643,6 +766,10 @@
     padding: 0.75rem;
   }
 
+  .scoreHero {
+    padding: 1.25rem 1rem 1rem;
+  }
+
   .scoreRing {
     width: 130px;
     height: 130px;
@@ -654,6 +781,10 @@
 
   .statsRow {
     gap: 0.5rem;
+  }
+
+  .stat {
+    min-width: calc(50% - 0.375rem);
   }
 
   .answerCard {

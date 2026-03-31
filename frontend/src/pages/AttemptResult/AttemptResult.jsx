@@ -524,15 +524,18 @@ export default function AttemptResult() {
       )}
 
       {!pendingManualReview && showScoreReport && (
-        <>
+        <div className={`${styles.scoreHero} ${passed ? styles.scoreHeroPass : styles.scoreHeroFail}`}>
           <div className={styles.scoreSection}>
-            <div className={styles.scoreRing}>
+            <span className={`${styles.passFailBadge} ${passed ? styles.passFailBadgePass : styles.passFailBadgeFail}`}>
+              {passed ? '✓ Passed' : '✗ Failed'}
+            </span>
+            <div className={`${styles.scoreRing} ${passed ? styles.scoreRingPass : styles.scoreRingFail}`}>
               <svg width="160" height="160" viewBox="0 0 160 160">
                 <circle cx="80" cy="80" r="62" fill="none" stroke="var(--color-border)" strokeWidth="12" />
                 <circle
                   cx="80" cy="80" r="62"
                   fill="none"
-                  stroke={passed ? 'var(--color-primary)' : 'var(--color-danger)'}
+                  stroke={passed ? 'var(--color-success)' : 'var(--color-danger)'}
                   strokeWidth="12"
                   strokeDasharray={circumference}
                   strokeDashoffset={offset}
@@ -540,34 +543,39 @@ export default function AttemptResult() {
                 />
               </svg>
               <div className={styles.scoreLabel}>
-                <div className={styles.scoreValue}>{Math.round(score)}</div>
-                <div className={styles.scoreUnit}>/ 100</div>
+                <div className={styles.scoreValue}>{Math.round(score)}<span className={styles.scorePercent}>%</span></div>
               </div>
             </div>
-            <div className={styles.gradeLabel}>
-              {gradeLabel}
-            </div>
+            <div className={styles.gradeLabel}>{gradeLabel}</div>
+            {passingScore !== null && (
+              <div className={styles.passingHint}>Passing threshold: {passingScore}%</div>
+            )}
           </div>
           <div className={styles.statsRow}>
             <div className={`${styles.stat} ${styles.statCorrect}`}>
+              <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
               <div className={styles.statVal}>{correctCount}</div>
               <div className={styles.statLbl}>Correct</div>
             </div>
             <div className={`${styles.stat} ${styles.statIncorrect}`}>
+              <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
               <div className={styles.statVal}>{incorrectCount}</div>
               <div className={styles.statLbl}>Incorrect</div>
             </div>
             {totalQ > 0 && (
               <div className={`${styles.stat} ${styles.statSkipped}`}>
+                <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
                 <div className={styles.statVal}>{skippedCount}</div>
                 <div className={styles.statLbl}>Skipped</div>
               </div>
             )}
             <div className={styles.stat}>
+              <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
               <div className={styles.statVal}>{formatDuration()}</div>
               <div className={styles.statLbl}>Duration</div>
             </div>
             <div className={styles.stat}>
+              <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
               <div className={styles.statVal}>{attempt.status?.replace('_', ' ')}</div>
               <div className={styles.statLbl}>Status</div>
             </div>
@@ -580,7 +588,7 @@ export default function AttemptResult() {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {!showScoreReport && canDownloadCert && (
