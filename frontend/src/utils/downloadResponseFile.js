@@ -10,5 +10,6 @@ export function downloadResponseFile(response, filename = 'download') {
     window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('Download failed:', err)
+    window.alert('File download failed. Please try again.')
   }
 }
