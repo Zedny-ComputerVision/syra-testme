@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../services/api'
 import useAuth from '../../hooks/useAuth'
+import useLanguage from '../../hooks/useLanguage'
 import PrefetchLink from '../../components/common/PrefetchLink/PrefetchLink'
 import Skeleton from '../../components/Skeleton/Skeleton'
 import ScrollReveal from '../../components/ScrollReveal/ScrollReveal'
@@ -44,20 +45,9 @@ function formatExamDate(iso) {
   })
 }
 
-function formatRelativeSchedule(iso) {
-  if (!iso) return 'No upcoming deadline'
-  const diff = new Date(iso).getTime() - Date.now()
-  const minutes = Math.round(diff / 60000)
-  if (minutes <= 0) return 'Starting now'
-  if (minutes < 60) return `Starts in ${minutes} min`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `Starts in ${hours} hr${hours === 1 ? '' : 's'}`
-  const days = Math.round(hours / 24)
-  return `Starts in ${days} day${days === 1 ? '' : 's'}`
-}
-
 export default function Home() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [dash, setDash] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -65,6 +55,18 @@ export default function Home() {
   const [attemptsError, setAttemptsError] = useState('')
   const [lastUpdated, setLastUpdated] = useState(null)
   const [recentAttempts, setRecentAttempts] = useState([])
+
+  const formatRelativeSchedule = (iso) => {
+    if (!iso) return t('home_no_upcoming_deadline')
+    const diff = new Date(iso).getTime() - Date.now()
+    const minutes = Math.round(diff / 60000)
+    if (minutes <= 0) return t('home_starting_now')
+    if (minutes < 60) return `${t('home_starts_in')} ${minutes} ${t('time_min')}`
+    const hours = Math.round(minutes / 60)
+    if (hours < 24) return `${t('home_starts_in')} ${hours} ${t('time_hrs')}`
+    const days = Math.round(hours / 24)
+    return `${t('home_starts_in')} ${days} ${t('time_days')}`
+  }
 
   const loadDashboard = async () => {
     setLoading(true)
@@ -81,7 +83,7 @@ export default function Home() {
         setLastUpdated(new Date())
       } else {
         setDash(EMPTY_DASHBOARD)
-        setError('Dashboard data is temporarily unavailable. You can still open your tests and retry.')
+        setError(t('home_dashboard_unavailable'))
       }
     } finally {
       setLoading(false)
@@ -99,7 +101,7 @@ export default function Home() {
       setRecentAttempts(done)
       setAttemptsError('')
     } catch (loadError) {
-      setAttemptsError(loadError?.message || 'Recent attempts are temporarily unavailable.')
+      setAttemptsError(loadError?.message || t('home_attempts_unavailable'))
     }
   }
 
@@ -122,22 +124,22 @@ export default function Home() {
       <div className={styles.page}>
         <ScrollReveal as="section" className={styles.hero}>
           <div className={styles.heroContent}>
-            <div className={styles.heroEyebrow}>Learner workspace</div>
+            <div className={styles.heroEyebrow}>{t('home_learner_workspace')}</div>
             <div className={styles.header}>
-              <h1 className={styles.heading}>Welcome, {user?.name || 'User'}</h1>
-              <p className={styles.sub}>Here is an overview of your learning progress, upcoming schedule, and latest results.</p>
+              <h1 className={styles.heading}>{t('home_welcome')}, {user?.name || t('home_user')}</h1>
+              <p className={styles.sub}>{t('home_overview_text')}</p>
             </div>
             <div className={styles.heroActions}>
-              <PrefetchLink to="/tests" className={styles.primaryAction}>Browse Tests</PrefetchLink>
-              <PrefetchLink to="/attempts" className={styles.secondaryAction}>Review Attempts</PrefetchLink>
-              <PrefetchLink to="/schedule" className={styles.secondaryAction}>Open Schedule</PrefetchLink>
+              <PrefetchLink to="/tests" className={styles.primaryAction}>{t('home_browse_tests')}</PrefetchLink>
+              <PrefetchLink to="/attempts" className={styles.secondaryAction}>{t('home_review_attempts')}</PrefetchLink>
+              <PrefetchLink to="/schedule" className={styles.secondaryAction}>{t('home_open_schedule')}</PrefetchLink>
               <button type="button" className={styles.secondaryAction} onClick={() => void refreshDashboard()} disabled={refreshing}>
-                {refreshing ? 'Refreshing...' : 'Refresh overview'}
+                {refreshing ? t('home_refreshing') : t('home_refresh_overview')}
               </button>
             </div>
           </div>
           <div className={styles.heroPanel}>
-            <div className={styles.heroPanelTitle}>Today at a glance</div>
+            <div className={styles.heroPanelTitle}>{t('home_today_glance')}</div>
             <div className={styles.heroMetricGrid}>
               <Skeleton variant="card" className={styles.statSkeleton} />
               <Skeleton variant="card" className={styles.statSkeleton} />
@@ -172,7 +174,7 @@ export default function Home() {
           <line x1="9" y1="16" x2="13" y2="16"/>
         </svg>
       ),
-      label: 'Total Tests',
+      label: t('home_total_tests'),
       value: dash?.total_tests ?? dash?.total_exams ?? 0,
     },
     {
@@ -181,7 +183,7 @@ export default function Home() {
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
         </svg>
       ),
-      label: 'Total Attempts',
+      label: t('home_total_attempts'),
       value: dash?.total_attempts ?? 0,
     },
     {
@@ -191,7 +193,7 @@ export default function Home() {
           <polyline points="22 4 12 14.01 9 11.01"/>
         </svg>
       ),
-      label: 'Completed',
+      label: t('home_completed'),
       value: dash?.completed_attempts ?? 0,
     },
     {
@@ -201,7 +203,7 @@ export default function Home() {
           <polyline points="12 6 12 12 16 14"/>
         </svg>
       ),
-      label: 'In Progress',
+      label: t('home_in_progress'),
       value: dash?.in_progress_attempts ?? 0,
     },
     {
@@ -211,8 +213,8 @@ export default function Home() {
           <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
         </svg>
       ),
-      label: 'Best Score',
-      value: dash?.best_score != null ? `${dash.best_score.toFixed(1)}%` : 'N/A',
+      label: t('home_best_score'),
+      value: dash?.best_score != null ? `${dash.best_score.toFixed(1)}%` : t('home_na'),
     },
   ]
   const completionRate = dash?.total_attempts
@@ -220,27 +222,27 @@ export default function Home() {
     : 0
   const nextSchedule = dash?.upcoming_schedules?.[0] || null
   const heroMetrics = [
-    { label: 'Average score', value: dash?.average_score != null ? `${dash.average_score.toFixed(1)}%` : 'N/A' },
-    { label: 'Completion rate', value: `${completionRate}%` },
-    { label: 'Upcoming', value: dash?.upcoming_count ?? 0 },
+    { label: t('home_average_score'), value: dash?.average_score != null ? `${dash.average_score.toFixed(1)}%` : t('home_na') },
+    { label: t('home_completion_rate'), value: `${completionRate}%` },
+    { label: t('home_upcoming'), value: dash?.upcoming_count ?? 0 },
   ]
   const progressCards = [
     {
-      title: 'Continue your momentum',
+      title: t('home_continue_momentum'),
       body: (dash?.in_progress_attempts || 0) > 0
-        ? `You have ${dash?.in_progress_attempts} active attempt${dash?.in_progress_attempts === 1 ? '' : 's'} that can be resumed right away.`
-        : 'No live attempt is waiting on you right now. Use this time to review upcoming tests or recent results.',
+        ? `${t('home_you_have')} ${dash?.in_progress_attempts} ${t('home_active_attempts_msg')}`
+        : t('home_no_active_attempts_msg'),
       cta: {
         to: (dash?.in_progress_attempts || 0) > 0 ? '/attempts' : '/tests',
-        label: (dash?.in_progress_attempts || 0) > 0 ? 'Resume attempts' : 'Browse tests',
+        label: (dash?.in_progress_attempts || 0) > 0 ? t('home_resume_attempts') : t('home_browse_tests'),
       },
     },
     {
-      title: 'Next scheduled test',
+      title: t('home_next_scheduled_test'),
       body: nextSchedule
-        ? `${nextSchedule.test_title || nextSchedule.exam_title || 'Upcoming test'} - ${formatRelativeSchedule(nextSchedule.scheduled_at)}`
-        : 'Nothing is on the calendar yet. When an instructor assigns a test, it will appear here.',
-      cta: { to: '/schedule', label: 'Open schedule' },
+        ? `${nextSchedule.test_title || nextSchedule.exam_title || t('home_upcoming_test')} - ${formatRelativeSchedule(nextSchedule.scheduled_at)}`
+        : t('home_nothing_on_calendar'),
+      cta: { to: '/schedule', label: t('home_open_schedule') },
     },
   ]
 
@@ -248,26 +250,26 @@ export default function Home() {
     <div className={styles.page}>
       <ScrollReveal as="section" className={styles.hero}>
         <div className={styles.heroContent}>
-          <div className={styles.heroEyebrow}>Learner workspace</div>
+          <div className={styles.heroEyebrow}>{t('home_learner_workspace')}</div>
           <div className={styles.header}>
-            <h1 className={styles.heading}>Welcome, {user?.name || 'User'}</h1>
+            <h1 className={styles.heading}>{t('home_welcome')}, {user?.name || t('home_user')}</h1>
             <p className={styles.sub}>
               {(dash?.in_progress_attempts || 0) > 0
-                ? `You have ${dash?.in_progress_attempts} in-progress attempt${dash?.in_progress_attempts === 1 ? '' : 's'} and ${dash?.upcoming_count || 0} upcoming scheduled test${(dash?.upcoming_count || 0) === 1 ? '' : 's'}.`
-                : 'Here is an overview of your learning progress, upcoming schedule, and latest results.'}
+                ? `${t('home_you_have')} ${dash?.in_progress_attempts} ${t('home_in_progress_attempts_msg')} ${dash?.upcoming_count || 0} ${t('home_upcoming_scheduled_msg')}`
+                : t('home_overview_text')}
             </p>
           </div>
           <div className={styles.heroActions}>
-            <PrefetchLink to="/tests" className={styles.primaryAction}>Browse Tests</PrefetchLink>
-            <PrefetchLink to="/attempts" className={styles.secondaryAction}>Review Attempts</PrefetchLink>
-            <PrefetchLink to="/schedule" className={styles.secondaryAction}>Open Schedule</PrefetchLink>
+            <PrefetchLink to="/tests" className={styles.primaryAction}>{t('home_browse_tests')}</PrefetchLink>
+            <PrefetchLink to="/attempts" className={styles.secondaryAction}>{t('home_review_attempts')}</PrefetchLink>
+            <PrefetchLink to="/schedule" className={styles.secondaryAction}>{t('home_open_schedule')}</PrefetchLink>
             <button type="button" className={styles.secondaryAction} onClick={() => void refreshDashboard()} disabled={refreshing}>
-              {refreshing ? 'Refreshing...' : 'Refresh overview'}
+              {refreshing ? t('home_refreshing') : t('home_refresh_overview')}
             </button>
           </div>
         </div>
         <div className={styles.heroPanel}>
-          <div className={styles.heroPanelTitle}>Today at a glance</div>
+          <div className={styles.heroPanelTitle}>{t('home_today_glance')}</div>
           <div className={styles.heroMetricGrid}>
             {heroMetrics.map((metric) => (
               <div key={metric.label} className={styles.heroMetric}>
@@ -277,16 +279,16 @@ export default function Home() {
             ))}
           </div>
           <div className={styles.heroCallout}>
-            <span className={styles.heroCalloutLabel}>Next checkpoint</span>
+            <span className={styles.heroCalloutLabel}>{t('home_next_checkpoint')}</span>
             <span className={styles.heroCalloutTitle}>
-              {nextSchedule?.test_title || nextSchedule?.exam_title || 'No scheduled test yet'}
+              {nextSchedule?.test_title || nextSchedule?.exam_title || t('home_no_scheduled_test_yet')}
             </span>
             <span className={styles.heroCalloutMeta}>
-              {nextSchedule ? formatRelativeSchedule(nextSchedule.scheduled_at) : 'Your next assignment will appear here automatically.'}
+              {nextSchedule ? formatRelativeSchedule(nextSchedule.scheduled_at) : t('home_next_assignment_auto')}
             </span>
           </div>
           <div className={styles.statusNote}>
-            {lastUpdated ? `Last refreshed ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Live learner overview'}
+            {lastUpdated ? `${t('home_last_refreshed')} ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : t('home_live_overview')}
           </div>
         </div>
       </ScrollReveal>
@@ -295,7 +297,7 @@ export default function Home() {
         <div className={styles.errorRow}>
           <div className={styles.error}>{error}</div>
           <button type="button" className={styles.retryBtn} onClick={() => void loadDashboard()} disabled={loading}>
-            {loading ? 'Retrying dashboard...' : 'Retry dashboard'}
+            {loading ? t('home_retrying_dashboard') : t('home_retry_dashboard')}
           </button>
         </div>
       )}
@@ -303,17 +305,17 @@ export default function Home() {
       <ScrollReveal className={styles.examSection} delay={60}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>
-            Your Upcoming Exams
+            {t('home_your_upcoming_exams')}
             {(dash?.upcoming_count || 0) > 0 && (
               <span className={styles.countBadge}>{dash.upcoming_count}</span>
             )}
           </h2>
-          <PrefetchLink to="/schedule" className={styles.viewAll}>View full schedule</PrefetchLink>
+          <PrefetchLink to="/schedule" className={styles.viewAll}>{t('home_view_full_schedule')}</PrefetchLink>
         </div>
         {!dash?.upcoming_schedules?.length ? (
           <div className={styles.emptySchedule}>
-            <div>No upcoming exams scheduled yet.</div>
-            <PrefetchLink to="/tests" className={styles.emptyAction}>Browse available tests</PrefetchLink>
+            <div>{t('home_no_upcoming_exams')}</div>
+            <PrefetchLink to="/tests" className={styles.emptyAction}>{t('home_browse_available_tests')}</PrefetchLink>
           </div>
         ) : (
           <div className={styles.scheduleGrid}>
@@ -332,27 +334,27 @@ export default function Home() {
                 >
                   <div className={styles.schedCardTop}>
                     <span className={`${styles.urgencyBadge} ${styles[`urgency_${urgency}`] || ''}`}>
-                      {urgency === 'today' ? 'TODAY' : urgency === 'soon' ? 'SOON' : urgency === 'overdue' ? 'PAST DUE' : 'UPCOMING'}
+                      {urgency === 'today' ? t('home_urgency_today') : urgency === 'soon' ? t('home_urgency_soon') : urgency === 'overdue' ? t('home_urgency_past_due') : t('home_urgency_upcoming')}
                     </span>
                     {takenAttempts > 0 && (
-                      <span className={styles.attemptChip}>{takenAttempts} attempt{takenAttempts !== 1 ? 's' : ''} taken</span>
+                      <span className={styles.attemptChip}>{takenAttempts} {t('home_attempts_taken')}</span>
                     )}
                   </div>
-                  <div className={styles.schedExamTitle}>{schedule.test_title || schedule.exam_title || 'Test'}</div>
+                  <div className={styles.schedExamTitle}>{schedule.test_title || schedule.exam_title || t('home_test')}</div>
                   <div className={styles.schedDateRow}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     <span>{formatExamDate(schedule.scheduled_at)}</span>
                   </div>
                   <div className={styles.schedMeta}>
-                    <span>{schedule.test_type || schedule.exam_type || 'Test'}</span>
-                    <span>{(schedule.test_time_limit ?? schedule.exam_time_limit) ? `${schedule.test_time_limit ?? schedule.exam_time_limit} min` : 'No limit'}</span>
+                    <span>{schedule.test_type || schedule.exam_type || t('home_test')}</span>
+                    <span>{(schedule.test_time_limit ?? schedule.exam_time_limit) ? `${schedule.test_time_limit ?? schedule.exam_time_limit} ${t('time_min')}` : t('home_no_limit')}</span>
                   </div>
                   <div className={styles.schedCountdown}>{formatRelativeSchedule(schedule.scheduled_at)}</div>
                   <PrefetchLink
                     to={schedulePath}
                     className={`${styles.schedCta} ${urgency === 'today' || urgency === 'soon' ? styles.schedCtaUrgent : ''}`}
                   >
-                    {urgency === 'today' ? 'Start Test Now' : urgency === 'soon' ? 'View & Prepare' : 'View Test'}
+                    {urgency === 'today' ? t('home_start_test_now') : urgency === 'soon' ? t('home_view_and_prepare') : t('home_view_test')}
                   </PrefetchLink>
                 </div>
               )
@@ -386,14 +388,14 @@ export default function Home() {
       {(recentAttempts.length > 0 || attemptsError) && (
         <ScrollReveal className={styles.section} delay={200}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Recent Attempts</h2>
+            <h2 className={styles.sectionTitle}>{t('home_recent_attempts')}</h2>
             <div className={styles.sectionActions}>
               {attemptsError && (
                 <button type="button" className={styles.retryBtn} onClick={() => void loadAttempts()}>
-                  Retry attempts
+                  {t('home_retry_attempts')}
                 </button>
               )}
-              <PrefetchLink to="/attempts" className={styles.viewAll}>Open all attempts</PrefetchLink>
+              <PrefetchLink to="/attempts" className={styles.viewAll}>{t('home_open_all_attempts')}</PrefetchLink>
             </div>
           </div>
           {attemptsError && (
@@ -409,7 +411,7 @@ export default function Home() {
                 className={styles.recentCard}
                 onMouseEnter={() => preloadRoute(`/attempts/${attempt.id}`)}
               >
-                <div className={styles.recentTitle}>{attempt.test_title || attempt.exam_title || 'Test'}</div>
+                <div className={styles.recentTitle}>{attempt.test_title || attempt.exam_title || t('home_test')}</div>
                 <div className={styles.recentMeta}>
                   {attempt.score != null && (
                     <span className={`${styles.scoreBadge} ${attempt.score >= 60 ? styles.scorePass : styles.scoreFail}`}>
@@ -429,17 +431,17 @@ export default function Home() {
       {recentAttempts.length === 0 && !attemptsError && (
         <ScrollReveal className={styles.section} delay={200}>
           <div className={styles.emptyRecent}>
-            <div className={styles.emptyRecentTitle}>No recent attempts yet</div>
+            <div className={styles.emptyRecentTitle}>{t('home_no_recent_attempts')}</div>
             <div className={styles.emptyRecentText}>
-              Your completed attempts will show up here once you start taking tests.
+              {t('home_no_recent_attempts_text')}
             </div>
-            <PrefetchLink to="/tests" className={styles.emptyAction}>Start with available tests</PrefetchLink>
+            <PrefetchLink to="/tests" className={styles.emptyAction}>{t('home_start_with_tests')}</PrefetchLink>
           </div>
         </ScrollReveal>
       )}
 
       <ScrollReveal className={styles.actions} delay={240}>
-        <PrefetchLink to="/tests" className={styles.viewAll}>Browse all tests</PrefetchLink>
+        <PrefetchLink to="/tests" className={styles.viewAll}>{t('home_browse_all_tests')}</PrefetchLink>
       </ScrollReveal>
     </div>
   )

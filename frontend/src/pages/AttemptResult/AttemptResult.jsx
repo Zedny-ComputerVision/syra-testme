@@ -10,6 +10,7 @@ import {
 } from '../../services/attempt.service'
 import { getTestQuestions, getTest } from '../../services/test.service'
 import api from '../../services/api'
+import useLanguage from '../../hooks/useLanguage'
 import { normalizeAttempt, normalizeTest } from '../../utils/assessmentAdapters'
 import { readBlobErrorMessage } from '../../utils/httpErrors'
 import styles from './AttemptResult.module.scss'
@@ -38,10 +39,6 @@ function getSeverityClass(severity) {
   return styles[`severity${normalized}`] || ''
 }
 
-function formatConfidence(value) {
-  return typeof value === 'number' ? `${Math.round(value * 100)}% confidence` : 'Confidence unavailable'
-}
-
 function hasAnswerValue(value) {
   if (value == null) return false
   if (Array.isArray(value)) return value.some((entry) => hasAnswerValue(entry))
@@ -65,6 +62,7 @@ export default function AttemptResult() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useLanguage()
   const [attempt, setAttempt] = useState(null)
   const [questions, setQuestions] = useState([])
   const [answers, setAnswers] = useState([])
@@ -84,6 +82,10 @@ export default function AttemptResult() {
   const [reviewNotice, setReviewNotice] = useState('')
   const [finalizingReview, setFinalizingReview] = useState(false)
 
+  const formatConfidence = (value) => {
+    return typeof value === 'number' ? `${Math.round(value * 100)}% ${t('result_confidence')}` : t('result_confidence_unavailable')
+  }
+
   const loadResult = async () => {
     setLoading(true)
     setLoadError('')
@@ -100,7 +102,7 @@ export default function AttemptResult() {
       setAnswers([])
       setProctoringSummary(null)
       setExam(null)
-      setLoadError('Invalid attempt link. Return to your attempts list and try again.')
+      setLoadError(t('result_invalid_link'))
       setLoading(false)
       return
     }
@@ -147,12 +149,12 @@ export default function AttemptResult() {
         setProctoringSummaryError('')
       } else {
         setProctoringSummary(null)
-        setProctoringSummaryError('Proctoring summary could not be loaded. Retry to restore it.')
+        setProctoringSummaryError(t('result_proctoring_load_error'))
         failed.push('proctoring')
       }
 
       if (failed.length > 0) {
-        setDetailWarning('Some result details could not be loaded. Retry to restore the full review.')
+        setDetailWarning(t('result_details_load_error'))
       }
     } catch (e) {
       setAttempt(null)
@@ -160,7 +162,7 @@ export default function AttemptResult() {
       setAnswers([])
       setProctoringSummary(null)
       setExam(null)
-      setLoadError(e.response?.data?.detail || 'Failed to load result. Please try again.')
+      setLoadError(e.response?.data?.detail || t('result_failed_to_load'))
     } finally {
       setLoading(false)
     }
@@ -170,16 +172,16 @@ export default function AttemptResult() {
     void loadResult()
   }, [id])
 
-  if (loading) return <div className={styles.loading}>Loading result...</div>
+  if (loading) return <div className={styles.loading}>{t('result_loading')}</div>
   if (loadError) {
     return (
       <div className={styles.errorRow}>
         <div className={styles.errorBanner}>{loadError}</div>
-        <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>Retry loading result</button>
+        <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>{t('result_retry_loading')}</button>
       </div>
     )
   }
-  if (!attempt) return <div className={styles.loading}>Attempt not found.</div>
+  if (!attempt) return <div className={styles.loading}>{t('result_not_found')}</div>
 
   const score = attempt.score ?? 0
   const passingScore = exam?.passing_score ?? null
@@ -233,13 +235,13 @@ export default function AttemptResult() {
   const answerBadgeFor = (question, answerRow) => {
     if (!answerRow || !hasAnswerValue(answerRow.answer)) return null
     if (answerRow.is_correct === true) {
-      return { label: 'Correct', className: styles.correctBadge }
+      return { label: t('result_correct'), className: styles.correctBadge }
     }
     if (answerRow.is_correct === false) {
-      return { label: 'Wrong', className: styles.wrongBadge }
+      return { label: t('result_wrong'), className: styles.wrongBadge }
     }
     if (isManualReviewAnswer(question, answerRow)) {
-      return { label: 'Manual review', className: styles.manualBadge }
+      return { label: t('result_manual_review'), className: styles.manualBadge }
     }
     return null
   }
@@ -269,16 +271,16 @@ export default function AttemptResult() {
     : null
   const canShowAnswerReview = openedFromManageTest || (showAnswerReview && !pendingManualReview)
   const gradeLabel = (() => {
-    if (!passed) return 'Fail'
+    if (!passed) return t('result_grade_fail')
     if (passingScore == null) {
-      if (score === 0 && pendingManualReview) return 'Pending Review'
-      if (score === 0) return 'Completed'
-      if (score >= 90) return 'Excellent'
-      if (score >= 80) return 'Very Good'
-      if (score >= 70) return 'Good'
-      return 'Pass'
+      if (score === 0 && pendingManualReview) return t('result_grade_pending_review')
+      if (score === 0) return t('result_grade_completed')
+      if (score >= 90) return t('result_grade_excellent')
+      if (score >= 80) return t('result_grade_very_good')
+      if (score >= 70) return t('result_grade_good')
+      return t('result_grade_pass')
     }
-    return score >= 90 ? 'Excellent' : score >= 80 ? 'Very Good' : score >= 70 ? 'Good' : 'Pass'
+    return score >= 90 ? t('result_grade_excellent') : score >= 80 ? t('result_grade_very_good') : score >= 70 ? t('result_grade_good') : t('result_grade_pass')
   })()
 
   const downloadCertificate = async () => {
@@ -295,7 +297,7 @@ export default function AttemptResult() {
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch (e) {
-      setCertError(await readBlobErrorMessage(e, 'Unable to download certificate.'))
+      setCertError(await readBlobErrorMessage(e, t('result_cert_download_error')))
     } finally {
       setDownloading(false)
     }
@@ -311,7 +313,7 @@ export default function AttemptResult() {
   const openReportHtml = (html, reportWindow = null) => {
     const nextWindow = reportWindow || window.open('', '_blank')
     if (!nextWindow || nextWindow.closed) {
-      throw new Error('Unable to open the report in a new tab.')
+      throw new Error(t('result_report_tab_error'))
     }
 
     const nextDocument = nextWindow.document
@@ -337,7 +339,7 @@ export default function AttemptResult() {
     const fallbackWindow = window.open(url, '_blank')
     if (!fallbackWindow) {
       window.URL.revokeObjectURL(url)
-      throw new Error('Unable to open the report in a new tab.')
+      throw new Error(t('result_report_tab_error'))
     }
     window.setTimeout(() => window.URL.revokeObjectURL(url), 60000)
   }
@@ -368,9 +370,9 @@ export default function AttemptResult() {
       ) {
         reportWindow.close()
       }
-      const fallback = e?.message === 'Unable to open the report in a new tab.'
+      const fallback = e?.message === t('result_report_tab_error')
         ? e.message
-        : 'Unable to open the exam report.'
+        : t('result_open_report_error')
       setReportError(await readBlobErrorMessage(e, fallback))
     } finally {
       setReportBusy('')
@@ -385,7 +387,7 @@ export default function AttemptResult() {
       const pdfBlob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: 'application/pdf' })
       downloadReportBlob(pdfBlob, `exam-report_${id}.pdf`)
     } catch (e) {
-      setReportError(await readBlobErrorMessage(e, 'Unable to download the PDF report.'))
+      setReportError(await readBlobErrorMessage(e, t('result_pdf_download_error')))
     } finally {
       setReportBusy('')
     }
@@ -396,12 +398,12 @@ export default function AttemptResult() {
     const maxPoints = Number(question.points || 0)
     const nextPoints = Number(draft)
     if (draft === '' || Number.isNaN(nextPoints)) {
-      setReviewError('Enter the awarded points before saving this review.')
+      setReviewError(t('result_enter_points_error'))
       setReviewNotice('')
       return
     }
     if (nextPoints < 0 || nextPoints > maxPoints) {
-      setReviewError(`Awarded points must be between 0 and ${maxPoints}.`)
+      setReviewError(`${t('result_points_range_error')} 0 - ${maxPoints}.`)
       setReviewNotice('')
       return
     }
@@ -415,9 +417,9 @@ export default function AttemptResult() {
         ...current,
         [data.id]: data.points_earned != null ? String(data.points_earned) : '',
       }))
-      setReviewNotice('Manual review points saved. Finalize the review to publish the updated score.')
+      setReviewNotice(t('result_review_saved_notice'))
     } catch (e) {
-      setReviewError(e.response?.data?.detail || 'Unable to save manual review points.')
+      setReviewError(e.response?.data?.detail || t('result_save_review_error'))
     } finally {
       setReviewBusy((current) => ({ ...current, [answerRow.id]: false }))
     }
@@ -430,9 +432,9 @@ export default function AttemptResult() {
     try {
       const { data } = await finalizeAttemptReview(id)
       setAttempt(normalizeAttempt(data))
-      setReviewNotice('Attempt review finalized and score published.')
+      setReviewNotice(t('result_review_finalized_notice'))
     } catch (e) {
-      setReviewError(e.response?.data?.detail || 'Unable to finalize manual review.')
+      setReviewError(e.response?.data?.detail || t('result_finalize_error'))
     } finally {
       setFinalizingReview(false)
     }
@@ -442,9 +444,9 @@ export default function AttemptResult() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h2 className={styles.title}>{attempt.test_title || attempt.exam_title || 'Test Result'}</h2>
+          <h2 className={styles.title}>{attempt.test_title || attempt.exam_title || t('result_test_result')}</h2>
           <p className={styles.sub}>
-            Submitted {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : ''}
+            {t('result_submitted')} {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : ''}
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -454,7 +456,7 @@ export default function AttemptResult() {
             onClick={() => void handleOpenExamReport()}
             disabled={reportBusy !== ''}
           >
-            {reportBusy === 'html' ? 'Opening report...' : 'Open exam report'}
+            {reportBusy === 'html' ? t('result_opening_report') : t('result_open_exam_report')}
           </button>
           <button
             type="button"
@@ -462,15 +464,15 @@ export default function AttemptResult() {
             onClick={() => void handleDownloadPdfReport()}
             disabled={reportBusy !== ''}
           >
-            {reportBusy === 'pdf' ? 'Preparing PDF...' : 'Download PDF report'}
+            {reportBusy === 'pdf' ? t('result_preparing_pdf') : t('result_download_pdf')}
           </button>
         </div>
       </div>
 
       {openedFromManageTest && returnTestId && (
         <div className={styles.contextBanner}>
-          <div className={styles.contextTitle}>Opened from Manage Test</div>
-          <div className={styles.contextText}>This result was opened from the admin test review workflow. Use the back action below to return to the same test tab.</div>
+          <div className={styles.contextTitle}>{t('result_opened_from_manage')}</div>
+          <div className={styles.contextText}>{t('result_opened_from_manage_text')}</div>
         </div>
       )}
 
@@ -478,7 +480,7 @@ export default function AttemptResult() {
         <div className={styles.warningRow}>
           <div className={styles.warningBanner}>{detailWarning}</div>
           <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>
-            Retry loading details
+            {t('result_retry_details')}
           </button>
         </div>
       )}
@@ -488,37 +490,37 @@ export default function AttemptResult() {
 
       {pendingManualReview && (
         <div className={styles.pendingReviewCard}>
-          <div className={styles.pendingReviewTitle}>Awaiting manual review</div>
+          <div className={styles.pendingReviewTitle}>{t('result_awaiting_review')}</div>
           <div className={styles.pendingReviewText}>
-            Your attempt was submitted successfully. An instructor or admin still needs to review at least one manually graded answer before the final score is published.
+            {t('result_awaiting_review_text')}
           </div>
           <div className={styles.pendingReviewGrid}>
             <div className={styles.proctoringCard}>
               <div className={styles.pendingReviewValue}>{answeredCount}</div>
-              <div className={styles.pendingReviewLabel}>Saved Answers</div>
+              <div className={styles.pendingReviewLabel}>{t('result_saved_answers')}</div>
             </div>
             <div className={styles.proctoringCard}>
               <div className={styles.pendingReviewValue}>{totalQ}</div>
-              <div className={styles.pendingReviewLabel}>Questions</div>
+              <div className={styles.pendingReviewLabel}>{t('questions')}</div>
             </div>
             <div className={styles.proctoringCard}>
               <div className={styles.pendingReviewValue}>{formatDuration()}</div>
-              <div className={styles.pendingReviewLabel}>Duration</div>
+              <div className={styles.pendingReviewLabel}>{t('duration')}</div>
             </div>
             <div className={styles.proctoringCard}>
               <div className={styles.pendingReviewValue}>{attempt.status?.replace('_', ' ')}</div>
-              <div className={styles.pendingReviewLabel}>Status</div>
+              <div className={styles.pendingReviewLabel}>{t('status')}</div>
             </div>
           </div>
           <div className={styles.pendingReviewText}>
-            Detailed answer review and final result reporting will appear after grading is complete.
+            {t('result_after_grading_text')}
           </div>
         </div>
       )}
 
       {certificateConfigured && !canDownloadCert && certificateBlockReason && (
         <div className={styles.contextBanner}>
-          <div className={styles.contextTitle}>Certificate status</div>
+          <div className={styles.contextTitle}>{t('result_certificate_status')}</div>
           <div className={styles.contextText}>{certificateBlockReason}</div>
         </div>
       )}
@@ -527,7 +529,7 @@ export default function AttemptResult() {
         <div className={`${styles.scoreHero} ${passed ? styles.scoreHeroPass : styles.scoreHeroFail}`}>
           <div className={styles.scoreSection}>
             <span className={`${styles.passFailBadge} ${passed ? styles.passFailBadgePass : styles.passFailBadgeFail}`}>
-              {passed ? '✓ Passed' : '✗ Failed'}
+              {passed ? `✓ ${t('passed')}` : `✗ ${t('failed')}`}
             </span>
             <div className={`${styles.scoreRing} ${passed ? styles.scoreRingPass : styles.scoreRingFail}`}>
               <svg width="160" height="160" viewBox="0 0 160 160">
@@ -548,41 +550,41 @@ export default function AttemptResult() {
             </div>
             <div className={styles.gradeLabel}>{gradeLabel}</div>
             {passingScore !== null && (
-              <div className={styles.passingHint}>Passing threshold: {passingScore}%</div>
+              <div className={styles.passingHint}>{t('result_passing_threshold')}: {passingScore}%</div>
             )}
           </div>
           <div className={styles.statsRow}>
             <div className={`${styles.stat} ${styles.statCorrect}`}>
               <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
               <div className={styles.statVal}>{correctCount}</div>
-              <div className={styles.statLbl}>Correct</div>
+              <div className={styles.statLbl}>{t('result_correct')}</div>
             </div>
             <div className={`${styles.stat} ${styles.statIncorrect}`}>
               <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
               <div className={styles.statVal}>{incorrectCount}</div>
-              <div className={styles.statLbl}>Incorrect</div>
+              <div className={styles.statLbl}>{t('result_incorrect')}</div>
             </div>
             {totalQ > 0 && (
               <div className={`${styles.stat} ${styles.statSkipped}`}>
                 <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
                 <div className={styles.statVal}>{skippedCount}</div>
-                <div className={styles.statLbl}>Skipped</div>
+                <div className={styles.statLbl}>{t('result_skipped')}</div>
               </div>
             )}
             <div className={styles.stat}>
               <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
               <div className={styles.statVal}>{formatDuration()}</div>
-              <div className={styles.statLbl}>Duration</div>
+              <div className={styles.statLbl}>{t('duration')}</div>
             </div>
             <div className={styles.stat}>
               <span className={styles.statIconEl}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
               <div className={styles.statVal}>{attempt.status?.replace('_', ' ')}</div>
-              <div className={styles.statLbl}>Status</div>
+              <div className={styles.statLbl}>{t('status')}</div>
             </div>
             {canDownloadCert && (
               <div className={styles.stat}>
                 <button type="button" className={styles.certBtn} onClick={downloadCertificate} disabled={downloading}>
-                  {downloading ? 'Preparing...' : 'Download Certificate'}
+                  {downloading ? t('result_preparing') : t('result_download_certificate')}
                 </button>
                 {certError && <div className={styles.certError}>{certError}</div>}
               </div>
@@ -595,7 +597,7 @@ export default function AttemptResult() {
         <div className={styles.statsRow}>
           <div className={styles.stat}>
             <button type="button" className={styles.certBtn} onClick={downloadCertificate} disabled={downloading}>
-              {downloading ? 'Preparing...' : 'Download Certificate'}
+              {downloading ? t('result_preparing') : t('result_download_certificate')}
             </button>
             {certError && <div className={styles.certError}>{certError}</div>}
           </div>
@@ -603,16 +605,16 @@ export default function AttemptResult() {
       )}
 
       <div className={styles.proctoringSection}>
-        <h3 className={styles.sectionTitle}>Proctoring Summary</h3>
+        <h3 className={styles.sectionTitle}>{t('result_proctoring_summary')}</h3>
         {proctoringSummaryError ? (
           <div className={styles.errorRow}>
             <div className={styles.errorBanner}>{proctoringSummaryError}</div>
             <button type="button" className={styles.secondaryBtn} onClick={() => void loadResult()}>
-              Retry proctoring summary
+              {t('result_retry_proctoring')}
             </button>
           </div>
         ) : !hasProctoringData ? (
-          <div className={styles.emptyReview}>No proctoring data was recorded for this attempt.</div>
+          <div className={styles.emptyReview}>{t('result_no_proctoring_data')}</div>
         ) : (
           <>
             <div className={styles.proctoringGrid}>
@@ -620,19 +622,19 @@ export default function AttemptResult() {
                 <div className={styles.proctoringValue}>
                   {expectedRecordings > 0 ? `${savedRecordings}/${expectedRecordings}` : savedRecordings}
                 </div>
-                <div className={styles.proctoringLabel}>Saved Recordings</div>
+                <div className={styles.proctoringLabel}>{t('result_saved_recordings')}</div>
               </div>
               <div className={styles.proctoringCard}>
                 <div className={styles.proctoringValue}>{totalAlerts}</div>
-                <div className={styles.proctoringLabel}>Total Alerts</div>
+                <div className={styles.proctoringLabel}>{t('result_total_alerts')}</div>
               </div>
               <div className={styles.proctoringCard}>
                 <div className={`${styles.proctoringValue} ${styles.proctoringMedium}`}>{seriousAlerts}</div>
-                <div className={styles.proctoringLabel}>Serious Alerts</div>
+                <div className={styles.proctoringLabel}>{t('result_serious_alerts')}</div>
               </div>
               <div className={styles.proctoringCard}>
                 <div className={`${styles.proctoringValue} ${styles.proctoringHigh}`}>{riskScore}</div>
-                <div className={styles.proctoringLabel}>Risk Score</div>
+                <div className={styles.proctoringLabel}>{t('result_risk_score')}</div>
               </div>
             </div>
             {recentViolations.length > 0 ? (
@@ -643,7 +645,7 @@ export default function AttemptResult() {
                       <span className={styles.proctoringEventType}>{event.event_type?.replace(/_/g, ' ')}</span>
                       <span className={`${styles.severityBadge} ${getSeverityClass(event.severity)}`}>{event.severity}</span>
                     </div>
-                    <div className={styles.proctoringEventDetail}>{event.detail || 'Automatic proctoring alert recorded.'}</div>
+                    <div className={styles.proctoringEventDetail}>{event.detail || t('result_auto_proctoring_alert')}</div>
                     <div className={styles.proctoringEventMeta}>
                       <span>{formatConfidence(event.ai_confidence)}</span>
                       <span>{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : '-'}</span>
@@ -652,7 +654,7 @@ export default function AttemptResult() {
                 ))}
               </div>
             ) : (
-              <div className={styles.emptyReview}>No alert events were recorded for this attempt.</div>
+              <div className={styles.emptyReview}>{t('result_no_alert_events')}</div>
             )}
           </>
         )}
@@ -662,9 +664,9 @@ export default function AttemptResult() {
         <div className={styles.reviewWorkflowCard}>
           <div className={styles.reviewWorkflowHeader}>
             <div>
-              <div className={styles.reviewWorkflowTitle}>Manual review workflow</div>
+              <div className={styles.reviewWorkflowTitle}>{t('result_manual_review_workflow')}</div>
               <div className={styles.reviewWorkflowText}>
-                Review manually graded answers, save awarded points question by question, then finalize to publish the updated score.
+                {t('result_manual_review_workflow_text')}
               </div>
             </div>
             <button
@@ -673,25 +675,25 @@ export default function AttemptResult() {
               disabled={finalizingReview || reviewedManualCount !== manualReviewItems.length}
               onClick={handleFinalizeReview}
             >
-              {finalizingReview ? 'Finalizing...' : attempt.status === 'GRADED' ? 'Republish updated score' : 'Finalize review'}
+              {finalizingReview ? t('result_finalizing') : attempt.status === 'GRADED' ? t('result_republish_score') : t('result_finalize_review')}
             </button>
           </div>
           <div className={styles.reviewWorkflowGrid}>
             <div className={styles.reviewWorkflowStat}>
               <div className={styles.reviewWorkflowValue}>{manualReviewItems.length}</div>
-              <div className={styles.reviewWorkflowLabel}>Manual Questions</div>
+              <div className={styles.reviewWorkflowLabel}>{t('result_manual_questions')}</div>
             </div>
             <div className={styles.reviewWorkflowStat}>
               <div className={styles.reviewWorkflowValue}>{reviewedManualCount} / {manualReviewItems.length}</div>
-              <div className={styles.reviewWorkflowLabel}>Reviewed</div>
+              <div className={styles.reviewWorkflowLabel}>{t('result_reviewed')}</div>
             </div>
             <div className={styles.reviewWorkflowStat}>
               <div className={styles.reviewWorkflowValue}>{projectedScore != null ? `${projectedScore}%` : '-'}</div>
-              <div className={styles.reviewWorkflowLabel}>Projected Score</div>
+              <div className={styles.reviewWorkflowLabel}>{t('result_projected_score')}</div>
             </div>
             <div className={styles.reviewWorkflowStat}>
               <div className={styles.reviewWorkflowValue}>{Math.max(manualReviewItems.length - reviewedManualCount, 0)}</div>
-              <div className={styles.reviewWorkflowLabel}>Still Pending</div>
+              <div className={styles.reviewWorkflowLabel}>{t('result_still_pending')}</div>
             </div>
           </div>
         </div>
@@ -699,9 +701,9 @@ export default function AttemptResult() {
 
       {canShowAnswerReview && (
         <div className={styles.answersSection}>
-          <h3 className={styles.sectionTitle}>Answer Review</h3>
+          <h3 className={styles.sectionTitle}>{t('result_answer_review')}</h3>
           {questions.length === 0 ? (
-            <div className={styles.emptyReview}>No answer review is available for this attempt.</div>
+            <div className={styles.emptyReview}>{t('result_no_answer_review')}</div>
           ) : questions.map((q, i) => {
             const ans = answerMap[q.id]
             const badge = answerBadgeFor(q, ans)
@@ -710,7 +712,7 @@ export default function AttemptResult() {
             return (
               <div key={q.id} className={styles.answerCard}>
                 <div className={styles.answerHeader}>
-                  <span className={styles.qNumber}>Question {i + 1}</span>
+                  <span className={styles.qNumber}>{t('question')} {i + 1}</span>
                   {badge && (
                     <span className={badge.className}>
                       {badge.label}
@@ -720,21 +722,21 @@ export default function AttemptResult() {
                 <div className={styles.qText}>{q.text}</div>
                 {ans && (
                   <div className={styles.answerDetail}>
-                    <strong>Your answer:</strong> {formatAnswerValue(ans.answer)}
+                    <strong>{t('result_your_answer')}:</strong> {formatAnswerValue(ans.answer)}
                     {showCorrectAnswers && q.correct_answer && (
-                      <> &nbsp;|&nbsp; <strong>{isManualReview ? 'Reference:' : 'Correct:'}</strong> {formatAnswerValue(q.correct_answer)}</>
+                      <> &nbsp;|&nbsp; <strong>{isManualReview ? `${t('result_reference')}:` : `${t('result_correct_answer')}:`}</strong> {formatAnswerValue(q.correct_answer)}</>
                     )}
                   </div>
                 )}
                 {ans?.points_earned != null && (
                   <div className={styles.reviewPointsText}>
-                    Awarded points: <strong>{ans.points_earned}</strong>{maxPoints > 0 ? ` / ${maxPoints}` : ''}
+                    {t('result_awarded_points')}: <strong>{ans.points_earned}</strong>{maxPoints > 0 ? ` / ${maxPoints}` : ''}
                   </div>
                 )}
                 {openedFromManageTest && ans && isManualReview && (
                   <div className={styles.manualReviewEditor}>
                     <label className={styles.reviewField}>
-                      <span>Awarded points</span>
+                      <span>{t('result_awarded_points')}</span>
                       <input
                         type="number"
                         min="0"
@@ -751,7 +753,7 @@ export default function AttemptResult() {
                       disabled={reviewBusy[ans.id] || finalizingReview}
                       onClick={() => void handleSaveManualReview(q, ans)}
                     >
-                      {reviewBusy[ans.id] ? 'Saving...' : 'Save review'}
+                      {reviewBusy[ans.id] ? t('result_saving_review') : t('result_save_review')}
                     </button>
                   </div>
                 )}
@@ -762,7 +764,7 @@ export default function AttemptResult() {
       )}
 
       <button type="button" className={styles.backBtn} onClick={handleBack}>
-        {openedFromManageTest && returnTestId ? '\u2190 Back to Manage Test' : '\u2190 Back to Attempts List'}
+        {openedFromManageTest && returnTestId ? `\u2190 ${t('result_back_to_manage')}` : `\u2190 ${t('result_back_to_attempts')}`}
       </button>
     </div>
   )

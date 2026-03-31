@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import useLanguage from '../../hooks/useLanguage'
 import Skeleton from '../../components/Skeleton/Skeleton'
 import { listAttempts } from '../../services/attempt.service'
 import { isAttemptCompletedStatus, normalizeAttempt } from '../../utils/assessmentAdapters'
@@ -15,14 +16,9 @@ const STATUS_CLASSES = {
 }
 
 const PAGE_SIZE = 20
-const STAT_LABELS = {
-  total: 'Total attempts value',
-  completed: 'Completed attempts value',
-  average: 'Average score value',
-  best: 'Best score value',
-}
 
 export default function Attempts() {
+  const { t } = useLanguage()
   const [attempts, setAttempts] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -32,6 +28,13 @@ export default function Attempts() {
   const [page, setPage] = useState(1)
   const emptyRetryTimeoutRef = useRef(null)
   const navigate = useNavigate()
+
+  const STAT_LABELS = {
+    total: t('attempts_total_value'),
+    completed: t('attempts_completed_value'),
+    average: t('attempts_average_value'),
+    best: t('attempts_best_value'),
+  }
 
   const loadAttempts = useCallback(async ({ allowEmptyRetry = false } = {}) => {
     setLoading(true)
@@ -50,7 +53,7 @@ export default function Attempts() {
         }, 1200)
       }
     } catch {
-      setLoadError('Failed to load attempts.')
+      setLoadError(t('attempts_failed_to_load'))
     } finally {
       setLoading(false)
     }
@@ -101,6 +104,14 @@ export default function Attempts() {
     return 0
   }
 
+  const tabLabel = (tab) => {
+    if (tab === 'All') return t('all')
+    if (tab === 'Completed') return t('attempts_completed')
+    if (tab === 'In Progress') return t('attempts_in_progress')
+    if (tab === 'Timed Out') return t('attempts_timed_out')
+    return tab
+  }
+
   const formatDate = (iso) => {
     if (!iso) return '-'
     return new Date(iso).toLocaleDateString('en-US', {
@@ -116,7 +127,7 @@ export default function Attempts() {
     if (!start || !end) return '-'
     const milliseconds = new Date(end) - new Date(start)
     const minutes = Math.floor(milliseconds / 60000)
-    return `${minutes} min`
+    return `${minutes} ${t('time_min')}`
   }
 
   const openAttempt = (attempt) => {
@@ -131,7 +142,7 @@ export default function Attempts() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h2 className={styles.title}>Your Attempts</h2>
+        <h2 className={styles.title}>{t('attempts_your_attempts')}</h2>
       </div>
 
       <div className={styles.statsRow}>
@@ -141,7 +152,7 @@ export default function Attempts() {
           </span>
           <div className={styles.statBody}>
             <div className={styles.statValue} aria-label={STAT_LABELS.total}>{attempts.length}</div>
-            <div className={styles.statLabel}>Total</div>
+            <div className={styles.statLabel}>{t('attempts_total')}</div>
           </div>
         </div>
         <div className={`${styles.stat} ${styles.statSuccess}`}>
@@ -150,7 +161,7 @@ export default function Attempts() {
           </span>
           <div className={styles.statBody}>
             <div className={styles.statValue} aria-label={STAT_LABELS.completed}>{completed.length}</div>
-            <div className={styles.statLabel}>Completed</div>
+            <div className={styles.statLabel}>{t('attempts_completed')}</div>
           </div>
         </div>
         <div className={`${styles.stat} ${styles.statBlue}`}>
@@ -159,7 +170,7 @@ export default function Attempts() {
           </span>
           <div className={styles.statBody}>
             <div className={styles.statValue} aria-label={STAT_LABELS.average}>{avgScore}%</div>
-            <div className={styles.statLabel}>Avg Score</div>
+            <div className={styles.statLabel}>{t('attempts_avg_score')}</div>
           </div>
         </div>
         <div className={`${styles.stat} ${styles.statWarning}`}>
@@ -168,7 +179,7 @@ export default function Attempts() {
           </span>
           <div className={styles.statBody}>
             <div className={styles.statValue} aria-label={STAT_LABELS.best}>{bestScore}%</div>
-            <div className={styles.statLabel}>Best Score</div>
+            <div className={styles.statLabel}>{t('attempts_best_score')}</div>
           </div>
         </div>
       </div>
@@ -177,7 +188,7 @@ export default function Attempts() {
         <input
           type="text"
           className={styles.searchInput}
-          placeholder="Search by test name..."
+          placeholder={t('attempts_search_placeholder')}
           value={search}
           onChange={(event) => { setSearch(event.target.value); setPage(1) }}
         />
@@ -186,10 +197,10 @@ export default function Attempts() {
           value={sortBy}
           onChange={(event) => { setSortBy(event.target.value); setPage(1) }}
         >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="score_desc">Score: High to Low</option>
-          <option value="score_asc">Score: Low to High</option>
+          <option value="newest">{t('newest_first')}</option>
+          <option value="oldest">{t('oldest_first')}</option>
+          <option value="score_desc">{t('attempts_score_high_low')}</option>
+          <option value="score_asc">{t('attempts_score_low_high')}</option>
         </select>
       </div>
 
@@ -201,7 +212,7 @@ export default function Attempts() {
             className={`${styles.statusTab} ${statusTab === tab ? styles.statusTabActive : ''}`}
             onClick={() => { setStatusTab(tab); setPage(1) }}
           >
-            {tab}
+            {tabLabel(tab)}
             <span className={styles.tabCount}>{tabCount(tab)}</span>
           </button>
         ))}
@@ -216,29 +227,29 @@ export default function Attempts() {
           <div className={styles.errorRow}>
             <div className={styles.empty}>{loadError}</div>
             <button type="button" className={styles.secondaryBtn} onClick={() => void loadAttempts()}>
-              Retry loading attempts
+              {t('attempts_retry_loading')}
             </button>
           </div>
         ) : paginated.length === 0 ? (
-          <div className={styles.empty}>{attempts.length === 0 ? 'No attempts yet. Take a test to get started.' : 'No attempts match your filters.'}</div>
+          <div className={styles.empty}>{attempts.length === 0 ? t('attempts_no_attempts_yet') : t('attempts_no_match_filters')}</div>
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Test</th>
-                <th>Status</th>
-                <th>Score</th>
-                <th>Date</th>
-                <th>Duration</th>
-                <th>Action</th>
+                <th>{t('attempts_th_test')}</th>
+                <th>{t('status')}</th>
+                <th>{t('score')}</th>
+                <th>{t('date')}</th>
+                <th>{t('duration')}</th>
+                <th>{t('attempts_th_action')}</th>
               </tr>
             </thead>
             <tbody>
               {paginated.map((attempt) => (
                 <tr key={attempt.id} data-status={attempt.status}>
                   <td>
-                    <span className={styles.testName}>{attempt.test_title || attempt.exam_title || 'Test'}</span>
-                    {attempt.certificate_eligible && <span className={styles.certBadge} title="Certificate eligible">CERT</span>}
+                    <span className={styles.testName}>{attempt.test_title || attempt.exam_title || t('attempts_test')}</span>
+                    {attempt.certificate_eligible && <span className={styles.certBadge} title={t('attempts_cert_eligible')}>CERT</span>}
                   </td>
                   <td>
                     <span className={`${styles.badge} ${STATUS_CLASSES[attempt.status] || ''}`}>
@@ -267,10 +278,10 @@ export default function Attempts() {
                       type="button"
                       className={`${styles.actionBtn} ${attempt.status === 'IN_PROGRESS' ? styles.actionBtnResume : ''}`}
                       onClick={() => openAttempt(attempt)}
-                      aria-label={`${attempt.status === 'IN_PROGRESS' ? 'Resume attempt for' : 'Open result for'} ${attempt.test_title || attempt.exam_title || 'this test'}`}
-                      title={`${attempt.status === 'IN_PROGRESS' ? 'Resume attempt for' : 'Open result for'} ${attempt.test_title || attempt.exam_title || 'this test'}`}
+                      aria-label={`${attempt.status === 'IN_PROGRESS' ? t('attempts_resume_attempt_for') : t('attempts_open_result_for')} ${attempt.test_title || attempt.exam_title || t('attempts_this_test')}`}
+                      title={`${attempt.status === 'IN_PROGRESS' ? t('attempts_resume_attempt_for') : t('attempts_open_result_for')} ${attempt.test_title || attempt.exam_title || t('attempts_this_test')}`}
                     >
-                      {attempt.status === 'IN_PROGRESS' ? 'Resume attempt' : 'Open result'}
+                      {attempt.status === 'IN_PROGRESS' ? t('attempts_resume_attempt') : t('attempts_open_result')}
                     </button>
                   </td>
                 </tr>
@@ -282,9 +293,9 @@ export default function Attempts() {
 
       {totalPages > 1 && (
         <div className={styles.pagination}>
-          <span className={styles.pageInfo}>{sortedFiltered.length} attempt{sortedFiltered.length !== 1 ? 's' : ''} - Page {page} of {totalPages}</span>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1}>Previous page</button>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages}>Next page</button>
+          <span className={styles.pageInfo}>{sortedFiltered.length} {t('attempts_label')} - {t('page')} {page} {t('of')} {totalPages}</span>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1}>{t('previous_page')}</button>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages}>{t('next_page')}</button>
         </div>
       )}
     </div>
