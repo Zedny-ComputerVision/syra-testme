@@ -6,112 +6,129 @@ export default function DashboardOperations({
   auditLog,
   flaggedAttempts,
   navigate,
-  topTests,
-  upcomingSchedules,
+  funnelStats,
 }) {
+  const {
+    totalLearners = 0,
+    totalAttempts = 0,
+    completedAttempts = 0,
+    passRate = 0,
+    awaitingReview = 0,
+  } = funnelStats || {}
+
+  const passed = Math.round(completedAttempts * (passRate / 100))
+  const maxVal = Math.max(totalLearners, totalAttempts, completedAttempts, passed, 1)
+
+  const stages = [
+    {
+      key: 'learners',
+      label: 'Learners',
+      sub: 'Registered on platform',
+      value: totalLearners,
+      colorClass: styles.funnelFillBlue,
+      dotClass: styles.funnelDotBlue,
+    },
+    {
+      key: 'attempts',
+      label: 'Attempts started',
+      sub: 'Tests begun by learners',
+      value: totalAttempts,
+      colorClass: styles.funnelFillCyan,
+      dotClass: styles.funnelDotCyan,
+    },
+    {
+      key: 'completed',
+      label: 'Completed',
+      sub: 'Attempts fully submitted',
+      value: completedAttempts,
+      colorClass: styles.funnelFillGreen,
+      dotClass: styles.funnelDotGreen,
+    },
+    {
+      key: 'passed',
+      label: 'Passed',
+      sub: 'Met the passing threshold',
+      value: passed,
+      colorClass: styles.funnelFillAmber,
+      dotClass: styles.funnelDotAmber,
+    },
+  ]
+
   return (
     <>
-      <div className={styles.insightsGrid}>
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeader}>
-            <div>
-              <div className={styles.panelEyebrow}>Test performance</div>
-              <h3 className={styles.panelTitle}>Most active tests</h3>
-            </div>
-            <button type="button" className={styles.linkButton} onClick={() => navigate('/admin/tests')}>
-              Manage tests
-            </button>
+      <section className={`${styles.panelCard} ${styles.funnelPanel}`}>
+        <div className={styles.panelHeader}>
+          <div>
+            <div className={styles.panelEyebrow}>Learner journey</div>
+            <h3 className={styles.panelTitle}>Conversion Funnel</h3>
           </div>
-          {topTests.length === 0 ? (
-            <div className={styles.empty}>Attempts will surface top tests once learners start submitting work.</div>
-          ) : (
-            <div className={styles.topTestsList}>
-              {topTests.map((test) => {
-                const riskRate = test.attempts ? Math.round((test.flagged_attempts / test.attempts) * 100) : 0
-                return (
-                  <button
-                    key={test.exam_id}
-                    type="button"
-                    className={styles.topTestCard}
-                    onClick={() => navigate(`/admin/tests/${test.exam_id}/manage`)}
-                  >
-                    <div className={styles.topTestHeader}>
-                      <div>
-                        <div className={styles.topTestTitle}>{test.title}</div>
-                        <div className={styles.topTestMeta}>{test.attempts} attempts | {test.scored_attempts} scored</div>
-                      </div>
-                      <div className={styles.topTestScore}>{formatPercent(test.average_score, 1)}</div>
-                    </div>
-                    <div className={styles.topTestBars}>
-                      <div className={styles.metricBarBlock}>
-                        <div className={styles.metricBarLabel}>
-                          <span>Pass rate</span>
-                          <strong>{formatPercent(test.pass_rate, 0)}</strong>
-                        </div>
-                        <div className={styles.metricBarTrack}>
-                          <span className={styles.metricBarFillPass} style={{ width: `${Math.min(test.pass_rate || 0, 100)}%` }} />
-                        </div>
-                      </div>
-                      <div className={styles.metricBarBlock}>
-                        <div className={styles.metricBarLabel}>
-                          <span>Flagged attempts</span>
-                          <strong>{riskRate}%</strong>
-                        </div>
-                        <div className={styles.metricBarTrack}>
-                          <span className={styles.metricBarFillRisk} style={{ width: `${Math.min(riskRate, 100)}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                    <div className={styles.topTestFooter}>
-                      <span>{test.high_risk_attempts} high-risk attempts</span>
-                      <span>Open test details</span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </section>
+          <button type="button" className={styles.linkButton} onClick={() => navigate('/admin/reports')}>
+            View reports
+          </button>
+        </div>
 
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeader}>
-            <div>
-              <div className={styles.panelEyebrow}>Scheduling</div>
-              <h3 className={styles.panelTitle}>Upcoming sessions</h3>
-            </div>
-            <button type="button" className={styles.linkButton} onClick={() => navigate('/admin/sessions')}>
-              Open sessions
-            </button>
-          </div>
-          {upcomingSchedules.length === 0 ? (
-            <div className={styles.empty}>No upcoming scheduled sessions are waiting in the queue.</div>
-          ) : (
-            <div className={styles.scheduleList}>
-              {upcomingSchedules.map((schedule) => (
-                <button
-                  key={schedule.id}
-                  type="button"
-                  className={styles.scheduleCard}
-                  onClick={() => navigate('/admin/sessions')}
-                >
-                  <div className={styles.scheduleTime}>
-                    <strong>{formatTime(schedule.scheduled_at)}</strong>
-                    <span>{formatRelativeTime(schedule.scheduled_at)}</span>
+        <div className={styles.funnelBody}>
+          {stages.map((stage, i) => {
+            const prev = stages[i - 1]
+            const conversionRate = prev && prev.value > 0
+              ? Math.round((stage.value / prev.value) * 100)
+              : null
+            const barWidth = Math.round((stage.value / maxVal) * 100)
+
+            return (
+              <div key={stage.key} className={styles.funnelStage}>
+                {i > 0 && (
+                  <div className={styles.funnelConnector}>
+                    <svg width="10" height="14" viewBox="0 0 10 14" fill="none" aria-hidden="true">
+                      <path d="M5 0v10M1 7l4 5 4-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className={conversionRate != null && conversionRate < 30 ? styles.funnelRateLow : styles.funnelRateOk}>
+                      {conversionRate != null ? `${conversionRate}% conversion` : '—'}
+                    </span>
                   </div>
-                  <div className={styles.scheduleBody}>
-                    <div className={styles.scheduleTitle}>{schedule.test_title || schedule.exam_title || 'Test session'}</div>
-                    <div className={styles.scheduleMeta}>
-                      <span>{schedule.user_name || schedule.user_student_id || 'Assigned learner'}</span>
-                      <span>{schedule.access_mode}</span>
+                )}
+                <div className={styles.funnelRow}>
+                  <div className={styles.funnelMeta}>
+                    <span className={`${styles.funnelDot} ${stage.dotClass}`} />
+                    <div>
+                      <div className={styles.funnelLabel}>{stage.label}</div>
+                      <div className={styles.funnelSub}>{stage.sub}</div>
                     </div>
-                    {schedule.notes && <div className={styles.scheduleNotes}>{schedule.notes}</div>}
                   </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+                  <div className={styles.funnelBarWrap}>
+                    <div className={styles.funnelBarTrack}>
+                      <div
+                        className={`${styles.funnelBarFill} ${stage.colorClass}`}
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.funnelCount}>{stage.value.toLocaleString()}</div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className={styles.funnelSummary}>
+          <div className={styles.funnelSummaryItem}>
+            <span className={styles.funnelSummaryVal}>{totalLearners > 0 ? `${Math.round((totalAttempts / totalLearners) * 100)}%` : '—'}</span>
+            <span className={styles.funnelSummaryLbl}>Learner → Attempt</span>
+          </div>
+          <div className={styles.funnelSummaryItem}>
+            <span className={styles.funnelSummaryVal}>{totalAttempts > 0 ? `${Math.round((completedAttempts / totalAttempts) * 100)}%` : '—'}</span>
+            <span className={styles.funnelSummaryLbl}>Attempt → Completion</span>
+          </div>
+          <div className={styles.funnelSummaryItem}>
+            <span className={styles.funnelSummaryVal}>{formatPercent(passRate, 1)}</span>
+            <span className={styles.funnelSummaryLbl}>Completion → Pass</span>
+          </div>
+          <div className={styles.funnelSummaryItem}>
+            <span className={styles.funnelSummaryVal}>{awaitingReview}</span>
+            <span className={styles.funnelSummaryLbl}>Awaiting review</span>
+          </div>
+        </div>
+      </section>
 
       <div className={styles.tablesGrid}>
         <section className={styles.panelCard}>

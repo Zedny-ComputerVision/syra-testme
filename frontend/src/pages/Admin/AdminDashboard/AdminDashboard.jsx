@@ -222,8 +222,13 @@ export default function AdminDashboard() {
         auditLog={auditLog}
         flaggedAttempts={dashboard.recent_flagged_attempts || []}
         navigate={navigate}
-        topTests={dashboard.top_tests || []}
-        upcomingSchedules={dashboard.upcoming_schedules || []}
+        funnelStats={{
+          totalLearners: dashboard.total_learners || 0,
+          totalAttempts: dashboard.total_attempts || 0,
+          completedAttempts: dashboard.completed_attempts || 0,
+          passRate: dashboard.pass_rate || 0,
+          awaitingReview: dashboard.awaiting_review_attempts || 0,
+        }}
       />
     </div>
   )
