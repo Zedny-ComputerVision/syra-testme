@@ -334,6 +334,16 @@ export default function Proctoring() {
       try {
         const attemptRes = await getAttempt(attemptId)
         const att = attemptRes.data
+        // If the attempt was already submitted (e.g. forced_submit from proctoring),
+        // redirect to the result page immediately instead of showing the exam UI.
+        const attStatus = String(att.status || '').toUpperCase()
+        if (attStatus === 'SUBMITTED' || attStatus === 'GRADED') {
+          if (!cancelled) {
+            submittedRef.current = true
+            navigate(`/attempts/${attemptId}`, { replace: true })
+          }
+          return
+        }
         const [examRes, qRes, answersRes] = await Promise.allSettled([
           getTest(att.exam_id),
           getTestQuestions(att.exam_id),
@@ -972,7 +982,21 @@ export default function Proctoring() {
 
   const finalizeAttemptSubmission = useCallback(async () => {
     setSubmitPhase('Submitting your attempt...')
-    await submitAttempt(attemptId)
+    try {
+      await submitAttempt(attemptId)
+    } catch (submitErr) {
+      // If the backend already submitted (e.g. forced_submit from proctoring),
+      // treat it as a success and redirect to the result page anyway.
+      const detail = submitErr?.response?.data?.detail || ''
+      const status = submitErr?.response?.status
+      const alreadySubmitted = status === 409 || status === 400
+        || /already.submitted/i.test(detail)
+        || /already.completed/i.test(detail)
+        || /not.*in.progress/i.test(detail)
+      if (!alreadySubmitted) {
+        throw submitErr
+      }
+    }
     submittedRef.current = true
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch((error) => {
@@ -1221,8 +1245,7 @@ export default function Proctoring() {
   useEffect(() => {
     if (!proctorCfg.tab_switch_detect) return
     const tabBlurCountRef = { current: 0 }
-    const onVisibility = () => {
-      if (!document.hidden) return
+    const recordTabSwitch = () => {
       // Suppress tab switch violations while screen share picker is open or grace period
       if (screenSharePickerOpenRef.current || screenShareGraceRef.current) return
       const now = Date.now()
@@ -1245,9 +1268,21 @@ export default function Proctoring() {
         })
       }
     }
-    document.addEventListener('visibilitychange', onVisibility)
+    const onVisibility = () => {
+      if (document.hidden) recordTabSwitch()
+    }
+    // Use capture phase to ensure we detect before any other handler can stop propagation
+    document.addEventListener('visibilitychange', onVisibility, true)
+    // Also listen for window blur as a fallback — catches Alt+Tab and other
+    // focus-loss scenarios that some browsers don't report via visibilitychange
+    // (e.g. when fullscreen_enforce immediately re-enters fullscreen).
+    const onWindowBlur = () => {
+      if (!document.hasFocus()) recordTabSwitch()
+    }
+    window.addEventListener('blur', onWindowBlur, true)
     return () => {
-      document.removeEventListener('visibilitychange', onVisibility)
+      document.removeEventListener('visibilitychange', onVisibility, true)
+      window.removeEventListener('blur', onWindowBlur, true)
     }
   }, [applyPingResponse, attemptId, cameraDark, emitProctoringNotice, proctorCfg.tab_switch_detect, sendBrowserViolation])
 
@@ -1267,7 +1302,7 @@ export default function Proctoring() {
   useEffect(() => {
     if (!proctorCfg.copy_paste_block) return
     const lastAlert = { t: 0 }
-    const handler = (e) => {
+    const clipboardHandler = (e) => {
       e.preventDefault()
       const now = Date.now()
       if (now - lastAlert.t > 6000) {
@@ -1276,13 +1311,34 @@ export default function Proctoring() {
           `${e.type.toUpperCase()} attempt blocked during exam`)
       }
     }
-    document.addEventListener('copy', handler)
-    document.addEventListener('cut', handler)
-    document.addEventListener('paste', handler)
+    // Block Ctrl+C / Ctrl+X / Ctrl+V at the keydown level as well, because
+    // some browsers suppress the clipboard event when the keydown is not
+    // prevented, and bubble-phase document listeners may not fire if a child
+    // element stops propagation. Capture phase ensures we intercept first.
+    const keyHandler = (e) => {
+      const key = e.key?.toLowerCase() || ''
+      const ctrl = e.ctrlKey || e.metaKey
+      if (ctrl && (key === 'c' || key === 'x' || key === 'v')) {
+        e.preventDefault()
+        const now = Date.now()
+        if (now - lastAlert.t > 6000) {
+          lastAlert.t = now
+          const action = key === 'c' ? 'COPY' : key === 'x' ? 'CUT' : 'PASTE'
+          sendBrowserViolation('COPY_PASTE_ATTEMPT', 'MEDIUM',
+            `${action} attempt blocked during exam`)
+        }
+      }
+    }
+    // Use capture phase to intercept before any child handler can process or stop propagation
+    document.addEventListener('copy', clipboardHandler, true)
+    document.addEventListener('cut', clipboardHandler, true)
+    document.addEventListener('paste', clipboardHandler, true)
+    document.addEventListener('keydown', keyHandler, true)
     return () => {
-      document.removeEventListener('copy', handler)
-      document.removeEventListener('cut', handler)
-      document.removeEventListener('paste', handler)
+      document.removeEventListener('copy', clipboardHandler, true)
+      document.removeEventListener('cut', clipboardHandler, true)
+      document.removeEventListener('paste', clipboardHandler, true)
+      document.removeEventListener('keydown', keyHandler, true)
     }
   }, [proctorCfg.copy_paste_block, sendBrowserViolation])
 
