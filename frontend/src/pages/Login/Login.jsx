@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { jwtDecode } from 'jwt-decode'
 import { login as loginApi, setup as setupAdminApi, signupStatus as signupStatusApi } from '../../services/auth.service'
 import useAuth from '../../hooks/useAuth'
+import useLanguage from '../../hooks/useLanguage'
 import { resolvePostLoginPath } from '../../utils/postLoginRedirect'
 import styles from './Login.module.scss'
 
@@ -67,6 +68,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [devUsers, setDevUsers] = useState(DEV_USERS)
   const { login } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
   const showDevTools = isLocalDevHost()
@@ -246,11 +248,11 @@ export default function Login() {
     const nextPassword = password
     setError('')
     if (!nextEmail) {
-      setError('Email is required.')
+      setError(t('validation_email_required'))
       return
     }
     if (!nextPassword) {
-      setError('Password is required.')
+      setError(t('validation_password_required'))
       return
     }
     setLoading(true)
@@ -258,7 +260,7 @@ export default function Login() {
     try {
       await completeLogin(nextEmail, nextPassword)
     } catch (err) {
-      setError(getErrorMessage(err, 'Login failed'))
+      setError(getErrorMessage(err, t('login_failed')))
     } finally {
       setLoading(false)
     }
@@ -300,9 +302,9 @@ export default function Login() {
       } catch (fallbackError) {
         const detail = fallbackError?.response?.data?.detail
         if (detail === 'Admin already set up') {
-          setError('Dev admin could not be created because this database already has users.')
+          setError(t('login_dev_admin_db_error'))
         } else {
-          setError(getErrorMessage(fallbackError, 'Admin login failed'))
+          setError(getErrorMessage(fallbackError, t('login_admin_failed')))
         }
       }
     } finally {
@@ -339,9 +341,9 @@ export default function Login() {
         } catch (repairError) {
           const detail = repairError?.response?.data?.detail
           if (detail === 'Admin already set up') {
-            setError('Learner bootstrap failed because this database uses a different admin account.')
+            setError(t('login_learner_bootstrap_error'))
           } else {
-            setError(getErrorMessage(repairError, 'Learner login failed'))
+            setError(getErrorMessage(repairError, t('login_learner_failed')))
           }
         }
       }
@@ -362,24 +364,24 @@ export default function Login() {
             </svg>
           </div>
           <h1 className={styles.title}>syra</h1>
-          <p className={styles.subtitle}>Sign in to your account</p>
+          <p className={styles.subtitle}>{t('login_subtitle')}</p>
         </div>
 
         {error && <div className={styles.error}>{error}</div>}
 
         <div className={styles.field}>
-          <label htmlFor="email">Email</label>
-          <input id="email" type="email" placeholder="you@example.com" value={email}
+          <label htmlFor="email">{t('email')}</label>
+          <input id="email" type="email" placeholder={t('login_email_placeholder')} value={email}
             onChange={(e) => setEmail(e.target.value)} disabled={loading} required autoFocus />
         </div>
 
         <div className={styles.field}>
-          <label htmlFor="password">Password</label>
+          <label htmlFor="password">{t('password')}</label>
           <div className={styles.passwordInputWrap}>
             <input
               id="password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Enter password"
+              placeholder={t('login_password_placeholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
@@ -389,17 +391,17 @@ export default function Login() {
               type="button"
               className={styles.passwordToggle}
               onClick={() => setShowPassword((current) => !current)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? t('login_hide_password') : t('login_show_password')}
               aria-pressed={showPassword}
               disabled={loading}
             >
-              {showPassword ? 'Hide' : 'Show'}
+              {showPassword ? t('login_hide') : t('login_show')}
             </button>
           </div>
         </div>
 
         <button type="button" className={styles.btn} disabled={loading} onClick={requestFormSubmit}>
-          {loading ? 'Logging in...' : 'Sign In'}
+          {loading ? t('login_logging_in') : t('sign_in')}
         </button>
 
         {showDevTools && (
@@ -429,8 +431,8 @@ export default function Login() {
         )}
 
         <div className={styles.actionsRow}>
-          <Link className={styles.secondaryLink} to="/forgot-password">Forgot password?</Link>
-          <Link className={styles.secondaryLink} to="/signup">Create account</Link>
+          <Link className={styles.secondaryLink} to="/forgot-password">{t('login_forgot_password')}</Link>
+          <Link className={styles.secondaryLink} to="/signup">{t('login_create_account')}</Link>
         </div>
       </form>
     </main>

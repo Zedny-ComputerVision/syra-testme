@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { forgotPassword } from '../../services/auth.service'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './AuthPages.module.scss'
 
 export default function ForgotPassword() {
+  const { t } = useLanguage()
   const [email, setEmail] = useState('')
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
@@ -16,9 +18,9 @@ export default function ForgotPassword() {
     setError('')
     try {
       await forgotPassword(email)
-      setSuccess('If the email exists, a reset link was sent.')
+      setSuccess(t('forgot_success'))
     } catch (e) {
-      setError(e.response?.data?.detail || 'Error sending reset email')
+      setError(e.response?.data?.detail || t('forgot_error'))
     } finally { setLoading(false) }
   }
 
@@ -36,13 +38,13 @@ export default function ForgotPassword() {
   return (
     <main className={styles.page}>
       <form className={styles.card} onSubmit={submit}>
-        <h1 className={styles.title}>Forgot Password</h1>
-        <p className={styles.sub}>Enter your email to receive a reset link.</p>
+        <h1 className={styles.title}>{t('forgot_title')}</h1>
+        <p className={styles.sub}>{t('forgot_subtitle')}</p>
         {success && <div className={styles.info}>{success}</div>}
         {error && <div className={styles.error}>{error}</div>}
-        <input className={styles.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required disabled={loading} aria-label="Email address" />
-        <button className={styles.btn} type="button" disabled={loading} onClick={requestFormSubmit}>{loading ? 'Sending...' : 'Send Reset Link'}</button>
-        <p className={styles.loginLink}>Back to <Link className={styles.link} to="/login">login</Link></p>
+        <input className={styles.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={t('login_email_placeholder')} required disabled={loading} aria-label={t('forgot_email_aria')} />
+        <button className={styles.btn} type="button" disabled={loading} onClick={requestFormSubmit}>{loading ? t('forgot_sending') : t('forgot_send_link')}</button>
+        <p className={styles.loginLink}>{t('forgot_back_to')} <Link className={styles.link} to="/login">{t('login')}</Link></p>
       </form>
     </main>
   )

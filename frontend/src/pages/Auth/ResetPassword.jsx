@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { resetPassword } from '../../services/auth.service'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './AuthPages.module.scss'
 
 export default function ResetPassword() {
+  const { t } = useLanguage()
   const [params] = useSearchParams()
   const tokenParam = params.get('token') || ''
   const [token, setToken] = useState(tokenParam)
@@ -16,17 +18,17 @@ export default function ResetPassword() {
   const submit = async (e) => {
     e.preventDefault()
     if (!token.trim()) {
-      setError('Reset token is required.')
+      setError(t('reset_pwd_token_required'))
       setSuccess('')
       return
     }
     if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
+      setError(t('validation_password_min_length'))
       setSuccess('')
       return
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match.')
+      setError(t('validation_passwords_mismatch'))
       setSuccess('')
       return
     }
@@ -35,25 +37,25 @@ export default function ResetPassword() {
     setSuccess('')
     try {
       await resetPassword(token, password)
-      setSuccess('Password reset successful. You can now log in.')
+      setSuccess(t('reset_pwd_success'))
       setPassword('')
       setConfirmPassword('')
     } catch (e) {
-      setError(e.response?.data?.detail || 'Reset failed')
+      setError(e.response?.data?.detail || t('reset_pwd_failed'))
     } finally { setLoading(false) }
   }
 
   return (
     <main className={styles.page}>
       <form className={styles.card} onSubmit={submit}>
-        <h1 className={styles.title}>Reset Password</h1>
+        <h1 className={styles.title}>{t('reset_pwd_title')}</h1>
         {success && <div className={styles.info}>{success}</div>}
         {error && <div className={styles.error}>{error}</div>}
-        <input className={styles.input} value={token} onChange={e => setToken(e.target.value)} placeholder="Reset token" required disabled={loading} aria-label="Reset token" />
-        <input className={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New password" required disabled={loading} aria-label="New password" />
-        <input className={styles.input} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" required disabled={loading} aria-label="Confirm new password" />
-        <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Resetting...' : 'Reset Password'}</button>
-        <p className={styles.loginLink}>Back to <Link className={styles.link} to="/login">login</Link></p>
+        <input className={styles.input} value={token} onChange={e => setToken(e.target.value)} placeholder={t('reset_pwd_token_placeholder')} required disabled={loading} aria-label={t('reset_pwd_token_placeholder')} />
+        <input className={styles.input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={t('change_pwd_new')} required disabled={loading} aria-label={t('change_pwd_new')} />
+        <input className={styles.input} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder={t('change_pwd_confirm_new')} required disabled={loading} aria-label={t('change_pwd_confirm_new')} />
+        <button className={styles.btn} type="submit" disabled={loading}>{loading ? t('reset_pwd_resetting') : t('reset_pwd_button')}</button>
+        <p className={styles.loginLink}>{t('forgot_back_to')} <Link className={styles.link} to="/login">{t('login')}</Link></p>
       </form>
     </main>
   )
