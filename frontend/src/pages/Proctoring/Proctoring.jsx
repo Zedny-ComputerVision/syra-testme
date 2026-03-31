@@ -1407,23 +1407,85 @@ export default function Proctoring() {
     return () => document.removeEventListener('contextmenu', handler)
   }, [proctoringEnabled, sendBrowserViolation])
 
-  // ── Multiple monitor detection ──────────────────────────────────────────────
+  // ── Multiple monitor / external display detection ───────────────────────────
   useEffect(() => {
     if (!proctoringEnabled) return
-    const alerted = { current: false }
+    const lastAlert = { current: 0 }
+    const COOLDOWN = 60_000 // 1 alert per minute max
+
     const check = () => {
-      const isExtended = 'isExtended' in window.screen ? window.screen.isExtended : false
-      // Fallback: screen resolution significantly larger than the available viewport
-      const likelyExtended = window.screen.width > window.screen.availWidth + 300
-      if ((isExtended || likelyExtended) && !alerted.current) {
-        alerted.current = true
-        sendBrowserViolation('MULTIPLE_MONITORS', 'MEDIUM',
-          `Multiple monitors detected (screen ${window.screen.width}×${window.screen.height})`)
+      const now = Date.now()
+      if (now - lastAlert.current < COOLDOWN) return
+
+      const reasons = []
+
+      // Method 1: Screen API isExtended (Chrome 100+)
+      if ('isExtended' in window.screen && window.screen.isExtended) {
+        reasons.push('screen.isExtended=true')
+      }
+
+      // Method 2: screen.width vs availWidth mismatch (taskbar-adjusted)
+      if (window.screen.width > window.screen.availWidth + 300) {
+        reasons.push(`width ${window.screen.width} >> availWidth ${window.screen.availWidth}`)
+      }
+
+      // Method 3: Window position outside primary screen bounds
+      if (window.screenX < -50 || window.screenX > window.screen.width + 50 ||
+          window.screenY < -50 || window.screenY > window.screen.height + 50) {
+        reasons.push(`window at (${window.screenX},${window.screenY}) outside screen`)
+      }
+
+      // Method 4: devicePixelRatio mismatch with screen resolution
+      // External monitors often have different DPI
+      const dpr = window.devicePixelRatio || 1
+      const logicalW = window.screen.width
+      const physicalW = logicalW * dpr
+      if (physicalW > 5000 && dpr > 1) {
+        reasons.push(`unusual resolution ${physicalW}px physical at ${dpr}x DPI`)
+      }
+
+      // Method 5: Screen Change Events API (Chrome 107+)
+      if (window.getScreenDetails) {
+        window.getScreenDetails().then(details => {
+          if (details.screens && details.screens.length > 1) {
+            const now2 = Date.now()
+            if (now2 - lastAlert.current < COOLDOWN) return
+            lastAlert.current = now2
+            sendBrowserViolation('MULTIPLE_MONITORS', 'HIGH',
+              `${details.screens.length} screens detected via Screen Details API (${details.screens.map(s => `${s.width}x${s.height}`).join(', ')})`)
+          }
+        }).catch(() => {})
+      }
+
+      if (reasons.length > 0) {
+        lastAlert.current = now
+        sendBrowserViolation('MULTIPLE_MONITORS', 'HIGH',
+          `External display suspected: ${reasons.join('; ')} (screen ${window.screen.width}×${window.screen.height})`)
       }
     }
+
     check()
-    const interval = setInterval(check, 30000)
-    return () => clearInterval(interval)
+    const interval = setInterval(check, 10_000) // check every 10s
+
+    // Also check on resize/move (user plugs in monitor mid-exam)
+    const onResize = () => setTimeout(check, 500)
+    window.addEventListener('resize', onResize)
+
+    // screen.isExtended change event (Chrome 100+)
+    let screenCleanup
+    try {
+      if ('isExtended' in window.screen) {
+        const onChange = () => check()
+        window.screen.addEventListener('change', onChange)
+        screenCleanup = () => window.screen.removeEventListener('change', onChange)
+      }
+    } catch (_) {}
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('resize', onResize)
+      if (screenCleanup) screenCleanup()
+    }
   }, [proctoringEnabled, sendBrowserViolation])
 
   // ── Virtual machine / remote desktop detection ─────────────────────────────
