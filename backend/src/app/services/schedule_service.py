@@ -15,6 +15,7 @@ from ..utils.response_cache import TimedSingleFlightCache
 from .audit import write_audit_log
 from .sanitization import sanitize_plain_text
 from .normalized_relations import exam_archived_at
+from ..core.i18n import translate as _t
 from .notifications import notify_user
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ _schedule_list_cache: TimedSingleFlightCache[list[ScheduleRead]] = TimedSingleFl
 
 def ensure_exam_schedulable(exam: Exam | None) -> None:
     if exam and exam_archived_at(exam):
-        raise HTTPException(status_code=400, detail="Cannot schedule an archived test")
+        raise HTTPException(status_code=400, detail=_t("cannot_schedule_archived"))
 
 
 def validate_schedule_time(
@@ -41,7 +42,7 @@ def validate_schedule_time(
         and normalized < cutoff
         and not (allow_existing_past and previous_normalized and previous_normalized < cutoff)
     ):
-        raise HTTPException(status_code=422, detail="Cannot schedule in the past")
+        raise HTTPException(status_code=422, detail=_t("cannot_schedule_past"))
 
 
 def serialize_schedule(schedule: Schedule) -> ScheduleRead:
@@ -103,13 +104,13 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     exam_id = body.exam_id or body.test_id
     exam = db.get(Exam, exam_id) if exam_id else None
     if exam_id and not exam:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     if exam is not None:
         ensure_exam_owner(exam, actor)
     ensure_exam_schedulable(exam)
     existing = db.scalar(select(Schedule).where(Schedule.user_id == body.user_id, Schedule.exam_id == exam_id))
     if existing:
-        raise HTTPException(status_code=409, detail="Schedule already exists")
+        raise HTTPException(status_code=409, detail=_t("schedule_already_exists"))
     validate_schedule_time(body.scheduled_at)
     now = datetime.now(timezone.utc)
     payload = body.model_dump(exclude={"test_id"})
@@ -123,7 +124,7 @@ def create_schedule(*, db: Session, body: ScheduleBase, actor) -> ScheduleRead:
     except Exception:
         db.rollback()
         logger.exception("Failed to create schedule for user %s and test %s", body.user_id, exam_id)
-        raise HTTPException(status_code=409, detail="Schedule already exists")
+        raise HTTPException(status_code=409, detail=_t("schedule_already_exists"))
     db.refresh(schedule)
     write_audit_log(
         db,
@@ -190,7 +191,7 @@ def list_schedulable_tests(*, db: Session, current) -> list[ExamRead]:
 
 
 def list_schedules(*, db: Session, current, exam_id: str | None = None) -> list[ScheduleRead]:
-    resolved_exam_id = str(parse_uuid_param(exam_id, detail="Exam not found")) if exam_id else None
+    resolved_exam_id = str(parse_uuid_param(exam_id, detail=_t("exam_not_found"))) if exam_id else None
     cache_key = json.dumps(
         {
             "role": getattr(current.role, "value", current.role),
@@ -242,16 +243,16 @@ def list_schedules(*, db: Session, current, exam_id: str | None = None) -> list[
 
 
 def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, actor) -> ScheduleRead:
-    schedule_pk = parse_uuid_param(schedule_id, detail="Not found")
+    schedule_pk = parse_uuid_param(schedule_id, detail=_t("not_found"))
     schedule = db.get(Schedule, schedule_pk)
     if not schedule:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     payload = body.model_dump(exclude_unset=True)
     new_exam_id = payload.get("exam_id") or payload.get("test_id")
     target_exam_id = new_exam_id or schedule.exam_id
     target_exam = db.get(Exam, target_exam_id) if target_exam_id else None
     if new_exam_id and not target_exam:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     if target_exam is not None:
         ensure_exam_owner(target_exam, actor)
     ensure_exam_schedulable(target_exam)
@@ -272,7 +273,7 @@ def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, acto
     except Exception:
         db.rollback()
         logger.exception("Failed to update schedule %s", schedule_id)
-        raise HTTPException(status_code=409, detail="Failed to update schedule due to a conflict")
+        raise HTTPException(status_code=409, detail=_t("schedule_update_conflict"))
     db.refresh(schedule)
     scheduled_at_str = schedule.scheduled_at.isoformat() if schedule.scheduled_at else "unset"
     write_audit_log(
@@ -289,10 +290,10 @@ def update_schedule(*, db: Session, schedule_id: str, body: ScheduleUpdate, acto
 
 
 def delete_schedule(*, db: Session, schedule_id: str, actor) -> Message:
-    schedule_pk = parse_uuid_param(schedule_id, detail="Not found")
+    schedule_pk = parse_uuid_param(schedule_id, detail=_t("not_found"))
     schedule = db.get(Schedule, schedule_pk)
     if not schedule:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     if schedule.exam_id:
         exam = db.get(Exam, schedule.exam_id)
         if exam is not None:
@@ -307,7 +308,7 @@ def delete_schedule(*, db: Session, schedule_id: str, actor) -> Message:
         .limit(1)
     )
     if active_attempt:
-        raise HTTPException(status_code=409, detail="Cannot delete schedule while user has an active attempt")
+        raise HTTPException(status_code=409, detail=_t("cannot_delete_active_attempt"))
     detail = f"exam={schedule.exam_id}; user={schedule.user_id}"
     try:
         db.delete(schedule)
@@ -315,7 +316,7 @@ def delete_schedule(*, db: Session, schedule_id: str, actor) -> Message:
     except Exception:
         db.rollback()
         logger.exception("Failed to delete schedule %s", schedule_id)
-        raise HTTPException(status_code=409, detail="Failed to delete schedule due to a conflict")
+        raise HTTPException(status_code=409, detail=_t("schedule_delete_conflict"))
     write_audit_log(
         db,
         getattr(actor, "id", None),
@@ -325,7 +326,7 @@ def delete_schedule(*, db: Session, schedule_id: str, actor) -> Message:
         detail=detail,
     )
     invalidate_schedule_caches()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))
 
 
 def notify_schedule_change(db: Session, schedule: Schedule, *, updated: bool) -> None:

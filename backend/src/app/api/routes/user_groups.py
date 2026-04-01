@@ -7,6 +7,7 @@ from ...models import User, UserGroup, RoleEnum
 from ...schemas import UserGroupCreate, UserGroupRead, UserRead, Message
 from ...services.normalized_relations import replace_user_group_members, serialize_user_group_member_ids
 from ...services.sanitization import sanitize_plain_text
+from ...core.i18n import translate as _t
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -17,7 +18,7 @@ def _clean_required_text(value: str | None, field_name: str) -> str:
     if not text:
         raise HTTPException(
             status_code=422,
-            detail=f"{field_name} is required",
+            detail=_t("field_required", field_name=field_name),
         )
     return text
 
@@ -28,10 +29,10 @@ def _clean_optional_text(value: str | None) -> str | None:
 
 
 def _get_group_or_404(db: Session, group_id: str) -> UserGroup:
-    group_pk = parse_uuid_param(group_id, detail="Not found")
+    group_pk = parse_uuid_param(group_id, detail=_t("not_found"))
     group = db.get(UserGroup, group_pk)
     if not group:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     return group
 
 
@@ -42,20 +43,20 @@ def _ensure_unique_group_name(db: Session, name: str, existing_group_id=None):
         select(UserGroup).where(func.lower(UserGroup.name) == normalized)
     )
     if existing and getattr(existing, "id", None) != existing_group_id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group name exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("group_name_exists"))
 
 
 def _normalize_member_ids(db: Session, raw_member_ids: list[str] | None) -> list:
     member_ids = []
     for raw_member_id in raw_member_ids or []:
-        user_pk = parse_uuid_param(str(raw_member_id), detail="User not found")
+        user_pk = parse_uuid_param(str(raw_member_id), detail=_t("user_not_found"))
         user = db.get(User, user_pk)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_t("user_not_found"))
         if user.role != RoleEnum.LEARNER:
             raise HTTPException(
                 status_code=422,
-                detail="Only learners can be added to groups",
+                detail=_t("only_learners_in_groups"),
             )
         normalized_user_id = str(user.id)
         if normalized_user_id not in member_ids:
@@ -94,7 +95,7 @@ def create_group(body: UserGroupCreate, db: Session = Depends(get_db_dep), curre
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Group name already exists")
+        raise HTTPException(status_code=409, detail=_t("group_name_already_exists"))
     db.refresh(group)
     return _build_group_read(group)
 
@@ -129,7 +130,7 @@ def delete_group(group_id: str, db: Session = Depends(get_db_dep), current=Depen
     group = _get_group_or_404(db, group_id)
     db.delete(group)
     db.commit()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))
 
 
 @router.get("/{group_id}/members", response_model=list[UserRead])
@@ -142,7 +143,7 @@ def list_group_members(
     member_ids = serialize_user_group_member_ids(group)
     if not member_ids:
         return []
-    user_ids = [parse_uuid_param(member_id, detail="User not found") for member_id in member_ids]
+    user_ids = [parse_uuid_param(member_id, detail=_t("user_not_found")) for member_id in member_ids]
     users = db.scalars(select(User).where(User.id.in_(user_ids))).all()
     user_map = {str(user.id): user for user in users}
     return [user_map[member_id] for member_id in member_ids if member_id in user_map]
@@ -158,20 +159,20 @@ def add_group_member(
     group = _get_group_or_404(db, group_id)
     user_id = payload.get("user_id")
     if not user_id:
-        raise HTTPException(status_code=422, detail="user_id is required")
-    user_pk = parse_uuid_param(user_id, detail="User not found")
+        raise HTTPException(status_code=422, detail=_t("user_id_required"))
+    user_pk = parse_uuid_param(user_id, detail=_t("user_not_found"))
     user = db.get(User, user_pk)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_t("user_not_found"))
     if user.role != RoleEnum.LEARNER:
         raise HTTPException(
             status_code=422,
-            detail="Only learners can be added to groups",
+            detail=_t("only_learners_in_groups"),
         )
     member_ids = serialize_user_group_member_ids(group)
     normalized_user_id = str(user.id)
     if normalized_user_id in member_ids:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already in group")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("user_already_in_group"))
     member_ids.append(normalized_user_id)
     replace_user_group_members(group, member_ids, db=db)
     db.add(group)
@@ -179,8 +180,8 @@ def add_group_member(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="User already in group")
-    return Message(detail="Member added")
+        raise HTTPException(status_code=409, detail=_t("user_already_in_group"))
+    return Message(detail=_t("member_added"))
 
 
 @router.post("/{group_id}/members/bulk", response_model=Message)
@@ -193,11 +194,11 @@ def add_group_members_bulk(
     group = _get_group_or_404(db, group_id)
     user_ids = payload.get("user_ids")
     if not user_ids or not isinstance(user_ids, list):
-        raise HTTPException(status_code=422, detail="user_ids list is required")
+        raise HTTPException(status_code=422, detail=_t("user_ids_required"))
     member_ids = serialize_user_group_member_ids(group)
     added = 0
     for raw_id in user_ids:
-        user_pk = parse_uuid_param(str(raw_id), detail="User not found")
+        user_pk = parse_uuid_param(str(raw_id), detail=_t("user_not_found"))
         user = db.get(User, user_pk)
         if not user:
             continue
@@ -221,12 +222,12 @@ def remove_group_member(
     current=Depends(require_permission("Manage Users", RoleEnum.ADMIN)),
 ):
     group = _get_group_or_404(db, group_id)
-    user_pk = parse_uuid_param(user_id, detail="User not found")
+    user_pk = parse_uuid_param(user_id, detail=_t("user_not_found"))
     member_ids = serialize_user_group_member_ids(group)
     normalized_user_id = str(user_pk)
     if normalized_user_id not in member_ids:
-        raise HTTPException(status_code=404, detail="Member not found")
+        raise HTTPException(status_code=404, detail=_t("member_not_found"))
     replace_user_group_members(group, [member_id for member_id in member_ids if member_id != normalized_user_id], db=db)
     db.add(group)
     db.commit()
-    return Message(detail="Member removed")
+    return Message(detail=_t("member_removed"))

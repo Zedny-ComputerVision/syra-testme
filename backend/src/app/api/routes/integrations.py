@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from ...core.i18n import translate as _t
 from ...api.deps import get_db_dep, require_permission
 from ...models import RoleEnum
 from ...services.integrations import dispatch_integrations
@@ -20,5 +21,5 @@ async def test_integrations(config: dict, db: Session = Depends(get_db_dep), cur
     }
     results = await dispatch_integrations(event, config or {})
     if not results:
-        raise HTTPException(status_code=400, detail="No integrations enabled or configured")
+        raise HTTPException(status_code=400, detail=_t("no_integrations_enabled"))
     return {"results": results}

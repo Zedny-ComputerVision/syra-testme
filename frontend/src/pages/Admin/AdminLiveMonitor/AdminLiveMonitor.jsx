@@ -170,24 +170,24 @@ function LiveViewer({ attemptId, token, onClose }) {
         <div className={styles.videoPanel}>
           <canvas ref={canvasRef} className={styles.videoCanvas} />
           {!connected && error && <div className={styles.errorOverlay}>{error}</div>}
-          {forceSubmitted && <div className={styles.errorOverlay}>Attempt force-submitted</div>}
+          {forceSubmitted && <div className={styles.errorOverlay}>{t('settings_attempt_force_submitted')}</div>}
         </div>
 
         <div className={styles.sidePanel}>
           {summary && (
             <div className={styles.summaryBox}>
-              <h4>Live Stats</h4>
-              <div className={styles.statRow}><span>Alerts</span><strong>{summary.alerts_fired || 0}</strong></div>
-              <div className={styles.statRow}><span>Risk Score</span><strong>{summary.risk_score || 0}</strong></div>
-              <div className={styles.statRow}><span>Face Present</span><strong>{summary.face_present_pct || 0}%</strong></div>
-              <div className={styles.statRow}><span>Attention</span><strong>{summary.attention_pct || 0}%</strong></div>
-              <div className={styles.statRow}><span>Violation Score</span><strong>{summary.violation_score || 0}</strong></div>
+              <h4>{t('live_stats')}</h4>
+              <div className={styles.statRow}><span>{t('live_alerts')}</span><strong>{summary.alerts_fired || 0}</strong></div>
+              <div className={styles.statRow}><span>{t('live_risk_score')}</span><strong>{summary.risk_score || 0}</strong></div>
+              <div className={styles.statRow}><span>{t('live_face_present')}</span><strong>{summary.face_present_pct || 0}%</strong></div>
+              <div className={styles.statRow}><span>{t('live_attention')}</span><strong>{summary.attention_pct || 0}%</strong></div>
+              <div className={styles.statRow}><span>{t('live_violation_score')}</span><strong>{summary.violation_score || 0}</strong></div>
             </div>
           )}
 
           <div className={styles.alertList}>
-            <h4>Recent Alerts</h4>
-            {alerts.length === 0 && <p className={styles.noAlerts}>No alerts yet</p>}
+            <h4>{t('live_recent_alerts')}</h4>
+            {alerts.length === 0 && <p className={styles.noAlerts}>{t('live_no_alerts')}</p>}
             {alerts.map((alert, i) => (
               <div key={i} className={`${styles.alertItem} ${styles[`severity${alert.severity}`]}`}>
                 <span className={styles.alertType}>{alert.event_type}</span>

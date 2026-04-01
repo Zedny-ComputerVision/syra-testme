@@ -13,6 +13,7 @@ from ...schemas import Message, QuestionBase, QuestionPoolCreate, QuestionPoolRe
 from ...services.audit import write_audit_log
 from ...services.normalized_relations import is_exam_pool_library, set_exam_library_pool
 from ...services.sanitization import sanitize_question_payload
+from ...core.i18n import translate as _t
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -257,7 +258,7 @@ def create_pool(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Question pool name already exists")
+        raise HTTPException(status_code=409, detail=_t("pool_name_exists"))
     db.refresh(pool)
     write_audit_log(
         db,
@@ -282,10 +283,10 @@ def list_pools(db: Session = Depends(get_db_dep), current=Depends(require_permis
 
 @router.get("/{pool_id}", response_model=QuestionPoolRead)
 def get_pool(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    pool_pk = parse_uuid_param(pool_id, detail="Not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     return _serialize_pool(pool, db)
 
 
@@ -297,12 +298,12 @@ def update_pool(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    pool_pk = parse_uuid_param(pool_id, detail="Not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     pool.name = body.name
     pool.description = body.description
     pool.updated_at = datetime.now(timezone.utc)
@@ -323,10 +324,10 @@ def update_pool(
 
 @router.get("/{pool_id}/questions", response_model=list[QuestionRead])
 def list_pool_questions(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    pool_pk = parse_uuid_param(pool_id, detail="Pool not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("pool_not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Pool not found")
+        raise HTTPException(status_code=404, detail=_t("pool_not_found"))
     return _load_pool_questions(db, pool_pk)
 
 
@@ -337,12 +338,12 @@ def create_pool_question(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    pool_pk = parse_uuid_param(pool_id, detail="Pool not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("pool_not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Pool not found")
+        raise HTTPException(status_code=404, detail=_t("pool_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
     library_exam = _ensure_pool_library_exam(db, current, pool)
     next_order = db.scalar(select(func.max(Question.order)).where(Question.pool_id == pool_pk)) or 0
@@ -374,17 +375,17 @@ def update_pool_question(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    pool_pk = parse_uuid_param(pool_id, detail="Pool not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("pool_not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Pool not found")
+        raise HTTPException(status_code=404, detail=_t("pool_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
-    question_pk = parse_uuid_param(question_id, detail="Question not found")
+    question_pk = parse_uuid_param(question_id, detail=_t("question_not_found"))
     question = db.get(Question, question_pk)
     if not question or question.pool_id != pool_pk:
-        raise HTTPException(status_code=404, detail="Question not found")
+        raise HTTPException(status_code=404, detail=_t("question_not_found"))
 
     payload = sanitize_question_payload(body.model_dump())
     question.text = payload["text"]
@@ -406,20 +407,20 @@ def delete_pool_question(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    pool_pk = parse_uuid_param(pool_id, detail="Pool not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("pool_not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Pool not found")
+        raise HTTPException(status_code=404, detail=_t("pool_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
-    question_pk = parse_uuid_param(question_id, detail="Question not found")
+    question_pk = parse_uuid_param(question_id, detail=_t("question_not_found"))
     question = db.get(Question, question_pk)
     if not question or question.pool_id != pool_pk:
-        raise HTTPException(status_code=404, detail="Question not found")
+        raise HTTPException(status_code=404, detail=_t("question_not_found"))
     db.delete(question)
     db.commit()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))
 
 
 @router.post("/{pool_id}/seed-exam/{exam_id}", response_model=Message)
@@ -430,21 +431,21 @@ def seed_exam_from_pool(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    pool_pk = parse_uuid_param(pool_id, detail="Pool not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("pool_not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Pool not found")
-    exam_pk = parse_uuid_param(exam_id, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("pool_not_found"))
+    exam_pk = parse_uuid_param(exam_id, detail=_t("test_not_found"))
     exam = db.get(Exam, exam_pk)
     if not exam:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and exam.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     if exam.status == ExamStatus.OPEN:
-        raise HTTPException(status_code=409, detail="Cannot seed questions into a published test")
+        raise HTTPException(status_code=409, detail=_t("cannot_seed_published"))
     pool_questions = _load_pool_questions(db, pool_pk)
     if not pool_questions:
-        raise HTTPException(status_code=400, detail="Pool has no questions. Add questions to the pool before seeding this test.")
+        raise HTTPException(status_code=400, detail=_t("pool_no_questions"))
     existing_max = db.scalar(
         select(func.max(Question.order)).where(Question.exam_id == exam_pk)
     ) or 0
@@ -457,7 +458,7 @@ def seed_exam_from_pool(
         )
         db.add(q)
     db.commit()
-    return Message(detail=f"Seeded {len(selected)} questions")
+    return Message(detail=_t("seeded_questions", count=len(selected)))
 
 
 @router.delete("/{pool_id}", response_model=Message)
@@ -467,12 +468,12 @@ def delete_pool(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    pool_pk = parse_uuid_param(pool_id, detail="Not found")
+    pool_pk = parse_uuid_param(pool_id, detail=_t("not_found"))
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     pool_name = pool.name
     pool_pk_str = str(pool.id)
     _cleanup_pool_library_resources(db, pool.id)
@@ -487,4 +488,4 @@ def delete_pool(
         detail=f"Deleted question pool: {pool_name}",
         ip_address=getattr(getattr(request, "client", None), "host", None),
     )
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))

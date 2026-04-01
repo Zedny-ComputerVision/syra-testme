@@ -52,6 +52,7 @@ from ...services.cloudflare_media import (
 )
 from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
+from ...core.i18n import translate as _t
 from ...utils.request_ip import get_request_ip, get_websocket_ip
 from ...utils.response_cache import TimedSingleFlightCache
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
@@ -102,8 +103,7 @@ def _video_storage_provider() -> str:
         if not cloudflare_video_storage_enabled():
             raise HTTPException(
                 status_code=503,
-                detail="Cloudflare video storage is not properly configured. "
-                       "Please set CLOUDFLARE_MEDIA_API_BASE_URL.",
+                detail=_t("cloudflare_not_properly_configured"),
             )
         return "cloudflare"
     if provider == "supabase":
@@ -111,21 +111,21 @@ def _video_storage_provider() -> str:
         if not supabase_video_storage_enabled():
             raise HTTPException(
                 status_code=503,
-                detail="Supabase video storage is not properly configured.",
+                detail=_t("supabase_not_configured"),
             )
         return "supabase"
     raise HTTPException(
         status_code=503,
-        detail=f"Unsupported video storage provider: {provider}",
+        detail=_t("unsupported_video_provider", provider=provider),
     )
 
 
 def _require_cloudflare_video_storage() -> None:
     provider = str(get_settings().PROCTORING_VIDEO_STORAGE_PROVIDER or "").strip().lower()
     if provider != "cloudflare":
-        raise HTTPException(status_code=503, detail="Cloudflare video storage must be enabled for proctoring recordings")
+        raise HTTPException(status_code=503, detail=_t("cloudflare_must_be_enabled"))
     if not cloudflare_video_storage_enabled():
-        raise HTTPException(status_code=503, detail="Cloudflare video storage is not configured")
+        raise HTTPException(status_code=503, detail=_t("cloudflare_not_configured"))
 
 
 def _cloudflare_upload_queue_enabled() -> bool:
@@ -258,7 +258,7 @@ def _saved_video_events(db: Session, attempt_id: str) -> list[ProctoringEvent]:
         db.scalars(
             select(ProctoringEvent)
             .where(
-                ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+                ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail=_t("attempt_not_found")),
                 ProctoringEvent.event_type == "VIDEO_SAVED",
             )
             .order_by(ProctoringEvent.occurred_at.desc())
@@ -271,7 +271,7 @@ def _video_upload_progress_events(db: Session, attempt_id: str) -> list[Proctori
         db.scalars(
             select(ProctoringEvent)
             .where(
-                ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+                ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail=_t("attempt_not_found")),
                 ProctoringEvent.event_type == "VIDEO_UPLOAD_PROGRESS",
             )
             .order_by(ProctoringEvent.occurred_at.desc())
@@ -636,7 +636,7 @@ def _find_video_batch_info(db: Session, attempt_id: str, session_id: str, source
     events = db.scalars(
         select(ProctoringEvent)
         .where(
-            ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+            ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail=_t("attempt_not_found")),
             ProctoringEvent.event_type.in_(_VIDEO_BATCH_EVENT_TYPES),
         )
         .order_by(ProctoringEvent.occurred_at.desc())
@@ -654,7 +654,7 @@ def _find_video_batch_info_by_job_id(db: Session, attempt_id: str, job_id: str) 
     events = db.scalars(
         select(ProctoringEvent)
         .where(
-            ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail="Attempt not found"),
+            ProctoringEvent.attempt_id == parse_uuid_param(attempt_id, detail=_t("attempt_not_found")),
             ProctoringEvent.event_type.in_(_VIDEO_BATCH_EVENT_TYPES),
         )
         .order_by(ProctoringEvent.occurred_at.desc())
@@ -725,7 +725,7 @@ def _build_registered_video_info(
     remote = remote if isinstance(remote, dict) else {}
     provider = str(raw.get("provider") or remote.get("provider") or _video_storage_provider()).strip().lower()
     if provider and provider != "cloudflare":
-        raise HTTPException(status_code=400, detail="provider must be cloudflare")
+        raise HTTPException(status_code=400, detail=_t("provider_must_be_cloudflare"))
 
     name = str(raw.get("name") or remote.get("name") or "").strip()
     if not name:
@@ -742,9 +742,9 @@ def _build_registered_video_info(
     playback_url = str(raw.get("playback_url") or raw.get("url") or remote.get("playback_url") or remote.get("url") or "").strip()
     uid = str(raw.get("uid") or remote.get("uid") or "").strip()
     if not playback_url:
-        raise HTTPException(status_code=400, detail="playback_url is required")
+        raise HTTPException(status_code=400, detail=_t("playback_url_required"))
     if not _is_absolute_http_url(playback_url):
-        raise HTTPException(status_code=400, detail="playback_url must be an absolute Cloudflare URL")
+        raise HTTPException(status_code=400, detail=_t("playback_url_invalid"))
 
     playback_type = str(raw.get("playback_type") or "").strip().lower()
     if not playback_type:
@@ -801,7 +801,7 @@ async def _build_supabase_video_info(
 ) -> dict[str, object]:
     safe_filename = Path(filename).name
     if not safe_filename:
-        raise HTTPException(status_code=400, detail="A valid video filename is required")
+        raise HTTPException(status_code=400, detail=_t("valid_video_filename_required"))
 
     try:
         uploaded = await upload_bytes_to_supabase(
@@ -812,12 +812,12 @@ async def _build_supabase_video_info(
         )
     except Exception as exc:
         logger.exception("Supabase video upload failed for attempt %s", attempt_id)
-        raise HTTPException(status_code=502, detail="Supabase video upload failed") from exc
+        raise HTTPException(status_code=502, detail=_t("supabase_upload_failed")) from exc
 
     playback_url = str(uploaded.get("url") or "").strip()
     object_path = str(uploaded.get("path") or "").strip()
     if not playback_url and not object_path:
-        raise HTTPException(status_code=502, detail="Supabase video upload returned no file reference")
+        raise HTTPException(status_code=502, detail=_t("supabase_no_file_ref"))
 
     return {
         "provider": "supabase",
@@ -846,7 +846,7 @@ def _normalize_iso_datetime(value: object) -> str | None:
         normalized = raw.replace("Z", "+00:00")
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid recording timestamp") from exc
+        raise HTTPException(status_code=400, detail=_t("invalid_recording_timestamp")) from exc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc).isoformat()
@@ -879,7 +879,7 @@ async def _save_evidence(attempt_id: str, frame_bytes: bytes, event_type: str) -
 
 
 def _attempt_or_forbidden(attempt_id: str, db: Session, current):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.scalars(
         select(Attempt)
         .options(
@@ -898,9 +898,9 @@ def _attempt_or_forbidden(attempt_id: str, db: Session, current):
         .where(Attempt.id == attempt_pk)
     ).unique().first()
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "View Attempt Analysis")
     return attempt
@@ -933,7 +933,7 @@ async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> 
             if total_size > upload_limit_bytes:
                 raise HTTPException(
                     status_code=413,
-                    detail=f"Video upload exceeds the {settings.MAX_VIDEO_UPLOAD_MB} MB limit",
+                    detail=_t("video_upload_exceeds_limit", limit_mb=settings.MAX_VIDEO_UPLOAD_MB),
                 )
             temp_file.write(chunk)
     except Exception:
@@ -944,7 +944,7 @@ async def _write_video_upload_to_temp_file(request: Request, *, suffix: str) -> 
 
     if total_size == 0:
         temp_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="Empty video upload")
+        raise HTTPException(status_code=400, detail=_t("empty_video_upload"))
 
     return temp_path, total_size
 
@@ -964,7 +964,7 @@ async def _write_video_upload_to_spool_file(request: Request, *, suffix: str) ->
                 if total_size > upload_limit_bytes:
                     raise HTTPException(
                         status_code=413,
-                        detail=f"Video upload exceeds the {settings.MAX_VIDEO_UPLOAD_MB} MB limit",
+                        detail=_t("video_upload_exceeds_limit", limit_mb=settings.MAX_VIDEO_UPLOAD_MB),
                     )
                 spool_file.write(chunk)
     except Exception:
@@ -973,7 +973,7 @@ async def _write_video_upload_to_spool_file(request: Request, *, suffix: str) ->
 
     if total_size == 0:
         spool_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="Empty video upload")
+        raise HTTPException(status_code=400, detail=_t("empty_video_upload"))
 
     return spool_path, total_size
 
@@ -1585,7 +1585,7 @@ def start_video_capture(
 ):
     raise HTTPException(
         status_code=410,
-        detail="Chunked local video capture has been removed. Upload the finalized video through /video/upload.",
+        detail=_t("chunked_capture_removed"),
     )
 
 
@@ -1600,7 +1600,7 @@ def upload_video_chunk(
 ):
     raise HTTPException(
         status_code=410,
-        detail="Chunked local video capture has been removed. Upload the finalized video through /video/upload.",
+        detail=_t("chunked_capture_removed"),
     )
 
 
@@ -1613,7 +1613,7 @@ def finalize_video_capture(
 ):
     raise HTTPException(
         status_code=410,
-        detail="Local video finalize has been removed. Upload the finalized video through /video/upload.",
+        detail=_t("local_finalize_removed"),
     )
 
 
@@ -1634,7 +1634,7 @@ async def upload_video_capture(
     normalized_source = _normalize_video_source(source)
     session_id = str(session_id or "").strip()
     if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
+        raise HTTPException(status_code=400, detail=_t("session_id_required"))
 
     existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, normalized_source)
     if existing_file_info:
@@ -1650,7 +1650,7 @@ async def upload_video_capture(
 
     content_type = str(request.headers.get("content-type") or "application/octet-stream").split(";", 1)[0].strip().lower()
     if not (content_type.startswith("video/") or content_type == "application/octet-stream"):
-        raise HTTPException(status_code=415, detail="Invalid video upload content type")
+        raise HTTPException(status_code=415, detail=_t("invalid_video_content_type"))
 
     extension = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else (
         "mp4" if "mp4" in content_type else "webm"
@@ -1684,7 +1684,7 @@ async def upload_video_capture(
         except Exception:
             spool_path.unlink(missing_ok=True)
             logger.exception("Failed to queue Cloudflare video upload for attempt %s", attempt_id)
-            raise HTTPException(status_code=503, detail="Cloudflare video upload queue is unavailable")
+            raise HTTPException(status_code=503, detail=_t("cf_queue_unavailable"))
 
         return JSONResponse(
             status_code=202,
@@ -1710,7 +1710,7 @@ async def upload_video_capture(
                 )
             except Exception as exc:
                 logger.exception("Cloudflare video upload failed for attempt %s", attempt_id)
-                raise HTTPException(status_code=502, detail="Cloudflare video upload failed") from exc
+                raise HTTPException(status_code=502, detail=_t("cf_upload_failed")) from exc
             file_info = _build_registered_video_info(
                 attempt_id,
                 {
@@ -1802,7 +1802,7 @@ async def register_video_capture(
 
     session_id = str(payload.get("session_id") or "").strip()
     if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
+        raise HTTPException(status_code=400, detail=_t("session_id_required"))
     source = _normalize_video_source(payload.get("source"))
 
     existing_file_info = _find_saved_video_file_info(db, attempt_id, session_id, source)
@@ -1861,11 +1861,11 @@ def report_video_upload_progress(
 
     session_id = str(payload.get("session_id") or "").strip()
     if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
+        raise HTTPException(status_code=400, detail=_t("session_id_required"))
 
     source = _normalize_video_source(payload.get("source"))
     if _find_saved_video_file_info(db, attempt_id, session_id, source):
-        return Message(detail="Video already saved")
+        return Message(detail=_t("video_already_saved"))
 
     uploaded_bytes = _coerce_non_negative_int(payload.get("uploaded_bytes"))
     total_bytes = _coerce_non_negative_int(payload.get("total_bytes"))
@@ -1904,7 +1904,7 @@ def report_video_upload_progress(
     )
     db.add(event)
     db.commit()
-    return Message(detail="Video upload progress recorded")
+    return Message(detail=_t("video_upload_progress_recorded"))
 
 
 @router.get("/{attempt_id}/jobs/{job_id}/status", response_model=ProctoringJobStatusResponse)
@@ -1916,7 +1916,7 @@ async def get_video_job_status(
 ):
     _attempt_or_forbidden(attempt_id, db, current)
     if not video_job_queue_enabled():
-        raise HTTPException(status_code=503, detail="Background proctoring jobs are not enabled")
+        raise HTTPException(status_code=503, detail=_t("bg_proctoring_not_enabled"))
 
     status_payload = get_proctoring_video_job_status(job_id)
     event_payload = _find_video_batch_info_by_job_id(db, attempt_id, job_id)
@@ -1950,7 +1950,7 @@ def pause_attempt(
 ):
     attempt = _attempt_or_forbidden(attempt_id, db, current)
     if attempt.status != AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=400, detail="Only in-progress attempts can be paused")
+        raise HTTPException(status_code=400, detail=_t("only_in_progress_pause"))
 
     event = ProctoringEvent(
         attempt_id=attempt_id,
@@ -1962,7 +1962,7 @@ def pause_attempt(
     )
     db.add(event)
     db.commit()
-    return Message(detail="Attempt paused")
+    return Message(detail=_t("attempt_paused"))
 
 
 @router.post("/{attempt_id}/resume", response_model=Message)
@@ -1973,7 +1973,7 @@ def resume_attempt(
 ):
     attempt = _attempt_or_forbidden(attempt_id, db, current)
     if attempt.status != AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=400, detail="Only in-progress attempts can be resumed")
+        raise HTTPException(status_code=400, detail=_t("only_in_progress_resume"))
 
     event = ProctoringEvent(
         attempt_id=attempt_id,
@@ -1985,7 +1985,7 @@ def resume_attempt(
     )
     db.add(event)
     db.commit()
-    return Message(detail="Attempt resumed")
+    return Message(detail=_t("attempt_resumed"))
 
 
 @router.get("/{attempt_id}/videos")
@@ -2022,7 +2022,7 @@ def list_exam_video_upload_status(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    exam_pk = parse_uuid_param(exam_id, detail="Exam not found")
+    exam_pk = parse_uuid_param(exam_id, detail=_t("exam_not_found"))
     filtered_attempt_pks: list[object] = []
     seen_attempt_ids: set[str] = set()
     for raw_attempt_ids in attempt_ids or []:
@@ -2034,7 +2034,7 @@ def list_exam_video_upload_status(
             filtered_attempt_pks.append(
                 parse_uuid_param(
                     normalized_attempt_id,
-                    detail="Invalid attempt id",
+                    detail=_t("invalid_attempt_id"),
                     status_code=400,
                 )
             )
@@ -2136,7 +2136,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
 
     # load attempt/exam for thresholds
     try:
-        attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+        attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     except HTTPException:
         await websocket.close(code=4404)
         db.close()
@@ -2170,10 +2170,10 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         return
     if payload.get("role") in {"ADMIN", "INSTRUCTOR"}:
         try:
-            actor_pk = parse_uuid_param(user_id, detail="User not found", status_code=403)
+            actor_pk = parse_uuid_param(user_id, detail=_t("user_not_found"), status_code=403)
             actor = db.get(User, actor_pk)
             if not actor:
-                raise HTTPException(status_code=403, detail="Insufficient permissions")
+                raise HTTPException(status_code=403, detail=_t("insufficient_permissions"))
             ensure_permission(db, actor, "View Attempt Analysis")
         except HTTPException:
             await websocket.close(code=4403)
@@ -3044,6 +3044,6 @@ def generate_report(
             headers={"Content-Disposition": f'attachment; filename="{filename_stub}.pdf"'},
         )
     if normalized_format != "html":
-        raise HTTPException(status_code=400, detail="Unsupported report format")
+        raise HTTPException(status_code=400, detail=_t("unsupported_report_format"))
     html_content = generate_html_report(db, attempt)
     return HTMLResponse(content=html_content, media_type="text/html")

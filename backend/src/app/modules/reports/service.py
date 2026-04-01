@@ -27,6 +27,7 @@ from ...services.audit import write_audit_log
 from ...services.email import send_email
 from ...services.integrations import send_report_integration_event
 from ...services.normalized_relations import exam_archived_at, exam_code, is_exam_pool_library
+from ...core.i18n import translate as _t
 from ...services.report_rendering import render_report_template
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from .repository import ReportRepository
@@ -174,7 +175,7 @@ class ReportService:
             self._write_predefined_audit(actor_id, slug)
             return self._csv_response(rows, f"{slug}_{ts}.csv")
 
-        raise HTTPException(status_code=404, detail="Unknown report slug")
+        raise HTTPException(status_code=404, detail=_t("unknown_report_slug"))
 
     def generate_test_report_csv(self, *, test_id: str, actor_id) -> StreamingResponse:
         _, exam = self._get_test_or_404(test_id)
@@ -260,7 +261,7 @@ class ReportService:
         story.append(Spacer(1, 12))
 
         if not attempts:
-            story.append(Paragraph("No attempts yet for this test.", styles["Normal"]))
+            story.append(Paragraph(_t("no_attempts_report"), styles["Normal"]))
         else:
             for attempt in attempts:
                 events = self.repository.scalars(
@@ -372,10 +373,10 @@ class ReportService:
         return self.repository.scalars(select(ReportSchedule).order_by(ReportSchedule.created_at.desc())).all()
 
     def get_report_schedule(self, schedule_id: str) -> ReportSchedule:
-        schedule_pk = parse_uuid_param(schedule_id, detail="Not found")
+        schedule_pk = parse_uuid_param(schedule_id, detail=_t("not_found"))
         schedule = self.repository.get(ReportSchedule, schedule_pk)
         if not schedule:
-            raise HTTPException(status_code=404, detail="Not found")
+            raise HTTPException(status_code=404, detail=_t("not_found"))
         return schedule
 
     def delete_report_schedule(self, *, schedule_id: str, actor_id) -> Message:
@@ -391,7 +392,7 @@ class ReportService:
             resource_id=schedule_id,
             detail=schedule_name,
         )
-        return Message(detail="Deleted")
+        return Message(detail=_t("deleted"))
 
     async def run_schedule_now(self, *, schedule_id: str, actor_id) -> ReportScheduleRunResult:
         schedule = self.get_report_schedule(schedule_id)
@@ -432,7 +433,7 @@ class ReportService:
 
     def _csv_response(self, rows: list[dict], filename: str, columns: list[str] | None = None) -> StreamingResponse:
         if not rows and not columns:
-            raise HTTPException(status_code=400, detail="No data to export")
+            raise HTTPException(status_code=400, detail=_t("no_data_to_export"))
         buffer = io.StringIO()
         writer = csv.DictWriter(buffer, fieldnames=columns or list(rows[0].keys()))
         writer.writeheader()
@@ -461,7 +462,7 @@ class ReportService:
     def _validate_custom_report_columns(self, dataset: str, requested: list[str]) -> tuple[list[str], list[str]]:
         allowed = CUSTOM_REPORT_DATASETS.get(dataset)
         if not allowed:
-            raise HTTPException(status_code=400, detail="Unknown dataset")
+            raise HTTPException(status_code=400, detail=_t("unknown_dataset"))
         normalized: list[str] = []
         seen = set()
         invalid: list[str] = []
@@ -475,7 +476,7 @@ class ReportService:
             seen.add(canonical)
             normalized.append(canonical)
         if invalid:
-            raise HTTPException(status_code=400, detail=f"Unsupported columns for {dataset}: {', '.join(invalid)}")
+            raise HTTPException(status_code=400, detail=_t("unsupported_columns", dataset=dataset, invalid=", ".join(invalid)))
         return normalized, allowed
 
     def _build_custom_report_rows(self, dataset: str, search: str | None = None) -> tuple[list[dict], list[str]]:
@@ -529,7 +530,7 @@ class ReportService:
                 for user in users
             ]
         else:
-            raise HTTPException(status_code=400, detail="Unknown dataset")
+            raise HTTPException(status_code=400, detail=_t("unknown_dataset"))
 
         query = (search or "").strip().lower()
         if query:
@@ -542,10 +543,10 @@ class ReportService:
         return [{column: row.get(column, "") for column in columns} for row in rows]
 
     def _get_test_or_404(self, exam_id: str) -> tuple[str, Exam]:
-        exam_pk = parse_uuid_param(exam_id, detail="Test not found")
+        exam_pk = parse_uuid_param(exam_id, detail=_t("test_not_found"))
         exam = self.repository.get(Exam, exam_pk)
         if not exam:
-            raise HTTPException(status_code=404, detail="Test not found")
+            raise HTTPException(status_code=404, detail=_t("test_not_found"))
         return exam_pk, exam
 
     def _load_attempt_report_events(self, attempts: list[Attempt]) -> None:
@@ -613,15 +614,15 @@ class ReportService:
     def _normalize_schedule_payload(self, body: ReportScheduleCreate) -> dict:
         name = str(body.name or "").strip()
         if not name:
-            raise HTTPException(status_code=400, detail="Schedule name is required")
+            raise HTTPException(status_code=400, detail=_t("schedule_name_required"))
 
         report_type = str(body.report_type or "").strip()
         if report_type not in REPORT_TYPES:
-            raise HTTPException(status_code=400, detail="Invalid report type")
+            raise HTTPException(status_code=400, detail=_t("invalid_report_type"))
 
         cron_value = str(body.schedule_cron or "").strip()
         if not cron_value:
-            raise HTTPException(status_code=400, detail="A valid cron schedule is required")
+            raise HTTPException(status_code=400, detail=_t("valid_cron_required"))
         self._validate_cron_expression(cron_value)
 
         return {
@@ -640,7 +641,7 @@ class ReportService:
             if not email:
                 continue
             if not EMAIL_RE.match(email):
-                raise HTTPException(status_code=400, detail=f"Invalid recipient email: {email}")
+                raise HTTPException(status_code=400, detail=_t("invalid_recipient_email", email=email))
             if email in seen:
                 continue
             seen.add(email)
@@ -708,11 +709,20 @@ class ReportService:
             }
             for attempt in attempts
         ]
+        labels = {
+            "attempt_id": _t("report_attempt_id"),
+            "test": _t("report_test"),
+            "user": _t("report_user"),
+            "score": _t("report_score"),
+            "status": _t("report_status"),
+            "no_attempts_found": _t("report_no_attempts_found"),
+        }
         return render_report_template(
             "attempt_summary.html",
             report_title="Attempt Summary Report",
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows=rows,
+            labels=labels,
         )
 
     def _render_risk_alerts_report(self, attempts: list[Attempt]) -> str:
@@ -730,11 +740,20 @@ class ReportService:
                     "medium_alerts": medium,
                 }
             )
+        labels = {
+            "attempt": _t("report_attempt"),
+            "user": _t("report_user"),
+            "test": _t("report_test"),
+            "high_alerts": _t("report_high_alerts"),
+            "medium_alerts": _t("report_medium_alerts"),
+            "no_alert_data": _t("report_no_alert_data"),
+        }
         return render_report_template(
             "risk_alerts.html",
             report_title="Risk Alerts Report",
             generated_at=datetime.now(timezone.utc).isoformat(),
             rows=rows,
+            labels=labels,
         )
 
     def _render_usage_report(self, attempts: list[Attempt]) -> str:

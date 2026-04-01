@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ...models import Notification
 from ...schemas import NotificationRead, Message
+from ...core.i18n import translate as _t
 from ..deps import get_current_user, get_db_dep, parse_uuid_param
 from ...utils.response_cache import TimedSingleFlightCache
 
@@ -19,15 +20,15 @@ def list_notifications(db: Session = Depends(get_db_dep), current=Depends(get_cu
 
 @router.post("/{notification_id}/read", response_model=Message)
 def mark_read(notification_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    notif_pk = parse_uuid_param(notification_id, detail="Not found")
+    notif_pk = parse_uuid_param(notification_id, detail=_t("not_found"))
     notif = db.get(Notification, notif_pk)
     if not notif or notif.user_id != current.id:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     notif.is_read = True
     db.add(notif)
     db.commit()
     _unread_count_cache.invalidate(str(current.id))
-    return Message(detail="Marked as read")
+    return Message(detail=_t("marked_as_read"))
 
 
 @router.post("/read-all", response_model=Message)
@@ -39,7 +40,7 @@ def mark_all_read(db: Session = Depends(get_db_dep), current=Depends(get_current
     )
     db.commit()
     _unread_count_cache.invalidate(str(current.id))
-    return Message(detail="All marked as read")
+    return Message(detail=_t("all_marked_as_read"))
 
 
 @router.get("/unread-count")

@@ -29,6 +29,7 @@ from .schemas import (
     UserRead,
 )
 from .service import AuthService
+from ...core.i18n import translate as _t
 
 
 router = APIRouter()
@@ -68,10 +69,9 @@ def signup(
     background: BackgroundTasks,
     service: AuthService = Depends(_service_from_db),
 ):
-    del request
     user = service.signup(body)
     background.add_task(_bg_send_welcome_email, user)
-    return Message(detail="Signup successful. Please check your email and log in.")
+    return Message(detail=_t("signup_successful", request))
 
 
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
@@ -129,17 +129,16 @@ def forgot_password(
     background: BackgroundTasks,
     service: AuthService = Depends(_service_from_db),
 ):
-    del request
     email_ready, email_error = get_email_delivery_status()
     if not email_ready:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=email_error or "Password reset is temporarily unavailable.",
+            detail=email_error or _t("password_reset", request),
         )
     user, token = service.prepare_password_reset(body)
     if user and token:
         background.add_task(_bg_send_password_reset_email, user, token)
-    return Message(detail="If the email exists, a reset link was sent")
+    return Message(detail=_t("reset_link_sent", request))
 
 
 @limiter.limit(settings.RATE_LIMIT_LOGIN)

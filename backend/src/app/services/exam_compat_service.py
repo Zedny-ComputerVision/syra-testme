@@ -26,6 +26,7 @@ from .normalized_relations import (
     set_exam_proctoring,
     set_exam_runtime_settings,
 )
+from ..core.i18n import translate as _t
 from .sanitization import sanitize_exam_payload
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ DEFAULT_PROCTORING = {
 
 def _assert_runtime_attempt_policy(settings: dict | None, max_attempts: int | None) -> None:
     if runtime_attempt_policy_conflicts(settings, max_attempts):
-        raise HTTPException(status_code=422, detail="Enable retakes or reduce max attempts to 1.")
+        raise HTTPException(status_code=422, detail=_t("enable_retakes_or_reduce"))
 
 
 def _scalars_all(db: Session, query):
@@ -306,10 +307,10 @@ def create_test(*, db: Session, body: ExamCreate, current) -> ExamRead:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="A test with this title already exists for this module")
+        raise HTTPException(status_code=409, detail=_t("title_already_exists_module"))
     except OperationalError as exc:
         db.rollback()
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise HTTPException(status_code=503, detail=_t("database_unavailable"))
     db.refresh(test)
     _invalidate_learner_exam_list_cache()
     return serialize_legacy_test(test)
@@ -318,10 +319,10 @@ def create_test(*, db: Session, body: ExamCreate, current) -> ExamRead:
 def get_test(*, db: Session, test_id: str, current) -> ExamRead:
     test = db.get(Exam, parse_test_id(test_id))
     if not test:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     if current.role == RoleEnum.LEARNER:
         if not learner_can_access_exam(db, test, current):
-            raise HTTPException(status_code=404, detail="Test not found")
+            raise HTTPException(status_code=404, detail=_t("test_not_found"))
     else:
         ensure_permission(db, current, "Edit Tests")
         ensure_exam_owner(test, current)
@@ -331,9 +332,9 @@ def get_test(*, db: Session, test_id: str, current) -> ExamRead:
 def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> ExamRead:
     test = db.get(Exam, parse_test_id(test_id))
     if not test:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
-        ensure_exam_owner(test, current, detail="Not allowed", status_code=403)
+        ensure_exam_owner(test, current, detail=_t("not_allowed"), status_code=403)
 
     data = sanitize_exam_payload(body.model_dump(exclude_unset=True))
     if not data:
@@ -355,7 +356,7 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
         if field == "node_id":
             node = db.get(Node, value)
             if not node:
-                raise HTTPException(status_code=404, detail="Node not found")
+                raise HTTPException(status_code=404, detail=_t("node_not_found"))
             test.node_id = value
             continue
         if field == "proctoring_config":
@@ -386,7 +387,7 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
     except Exception:
         db.rollback()
         logger.exception("Failed to update legacy test %s", test_id)
-        raise HTTPException(status_code=409, detail="Failed to update test due to a conflict")
+        raise HTTPException(status_code=409, detail=_t("failed_update_test_conflict"))
     db.refresh(test)
     _invalidate_learner_exam_list_cache()
     return serialize_legacy_test(test)
@@ -395,8 +396,8 @@ def update_test(*, db: Session, test_id: str, body: ExamUpdate, current) -> Exam
 def delete_test(*, db: Session, test_id: str, current) -> Message:
     test = db.get(Exam, parse_test_id(test_id))
     if not test:
-        raise HTTPException(status_code=404, detail="Test not found")
-    ensure_exam_owner(test, current, detail="Not allowed", status_code=403)
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
+    ensure_exam_owner(test, current, detail=_t("not_allowed"), status_code=403)
     try:
         db.delete(test)
         db.commit()
@@ -405,10 +406,10 @@ def delete_test(*, db: Session, test_id: str, current) -> Message:
         logger.exception("Failed to delete legacy test %s", test_id)
         raise HTTPException(
             status_code=409,
-            detail="Cannot delete test with existing attempts or schedules",
+            detail=_t("cannot_delete_test_attempts"),
         )
     _invalidate_learner_exam_list_cache()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))
 
 
 def serialize_legacy_test(test: Exam, *, qcount: int | None = None) -> ExamRead:
@@ -476,14 +477,14 @@ def _invalidate_learner_exam_list_cache() -> None:
 def assert_has_questions(db: Session, test_id) -> None:
     count = db.scalar(select(func.count()).select_from(Question).where(Question.exam_id == test_id))
     if not count:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Test must have at least one question before publishing")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_t("must_have_question_publish"))
 
 
 def parse_test_id(test_id: str) -> str:
     try:
         return str(UUID(test_id))
     except (TypeError, ValueError):
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
 
 
 def normalize_proctoring(config: dict | None) -> dict:
@@ -495,45 +496,45 @@ def normalize_proctoring(config: dict | None) -> dict:
 
 def _validate_create_payload(body: ExamCreate) -> None:
     if not body.title or not body.title.strip():
-        raise HTTPException(status_code=422, detail="Title is required")
+        raise HTTPException(status_code=422, detail=_t("title_required"))
     if body.time_limit is not None and body.time_limit <= 0:
-        raise HTTPException(status_code=422, detail="time_limit must be positive minutes")
+        raise HTTPException(status_code=422, detail=_t("time_limit_positive"))
     if body.time_limit is not None and body.time_limit > 600:
-        raise HTTPException(status_code=422, detail="time_limit exceeds maximum (600 minutes)")
+        raise HTTPException(status_code=422, detail=_t("time_limit_max"))
     if body.max_attempts is not None and body.max_attempts < 1:
-        raise HTTPException(status_code=422, detail="max_attempts must be at least 1")
+        raise HTTPException(status_code=422, detail=_t("max_attempts_min"))
     if body.passing_score is not None and not 0 <= body.passing_score <= 100:
-        raise HTTPException(status_code=422, detail="passing_score must be between 0 and 100")
+        raise HTTPException(status_code=422, detail=_t("passing_score_range"))
     if body.status == ExamStatus.OPEN:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Test must have at least one question before publishing")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_t("must_have_question_publish"))
 
 
 def _validate_update_payload(data: dict) -> None:
     if "title" in data and (data["title"] is None or not str(data["title"]).strip()):
-        raise HTTPException(status_code=422, detail="Title is required")
+        raise HTTPException(status_code=422, detail=_t("title_required"))
     if "title" in data:
         data["title"] = str(data["title"]).strip()
     if "time_limit" in data:
         time_limit = data["time_limit"]
         if time_limit is not None and time_limit <= 0:
-            raise HTTPException(status_code=422, detail="time_limit must be positive minutes")
+            raise HTTPException(status_code=422, detail=_t("time_limit_positive"))
         if time_limit is not None and time_limit > 600:
-            raise HTTPException(status_code=422, detail="time_limit exceeds maximum (600 minutes)")
+            raise HTTPException(status_code=422, detail=_t("time_limit_max"))
     if "max_attempts" in data:
         max_attempts = data["max_attempts"]
         if max_attempts is not None and max_attempts < 1:
-            raise HTTPException(status_code=422, detail="max_attempts must be at least 1")
+            raise HTTPException(status_code=422, detail=_t("max_attempts_min"))
     if "passing_score" in data:
         passing_score = data["passing_score"]
         if passing_score is not None and not 0 <= passing_score <= 100:
-            raise HTTPException(status_code=422, detail="passing_score must be between 0 and 100")
+            raise HTTPException(status_code=422, detail=_t("passing_score_range"))
 
 
 def _resolve_node(*, db: Session, node_id, actor, now: datetime) -> Node:
     if node_id:
         node = db.get(Node, node_id)
         if not node:
-            raise HTTPException(status_code=404, detail="Node not found")
+            raise HTTPException(status_code=404, detail=_t("node_not_found"))
         return node
 
     node = db.scalars(select(Node).order_by(Node.created_at)).first()

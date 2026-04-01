@@ -390,12 +390,12 @@ async def precheck(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
     nested_payload = payload.get("data") if isinstance(payload.get("data"), dict) else {}
 
@@ -510,18 +510,18 @@ async def precheck(
         selfie_b64 = _payload_value("selfie_b64")
         id_b64 = _payload_value("id_b64")
         if not selfie_b64 or not id_b64:
-            raise HTTPException(status_code=400, detail="Missing images")
+            raise HTTPException(status_code=400, detail=_t("missing_images"))
 
         try:
             selfie_bytes = _decode_b64(selfie_b64)
             id_bytes = _decode_b64(id_b64)
         except Exception:
-            raise HTTPException(status_code=400, detail="Invalid image data")
+            raise HTTPException(status_code=400, detail=_t("invalid_image_data"))
 
         selfie_img = cv2.imdecode(np.frombuffer(selfie_bytes, np.uint8), cv2.IMREAD_COLOR)
         id_img = cv2.imdecode(np.frombuffer(id_bytes, np.uint8), cv2.IMREAD_COLOR)
         if selfie_img is None or id_img is None:
-            raise HTTPException(status_code=400, detail="Unable to read images")
+            raise HTTPException(status_code=400, detail=_t("unable_read_images"))
 
         lighting_score = _brightness_score(selfie_img)
         lighting_ok = lighting_score >= lighting_min

@@ -10,6 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from ..core.i18n import translate as _t
 from ..api.deps import parse_uuid_param
 from ..models import Attempt, AttemptAnswer, Notification, RoleEnum, Schedule, User
 
@@ -19,10 +20,10 @@ EVIDENCE_DIR = BASE_STORAGE_DIR / "evidence"
 
 
 def export_user_data(*, db: Session, current: User, user_id: str) -> Response:
-    user_pk = parse_uuid_param(user_id, detail="User not found")
+    user_pk = parse_uuid_param(user_id, detail=_t("user_not_found"))
     target_user = db.get(User, user_pk)
     if not target_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_t("user_not_found"))
     ensure_export_access(current, target_user)
 
     attempts = db.scalars(
@@ -134,7 +135,7 @@ def ensure_export_access(current: User, target_user: User) -> None:
     if current.role == RoleEnum.ADMIN:
         return
     if current.id != target_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("not_allowed"))
 
 
 def file_metadata_from_path(value: str | None) -> dict | None:

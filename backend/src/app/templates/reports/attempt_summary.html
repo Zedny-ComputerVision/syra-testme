@@ -3,11 +3,11 @@
 <table>
   <thead>
     <tr>
-      <th>Attempt ID</th>
-      <th>Test</th>
-      <th>User</th>
-      <th>Score</th>
-      <th>Status</th>
+      <th>{{ labels.attempt_id }}</th>
+      <th>{{ labels.test }}</th>
+      <th>{{ labels.user }}</th>
+      <th>{{ labels.score }}</th>
+      <th>{{ labels.status }}</th>
     </tr>
   </thead>
   <tbody>
@@ -23,7 +23,7 @@
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="5">No attempts found.</td>
+        <td colspan="5">{{ labels.no_attempts_found }}</td>
       </tr>
     {% endif %}
   </tbody>

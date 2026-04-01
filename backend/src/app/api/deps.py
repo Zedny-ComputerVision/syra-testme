@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, load_only
 from ..core.config import get_settings
 from ..core.security import token_issued_at, verify_token
 from ..db.session import get_db
+from ..core.i18n import translate as _t
 from ..models import Exam, ExamStatus, RoleEnum, Schedule, SystemSettings, User
 
 security = HTTPBearer()
@@ -71,14 +72,14 @@ def get_current_user(
     try:
         payload = verify_token(token, expected_type="access")
     except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token"))
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token"))
     try:
         user_pk = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
     except (ValueError, TypeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token"))
 
     user = db.scalar(
         select(User)
@@ -96,20 +97,20 @@ def get_current_user(
         .where(User.id == user_pk)
     )
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("user_not_found"))
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("inactive_user"))
     issued_at = normalize_utc_datetime(token_issued_at(payload))
     cutoff = normalize_utc_datetime(getattr(user, "token_invalid_before", None))
     if issued_at is None or (cutoff is not None and issued_at < cutoff):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token"))
     return user
 
 
 def require_role(*roles: RoleEnum):
     def _wrapper(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("insufficient_permissions"))
         return user
 
     return _wrapper
@@ -140,7 +141,7 @@ def permission_defaults_enabled() -> bool:
 def _permissions_config_unavailable() -> None:
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Permissions configuration unavailable",
+        detail=_t("permissions_config_unavailable"),
     )
 
 
@@ -225,7 +226,7 @@ def permission_allowed(rows, role: RoleEnum | str | None, feature: str | None) -
 
 def ensure_permission(db: Session, user: User, feature: str):
     if not permission_allowed(load_permission_rows(db), user.role, feature):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("insufficient_permissions"))
 
 
 def exam_owned_by_user(exam: Exam | None, user: User | None) -> bool:
@@ -271,7 +272,7 @@ def require_permission(feature: str, *roles: RoleEnum):
         db: Session = Depends(get_db_dep),
     ) -> User:
         if roles and user.role not in roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("insufficient_permissions"))
         ensure_permission(db, user, feature)
         return user
 

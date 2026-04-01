@@ -7,6 +7,7 @@ from ...models import Category, Exam, RoleEnum
 from ...schemas import CategoryBase, CategoryRead, Message
 from ...services.audit import write_audit_log
 from ...services.sanitization import sanitize_plain_text
+from ...core.i18n import translate as _t
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -15,7 +16,7 @@ router = APIRouter()
 def _clean_required_text(value: str | None, field_name: str) -> str:
     cleaned = sanitize_plain_text((value or "").strip()) or ""
     if not cleaned:
-        raise HTTPException(status_code=422, detail=f"{field_name} is required")
+        raise HTTPException(status_code=422, detail=_t("field_required", field_name=field_name))
     return cleaned
 
 
@@ -29,7 +30,7 @@ def _ensure_unique_category_name(db: Session, name: str, existing_category_id=No
         select(Category).where(func.lower(Category.name) == name.lower())
     )
     if existing and getattr(existing, "id", None) != existing_category_id:
-        raise HTTPException(status_code=409, detail="Category exists")
+        raise HTTPException(status_code=409, detail=_t("category_exists"))
 
 
 def _normalize_category_payload(body: CategoryBase) -> dict:
@@ -55,7 +56,7 @@ def create_category(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Category exists")
+        raise HTTPException(status_code=409, detail=_t("category_exists"))
     db.refresh(cat)
     write_audit_log(
         db,
@@ -76,10 +77,10 @@ def list_categories(db: Session = Depends(get_db_dep), current=Depends(require_p
 
 @router.get("/{category_id}", response_model=CategoryRead)
 def get_category(category_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    category_pk = parse_uuid_param(category_id, detail="Not found")
+    category_pk = parse_uuid_param(category_id, detail=_t("not_found"))
     cat = db.get(Category, category_pk)
     if not cat:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     return cat
 
 
@@ -91,10 +92,10 @@ def update_category(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    category_pk = parse_uuid_param(category_id, detail="Not found")
+    category_pk = parse_uuid_param(category_id, detail=_t("not_found"))
     cat = db.get(Category, category_pk)
     if not cat:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     payload = _normalize_category_payload(body)
     _ensure_unique_category_name(db, payload["name"], existing_category_id=cat.id)
     for field, value in payload.items():
@@ -104,7 +105,7 @@ def update_category(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Category name already exists")
+        raise HTTPException(status_code=409, detail=_t("category_name_exists"))
     db.refresh(cat)
     write_audit_log(
         db,
@@ -125,13 +126,13 @@ def delete_category(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Categories", RoleEnum.ADMIN)),
 ):
-    category_pk = parse_uuid_param(category_id, detail="Not found")
+    category_pk = parse_uuid_param(category_id, detail=_t("not_found"))
     cat = db.get(Category, category_pk)
     if not cat:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     usage = db.scalar(select(func.count(Exam.id)).where(Exam.category_id == cat.id)) or 0
     if usage:
-        raise HTTPException(status_code=409, detail="Cannot delete a category assigned to existing tests")
+        raise HTTPException(status_code=409, detail=_t("cannot_delete_cat_assigned"))
     category_name = cat.name
     category_pk_str = str(cat.id)
     db.delete(cat)
@@ -145,4 +146,4 @@ def delete_category(
         detail=f"Deleted category: {category_name}",
         ip_address=getattr(getattr(request, "client", None), "host", None),
     )
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))

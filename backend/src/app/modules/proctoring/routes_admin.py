@@ -36,6 +36,7 @@ from ...models import (
 )
 from ...schemas import PaginatedResponse, ProctoringEventRead
 from ...utils.pagination import MAX_PAGE_SIZE, normalize_pagination
+from ...core.i18n import translate as _t
 from .routes_public import _build_attempt_proctoring_summary, _is_summary_alert_event
 
 router = APIRouter()
@@ -50,7 +51,7 @@ class ProctoringSessionSummary:
 def _owned_exam_or_404(db: Session, exam_id: UUID | str, current: User) -> Exam:
     exam = db.get(Exam, exam_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     ensure_exam_owner(exam, current)
     return exam
 
@@ -186,7 +187,7 @@ def get_session_summary(
     pk = parse_uuid_param(attempt_id)
     attempt = db.get(Attempt, pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _owned_exam_or_404(db, attempt.exam_id, current)
 
     events = (
@@ -249,7 +250,7 @@ def export_session_events(
     pk = parse_uuid_param(attempt_id)
     attempt = db.get(Attempt, pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _owned_exam_or_404(db, attempt.exam_id, current)
 
     events = (
@@ -414,11 +415,11 @@ async def force_submit_attempt(
     pk = parse_uuid_param(attempt_id)
     attempt = db.get(Attempt, pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _owned_exam_or_404(db, attempt.exam_id, current)
 
     if attempt.status == AttemptStatus.SUBMITTED:
-        raise HTTPException(status_code=409, detail="Attempt already submitted")
+        raise HTTPException(status_code=409, detail=_t("attempt_already_submitted"))
 
     _auto_submit_attempt(
         db,
@@ -434,7 +435,7 @@ async def force_submit_attempt(
         "detail": "Attempt was force-submitted by an administrator.",
     })
 
-    return {"detail": "Attempt force-submitted", "attempt_id": str(pk)}
+    return {"detail": _t("force_submitted"), "attempt_id": str(pk)}
 
 
 # ── Live Monitoring ───────────────────────────────────────────────────────────

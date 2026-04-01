@@ -7,6 +7,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from ..core.config import get_settings
+from ..core.i18n import translate as _t
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def _html_wrapper(preheader: str, body_html: str) -> str:
   </div>
   <div class="body">{body_html}</div>
   <div class="footer">
-    &copy; SYRA LMS &nbsp;&bull;&nbsp; This is an automated message, please do not reply.
+    &copy; SYRA LMS &nbsp;&bull;&nbsp; {_t("email_footer")}
   </div>
 </div>
 </body></html>"""
@@ -179,16 +180,16 @@ async def send_welcome_email(user):
     frontend = (settings.FRONTEND_BASE_URL or "http://localhost:5173").rstrip("/")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
-<p>Welcome to <strong>SYRA LMS</strong>! Your account has been created successfully.</p>
-<p>You can now log in and start taking your exams.</p>
-<a href="{frontend}/login" class="btn">Log In Now</a>
+<p>{_t("email_welcome_greeting")}</p>
+<p>{_t("email_welcome_body")}</p>
+<a href="{frontend}/login" class="btn">{_t("email_welcome_button")}</a>
 <hr class="divider">
-<p class="note">If you did not create this account, you can safely ignore this email.</p>
+<p class="note">{_t("email_welcome_ignore")}</p>
 """
     await send_email(
-        subject="Welcome to SYRA LMS — Your account is ready",
+        subject=_t("email_welcome_subject"),
         to=user.email,
-        content=_html_wrapper("Your SYRA LMS account has been created.", body),
+        content=_html_wrapper(_t("email_welcome_preheader"), body),
     )
 
 
@@ -196,15 +197,15 @@ async def send_admin_setup_email(admin):
     name = html_mod.escape(getattr(admin, "name", None) or "Admin")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
-<p>Your <strong>SYRA LMS</strong> admin account has been set up successfully.</p>
-<p>You have full administrative access to manage exams, users, and system settings.</p>
+<p>{_t("email_admin_greeting")}</p>
+<p>{_t("email_admin_body")}</p>
 <hr class="divider">
-<p class="note">This message was generated automatically during initial system setup.</p>
+<p class="note">{_t("email_admin_footer")}</p>
 """
     await send_email(
-        subject="SYRA LMS — Admin account ready",
+        subject=_t("email_admin_subject"),
         to=admin.email,
-        content=_html_wrapper("Your admin account is ready.", body),
+        content=_html_wrapper(_t("email_admin_preheader"), body),
     )
 
 
@@ -212,13 +213,13 @@ async def send_password_changed_email(user):
     name = html_mod.escape(getattr(user, "name", None) or "there")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
-<p>Your <strong>SYRA LMS</strong> password was changed successfully.</p>
-<p>If you did not make this change, please contact your administrator immediately.</p>
+<p>{_t("email_pwd_changed_body")}</p>
+<p>{_t("email_pwd_changed_warning")}</p>
 """
     await send_email(
-        subject="SYRA LMS — Password changed",
+        subject=_t("email_pwd_changed_subject"),
         to=user.email,
-        content=_html_wrapper("Your password was changed.", body),
+        content=_html_wrapper(_t("email_pwd_changed_preheader"), body),
     )
 
 
@@ -228,16 +229,16 @@ async def send_password_reset_email(user, token: str):
     reset_link = f"{base}/reset-password?token={token}"
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
-<p>We received a request to reset your <strong>SYRA LMS</strong> password.</p>
-<p>Click the button below to choose a new password. This link expires in 60 minutes.</p>
-<a href="{reset_link}" class="btn">Reset My Password</a>
+<p>{_t("email_pwd_reset_intro")}</p>
+<p>{_t("email_pwd_reset_body")}</p>
+<a href="{reset_link}" class="btn">{_t("email_pwd_reset_button")}</a>
 <hr class="divider">
-<p class="note">If you didn't request a password reset, you can safely ignore this email — your password will not be changed.</p>
+<p class="note">{_t("email_pwd_reset_ignore")}</p>
 """
     await send_email(
-        subject="SYRA LMS — Reset your password",
+        subject=_t("email_pwd_reset_subject"),
         to=user.email,
-        content=_html_wrapper("Reset your SYRA LMS password.", body),
+        content=_html_wrapper(_t("email_pwd_reset_preheader"), body),
     )
 
 
@@ -247,14 +248,14 @@ async def send_exam_scheduled_email(user, exam, schedule):
     scheduled_at = getattr(schedule, "scheduled_at", "")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
-<p>Your exam <strong>{title}</strong> has been scheduled.</p>
-<p><strong>Date &amp; Time:</strong> {scheduled_at}</p>
-<p>Please make sure you are ready before your scheduled time.</p>
+<p>{_t("email_scheduled_body")} <strong>{title}</strong></p>
+<p><strong>{_t("email_scheduled_datetime", scheduled_at=scheduled_at)}</strong></p>
+<p>{_t("email_scheduled_ready")}</p>
 """
     await send_email(
-        subject=f"SYRA LMS — Exam scheduled: {title}",
+        subject=_t("email_scheduled_subject", title=title),
         to=user.email,
-        content=_html_wrapper(f"Your exam {title} is scheduled.", body),
+        content=_html_wrapper(_t("email_scheduled_preheader", title=title), body),
     )
 
 
@@ -263,13 +264,13 @@ async def send_attempt_submitted_email(user, attempt):
     attempt_id = getattr(attempt, "id", "")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
-<p>Your exam attempt has been submitted successfully.</p>
-<p>Your results will be available once grading is complete.</p>
+<p>{_t("email_submitted_body")}</p>
+<p>{_t("email_submitted_results")}</p>
 <hr class="divider">
-<p class="note">Attempt reference: {attempt_id}</p>
+<p class="note">{_t("email_submitted_ref", attempt_id=attempt_id)}</p>
 """
     await send_email(
-        subject="SYRA LMS — Attempt submitted",
+        subject=_t("email_submitted_subject"),
         to=user.email,
-        content=_html_wrapper("Your attempt was submitted.", body),
+        content=_html_wrapper(_t("email_submitted_preheader"), body),
     )

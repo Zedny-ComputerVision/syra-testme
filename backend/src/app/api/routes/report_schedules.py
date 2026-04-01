@@ -2,6 +2,7 @@ import inspect
 
 from fastapi import HTTPException
 
+from ...core.i18n import translate as _t
 from ...api.deps import parse_uuid_param
 from ...models import ReportSchedule
 from ...modules.reports.repository import ReportRepository
@@ -45,10 +46,10 @@ async def run_schedule_now(
     db=None,
     current=None,
 ):
-    schedule_pk = parse_uuid_param(schedule_id, detail="Not found")
+    schedule_pk = parse_uuid_param(schedule_id, detail=_t("not_found"))
     schedule = db.get(ReportSchedule, schedule_pk) if db is not None else None
     if not schedule:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
 
     artifact = run_report_schedule(db, schedule)
     if inspect.isawaitable(artifact):

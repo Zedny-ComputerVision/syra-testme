@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ...models import Attempt, Course, CourseStatus, Exam, Node, RoleEnum
 from ...schemas import NodeCreate, NodeRead, NodeBase, Message
 from ...services.sanitization import sanitize_plain_text
+from ...core.i18n import translate as _t
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -16,9 +17,9 @@ router = APIRouter()
 def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     course = db.get(Course, body.course_id)
     if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(status_code=404, detail=_t("course_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and course.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     now = datetime.now(timezone.utc)
     node = Node(course_id=body.course_id, title=sanitize_plain_text(body.title) or body.title, order=body.order, created_at=now, updated_at=now)
     db.add(node)
@@ -31,7 +32,7 @@ def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), current=Dep
 def list_nodes(course_id: str | None = None, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = select(Node)
     if course_id:
-        course_pk = parse_uuid_param(course_id, detail="Invalid course_id")
+        course_pk = parse_uuid_param(course_id, detail=_t("invalid_course_id"))
         query = query.where(Node.course_id == course_pk)
     if current.role == RoleEnum.LEARNER:
         query = query.join(Course, Node.course_id == Course.id).where(Course.status == CourseStatus.PUBLISHED)
@@ -43,12 +44,12 @@ def list_nodes(course_id: str | None = None, db: Session = Depends(get_db_dep), 
 
 @router.get("/{node_id}", response_model=NodeRead)
 def get_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    node_pk = parse_uuid_param(node_id, detail="Node not found")
+    node_pk = parse_uuid_param(node_id, detail=_t("node_not_found"))
     node = db.get(Node, node_pk)
     if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
+        raise HTTPException(status_code=404, detail=_t("node_not_found"))
     if current.role == RoleEnum.LEARNER and node.course and node.course.status != CourseStatus.PUBLISHED:
-        raise HTTPException(status_code=404, detail="Node not found")
+        raise HTTPException(status_code=404, detail=_t("node_not_found"))
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
     return node
@@ -56,12 +57,12 @@ def get_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(ge
 
 @router.put("/{node_id}", response_model=NodeRead)
 def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    node_pk = parse_uuid_param(node_id, detail="Node not found")
+    node_pk = parse_uuid_param(node_id, detail=_t("node_not_found"))
     node = db.get(Node, node_pk)
     if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
+        raise HTTPException(status_code=404, detail=_t("node_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and (not node.course or node.course.created_by_id != current.id):
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     node.title = sanitize_plain_text(body.title) or body.title
     node.order = body.order
     node.updated_at = datetime.now(timezone.utc)
@@ -73,12 +74,12 @@ def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db_dep),
 
 @router.delete("/{node_id}", response_model=Message)
 def delete_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    node_pk = parse_uuid_param(node_id, detail="Node not found")
+    node_pk = parse_uuid_param(node_id, detail=_t("node_not_found"))
     node = db.get(Node, node_pk)
     if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
+        raise HTTPException(status_code=404, detail=_t("node_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and (not node.course or node.course.created_by_id != current.id):
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     attempt_count = int(
         db.scalar(
             select(func.count(Attempt.id))
@@ -91,8 +92,8 @@ def delete_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends
     if attempt_count:
         raise HTTPException(
             status_code=409,
-            detail="Cannot delete a node that has learner attempts",
+            detail=_t("cannot_delete_node_attempts"),
         )
     db.delete(node)
     db.commit()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))

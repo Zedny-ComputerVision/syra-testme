@@ -9,6 +9,7 @@ from ...models import SystemSettings, RoleEnum
 from ...schemas import SystemSettingRead, SystemSettingUpdate, Message
 from ...services.audit import write_audit_log
 from ...utils.response_cache import TimedSingleFlightCache
+from ...core.i18n import translate as _t
 from ..deps import (
     DEFAULT_PERMISSION_ROWS,
     canonicalize_permission_rows,
@@ -50,13 +51,13 @@ def _normalize_permissions_config(raw_value: str | None) -> str:
     try:
         parsed = [] if not raw_value else json.loads(raw_value)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON for permissions_config")
+        raise HTTPException(status_code=400, detail=_t("invalid_json_permissions"))
     if not isinstance(parsed, list):
-        raise HTTPException(status_code=400, detail="permissions_config must be a list")
+        raise HTTPException(status_code=400, detail=_t("permissions_must_be_list"))
     normalized = []
     for row in parsed:
         if not isinstance(row, dict) or not str(row.get("feature") or "").strip():
-            raise HTTPException(status_code=400, detail="Each permissions_config row must include a feature")
+            raise HTTPException(status_code=400, detail=_t("permissions_row_feature"))
         normalized.append({
             "feature": normalize_feature(str(row.get("feature")).strip()),
             "admin": bool(row.get("admin")),
@@ -128,7 +129,7 @@ def _get_or_create_permissions_setting(db: Session):
     if setting:
         return setting
     if not permission_defaults_enabled():
-        raise HTTPException(status_code=503, detail="Permissions configuration unavailable")
+        raise HTTPException(status_code=503, detail=_t("permissions_config_unavailable"))
     setting = SystemSettings(key=PERMISSIONS_CONFIG_KEY, value=json.dumps(DEFAULT_PERMISSION_ROWS))
     db.add(setting)
     db.commit()
@@ -140,9 +141,9 @@ def _normalize_integrations_config(raw_value: str | None) -> str:
     try:
         parsed = {} if not raw_value else json.loads(raw_value)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON for integrations_config")
+        raise HTTPException(status_code=400, detail=_t("invalid_json_integrations"))
     if not isinstance(parsed, dict):
-        raise HTTPException(status_code=400, detail="integrations_config must be an object")
+        raise HTTPException(status_code=400, detail=_t("integrations_must_be_object"))
 
     normalized = {}
     for name, cfg in parsed.items():
@@ -170,7 +171,7 @@ def list_settings(db: Session = Depends(get_db_dep), current=Depends(get_current
     can_system_settings = permission_allowed(rows, current.role, "System Settings")
     can_manage_roles = permission_allowed(rows, current.role, "Manage Roles")
     if not can_system_settings and not can_manage_roles:
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
+        raise HTTPException(status_code=403, detail=_t("insufficient_permissions"))
     if not can_system_settings:
         return [_get_or_create_permissions_setting(db)]
     return db.scalars(select(SystemSettings)).all()
@@ -183,7 +184,7 @@ def get_setting(key: str, db: Session = Depends(get_db_dep), current=Depends(get
         return _get_or_create_permissions_setting(db)
     setting = db.scalar(select(SystemSettings).where(SystemSettings.key == key))
     if not setting:
-        raise HTTPException(status_code=404, detail="Setting not found")
+        raise HTTPException(status_code=404, detail=_t("setting_not_found"))
     return setting
 
 
@@ -196,9 +197,9 @@ def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depends(ge
         try:
             parsed = [] if not body.value else json.loads(body.value)
         except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON for subscribers")
+            raise HTTPException(status_code=400, detail=_t("invalid_json_subscribers"))
         if not isinstance(parsed, list):
-            raise HTTPException(status_code=400, detail="subscribers must be a list")
+            raise HTTPException(status_code=400, detail=_t("subscribers_must_be_list"))
         normalized = []
         seen = set()
         for raw in parsed:
@@ -206,7 +207,7 @@ def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depends(ge
             if not email:
                 continue
             if not EMAIL_RE.match(email):
-                raise HTTPException(status_code=400, detail=f"Invalid subscriber email: {email}")
+                raise HTTPException(status_code=400, detail=_t("invalid_recipient_email", email=email))
             if email in seen:
                 continue
             seen.add(email)
@@ -215,12 +216,12 @@ def update_setting(key: str, body: SystemSettingUpdate, db: Session = Depends(ge
     elif key == "allow_signup":
         normalized = str(body.value or "").strip().lower()
         if normalized not in {"true", "false", "1", "0", "yes", "no"}:
-            raise HTTPException(status_code=400, detail="allow_signup must be true or false")
+            raise HTTPException(status_code=400, detail=_t("allow_signup_bool"))
         body = SystemSettingUpdate(value="true" if normalized in {"true", "1", "yes"} else "false")
     elif key == "maintenance_mode":
         normalized = str(body.value or "").strip().lower()
         if normalized not in MAINTENANCE_MODES:
-            raise HTTPException(status_code=400, detail="Invalid maintenance mode")
+            raise HTTPException(status_code=400, detail=_t("invalid_maintenance_mode"))
         body = SystemSettingUpdate(value=normalized)
     elif key == PERMISSIONS_CONFIG_KEY:
         body = SystemSettingUpdate(value=_normalize_permissions_config(body.value))
@@ -250,7 +251,7 @@ def maintenance_public(db: Session = Depends(get_db_dep)):
         mode = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_mode"))
         banner = db.scalar(select(SystemSettings).where(SystemSettings.key == "maintenance_banner"))
         if not mode and not permission_defaults_enabled():
-            raise HTTPException(status_code=503, detail="Maintenance configuration unavailable")
+            raise HTTPException(status_code=503, detail=_t("maintenance_config_unavailable"))
         return {
             "mode": mode.value if mode else "off",
             "banner": banner.value if banner else "",

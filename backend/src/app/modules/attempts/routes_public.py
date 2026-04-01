@@ -58,6 +58,7 @@ from ...services.notifications import notify_user
 from ...services.supabase_storage import upload_bytes as upload_bytes_to_supabase
 from ...modules.tests.proctoring_requirements import get_proctoring_requirements
 from ...utils.response_cache import TimedSingleFlightCache
+from ...core.i18n import translate as _t
 from ...utils.pagination import MAX_PAGE_SIZE, build_page_response, clamp_sort_field, normalize_pagination
 
 router = APIRouter()
@@ -657,23 +658,23 @@ def _exam_schedule_for_user(db: Session, exam_id, user_id):
 
 def _enforce_attempt_access(db: Session, exam: Exam, current: User):
     if current.role != RoleEnum.LEARNER:
-        ensure_exam_owner(exam, current, detail="Not allowed", status_code=status.HTTP_403_FORBIDDEN)
+        ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
         return None
     if exam.status != ExamStatus.OPEN:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
 
     now = normalize_utc_datetime(datetime.now(timezone.utc))
     user_schedule = _exam_schedule_for_user(db, exam.id, current.id)
     if not user_schedule:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not assigned to this test",
+            detail=_t("not_assigned_to_test"),
         )
     scheduled_at = normalize_utc_datetime(getattr(user_schedule, "scheduled_at", None))
     if scheduled_at and now and scheduled_at > now:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This test is not yet available",
+            detail=_t("test_not_yet_available"),
         )
     return user_schedule
 
@@ -681,11 +682,11 @@ def _enforce_attempt_access(db: Session, exam: Exam, current: User):
 def _ensure_attempt_access(db: Session, attempt: Attempt, current: User):
     if current.role == RoleEnum.LEARNER:
         if attempt.user_id != current.id:
-            raise HTTPException(status_code=403, detail="Not allowed")
+            raise HTTPException(status_code=403, detail=_t("not_allowed"))
         return
     ensure_permission(db, current, "View Attempt Analysis")
     exam = attempt.exam or db.get(Exam, attempt.exam_id)
-    ensure_exam_owner(exam, current, detail="Not allowed", status_code=status.HTTP_403_FORBIDDEN)
+    ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
 
 
 def _evaluate_answer(question: Question, submitted_answer):
@@ -969,9 +970,9 @@ def _apply_admin_grade(attempt: Attempt, *, score: float, db: Session, graded_by
     from ...services.audit import write_audit_log
 
     if score < 0 or score > 100:
-        raise HTTPException(status_code=422, detail="Score must be between 0 and 100")
+        raise HTTPException(status_code=422, detail=_t("score_range_error"))
     if attempt.status == AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=400, detail="Attempt must be submitted before grading")
+        raise HTTPException(status_code=400, detail=_t("attempt_must_be_submitted"))
 
     previous_score = attempt.score
     if attempt.submitted_at is None:
@@ -1084,14 +1085,14 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
         ).all()
         count = len(existing_attempts)
         if count >= exam.max_attempts:
-            raise HTTPException(status_code=400, detail="Max attempts reached")
+            raise HTTPException(status_code=400, detail=_t("max_attempts_reached"))
 
         runtime_settings = _runtime_settings(exam)
         completed_attempts = [attempt for attempt in existing_attempts if attempt.status in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}]
         if completed_attempts:
             allow_retake = bool(runtime_settings.get("allow_retake"))
             if not allow_retake:
-                raise HTTPException(status_code=400, detail="Retakes are disabled for this test")
+                raise HTTPException(status_code=400, detail=_t("retakes_disabled"))
 
             cooldown_raw = runtime_settings.get("retake_cooldown_hours")
             try:
@@ -1113,7 +1114,7 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
                 now = normalize_utc_datetime(datetime.now(timezone.utc))
                 if now and now < available_at:
                     wait_minutes = max(1, int((available_at - now).total_seconds() // 60) + (1 if (available_at - now).total_seconds() % 60 else 0))
-                    raise HTTPException(status_code=400, detail=f"Retake available in {wait_minutes} minute(s)")
+                    raise HTTPException(status_code=400, detail=_t("retake_available_in", wait_minutes=wait_minutes))
     now = datetime.now(timezone.utc)
     attempt = Attempt(
         exam_id=exam.id,
@@ -1128,7 +1129,7 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Could not create attempt — please try again")
+        raise HTTPException(status_code=409, detail=_t("could_not_create_attempt"))
     db.refresh(attempt)
     # Post-commit guard: if a concurrent request snuck past the pre-check,
     # verify we haven't exceeded max_attempts and roll back if so.
@@ -1142,7 +1143,7 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
         if post_count and post_count > exam.max_attempts:
             db.delete(attempt)
             db.commit()
-            raise HTTPException(status_code=400, detail="Max attempts reached")
+            raise HTTPException(status_code=400, detail=_t("max_attempts_reached"))
     return attempt
 
 
@@ -1150,7 +1151,7 @@ def _create_attempt_record(db: Session, exam: Exam, current: User) -> Attempt:
 def create_attempt(body: AttemptCreate, db: Session = Depends(get_db_dep), current=Depends(require_role(RoleEnum.LEARNER, RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     exam = db.get(Exam, body.exam_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     attempt = _create_attempt_record(db, exam, current)
     return _build_attempt_read(attempt, db=db)
 
@@ -1163,7 +1164,7 @@ def resolve_attempt(
 ):
     exam = db.get(Exam, body.exam_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
     _enforce_attempt_access(db, exam, current)
     reusable = db.scalars(
         select(Attempt)
@@ -1331,10 +1332,10 @@ def get_attempt(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _ensure_attempt_access(db, attempt, current)
     violation_counts = _violation_counts_by_attempt(db, [attempt.id]).get(str(attempt.id), {})
     return _build_attempt_read(
@@ -1353,30 +1354,30 @@ def submit_answer(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = _load_attempt_for_update(db, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _ensure_attempt_access(db, attempt, current)
     if attempt.status != AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=409, detail="Cannot modify answers on a submitted attempt")
+        raise HTTPException(status_code=409, detail=_t("cannot_modify_submitted"))
     if _attempt_is_paused(db, attempt_pk):
-        raise HTTPException(status_code=409, detail="Attempt is paused")
+        raise HTTPException(status_code=409, detail=_t("attempt_is_paused"))
     # Server-side identity verification enforcement
     proctoring_payload = exam_proctoring(attempt.exam) if attempt.exam else None
     exam_requirements = get_proctoring_requirements(proctoring_payload)
     if exam_requirements["identity_required"] and not (attempt.id_verified or attempt.identity_verified):
-        raise HTTPException(status_code=403, detail="Identity verification is required before answering questions")
+        raise HTTPException(status_code=403, detail=_t("identity_verification_required"))
     # Server-side time limit enforcement
     time_limit = getattr(attempt.exam, "time_limit", None) if attempt.exam else None
     if time_limit and attempt.started_at:
         deadline = attempt.started_at + timedelta(minutes=time_limit)
         if datetime.now(timezone.utc) > deadline + timedelta(seconds=30):
-            raise HTTPException(status_code=409, detail="Time limit exceeded")
+            raise HTTPException(status_code=409, detail=_t("time_limit_exceeded"))
     # Verify the question belongs to this attempt's exam
     question = db.get(Question, body.question_id)
     if not question or question.exam_id != attempt.exam_id:
-        raise HTTPException(status_code=400, detail="Question does not belong to this exam")
+        raise HTTPException(status_code=400, detail=_t("question_not_in_exam"))
     persisted_answer = _persistable_answer(body.answer)
     ans = db.scalar(
         select(AttemptAnswer).where(
@@ -1419,10 +1420,10 @@ def list_attempt_answers(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _ensure_attempt_access(db, attempt, current)
     answers = db.scalars(
         select(AttemptAnswer)
@@ -1443,23 +1444,23 @@ def submit_attempt(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = _load_attempt_for_update(db, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _ensure_attempt_access(db, attempt, current)
     if attempt.status in {AttemptStatus.SUBMITTED, AttemptStatus.GRADED}:
-        raise HTTPException(status_code=400, detail="Attempt already submitted")
+        raise HTTPException(status_code=400, detail=_t("attempt_already_submitted"))
     if attempt.status != AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=400, detail="Attempt cannot be submitted in its current state")
+        raise HTTPException(status_code=400, detail=_t("cannot_submit_current_state"))
     if _attempt_is_paused(db, attempt_pk):
-        raise HTTPException(status_code=409, detail="Attempt is paused")
+        raise HTTPException(status_code=409, detail=_t("attempt_is_paused"))
     # Server-side time limit enforcement (same as submit_answer, with 30s grace)
     time_limit = getattr(attempt.exam, "time_limit", None) if attempt.exam else None
     if time_limit and attempt.started_at:
         deadline = attempt.started_at + timedelta(minutes=time_limit)
         if datetime.now(timezone.utc) > deadline + timedelta(seconds=30):
-            raise HTTPException(status_code=409, detail="Time limit exceeded")
+            raise HTTPException(status_code=409, detail=_t("time_limit_exceeded"))
     proctoring_payload = exam_proctoring(attempt.exam) if attempt.exam else None
     exam_requirements = get_proctoring_requirements(proctoring_payload)
     exam_requires_verification = exam_requirements["identity_required"]
@@ -1467,7 +1468,7 @@ def submit_attempt(
         exam_requires_verification
         and not (attempt.id_verified or attempt.identity_verified)
     ):
-        raise HTTPException(status_code=400, detail="Pre-test verification required")
+        raise HTTPException(status_code=400, detail=_t("pre_test_verification_required"))
     if current.role == RoleEnum.LEARNER:
         score = None  # learners cannot grade
     elif score is not None:
@@ -1508,10 +1509,10 @@ def grade_attempt(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     graded = _apply_admin_grade(attempt, score=score, db=db, graded_by=current)
     _invalidate_attempt_list_cache()
     _notify_attempt_result(db, graded, result_kind="graded")
@@ -1526,13 +1527,13 @@ def review_attempt_answer(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
-    answer_pk = parse_uuid_param(answer_id, detail="Attempt answer not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
+    answer_pk = parse_uuid_param(answer_id, detail=_t("attempt_answer_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     if attempt.status == AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=400, detail="Attempt must be submitted before review")
+        raise HTTPException(status_code=400, detail=_t("attempt_must_be_submitted_review"))
 
     answer = db.scalar(
         select(AttemptAnswer).where(
@@ -1541,18 +1542,18 @@ def review_attempt_answer(
         )
     )
     if not answer:
-        raise HTTPException(status_code=404, detail="Attempt answer not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_answer_not_found"))
 
     question = answer.question
     if not question:
-        raise HTTPException(status_code=404, detail="Question not found")
+        raise HTTPException(status_code=404, detail=_t("question_not_found"))
     if not _question_requires_manual_review(question, answer.answer):
-        raise HTTPException(status_code=400, detail="Only manual-review answers can be reviewed")
+        raise HTTPException(status_code=400, detail=_t("only_manual_review"))
 
     max_points = float(question.points or 0)
     points_earned = round(float(body.points_earned), 2)
     if points_earned < 0 or points_earned > max_points:
-        raise HTTPException(status_code=422, detail=f"Points must be between 0 and {max_points:g}")
+        raise HTTPException(status_code=422, detail=_t("points_range_error", max_points=f"{max_points:g}"))
 
     answer.points_earned = points_earned
     answer.is_correct = None
@@ -1570,19 +1571,19 @@ def finalize_attempt_review(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     if attempt.status == AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=400, detail="Attempt must be submitted before review")
+        raise HTTPException(status_code=400, detail=_t("attempt_must_be_submitted_review"))
 
     _backfill_auto_graded_answers(attempt, db)
     progress = _calculate_attempt_review_progress(attempt, db)
     if progress["manual_total"] > 0 and progress["pending_manual_review"]:
-        raise HTTPException(status_code=409, detail="Review all manual answers before finalizing")
+        raise HTTPException(status_code=409, detail=_t("review_all_manual"))
     if progress["score"] is None:
-        raise HTTPException(status_code=400, detail="Attempt score could not be finalized")
+        raise HTTPException(status_code=400, detail=_t("attempt_score_not_finalized"))
 
     attempt.score = progress["score"]
     attempt.grade = progress.get("grade")
@@ -1604,22 +1605,22 @@ def review_attempt_certificate(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("View Attempt Analysis", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     if attempt.status == AttemptStatus.IN_PROGRESS:
-        raise HTTPException(status_code=400, detail="Attempt must be submitted before certificate review")
+        raise HTTPException(status_code=400, detail=_t("attempt_must_be_submitted_cert"))
 
     certificate = exam_certificate(attempt.exam) if attempt.exam else None
     if not certificate:
-        raise HTTPException(status_code=400, detail="Certificate not configured for this test")
+        raise HTTPException(status_code=400, detail=_t("cert_not_configured"))
     if normalize_certificate_issue_rule(certificate.get("issue_rule")) != "AFTER_PROCTORING_REVIEW":
-        raise HTTPException(status_code=400, detail="This certificate does not require a proctoring review decision")
+        raise HTTPException(status_code=400, detail=_t("cert_no_proctoring_review"))
 
     pending_manual_review = _pending_manual_review_for_attempt(attempt, db)
     if pending_manual_review:
-        raise HTTPException(status_code=409, detail="Finalize answer review before certificate review")
+        raise HTTPException(status_code=409, detail=_t("finalize_answer_review_first"))
 
     event_type = CERTIFICATE_REVIEW_APPROVED if body.decision == "APPROVED" else CERTIFICATE_REVIEW_REJECTED
     detail = (
@@ -1655,21 +1656,21 @@ async def verify_identity(
     current=Depends(get_current_user),
 ):
     """Mark attempt as identity verified and persist the captured photo."""
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
 
     if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
     try:
         raw_bytes = base64.b64decode(photo_base64.split(",", 1)[1] if "," in photo_base64 else photo_base64)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid photo data")
+        raise HTTPException(status_code=400, detail=_t("invalid_photo_data"))
 
     if not _face_present(raw_bytes):
-        raise HTTPException(status_code=400, detail="Face not detected in the photo")
+        raise HTTPException(status_code=400, detail=_t("face_not_detected"))
 
     signature = compute_face_signature(raw_bytes)
 
@@ -1792,22 +1793,22 @@ def download_certificate(
     db: Session = Depends(get_db_dep),
     current=Depends(get_current_user),
 ):
-    attempt_pk = parse_uuid_param(attempt_id, detail="Attempt not found")
+    attempt_pk = parse_uuid_param(attempt_id, detail=_t("attempt_not_found"))
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
-        raise HTTPException(status_code=404, detail="Attempt not found")
+        raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
     _ensure_attempt_access(db, attempt, current)
 
     exam = attempt.exam
     if not exam or not exam_certificate(exam):
-        raise HTTPException(status_code=400, detail="Certificate not configured for this test")
+        raise HTTPException(status_code=400, detail=_t("cert_not_configured"))
     decision = _certificate_decision(
         attempt,
         db=db,
         pending_manual_review=_pending_manual_review_for_attempt(attempt, db),
     )
     if not decision["eligible"]:
-        raise HTTPException(status_code=400, detail=str(decision["block_reason"] or "Certificate not available"))
+        raise HTTPException(status_code=400, detail=str(decision["block_reason"] or _t("cert_not_available")))
 
     pdf_bytes = _generate_certificate(attempt)
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={

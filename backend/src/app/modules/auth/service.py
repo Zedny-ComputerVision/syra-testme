@@ -28,6 +28,7 @@ from .schemas import (
     SignupRequest,
     UserCreate,
 )
+from ...core.i18n import translate as _t
 
 
 class AuthService:
@@ -36,7 +37,7 @@ class AuthService:
 
     def setup_admin(self, body: UserCreate) -> User:
         if self.repository.any_user_exists():
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Admin already set up")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("admin_already_set_up"))
         user = User(
             email=body.email,
             name=sanitize_plain_text(body.name) or body.name,
@@ -49,7 +50,7 @@ class AuthService:
             self.repository.commit()
         except Exception:
             self.repository.db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Admin already set up")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("admin_already_set_up"))
         self.repository.refresh(user)
         return user
 
@@ -58,10 +59,10 @@ class AuthService:
 
     def signup(self, body: SignupRequest) -> User:
         if not self.repository.signup_allowed():
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Self sign-up disabled")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("self_signup_disabled"))
         existing = self.repository.get_user_by_email_or_user_id(email=body.email, user_id=body.user_id)
         if existing:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("account_already_exists"))
         user = User(
             email=body.email,
             name=sanitize_plain_text(body.name) or body.name,
@@ -74,7 +75,7 @@ class AuthService:
             self.repository.commit()
         except Exception:
             self.repository.db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("account_already_exists"))
         self.repository.refresh(user)
         return user
 
@@ -82,9 +83,9 @@ class AuthService:
         email = str(body.email).strip().lower()
         user = self.repository.get_user_by_email(email)
         if not user or not verify_password(body.password, user.hashed_password):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_credentials"))
         if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("inactive_user"))
         write_audit_log(
             self.repository.db,
             user.id,
@@ -109,10 +110,10 @@ class AuthService:
         try:
             payload = verify_token(body.refresh_token, expected_type="refresh")
         except Exception as exc:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token")) from exc
         user = self._load_token_user(payload)
         if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("inactive_user"))
         self._ensure_token_is_current(user, payload)
         return TokenRefresh(
             access_token=create_access_token(
@@ -137,11 +138,11 @@ class AuthService:
             detail="User logged out",
             ip_address=request_ip,
         )
-        return Message(detail="Logged out")
+        return Message(detail=_t("logged_out"))
 
     def change_password(self, *, current_user: User, body: ChangePasswordRequest) -> Message:
         if not verify_password(body.current_password, current_user.hashed_password):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_t("incorrect_current_password"))
         current_user.hashed_password = hash_password(body.new_password)
         self._invalidate_user_tokens(current_user)
         self.repository.add(current_user)
@@ -154,7 +155,7 @@ class AuthService:
             resource_id=str(current_user.id),
             detail="Password changed by authenticated user",
         )
-        return Message(detail="Password updated")
+        return Message(detail=_t("password_updated"))
 
     def prepare_password_reset(self, body: ForgotPasswordRequest) -> tuple[User | None, str | None]:
         email = str(body.email).strip().lower()
@@ -167,7 +168,7 @@ class AuthService:
         try:
             payload = verify_token(body.token, expected_type="password_reset")
         except Exception as exc:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token")) from exc
         user = self._load_token_user(payload, not_found_status=status.HTTP_404_NOT_FOUND)
         self._ensure_token_is_current(user, payload)
         user.hashed_password = hash_password(body.new_password)
@@ -182,18 +183,18 @@ class AuthService:
             resource_id=str(user.id),
             detail="Password reset via token",
         )
-        return Message(detail="Password reset successful")
+        return Message(detail=_t("password_reset_successful"))
 
     def _load_token_user(self, payload: dict, *, not_found_status: int = status.HTTP_401_UNAUTHORIZED) -> User:
         sub = payload.get("sub")
         try:
             user_pk = uuid.UUID(sub) if isinstance(sub, str) else sub
         except (ValueError, TypeError) as exc:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token")) from exc
 
         user = self.repository.get_user_by_id(user_pk)
         if not user:
-            detail = "User not found" if not_found_status == status.HTTP_404_NOT_FOUND else "Invalid token"
+            detail = _t("user_not_found") if not_found_status == status.HTTP_404_NOT_FOUND else _t("invalid_token")
             raise HTTPException(status_code=not_found_status, detail=detail)
         return user
 
@@ -201,11 +202,11 @@ class AuthService:
         issued_at = token_issued_at(payload)
         cutoff = getattr(user, "token_invalid_before", None)
         if issued_at is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token"))
         if cutoff:
             normalized_cutoff = cutoff if cutoff.tzinfo else cutoff.replace(tzinfo=timezone.utc)
             if issued_at < normalized_cutoff:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_t("invalid_token"))
 
     def _invalidate_user_tokens(self, user: User) -> None:
         now = datetime.now(timezone.utc)

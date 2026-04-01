@@ -31,6 +31,7 @@ from ...services.normalized_relations import (
     runtime_attempt_policy_conflicts,
     set_exam_runtime_settings,
 )
+from ...core.i18n import translate as _t
 from ...services.report_rendering import render_report_template
 from ...services.sanitization import sanitize_html_fragment, sanitize_instructions
 from ...utils.pagination import PaginationParams, build_page_response
@@ -575,6 +576,12 @@ class TestService:
     def render_report(self, test_id: str, *, actor: ServiceActor) -> str:
         exam = self._get_test_or_raise(test_id, actor=actor)
         attempts = self.repository.list_report_attempts(exam.id)
+        labels = {
+            "user": _t("report_user"),
+            "status": _t("report_status"),
+            "score": _t("report_score"),
+            "no_attempts_yet": _t("report_no_attempts_yet"),
+        }
         return render_report_template(
             "test_report.html",
             report_title=f"{exam.title} Report",
@@ -588,6 +595,7 @@ class TestService:
                 }
                 for attempt in attempts
             ],
+            labels=labels,
         )
 
     def _get_test_or_raise(self, test_id: str, *, actor: ServiceActor) -> Exam:

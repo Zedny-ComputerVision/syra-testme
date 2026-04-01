@@ -7,6 +7,7 @@ from ...models import Exam, GradingScale, RoleEnum
 from ...schemas import GradingScaleBase, GradingScaleRead, Message
 from ...services.audit import write_audit_log
 from ...services.sanitization import sanitize_plain_text
+from ...core.i18n import translate as _t
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -15,7 +16,7 @@ router = APIRouter()
 def _clean_required_text(value: str | None, field_name: str) -> str:
     cleaned = sanitize_plain_text((value or "").strip()) or ""
     if not cleaned:
-        raise HTTPException(status_code=422, detail=f"{field_name} is required")
+        raise HTTPException(status_code=422, detail=_t("field_required", field_name=field_name))
     return cleaned
 
 
@@ -24,12 +25,12 @@ def _ensure_unique_scale_name(db: Session, name: str, existing_scale_id=None):
         select(GradingScale).where(func.lower(GradingScale.name) == name.lower())
     )
     if existing and getattr(existing, "id", None) != existing_scale_id:
-        raise HTTPException(status_code=409, detail="Grading scale exists")
+        raise HTTPException(status_code=409, detail=_t("grading_scale_exists"))
 
 
 def _normalize_scale_bands(labels: list[dict]) -> list[dict]:
     if not labels:
-        raise HTTPException(status_code=422, detail="At least one grade band is required")
+        raise HTTPException(status_code=422, detail=_t("at_least_one_band"))
 
     normalized = []
     seen_labels: set[str] = set()
@@ -37,7 +38,7 @@ def _normalize_scale_bands(labels: list[dict]) -> list[dict]:
         label = _clean_required_text(band.get("label"), f"Band {index} label")
         label_key = label.lower()
         if label_key in seen_labels:
-            raise HTTPException(status_code=422, detail="Band labels must be unique")
+            raise HTTPException(status_code=422, detail=_t("band_labels_unique"))
         seen_labels.add(label_key)
         try:
             min_score = int(band.get("min_score"))
@@ -53,7 +54,7 @@ def _normalize_scale_bands(labels: list[dict]) -> list[dict]:
     ordered = sorted(normalized, key=lambda band: (band["min_score"], band["max_score"]))
     for previous, current in zip(ordered, ordered[1:]):
         if current["min_score"] <= previous["max_score"]:
-            raise HTTPException(status_code=422, detail="Grade bands cannot overlap")
+            raise HTTPException(status_code=422, detail=_t("bands_cannot_overlap"))
 
     return normalized
 
@@ -80,7 +81,7 @@ def create_scale(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Grading scale name already exists")
+        raise HTTPException(status_code=409, detail=_t("grading_scale_name_exists"))
     db.refresh(scale)
     write_audit_log(
         db,
@@ -101,10 +102,10 @@ def list_scales(db: Session = Depends(get_db_dep), current=Depends(require_permi
 
 @router.get("/{scale_id}", response_model=GradingScaleRead)
 def get_scale(scale_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    scale_pk = parse_uuid_param(scale_id, detail="Not found")
+    scale_pk = parse_uuid_param(scale_id, detail=_t("not_found"))
     scale = db.get(GradingScale, scale_pk)
     if not scale:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     return scale
 
 
@@ -116,10 +117,10 @@ def update_scale(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
-    scale_pk = parse_uuid_param(scale_id, detail="Not found")
+    scale_pk = parse_uuid_param(scale_id, detail=_t("not_found"))
     scale = db.get(GradingScale, scale_pk)
     if not scale:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     payload = _normalize_scale_payload(body)
     _ensure_unique_scale_name(db, payload["name"], existing_scale_id=scale.id)
     scale.name = payload["name"]
@@ -146,10 +147,10 @@ def delete_scale(
     db: Session = Depends(get_db_dep),
     current=Depends(require_permission("Manage Grading Scales", RoleEnum.ADMIN)),
 ):
-    scale_pk = parse_uuid_param(scale_id, detail="Not found")
+    scale_pk = parse_uuid_param(scale_id, detail=_t("not_found"))
     scale = db.get(GradingScale, scale_pk)
     if not scale:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     usage_count = int(
         db.scalar(select(func.count(Exam.id)).where(Exam.grading_scale_id == scale.id))
         or 0
@@ -157,7 +158,7 @@ def delete_scale(
     if usage_count:
         raise HTTPException(
             status_code=409,
-            detail="Cannot delete a grading scale that is assigned to existing tests",
+            detail=_t("cannot_delete_grading_assigned"),
         )
     scale_name = scale.name
     scale_pk_str = str(scale.id)
@@ -172,4 +173,4 @@ def delete_scale(
         detail=f"Deleted grading scale: {scale_name}",
         ip_address=getattr(getattr(request, "client", None), "host", None),
     )
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))

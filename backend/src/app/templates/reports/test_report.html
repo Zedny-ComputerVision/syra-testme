@@ -4,9 +4,9 @@
 <table>
   <thead>
     <tr>
-      <th>User</th>
-      <th>Status</th>
-      <th>Score</th>
+      <th>{{ labels.user }}</th>
+      <th>{{ labels.status }}</th>
+      <th>{{ labels.score }}</th>
     </tr>
   </thead>
   <tbody>
@@ -20,7 +20,7 @@
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="3">No attempts yet.</td>
+        <td colspan="3">{{ labels.no_attempts_yet }}</td>
       </tr>
     {% endif %}
   </tbody>

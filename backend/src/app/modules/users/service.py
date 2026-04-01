@@ -25,6 +25,7 @@ from ...services.audit import write_audit_log
 from ...services.sanitization import sanitize_plain_text
 from ...utils.response_cache import TimedSingleFlightCache
 from ...utils.pagination import PaginationParams, build_page_response, clamp_sort_field
+from ...core.i18n import translate as _t
 from .repository import UserRepository
 
 _user_list_cache: TimedSingleFlightCache[dict] = TimedSingleFlightCache(ttl_seconds=10.0)
@@ -112,7 +113,7 @@ class UserService:
         can_schedule = permission_allowed(rows, current.role, "Assign Schedules")
         can_manage_users = permission_allowed(rows, current.role, "Manage Users")
         if current.role not in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} or not (can_schedule or can_manage_users):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("insufficient_permissions"))
         cache_key = json.dumps(
             {
                 "role": getattr(current.role, "value", current.role),
@@ -177,15 +178,15 @@ class UserService:
             self.repository.commit()
         except Exception:
             self.repository.db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or User ID already exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("email_or_userid_exists"))
         self.repository.refresh(user)
         self._invalidate_user_caches()
         return user
 
     def get_user(self, user_id: str) -> User:
-        user = self.repository.get_user(parse_uuid_param(user_id, detail="User not found"))
+        user = self.repository.get_user(parse_uuid_param(user_id, detail=_t("user_not_found")))
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_t("user_not_found"))
         return user
 
     def update_user(self, *, user_id: str, body: UserUpdate, current: User) -> User:
@@ -247,7 +248,7 @@ class UserService:
     def reset_user_password(self, *, user_id: str, body: AdminPasswordResetRequest, current: User) -> Message:
         user = self.get_user(user_id)
         if not body.new_password or len(body.new_password) < 8:
-            raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+            raise HTTPException(status_code=422, detail=_t("password_min_length"))
         now = datetime.now(timezone.utc)
         user.hashed_password = hash_password(body.new_password)
         user.token_invalid_before = now
@@ -263,12 +264,12 @@ class UserService:
             resource_id=str(user.id),
             detail="Password reset by administrator",
         )
-        return Message(detail="Password reset")
+        return Message(detail=_t("password_reset"))
 
     def delete_user(self, *, user_id: str, current: User) -> Message:
         user = self.get_user(user_id)
         if user.id == current.id:
-            raise HTTPException(status_code=400, detail="Cannot delete your own account")
+            raise HTTPException(status_code=400, detail=_t("cannot_delete_own_account"))
         attempt_count = int(
             self.repository.db.scalar(select(func.count(Attempt.id)).where(Attempt.user_id == user.id))
             or 0
@@ -276,17 +277,17 @@ class UserService:
         if attempt_count:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot delete a user with existing attempts",
+                detail=_t("cannot_delete_user_attempts"),
             )
         self.repository.delete(user)
         self.repository.commit()
         self._invalidate_user_caches()
-        return Message(detail="Deleted")
+        return Message(detail=_t("deleted"))
 
     def _clean_required_text(self, value: str | None, field_name: str) -> str:
         text = sanitize_plain_text(str(value or "").strip()) or ""
         if not text:
-            raise HTTPException(status_code=422, detail=f"{field_name} is required")
+            raise HTTPException(status_code=422, detail=_t("field_required", field_name=field_name))
         return text
 
     def _normalize_user_payload(self, payload: dict, *, partial: bool) -> dict:
@@ -309,14 +310,14 @@ class UserService:
         email = email.strip().lower()
         existing = self.repository.get_user_by_email(email)
         if existing and existing.id != existing_user_id:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("email_exists"))
 
     def _ensure_unique_user_id(self, user_id: str | None, existing_user_id=None) -> None:
         if not user_id:
             return
         existing = self.repository.get_user_by_user_id(user_id)
         if existing and existing.id != existing_user_id:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User ID exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("user_id_exists"))
 
     def _sort_user_query(self, query, sort_by: str, sort_dir: str):
         field_map = {
@@ -332,9 +333,9 @@ class UserService:
 
     def _update_user_record(self, *, user: User, payload: dict, current: User) -> User:
         if user.id == current.id and "role" in payload and payload["role"] != user.role:
-            raise HTTPException(status_code=400, detail="Cannot change your own role")
+            raise HTTPException(status_code=400, detail=_t("cannot_change_own_role"))
         if user.id == current.id and payload.get("is_active") is False:
-            raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+            raise HTTPException(status_code=400, detail=_t("cannot_deactivate_own"))
 
         previous_role = user.role
         changed_fields: list[str] = []

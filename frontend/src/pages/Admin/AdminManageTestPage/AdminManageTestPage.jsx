@@ -145,60 +145,60 @@ const PROCTORING_MONITOR_KEYS = [
 
 const LOCKDOWN_KEYS = ['fullscreen_enforce', 'tab_switch_detect', 'copy_paste_block']
 
-const LANGUAGE_OPTIONS = [
-  { value: '', label: 'Select language preference' },
-  { value: 'en', label: 'English' },
-  { value: 'ar', label: 'Arabic' },
-  { value: 'fr', label: 'French' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'de', label: 'German' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'zh', label: 'Chinese' },
+const LANGUAGE_OPTION_KEYS = [
+  { value: '', key: 'settings_select_language' },
+  { value: 'en', key: 'english' },
+  { value: 'ar', key: 'arabic' },
+  { value: 'fr', key: 'french' },
+  { value: 'es', key: 'spanish' },
+  { value: 'de', key: 'german' },
+  { value: 'pt', key: 'portuguese' },
+  { value: 'zh', key: 'chinese' },
 ]
 
-const REPORT_DISPLAY_OPTIONS = [
-  { value: 'IMMEDIATELY_AFTER_GRADING', label: 'Immediately after grading' },
-  { value: 'IMMEDIATELY_AFTER_FINISHING', label: 'Immediately after finishing' },
-  { value: 'ON_MANAGER_APPROVAL', label: 'On manager approval' },
+const REPORT_DISPLAY_OPTION_KEYS = [
+  { value: 'IMMEDIATELY_AFTER_GRADING', key: 'report_display_after_grading' },
+  { value: 'IMMEDIATELY_AFTER_FINISHING', key: 'report_display_after_finishing' },
+  { value: 'ON_MANAGER_APPROVAL', key: 'report_display_on_approval' },
 ]
 
-const REPORT_CONTENT_OPTIONS = [
-  { value: 'SCORE_AND_DETAILS', label: 'Score and details' },
-  { value: 'SCORE_ONLY', label: 'Score only' },
+const REPORT_CONTENT_OPTION_KEYS = [
+  { value: 'SCORE_AND_DETAILS', key: 'report_content_score_details' },
+  { value: 'SCORE_ONLY', key: 'report_content_score_only' },
 ]
 
-const PERSONAL_REPORT_LEFT_FLAGS = [
-  ['show_score_report', 'Display score'],
-  ['display_subscores_by_pool', 'Display sub-scores based on question pools'],
-  ['display_section_scores', 'Display section scores'],
-  ['display_percentage_required_to_pass', 'Display percentage required to pass'],
-  ['display_employee_id', 'Display employee ID'],
-  ['display_achieved_score_summary', 'Display achieved score on the summary tab'],
-  ['display_score_description', 'Display score description'],
+const PERSONAL_REPORT_LEFT_FLAG_KEYS = [
+  ['show_score_report', 'report_flag_display_score'],
+  ['display_subscores_by_pool', 'report_flag_display_subscores_pool'],
+  ['display_section_scores', 'report_flag_display_section_scores'],
+  ['display_percentage_required_to_pass', 'report_flag_display_pct_to_pass'],
+  ['display_employee_id', 'report_flag_display_employee_id'],
+  ['display_achieved_score_summary', 'report_flag_display_achieved_summary'],
+  ['display_score_description', 'report_flag_display_score_desc'],
 ]
 
-const PERSONAL_REPORT_RIGHT_FLAGS = [
-  ['show_pass_fail_info', 'Show Passed/Failed info'],
-  ['display_score_each_question', 'Display score for each question'],
-  ['display_instructor_notes', 'Display notes the candidate took for instructors only'],
-  ['display_candidate_groups', 'Display candidates\' user groups'],
-  ['show_full_timestamps', 'Show full timestamps'],
-  ['show_rounded_scores', 'Show rounded scores'],
+const PERSONAL_REPORT_RIGHT_FLAG_KEYS = [
+  ['show_pass_fail_info', 'report_flag_show_pass_fail'],
+  ['display_score_each_question', 'report_flag_display_score_each_q'],
+  ['display_instructor_notes', 'report_flag_display_instructor_notes'],
+  ['display_candidate_groups', 'report_flag_display_candidate_groups'],
+  ['show_full_timestamps', 'report_flag_show_timestamps'],
+  ['show_rounded_scores', 'report_flag_show_rounded_scores'],
 ]
 
-const PERSONAL_REPORT_EXPORT_FLAGS = [
-  ['export_personal_report_excel', 'Export personal report as Excel file'],
-  ['export_personal_report_pdf', 'Export personal report as a PDF file'],
-  ['enable_score_report_download', 'Enable score report download to candidates'],
-  ['enable_knowledge_deficiency_report_download', 'Enable knowledge deficiency report to download'],
+const PERSONAL_REPORT_EXPORT_FLAG_KEYS = [
+  ['export_personal_report_excel', 'report_export_excel'],
+  ['export_personal_report_pdf', 'report_export_pdf'],
+  ['enable_score_report_download', 'report_export_score_download'],
+  ['enable_knowledge_deficiency_report_download', 'report_export_deficiency'],
 ]
 
-const ATTACHMENT_TYPE_OPTIONS = [
-  { value: 'LINK', label: 'Link' },
-  { value: 'PDF', label: 'PDF' },
-  { value: 'DOC', label: 'Document' },
-  { value: 'IMAGE', label: 'Image' },
-  { value: 'VIDEO', label: 'Video' },
+const ATTACHMENT_TYPE_OPTION_KEYS = [
+  { value: 'LINK', key: 'attachment_type_link' },
+  { value: 'PDF', key: 'attachment_type_pdf' },
+  { value: 'DOC', key: 'attachment_type_doc' },
+  { value: 'IMAGE', key: 'attachment_type_image' },
+  { value: 'VIDEO', key: 'attachment_type_video' },
 ]
 
 const DEFAULT_SCORE_REPORT_SETTINGS = {
@@ -265,18 +265,18 @@ const PROCTOR_BOOLEAN_KEYS = [
   'screen_capture',
 ]
 
-const PROCTOR_LABELS = {
-  fullscreen_enforce: 'Fullscreen Enforce',
-  tab_switch_detect: 'Tab Switch Detection',
-  lighting_required: 'Lighting Quality Check',
-  copy_paste_block: 'Block Copy & Paste',
-  face_detection: 'Face Detection',
-  multi_face: 'Multiple Face Detection',
-  eye_tracking: 'Eye Tracking',
-  head_pose_detection: 'Head Pose Detection',
-  audio_detection: 'Audio Detection',
-  object_detection: 'Object Detection',
-  screen_capture: 'Screen Recording',
+const PROCTOR_LABEL_KEYS = {
+  fullscreen_enforce: 'proctor_label_fullscreen_enforce',
+  tab_switch_detect: 'proctor_label_tab_switch_detect',
+  lighting_required: 'proctor_label_lighting_required',
+  copy_paste_block: 'proctor_label_copy_paste_block',
+  face_detection: 'proctor_label_face_detection',
+  multi_face: 'proctor_label_multi_face',
+  eye_tracking: 'proctor_label_eye_tracking',
+  head_pose_detection: 'proctor_label_head_pose_detection',
+  audio_detection: 'proctor_label_audio_detection',
+  object_detection: 'proctor_label_object_detection',
+  screen_capture: 'proctor_label_screen_capture',
 }
 
 const TAB_ALIASES = {
@@ -485,8 +485,8 @@ function buildLocalId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function languageLabelOf(value) {
-  return LANGUAGE_OPTIONS.find((option) => option.value === value)?.label || String(value || '').trim() || 'Custom'
+function languageLabelOf(value, languageOptions) {
+  return languageOptions.find((option) => option.value === value)?.label || String(value || '').trim() || 'Custom'
 }
 
 function attachmentTitleFromUrl(url, fallbackIndex = 1) {
@@ -535,7 +535,7 @@ function normalizeAttachmentEntry(entry, fallbackIndex = 1) {
   if (!entry || typeof entry !== 'object') return null
   const url = String(entry.url || '').trim()
   if (!url) return null
-  const type = ATTACHMENT_TYPE_OPTIONS.some((option) => option.value === entry.type) ? entry.type : 'LINK'
+  const type = ATTACHMENT_TYPE_OPTION_KEYS.some((option) => option.value === entry.type) ? entry.type : 'LINK'
   return {
     id: String(entry.id || buildLocalId('attachment')),
     title: String(entry.title || '').trim() || attachmentTitleFromUrl(url, fallbackIndex),
@@ -669,6 +669,14 @@ export default function AdminManageTestPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const { t } = useLanguage()
+
+  const languageOptions = useMemo(() => LANGUAGE_OPTION_KEYS.map((opt) => ({ value: opt.value, label: t(opt.key) })), [t])
+  const reportDisplayOptions = useMemo(() => REPORT_DISPLAY_OPTION_KEYS.map((opt) => ({ value: opt.value, label: t(opt.key) })), [t])
+  const reportContentOptions = useMemo(() => REPORT_CONTENT_OPTION_KEYS.map((opt) => ({ value: opt.value, label: t(opt.key) })), [t])
+  const personalReportLeftFlags = useMemo(() => PERSONAL_REPORT_LEFT_FLAG_KEYS.map(([field, key]) => [field, t(key)]), [t])
+  const personalReportRightFlags = useMemo(() => PERSONAL_REPORT_RIGHT_FLAG_KEYS.map(([field, key]) => [field, t(key)]), [t])
+  const personalReportExportFlags = useMemo(() => PERSONAL_REPORT_EXPORT_FLAG_KEYS.map(([field, key]) => [field, t(key)]), [t])
+  const attachmentTypeOptions = useMemo(() => ATTACHMENT_TYPE_OPTION_KEYS.map((opt) => ({ value: opt.value, label: t(opt.key) })), [t])
 
   const [tab, setTab] = useState(() => normalizeTabParam(location.search))
   const [settingsSection, setSettingsSection] = useState(() => normalizeSettingsSectionParam(location.search))
@@ -2117,7 +2125,7 @@ export default function AdminManageTestPage() {
     {
       label: t('admin_manage_lifecycle_proctoring_profile'),
       value: activeProctoringChecks.length > 0 ? `${activeProctoringChecks.length} ${t('admin_manage_lifecycle_checks')}` : t('admin_manage_lifecycle_monitoring_off'),
-      helper: activeProctoringChecks.length > 0 ? activeProctoringChecks.map((key) => PROCTOR_LABELS[key]).join(', ') : t('admin_manage_lifecycle_no_proctoring'),
+      helper: activeProctoringChecks.length > 0 ? activeProctoringChecks.map((key) => t(PROCTOR_LABEL_KEYS[key])).join(', ') : t('admin_manage_lifecycle_no_proctoring'),
     },
     {
       label: t('admin_manage_lifecycle_certificates'),
@@ -2142,7 +2150,7 @@ export default function AdminManageTestPage() {
   const couponCreatedBy = createdByLabel !== 'Unavailable' ? createdByLabel : 'Admin'
   const updatedByLabel = createdByUser?.user_id || createdByUser?.name || 'Unavailable'
   const basicPageInitials = getBrandInitials(settingsForm.title || exam.title)
-  const basicPageStatus = isPublished ? 'Published' : isArchived ? 'Archived' : 'Draft'
+  const basicPageStatus = isPublished ? t('published') : isArchived ? t('archived') : t('draft')
   const openCycleTab = (nextTab, nextSection = null) => {
     handleTabChange(nextTab, nextSection || settingsSection)
   }
@@ -2568,61 +2576,61 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Test instructions dialog settings',
-              'Define retake options and the ability to pause or resume during the testing session availability period. These settings must be defined in each section separately.',
+              t('settings_instructions_page_title'),
+              t('settings_instructions_page_desc'),
               SETTINGS_PAGE_ICONS.instructions,
             )}
             <div id="settings-instructions" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.instructions)}
-                  <h4>Test overview options</h4>
+                  <h4>{t('settings_test_overview_options')}</h4>
                 </div>
                 <div className={styles.settingsCheckboxList}>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.instructions_require_acknowledgement)} onChange={setCheckboxField('instructions_require_acknowledgement')} />
-                    <span>Require acknowledgment of instructions</span>
+                    <span>{t('settings_require_acknowledgment')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.show_test_instructions)} onChange={setCheckboxField('show_test_instructions')} />
-                    <span>Show test instructions</span>
+                    <span>{t('settings_show_test_instructions')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.show_test_duration)} onChange={setCheckboxField('show_test_duration')} />
-                    <span>Show test duration</span>
+                    <span>{t('settings_show_test_duration')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.show_passing_mark)} onChange={setCheckboxField('show_passing_mark')} />
-                    <span>Show passing mark</span>
+                    <span>{t('settings_show_passing_mark')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.show_question_count)} onChange={setCheckboxField('show_question_count')} />
-                    <span>Show the number of questions</span>
+                    <span>{t('settings_show_question_count')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.show_remaining_retakes)} onChange={setCheckboxField('show_remaining_retakes')} />
-                    <span>Show remaining number of retakes</span>
+                    <span>{t('settings_show_remaining_retakes')}</span>
                   </label>
                 </div>
               </div>
 
               <div className={styles.sectionCard}>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Instructions heading</span>
+                  <span>{t('settings_instructions_heading')}</span>
                   <input value={settingsForm.instructions_heading || ''} disabled={lockedExamFields} onChange={setTextField('instructions_heading')} />
                 </label>
               </div>
 
               <div className={styles.sectionCard}>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Instructions body</span>
+                  <span>{t('settings_instructions_body')}</span>
                   <textarea className={styles.settingsEditor} value={settingsForm.instructions_body || ''} disabled={lockedExamFields} onChange={setTextField('instructions_body')} rows={8} />
                 </label>
               </div>
 
               <div className={styles.sectionCard}>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Test completion message</span>
+                  <span>{t('settings_test_completion_message')}</span>
                   <textarea className={styles.settingsEditor} value={settingsForm.completion_message || ''} disabled={lockedExamFields} onChange={setTextField('completion_message')} rows={5} />
                 </label>
               </div>
@@ -2634,45 +2642,45 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Duration and layout',
-              'Configure the test duration and layout settings. Choose whether questions appear on a single page or separate pages, hide assignment metadata from the My Tests page, restrict the Finish test button until the last question, and enable a calculator during the test-taking process.',
+              t('settings_duration_page_title'),
+              t('settings_duration_page_desc'),
               SETTINGS_PAGE_ICONS.duration,
             )}
             <div id="settings-duration" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <div className={styles.settingsFormStack}>
                   <label className={styles.settingsFieldGroup}>
-                    <span>Duration type</span>
+                    <span>{t('settings_duration_type')}</span>
                     <select disabled={lockedExamFields} value={settingsForm.duration_type} onChange={setTextField('duration_type')}>
-                      <option value="Time defined in each section">Time defined in each section</option>
-                      <option value="Single timer for full test">Single timer for full test</option>
+                      <option value="Time defined in each section">{t('settings_duration_type_section')}</option>
+                      <option value="Single timer for full test">{t('settings_duration_type_single')}</option>
                     </select>
                   </label>
                   <label className={styles.settingsFieldGroup}>
-                    <span>Page format *</span>
+                    <span>{t('settings_page_format')}</span>
                     <div className={styles.inlineReadOnlyField}>
-                      <span>Page format must be set in each section separately.</span>
-                      <button type="button" className={styles.inlineLinkButton} onClick={() => openCycleTab('sections')}>Go to test sections</button>
+                      <span>{t('settings_page_format_note')}</span>
+                      <button type="button" className={styles.inlineLinkButton} onClick={() => openCycleTab('sections')}>{t('settings_go_to_sections')}</button>
                     </div>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.hide_assignment_metadata)} onChange={setCheckboxField('hide_assignment_metadata')} />
-                    <span>Hide assignment metadata</span>
+                    <span>{t('settings_hide_assignment_metadata')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.hide_finish_until_last_question)} onChange={setCheckboxField('hide_finish_until_last_question')} />
-                    <span>Hide "Finish test" button until last question</span>
+                    <span>{t('settings_hide_finish_until_last')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.enforce_section_order)} onChange={setCheckboxField('enforce_section_order')} />
-                    <span>Enforce section order</span>
+                    <span>{t('settings_enforce_section_order')}</span>
                   </label>
                   <label className={styles.settingsFieldGroup}>
-                    <span>Calculator type</span>
+                    <span>{t('settings_calculator_type')}</span>
                     <select disabled={lockedExamFields} value={settingsForm.calculator_type} onChange={setTextField('calculator_type')}>
-                      <option value="No calculator">No calculator</option>
-                      <option value="Simple calculator">Simple calculator</option>
-                      <option value="Advanced calculator">Advanced calculator</option>
+                      <option value="No calculator">{t('settings_calculator_none')}</option>
+                      <option value="Simple calculator">{t('settings_calculator_simple')}</option>
+                      <option value="Advanced calculator">{t('settings_calculator_advanced')}</option>
                     </select>
                   </label>
                 </div>
@@ -2685,29 +2693,29 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Security settings',
-              'Configure security settings by enabling the Lockdown Browser to enforce full-screen mode and prevent navigation outside the test, and by activating proctoring to monitor candidates and prevent cheating. You can also restrict access to specific internal networks or allow all networks, require candidates to update their profiles before starting the survey, and automatically log them out after completion.',
+              t('settings_security_page_title'),
+              t('settings_security_page_desc'),
               SETTINGS_PAGE_ICONS.security,
             )}
             <div id="settings-security" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <label className={styles.settingsInlineCheck}>
                   <input type="checkbox" disabled={lockedExamFields} checked={isBrowserLockdownEnabled} onChange={(e) => setBrowserLockdownEnabled(e.target.checked)} />
-                  <span>Enable browser lockdown by default</span>
+                  <span>{t('settings_enable_lockdown')}</span>
                 </label>
               </div>
               <div className={styles.sectionCard}>
                 <label className={styles.settingsInlineCheck}>
                   <input type="checkbox" disabled={lockedExamFields} checked={isProctoringEnabled} onChange={(e) => setProctoringEnabled(e.target.checked)} />
-                  <span>Enable proctoring</span>
+                  <span>{t('settings_enable_proctoring')}</span>
                 </label>
               </div>
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.review)}
-                  <h4>Proctoring checks</h4>
+                  <h4>{t('settings_proctoring_checks')}</h4>
                 </div>
-                <p className={styles.sectionDescription}>Choose which live checks the system enforces while candidates are taking the test.</p>
+                <p className={styles.sectionDescription}>{t('settings_proctoring_checks_desc')}</p>
                 <div className={styles.settingsTwoColumnChecks}>
                   <div className={styles.settingsCheckboxList}>
                     {['lighting_required', 'face_detection', 'multi_face', 'eye_tracking'].map((field) => (
@@ -2718,7 +2726,7 @@ export default function AdminManageTestPage() {
                           checked={Boolean(settingsForm.proctoring_config?.[field])}
                           onChange={setProctoringConfigField(field)}
                         />
-                        <span>{PROCTOR_LABELS[field]}</span>
+                        <span>{t(PROCTOR_LABEL_KEYS[field])}</span>
                       </label>
                     ))}
                   </div>
@@ -2731,7 +2739,7 @@ export default function AdminManageTestPage() {
                           checked={Boolean(settingsForm.proctoring_config?.[field])}
                           onChange={setProctoringConfigField(field)}
                         />
-                        <span>{PROCTOR_LABELS[field]}</span>
+                        <span>{t(PROCTOR_LABEL_KEYS[field])}</span>
                       </label>
                     ))}
                   </div>
@@ -2739,11 +2747,11 @@ export default function AdminManageTestPage() {
               </div>
               <div className={styles.sectionCard}>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Network access *</span>
+                  <span>{t('settings_network_access')}</span>
                   <select disabled={lockedExamFields} value={settingsForm.network_access} onChange={setTextField('network_access')}>
-                    <option value="ALL_NETWORKS">All networks</option>
-                    <option value="INTERNAL_ONLY">Internal networks only</option>
-                    <option value="ALLOWLIST_ONLY">Allowlist only</option>
+                    <option value="ALL_NETWORKS">{t('settings_network_all')}</option>
+                    <option value="INTERNAL_ONLY">{t('settings_network_internal')}</option>
+                    <option value="ALLOWLIST_ONLY">{t('settings_network_allowlist')}</option>
                   </select>
                 </label>
               </div>
@@ -2751,11 +2759,11 @@ export default function AdminManageTestPage() {
                 <div className={styles.settingsCheckboxList}>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.auto_logout_after_finish_or_pause)} onChange={setCheckboxField('auto_logout_after_finish_or_pause')} />
-                    <span>Automatically log out candidate after finishing or pausing</span>
+                    <span>{t('settings_auto_logout')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.require_profile_update)} onChange={setCheckboxField('require_profile_update')} />
-                    <span>Require updating user profile</span>
+                    <span>{t('settings_require_profile_update')}</span>
                   </label>
                 </div>
               </div>
@@ -2767,8 +2775,8 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Pause, retake and reschedule settings',
-              'Define retake options and the ability to pause or resume during the testing session availability period.',
+              t('settings_retake_page_title'),
+              t('settings_retake_page_desc'),
               SETTINGS_PAGE_ICONS.retake,
             )}
             <div id="settings-retake" className={styles.settingsPageStack}>
@@ -2776,18 +2784,18 @@ export default function AdminManageTestPage() {
                 <div className={styles.settingsCheckboxList}>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.allow_pause)} onChange={setCheckboxField('allow_pause')} />
-                    <span>Allow test continuation</span>
+                    <span>{t('settings_allow_pause')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.allow_retake)} onChange={setCheckboxField('allow_retake')} />
-                    <span>Allow test retaking</span>
+                    <span>{t('settings_allow_retake')}</span>
                   </label>
                 </div>
               </div>
               {settingsForm.allow_pause ? (
                 <div className={styles.sectionCard}>
                   <label className={styles.settingsFieldGroup}>
-                    <span>Pause duration (minutes)</span>
+                    <span>{t('settings_pause_duration')}</span>
                     <input type="number" min="1" value={settingsForm.pause_duration_minutes} disabled={lockedExamFields} onChange={setTextField('pause_duration_minutes')} />
                   </label>
                 </div>
@@ -2795,7 +2803,7 @@ export default function AdminManageTestPage() {
               {settingsForm.allow_retake ? (
                 <div className={styles.sectionCard}>
                   <label className={styles.settingsFieldGroup}>
-                    <span>Retake cooldown (hours)</span>
+                    <span>{t('settings_retake_cooldown')}</span>
                     <input type="number" min="0" step="1" value={settingsForm.retake_cooldown_hours} disabled={lockedExamFields} onChange={setTextField('retake_cooldown_hours')} />
                   </label>
                 </div>
@@ -2803,7 +2811,7 @@ export default function AdminManageTestPage() {
               <div className={styles.sectionCard}>
                 <label className={styles.settingsInlineCheck}>
                   <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.limited_free_reschedules)} onChange={setCheckboxField('limited_free_reschedules')} />
-                  <span>Enable limited number of free reschedules</span>
+                  <span>{t('settings_limited_reschedules')}</span>
                 </label>
               </div>
             </div>
@@ -2814,21 +2822,21 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Language settings',
-              'Set the test\'s default interface language and add translations for specific fields in other languages.',
+              t('settings_language_page_title'),
+              t('settings_language_page_desc'),
               SETTINGS_PAGE_ICONS.language,
             )}
             <div id="settings-language" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.language)}
-                  <h4>Language preference</h4>
+                  <h4>{t('settings_language_preference')}</h4>
                 </div>
-                <p className={styles.sectionDescription}>The default language for the test-taking screen interface when this specific test is accessed.</p>
+                <p className={styles.sectionDescription}>{t('settings_language_preference_desc')}</p>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Language preference</span>
+                  <span>{t('settings_language_preference')}</span>
                   <select disabled={lockedExamFields} value={settingsForm.language} onChange={setTextField('language')}>
-                    {LANGUAGE_OPTIONS.map((option) => (
+                    {languageOptions.map((option) => (
                       <option key={option.value || 'empty'} value={option.value}>{option.label}</option>
                     ))}
                   </select>
@@ -2837,25 +2845,25 @@ export default function AdminManageTestPage() {
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.categories)}
-                  <h4>Translation settings</h4>
+                  <h4>{t('settings_translation_settings')}</h4>
                 </div>
                 <p className={styles.sectionDescription}>
-                  Add translations for specific fields of the test in any supported language. If the language preference is selected or the candidate has the language set on their profile, the fields with translations will be displayed in the selected language.
+                  {t('settings_translation_settings_desc')}
                 </p>
                 <div className={styles.tableCard}>
                   <div className={styles.tableToolbar}>
-                    <div className={styles.settingsSubtableTitle}>Translations</div>
+                    <div className={styles.settingsSubtableTitle}>{t('settings_translations')}</div>
                     <div className={styles.tableActions}>
                       <button type="button" className={styles.blueBtn} disabled={lockedExamFields} onClick={startCreateTranslation}>
-                        Add translation
+                        {t('settings_add_translation')}
                       </button>
                     </div>
                   </div>
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th>Language</th>
-                        <th style={{ width: '180px' }}>Action</th>
+                        <th>{t('settings_language_label')}</th>
+                        <th style={{ width: '180px' }}>{t('settings_action')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2866,7 +2874,7 @@ export default function AdminManageTestPage() {
                       ) : translationRows.map((translation) => (
                         <tr key={translation.id}>
                           <td>
-                            <div className={styles.inlineDetailTitle}>{languageLabelOf(translation.language)}</div>
+                            <div className={styles.inlineDetailTitle}>{languageLabelOf(translation.language, languageOptions)}</div>
                             <div className={styles.inlineDetailCopy}>
                               {translation.title || translation.description || translation.instructions_body || translation.completion_message || t('admin_manage_translation_drafted')}
                             </div>
@@ -2874,10 +2882,10 @@ export default function AdminManageTestPage() {
                           <td>
                             <div className={styles.inlineActions}>
                               <button type="button" className={styles.blueBtn} disabled={lockedExamFields} onClick={() => startEditTranslation(translation)}>
-                                Edit
+                                {t('edit')}
                               </button>
                               <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={() => removeTranslationEntry(translation.id)}>
-                                Remove
+                                {t('remove')}
                               </button>
                             </div>
                           </td>
@@ -2889,42 +2897,42 @@ export default function AdminManageTestPage() {
                 {showTranslationEditor ? (
                   <div className={styles.editorCard}>
                     <div className={styles.editorHeader}>
-                      <h5>{editingTranslationId ? 'Edit translation' : 'Add translation'}</h5>
-                      <p>Draft translated values for this test. They will be saved with the rest of the test settings.</p>
+                      <h5>{editingTranslationId ? t('settings_edit_translation') : t('settings_add_translation')}</h5>
+                      <p>{t('settings_translation_editor_desc')}</p>
                     </div>
                     {translationError ? <div className={styles.error}>{translationError}</div> : null}
                     <div className={styles.inlineFormGrid}>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Language</span>
+                        <span>{t('settings_language_label')}</span>
                         <select value={translationDraft.language} onChange={(event) => setTranslationDraft((prev) => ({ ...prev, language: event.target.value }))}>
-                          {LANGUAGE_OPTIONS.filter((option) => option.value).map((option) => (
+                          {languageOptions.filter((option) => option.value).map((option) => (
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
                         </select>
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Translated title</span>
+                        <span>{t('settings_translated_title')}</span>
                         <input value={translationDraft.title} onChange={(event) => setTranslationDraft((prev) => ({ ...prev, title: event.target.value }))} />
                       </label>
                       <label className={`${styles.settingsFieldGroup} ${styles.editorWideField}`}>
-                        <span>Translated description</span>
+                        <span>{t('settings_translated_description')}</span>
                         <textarea rows={4} value={translationDraft.description} onChange={(event) => setTranslationDraft((prev) => ({ ...prev, description: event.target.value }))} />
                       </label>
                       <label className={`${styles.settingsFieldGroup} ${styles.editorWideField}`}>
-                        <span>Translated instructions</span>
+                        <span>{t('settings_translated_instructions')}</span>
                         <textarea rows={4} value={translationDraft.instructions_body} onChange={(event) => setTranslationDraft((prev) => ({ ...prev, instructions_body: event.target.value }))} />
                       </label>
                       <label className={`${styles.settingsFieldGroup} ${styles.editorWideField}`}>
-                        <span>Translated completion message</span>
+                        <span>{t('settings_translated_completion')}</span>
                         <textarea rows={3} value={translationDraft.completion_message} onChange={(event) => setTranslationDraft((prev) => ({ ...prev, completion_message: event.target.value }))} />
                       </label>
                     </div>
                     <div className={styles.inlineActions}>
                       <button type="button" className={styles.blueBtn} onClick={saveTranslationDraft}>
-                        Save translation
+                        {t('settings_save_translation')}
                       </button>
                       <button type="button" className={styles.ghostBtn} onClick={cancelTranslationEditor}>
-                        Cancel
+                        {t('cancel')}
                       </button>
                     </div>
                   </div>
@@ -2938,19 +2946,19 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Result validity settings',
-              'Set how many days test results remain valid after completion. When results expire, they become invalid, which can be useful for managing recertification periods.',
+              t('settings_validity_page_title'),
+              t('settings_validity_page_desc'),
               SETTINGS_PAGE_ICONS.validity,
             )}
             <div id="settings-result-validity" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <label className={styles.settingsInlineCheck}>
                   <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.result_validity_period_enabled)} onChange={setCheckboxField('result_validity_period_enabled')} />
-                  <span>Set result validity period</span>
+                  <span>{t('settings_result_validity')}</span>
                 </label>
                 {settingsForm.result_validity_period_enabled ? (
                   <label className={styles.settingsFieldGroup}>
-                    <span>Validity period in days</span>
+                    <span>{t('settings_validity_days')}</span>
                     <input type="number" min="1" disabled={lockedExamFields} value={settingsForm.result_validity_days} onChange={setTextField('result_validity_days')} />
                   </label>
                 ) : null}
@@ -2965,15 +2973,15 @@ export default function AdminManageTestPage() {
           return (
             <>
               {renderSettingsPageHeader(
-                'Grading configuration',
-                'Define the passing criteria for your test. If needed, configure advanced grading options, such as setting passing scores for individual sections or groups of sections. You can also select a previously created grading scale to display test results as letter grades.',
+                t('settings_grading_page_title'),
+                t('settings_grading_page_desc'),
                 SETTINGS_PAGE_ICONS.grading,
               )}
               <div id="settings-grading" className={styles.settingsPageStack}>
                 <div className={styles.sectionCard}>
                   <div className={styles.settingsCardHeader}>
                     {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.validity)}
-                    <h4>To pass the test, a candidate has to:</h4>
+                    <h4>{t('settings_grading_pass_rule')}</h4>
                   </div>
                   <div className={styles.gradingRuleList}>
                     <p>- Achieve more or equal to {settingsForm.passing_score || '0.00'}% on the entire test.</p>
@@ -2993,38 +3001,38 @@ export default function AdminManageTestPage() {
                 <div className={styles.sectionCard}>
                   <div className={styles.settingsCardHeader}>
                     {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.grading)}
-                    <h4>Define passing mark for the test</h4>
+                    <h4>{t('settings_define_passing_mark')}</h4>
                   </div>
-                  <p className={styles.sectionDescription}>Define the percentage required to pass the test.</p>
+                  <p className={styles.sectionDescription}>{t('settings_define_passing_mark_desc')}</p>
                   <div className={styles.settingsCompactFieldRow}>
                     <label className={styles.settingsFieldGroup}>
-                      <span>Passing mark</span>
+                      <span>{t('settings_passing_mark')}</span>
                       <input type="number" min="0" max="100" disabled={lockedExamFields} value={settingsForm.passing_score} onChange={setTextField('passing_score')} />
                     </label>
                   </div>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.passing_mark_inclusive)} onChange={setCheckboxField('passing_mark_inclusive')} />
-                    <span>Make the passing mark inclusive</span>
+                    <span>{t('settings_passing_mark_inclusive')}</span>
                   </label>
                 </div>
 
                 <div className={styles.sectionCard}>
                   <div className={styles.settingsCardHeader}>
                     {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.security)}
-                    <h4>Proctoring report</h4>
+                    <h4>{t('settings_proctoring_report')}</h4>
                   </div>
                   <p className={styles.sectionDescription}>
-                    Enable the option to require candidates to obtain a positive proctoring grade in order to pass the test. Otherwise, the proctoring report will not affect the final score on the test.
+                    {t('settings_proctoring_report_desc')}
                   </p>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.require_positive_proctoring_report)} onChange={setCheckboxField('require_positive_proctoring_report')} />
-                    <span>Require positive proctoring report</span>
+                    <span>{t('settings_require_positive_proctoring')}</span>
                   </label>
                 </div>
 
                 <div className={styles.sectionCard}>
                   <label className={styles.settingsSwitchRow}>
-                    <span>Show advanced settings</span>
+                    <span>{t('settings_show_advanced')}</span>
                     <span className={styles.settingsSwitch}>
                       <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.show_advanced_grading)} onChange={setCheckboxField('show_advanced_grading')} />
                       <span />
@@ -3040,20 +3048,20 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Personal report settings',
-              'Customize what candidates see in their reports. Changes affect only candidates; test managers will still see the full report.',
+              t('settings_personal_report_page_title'),
+              t('settings_personal_report_page_desc'),
               SETTINGS_PAGE_ICONS.personalReport,
             )}
             <div id="settings-personal-report" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.duration)}
-                  <h4>Timing and access</h4>
+                  <h4>{t('settings_timing_access')}</h4>
                 </div>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Show report</span>
+                  <span>{t('settings_show_report')}</span>
                   <select value={settingsForm.report_displayed} disabled={reportSettingsLocked} onChange={setTextField('report_displayed')}>
-                    {REPORT_DISPLAY_OPTIONS.map((option) => (
+                    {reportDisplayOptions.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
@@ -3061,11 +3069,11 @@ export default function AdminManageTestPage() {
                 <div className={styles.settingsCheckboxList}>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={reportSettingsLocked} checked={Boolean(settingsForm.report_lifespan_enabled)} onChange={setCheckboxField('report_lifespan_enabled')} />
-                    <span>Configure report lifespan</span>
+                    <span>{t('settings_report_lifespan')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={reportSettingsLocked} checked={Boolean(settingsForm.report_access_duration_enabled)} onChange={setCheckboxField('report_access_duration_enabled')} />
-                    <span>Configure report access duration</span>
+                    <span>{t('settings_report_access_duration')}</span>
                   </label>
                 </div>
               </div>
@@ -3073,19 +3081,19 @@ export default function AdminManageTestPage() {
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.scoreReport)}
-                  <h4>Report content</h4>
+                  <h4>{t('settings_report_content_heading')}</h4>
                 </div>
                 <label className={styles.settingsFieldGroup}>
-                  <span>Report content *</span>
+                  <span>{t('settings_report_content')}</span>
                   <select value={settingsForm.report_content} disabled={reportSettingsLocked} onChange={setTextField('report_content')}>
-                    {REPORT_CONTENT_OPTIONS.map((option) => (
+                    {reportContentOptions.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
                 <div className={styles.settingsTwoColumnChecks}>
                   <div className={styles.settingsCheckboxList}>
-                    {PERSONAL_REPORT_LEFT_FLAGS.map(([field, label]) => (
+                    {personalReportLeftFlags.map(([field, label]) => (
                       <label key={field} className={styles.settingsInlineCheck}>
                         <input type="checkbox" disabled={reportSettingsLocked} checked={Boolean(settingsForm[field])} onChange={setCheckboxField(field)} />
                         <span>{label}</span>
@@ -3093,7 +3101,7 @@ export default function AdminManageTestPage() {
                     ))}
                   </div>
                   <div className={styles.settingsCheckboxList}>
-                    {PERSONAL_REPORT_RIGHT_FLAGS.map(([field, label]) => (
+                    {personalReportRightFlags.map(([field, label]) => (
                       <label key={field} className={styles.settingsInlineCheck}>
                         <input type="checkbox" disabled={reportSettingsLocked} checked={Boolean(settingsForm[field])} onChange={setCheckboxField(field)} />
                         <span>{label}</span>
@@ -3106,12 +3114,12 @@ export default function AdminManageTestPage() {
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.review)}
-                  <h4>Review options</h4>
+                  <h4>{t('settings_review_options')}</h4>
                 </div>
                 <div className={styles.settingsCheckboxList}>
                   <label className={styles.settingsInlineCheck}>
                     <input type="checkbox" disabled={reportSettingsLocked} checked={Boolean(settingsForm.show_answer_review)} onChange={setCheckboxField('show_answer_review')} />
-                    <span>Allow answer review after submission</span>
+                    <span>{t('settings_allow_answer_review')}</span>
                   </label>
                   <label className={styles.settingsInlineCheck}>
                     <input
@@ -3120,7 +3128,7 @@ export default function AdminManageTestPage() {
                       checked={Boolean(settingsForm.show_correct_answers)}
                       onChange={setCheckboxField('show_correct_answers')}
                     />
-                    <span>Show correct answers in review</span>
+                    <span>{t('settings_show_correct_answers')}</span>
                   </label>
                 </div>
               </div>
@@ -3128,10 +3136,10 @@ export default function AdminManageTestPage() {
               <div className={styles.sectionCard}>
                 <div className={styles.settingsCardHeader}>
                   {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.attachments)}
-                  <h4>Export options</h4>
+                  <h4>{t('settings_export_options')}</h4>
                 </div>
                 <div className={styles.settingsCheckboxList}>
-                  {PERSONAL_REPORT_EXPORT_FLAGS.map(([field, label]) => (
+                  {personalReportExportFlags.map(([field, label]) => (
                     <label key={field} className={styles.settingsInlineCheck}>
                       <input type="checkbox" disabled={reportSettingsLocked} checked={Boolean(settingsForm[field])} onChange={setCheckboxField(field)} />
                       <span>{label}</span>
@@ -3147,14 +3155,14 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Score report settings',
-              'The score report is an advanced version of the personal report designed for export. Customize the content of the score report for the test. These settings will override the global configuration for score reports.',
+              t('settings_score_report_page_title'),
+              t('settings_score_report_page_desc'),
               SETTINGS_PAGE_ICONS.scoreReport,
             )}
             <div id="settings-score-report" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <p className={styles.sectionDescription}>
-                  To view the global configuration, navigate to System &gt; Settings and customization &gt; Score report setup under the System Preferences section.
+                  {t('settings_score_report_global_note')}
                 </p>
                 <div className={styles.inlineActions}>
                   <button
@@ -3166,7 +3174,7 @@ export default function AdminManageTestPage() {
                       withNotice(t('admin_manage_custom_score_report_enabled'))
                     }}
                   >
-                    Create custom settings
+                    {t('settings_create_custom')}
                   </button>
                   {settingsForm.custom_score_report_enabled ? (
                     <button
@@ -3188,57 +3196,57 @@ export default function AdminManageTestPage() {
                         withNotice(t('admin_manage_custom_score_report_reset'))
                       }}
                     >
-                      Reset custom settings
+                      {t('settings_reset_custom')}
                     </button>
                   ) : null}
                 </div>
                 {settingsForm.custom_score_report_enabled ? (
                   <div className={styles.editorCard}>
                     <div className={styles.editorHeader}>
-                      <h5>Custom score report layout</h5>
-                      <p>These settings are stored on the test draft and used when the score report is exported.</p>
+                      <h5>{t('settings_custom_layout')}</h5>
+                      <p>{t('settings_custom_layout_desc')}</p>
                     </div>
                     <div className={styles.inlineFormGrid}>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Report heading</span>
+                        <span>{t('settings_report_heading')}</span>
                         <input value={settingsForm.score_report_heading} disabled={lockedExamFields} onChange={setTextField('score_report_heading')} />
                       </label>
                       <label className={`${styles.settingsFieldGroup} ${styles.editorWideField}`}>
-                        <span>Report introduction</span>
+                        <span>{t('settings_report_introduction')}</span>
                         <textarea rows={4} value={settingsForm.score_report_intro} disabled={lockedExamFields} onChange={setTextField('score_report_intro')} />
                       </label>
                     </div>
                     <div className={styles.settingsCheckboxList}>
                       <label className={styles.settingsInlineCheck}>
                         <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.score_report_include_candidate_summary)} onChange={setCheckboxField('score_report_include_candidate_summary')} />
-                        <span>Include candidate summary block</span>
+                        <span>{t('settings_include_candidate_summary')}</span>
                       </label>
                       <label className={styles.settingsInlineCheck}>
                         <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.score_report_include_section_breakdown)} onChange={setCheckboxField('score_report_include_section_breakdown')} />
-                        <span>Include section breakdown</span>
+                        <span>{t('settings_include_section_breakdown')}</span>
                       </label>
                       <label className={styles.settingsInlineCheck}>
                         <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.score_report_include_proctoring_summary)} onChange={setCheckboxField('score_report_include_proctoring_summary')} />
-                        <span>Include proctoring summary</span>
+                        <span>{t('settings_include_proctoring_summary')}</span>
                       </label>
                       <label className={styles.settingsInlineCheck}>
                         <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.score_report_include_certificate_status)} onChange={setCheckboxField('score_report_include_certificate_status')} />
-                        <span>Include certificate status</span>
+                        <span>{t('settings_include_certificate_status')}</span>
                       </label>
                       <label className={styles.settingsInlineCheck}>
                         <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.score_report_include_pass_fail_badge)} onChange={setCheckboxField('score_report_include_pass_fail_badge')} />
-                        <span>Include pass / fail badge</span>
+                        <span>{t('settings_include_pass_fail_badge')}</span>
                       </label>
                     </div>
                     <div className={styles.previewList}>
                       <div className={styles.previewListTitle}>{settingsForm.score_report_heading || DEFAULT_SCORE_REPORT_SETTINGS.heading}</div>
                       <ul>
                         {settingsForm.score_report_intro ? <li>{settingsForm.score_report_intro}</li> : null}
-                        {settingsForm.score_report_include_candidate_summary ? <li>Candidate summary</li> : null}
-                        {settingsForm.score_report_include_section_breakdown ? <li>Section breakdown</li> : null}
-                        {settingsForm.score_report_include_proctoring_summary ? <li>Proctoring summary</li> : null}
-                        {settingsForm.score_report_include_certificate_status ? <li>Certificate status</li> : null}
-                        {settingsForm.score_report_include_pass_fail_badge ? <li>Pass / fail badge</li> : null}
+                        {settingsForm.score_report_include_candidate_summary ? <li>{t('settings_preview_candidate_summary')}</li> : null}
+                        {settingsForm.score_report_include_section_breakdown ? <li>{t('settings_preview_section_breakdown')}</li> : null}
+                        {settingsForm.score_report_include_proctoring_summary ? <li>{t('settings_preview_proctoring_summary')}</li> : null}
+                        {settingsForm.score_report_include_certificate_status ? <li>{t('settings_preview_certificate_status')}</li> : null}
+                        {settingsForm.score_report_include_pass_fail_badge ? <li>{t('settings_preview_pass_fail_badge')}</li> : null}
                       </ul>
                     </div>
                   </div>
@@ -3255,12 +3263,12 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Certificates',
-              'Include certificates in the test that will be awarded to candidates upon passing or meeting specifically defined completion conditions.',
+              t('settings_cert_page_title'),
+              t('settings_cert_page_desc'),
               SETTINGS_PAGE_ICONS.certificate,
               <>
-                <button type="button" className={styles.blueBtn} disabled={lockedExamFields} onClick={() => setShowCertificateEditor(true)}>Add certificate</button>
-                <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={() => void toggleCertificateSync()}>Synchronize certificates</button>
+                <button type="button" className={styles.blueBtn} disabled={lockedExamFields} onClick={() => setShowCertificateEditor(true)}>{t('settings_add_cert')}</button>
+                <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={() => void toggleCertificateSync()}>{t('settings_sync_cert')}</button>
                 <button type="button" className={`${styles.iconGhostBtn} ${certificateView === 'detail' ? styles.iconGhostBtnActive : ''}`} aria-label="Certificate board view" onClick={() => setCertificateView('detail')}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 5h16v14H4zM9 5v14M15 5v14M4 12h16" /></svg>
                 </button>
@@ -3273,12 +3281,12 @@ export default function AdminManageTestPage() {
               {showCertificateSync ? (
                 <div className={styles.editorCard}>
                   <div className={styles.editorHeader}>
-                    <h5>Synchronize certificate</h5>
-                    <p>Copy certificate settings from another test in the system.</p>
+                    <h5>{t('settings_sync_cert_heading')}</h5>
+                    <p>{t('settings_sync_cert_desc')}</p>
                   </div>
                   {certificateSyncError ? <div className={styles.error}>{certificateSyncError}</div> : null}
                   <label className={styles.settingsFieldGroup}>
-                    <span>Source test</span>
+                    <span>{t('settings_source_test')}</span>
                     <select value={certificateSyncSourceId} disabled={certificateSyncLoading || lockedExamFields} onChange={(event) => setCertificateSyncSourceId(event.target.value)}>
                       <option value="">{certificateSyncLoading ? t('admin_manage_loading_cert_sources') : t('admin_manage_select_a_test')}</option>
                       {certificateSyncOptions.map((item) => (
@@ -3288,10 +3296,10 @@ export default function AdminManageTestPage() {
                   </label>
                   <div className={styles.inlineActions}>
                     <button type="button" className={styles.blueBtn} disabled={lockedExamFields || !certificateSyncSourceId || certificateSyncLoading} onClick={applySyncedCertificate}>
-                      Apply synced certificate
+                      {t('settings_apply_synced')}
                     </button>
                     <button type="button" className={styles.ghostBtn} onClick={() => setShowCertificateSync(false)}>
-                      Cancel
+                      {t('cancel')}
                     </button>
                   </div>
                 </div>
@@ -3301,11 +3309,11 @@ export default function AdminManageTestPage() {
                   <div className={styles.sectionCard}>
                     <div className={styles.settingsCardHeader}>
                       {renderSettingsPageIcon(SETTINGS_PAGE_ICONS.certificate)}
-                      <h4>Certificate content</h4>
+                      <h4>{t('settings_cert_content')}</h4>
                     </div>
                     <div className={styles.inlineFormGrid}>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Issue rule</span>
+                        <span>{t('settings_issue_rule')}</span>
                         <select value={settingsForm.certificate_issue_rule} disabled={lockedExamFields} onChange={setCertificateField('certificate_issue_rule')}>
                           {CERTIFICATE_ISSUE_RULE_OPTIONS.map((option) => (
                             <option key={option.value} value={option.value}>{option.label}</option>
@@ -3313,25 +3321,25 @@ export default function AdminManageTestPage() {
                         </select>
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Certificate title</span>
+                        <span>{t('settings_certificate_title')}</span>
                         <input value={settingsForm.certificate_title} disabled={lockedExamFields} onChange={setCertificateField('certificate_title')} placeholder="Certificate of Completion" />
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Subtitle</span>
+                        <span>{t('settings_subtitle')}</span>
                         <input value={settingsForm.certificate_subtitle} disabled={lockedExamFields} onChange={setCertificateField('certificate_subtitle')} placeholder="Awarded for successful completion" />
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Issuer</span>
+                        <span>{t('settings_issuer')}</span>
                         <input value={settingsForm.certificate_issuer} disabled={lockedExamFields} onChange={setCertificateField('certificate_issuer')} placeholder="SYRA Learning Institute" />
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Signer</span>
+                        <span>{t('settings_signer')}</span>
                         <input value={settingsForm.certificate_signer} disabled={lockedExamFields} onChange={setCertificateField('certificate_signer')} placeholder="Dr. Jane Doe" />
                       </label>
                     </div>
                     <div className={styles.inlineActions}>
                       <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={clearCertificateDraft}>
-                        Remove certificate
+                        {t('settings_remove_cert')}
                       </button>
                     </div>
                   </div>
@@ -3344,17 +3352,17 @@ export default function AdminManageTestPage() {
                       </div>
                       <div className={styles.certificateMetaRow}>
                         <div>
-                          <span>Test</span>
+                          <span>{t('settings_cert_preview_test')}</span>
                           <strong>{settingsForm.title || exam.title}</strong>
                         </div>
                         <div>
-                          <span>Issuer</span>
-                          <strong>{certificatePreview?.issuer || 'Not set yet'}</strong>
+                          <span>{t('settings_issuer')}</span>
+                          <strong>{certificatePreview?.issuer || t('settings_cert_not_set')}</strong>
                         </div>
                       </div>
                       <div className={styles.certificateSignerRow}>
-                        <span>Signed by</span>
-                        <strong>{certificatePreview?.signer || 'Awaiting signer'}</strong>
+                        <span>{t('settings_cert_signed_by')}</span>
+                        <strong>{certificatePreview?.signer || t('settings_cert_awaiting_signer')}</strong>
                       </div>
                     </div>
                   </div>
@@ -3372,14 +3380,14 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Coupons',
-              'Create coupons to give users a discounted access to testing sessions. Each coupon is valid for all sessions in the test, can be used only once, and applies only to sessions with a set purchase price.',
+              t('settings_coupons_page_title'),
+              t('settings_coupons_page_desc'),
               SETTINGS_PAGE_ICONS.coupons,
             )}
             <div id="settings-coupons" className={styles.settingsPageStack}>
               <div className={styles.tableCard}>
                 <div className={styles.tableToolbar}>
-                  <div className={styles.settingsSubtableTitle}>List of coupons</div>
+                  <div className={styles.settingsSubtableTitle}>{t('settings_list_of_coupons')}</div>
                   <div className={styles.tableActions}>
                     <button
                       type="button"
@@ -3390,48 +3398,48 @@ export default function AdminManageTestPage() {
                         setCouponError('')
                       }}
                     >
-                      Generate coupons
+                      {t('settings_generate_coupons')}
                     </button>
                   </div>
                 </div>
                 {showCouponGenerator ? (
                   <div className={styles.editorCard}>
                     <div className={styles.editorHeader}>
-                      <h5>Coupon generator</h5>
-                      <p>Create one or more draft coupons for this test and save the page to persist them.</p>
+                      <h5>{t('settings_coupon_generator')}</h5>
+                      <p>{t('settings_coupon_generator_desc')}</p>
                     </div>
                     {couponError ? <div className={styles.error}>{couponError}</div> : null}
                     <div className={styles.inlineFormGrid}>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Code prefix</span>
+                        <span>{t('settings_code_prefix')}</span>
                         <input value={couponGenerator.prefix} onChange={(event) => setCouponGenerator((prev) => ({ ...prev, prefix: event.target.value }))} />
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Count</span>
+                        <span>{t('settings_count')}</span>
                         <input type="number" min="1" max="100" value={couponGenerator.count} onChange={(event) => setCouponGenerator((prev) => ({ ...prev, count: event.target.value }))} />
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Discount type</span>
+                        <span>{t('settings_discount_type')}</span>
                         <select value={couponGenerator.discount_type} onChange={(event) => setCouponGenerator((prev) => ({ ...prev, discount_type: event.target.value }))}>
-                          <option value="percentage">Percentage</option>
-                          <option value="fixed">Fixed amount</option>
+                          <option value="percentage">{t('settings_percentage')}</option>
+                          <option value="fixed">{t('settings_fixed_amount')}</option>
                         </select>
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Amount</span>
+                        <span>{t('settings_amount')}</span>
                         <input type="number" min="1" value={couponGenerator.amount} onChange={(event) => setCouponGenerator((prev) => ({ ...prev, amount: event.target.value }))} />
                       </label>
                       <label className={styles.settingsFieldGroup}>
-                        <span>Expiration time</span>
+                        <span>{t('settings_expiration_time')}</span>
                         <input type="datetime-local" value={couponGenerator.expiration_time} onChange={(event) => setCouponGenerator((prev) => ({ ...prev, expiration_time: event.target.value }))} />
                       </label>
                     </div>
                     <div className={styles.inlineActions}>
                       <button type="button" className={styles.blueBtn} onClick={handleGenerateCoupons}>
-                        Create coupon rows
+                        {t('settings_create_coupon_rows')}
                       </button>
                       <button type="button" className={styles.ghostBtn} onClick={() => setShowCouponGenerator(false)}>
-                        Cancel
+                        {t('cancel')}
                       </button>
                     </div>
                   </div>
@@ -3439,15 +3447,15 @@ export default function AdminManageTestPage() {
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th>Coupon code</th>
-                      <th>Discount type</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                      <th>Expiration time</th>
-                      <th>Used by</th>
-                      <th>Date of use</th>
-                      <th>Created by</th>
-                      <th>Actions</th>
+                      <th>{t('settings_coupon_code')}</th>
+                      <th>{t('settings_discount_type')}</th>
+                      <th>{t('settings_amount')}</th>
+                      <th>{t('status')}</th>
+                      <th>{t('settings_expiration_time')}</th>
+                      <th>{t('settings_used_by')}</th>
+                      <th>{t('settings_date_of_use')}</th>
+                      <th>{t('settings_created_by')}</th>
+                      <th>{t('settings_actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3455,15 +3463,15 @@ export default function AdminManageTestPage() {
                       <td><input aria-label="Coupon code filter" placeholder="Search" value={couponFilters.code} onChange={setCouponFilterField('code')} /></td>
                       <td>
                         <select aria-label="Discount type filter" value={couponFilters.discount_type} onChange={setCouponFilterField('discount_type')}>
-                          <option value="">All</option>
-                          <option value="percentage">Percentage</option>
-                          <option value="fixed">Fixed</option>
+                          <option value="">{t('settings_all')}</option>
+                          <option value="percentage">{t('settings_percentage')}</option>
+                          <option value="fixed">{t('settings_fixed')}</option>
                         </select>
                       </td>
                       <td><input aria-label="Amount filter" placeholder="Search" value={couponFilters.amount} onChange={setCouponFilterField('amount')} /></td>
                       <td>
                         <select aria-label="Status filter" value={couponFilters.status} onChange={setCouponFilterField('status')}>
-                          <option value="">All</option>
+                          <option value="">{t('settings_all')}</option>
                           {couponStatusOptions.map((status) => (
                             <option key={status} value={String(status).toLowerCase()}>{status}</option>
                           ))}
@@ -3487,7 +3495,7 @@ export default function AdminManageTestPage() {
                       filteredCouponRows.map((row) => (
                         <tr key={row.id}>
                           <td>{row.code}</td>
-                          <td>{row.discount_type === 'percentage' ? 'Percentage' : 'Fixed'}</td>
+                          <td>{row.discount_type === 'percentage' ? t('settings_percentage') : t('settings_fixed')}</td>
                           <td>{row.discount_type === 'percentage' ? `${row.amount}%` : row.amount}</td>
                           <td>{row.status || 'Draft'}</td>
                           <td>{row.expiration_time || '-'}</td>
@@ -3495,7 +3503,7 @@ export default function AdminManageTestPage() {
                           <td>{row.date_of_use || '-'}</td>
                           <td>{row.created_by || 'Admin'}</td>
                           <td className={styles.actionsCell}>
-                            <button type="button" disabled={lockedExamFields} onClick={() => removeCouponEntry(row.id)}>Delete</button>
+                            <button type="button" disabled={lockedExamFields} onClick={() => removeCouponEntry(row.id)}>{t('delete')}</button>
                           </td>
                         </tr>
                       ))
@@ -3503,7 +3511,7 @@ export default function AdminManageTestPage() {
                   </tbody>
                 </table>
                 <div className={styles.settingsTableFooter}>
-                  <span>{couponHasActiveFilters ? `Rows: ${filteredCouponRows.length} / ${couponRows.length}` : `Rows: ${couponRows.length}`}</span>
+                  <span>{couponHasActiveFilters ? `${t('settings_rows')}: ${filteredCouponRows.length} / ${couponRows.length}` : `${t('settings_rows')}: ${couponRows.length}`}</span>
                 </div>
               </div>
             </div>
@@ -3514,13 +3522,13 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Attachments',
-              'Import existing attachments from the library or create new ones.',
+              t('settings_attachments_page_title'),
+              t('settings_attachments_page_desc'),
               SETTINGS_PAGE_ICONS.attachments,
             )}
             <div id="settings-attachments" className={styles.settingsPageStack}>
               <div className={styles.inlineActions}>
-                <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={startCreateAttachment}>Create new</button>
+                <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={startCreateAttachment}>{t('settings_create_new_attachment')}</button>
                 <button
                   type="button"
                   className={styles.ghostBtn}
@@ -3530,29 +3538,29 @@ export default function AdminManageTestPage() {
                     setAttachmentImportError('')
                   }}
                 >
-                  Import from library
+                  {t('settings_import_from_library')}
                 </button>
               </div>
               {showAttachmentEditor ? (
                 <div className={styles.editorCard}>
                   <div className={styles.editorHeader}>
-                    <h5>{editingAttachmentId ? 'Edit attachment' : 'Create attachment'}</h5>
-                    <p>Add a saved attachment row to this test draft.</p>
+                    <h5>{editingAttachmentId ? t('settings_edit_attachment') : t('settings_create_attachment')}</h5>
+                    <p>{t('settings_attachment_editor_desc')}</p>
                   </div>
                   {attachmentError ? <div className={styles.error}>{attachmentError}</div> : null}
                   <div className={styles.inlineFormGrid}>
                     <label className={styles.settingsFieldGroup}>
-                      <span>Title</span>
+                      <span>{t('settings_attachment_title')}</span>
                       <input value={attachmentDraft.title} onChange={(event) => setAttachmentDraft((prev) => ({ ...prev, title: event.target.value }))} />
                     </label>
                     <label className={styles.settingsFieldGroup}>
-                      <span>Attachment URL</span>
+                      <span>{t('settings_attachment_url')}</span>
                       <input value={attachmentDraft.url} onChange={(event) => setAttachmentDraft((prev) => ({ ...prev, url: event.target.value }))} />
                     </label>
                     <label className={styles.settingsFieldGroup}>
-                      <span>Attachment type</span>
+                      <span>{t('settings_attachment_type')}</span>
                       <select value={attachmentDraft.type} onChange={(event) => setAttachmentDraft((prev) => ({ ...prev, type: event.target.value }))}>
-                        {ATTACHMENT_TYPE_OPTIONS.map((option) => (
+                        {attachmentTypeOptions.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </select>
@@ -3560,10 +3568,10 @@ export default function AdminManageTestPage() {
                   </div>
                   <div className={styles.inlineActions}>
                     <button type="button" className={styles.blueBtn} onClick={saveAttachmentDraft}>
-                      Save attachment
+                      {t('settings_save_attachment')}
                     </button>
                     <button type="button" className={styles.ghostBtn} onClick={cancelAttachmentEditor}>
-                      Cancel
+                      {t('cancel')}
                     </button>
                   </div>
                 </div>
@@ -3571,20 +3579,20 @@ export default function AdminManageTestPage() {
               {showAttachmentImporter ? (
                 <div className={styles.editorCard}>
                   <div className={styles.editorHeader}>
-                    <h5>Import attachment rows</h5>
-                    <p>Paste one URL per line, or use the format: <code>Title | URL</code>.</p>
+                    <h5>{t('settings_import_attachment_rows')}</h5>
+                    <p>{t('settings_import_attachment_rows_desc')}</p>
                   </div>
                   {attachmentImportError ? <div className={styles.error}>{attachmentImportError}</div> : null}
                   <label className={`${styles.settingsFieldGroup} ${styles.editorWideField}`}>
-                    <span>Attachment rows</span>
+                    <span>{t('settings_attachment_rows')}</span>
                     <textarea rows={5} value={attachmentImportText} onChange={(event) => setAttachmentImportText(event.target.value)} />
                   </label>
                   <div className={styles.inlineActions}>
                     <button type="button" className={styles.blueBtn} onClick={importAttachmentRows}>
-                      Import rows
+                      {t('settings_import_rows')}
                     </button>
                     <button type="button" className={styles.ghostBtn} onClick={() => setShowAttachmentImporter(false)}>
-                      Cancel
+                      {t('cancel')}
                     </button>
                   </div>
                 </div>
@@ -3594,27 +3602,27 @@ export default function AdminManageTestPage() {
               ) : (
                 <div className={styles.tableCard}>
                   <div className={styles.tableToolbar}>
-                    <div className={styles.settingsSubtableTitle}>Linked attachments</div>
-                    <div className={styles.tableMeta}>{attachmentRows.length} attachment{attachmentRows.length === 1 ? '' : 's'}</div>
+                    <div className={styles.settingsSubtableTitle}>{t('settings_linked_attachments')}</div>
+                    <div className={styles.tableMeta}>{attachmentRows.length} {t('settings_attachments_count')}</div>
                   </div>
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th>Title</th>
-                        <th>Type</th>
-                        <th>URL</th>
-                        <th>Actions</th>
+                        <th>{t('settings_attachment_title')}</th>
+                        <th>{t('settings_type')}</th>
+                        <th>{t('settings_url')}</th>
+                        <th>{t('settings_actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {attachmentRows.map((attachment) => (
                         <tr key={attachment.id}>
                           <td>{attachment.title}</td>
-                          <td>{ATTACHMENT_TYPE_OPTIONS.find((option) => option.value === attachment.type)?.label || attachment.type}</td>
+                          <td>{attachmentTypeOptions.find((option) => option.value === attachment.type)?.label || attachment.type}</td>
                           <td className={styles.urlCell}><a href={attachment.url} target="_blank" rel="noreferrer">{attachment.url}</a></td>
                           <td className={styles.actionsCell}>
-                            <button type="button" disabled={lockedExamFields} onClick={() => startEditAttachment(attachment)}>Edit</button>
-                            <button type="button" disabled={lockedExamFields} onClick={() => removeAttachmentItem(attachment.id)}>Delete</button>
+                            <button type="button" disabled={lockedExamFields} onClick={() => startEditAttachment(attachment)}>{t('edit')}</button>
+                            <button type="button" disabled={lockedExamFields} onClick={() => removeAttachmentItem(attachment.id)}>{t('delete')}</button>
                           </td>
                         </tr>
                       ))}
@@ -3630,14 +3638,14 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'External attributes',
-              'Fill in these fields if this test is referenced in another software (external system). External ID represents the external system\'s unique identifier for this test.',
+              t('settings_external_page_title'),
+              t('settings_external_page_desc'),
               SETTINGS_PAGE_ICONS.external,
             )}
             <div id="settings-externalattrs" className={styles.settingsPageStack}>
               <div className={styles.sectionCard}>
                 <label className={styles.settingsFieldGroup}>
-                  <span>External ID</span>
+                  <span>{t('settings_external_id')}</span>
                   <input disabled={lockedExamFields} value={settingsForm.external_id} onChange={setTextField('external_id')} />
                 </label>
               </div>
@@ -3649,8 +3657,8 @@ export default function AdminManageTestPage() {
         return (
           <>
             {renderSettingsPageHeader(
-              'Test categories',
-              'Test categories are used to simplify searches and group tests with shared characteristics such as subjects, difficulty levels, or other criteria.',
+              t('settings_categories_page_title'),
+              t('settings_categories_page_desc'),
               SETTINGS_PAGE_ICONS.categories,
             )}
             <div id="settings-categories" className={styles.settingsPageStack}>
@@ -3664,52 +3672,52 @@ export default function AdminManageTestPage() {
                     setCategoryError('')
                   }}
                 >
-                  Add category
+                  {t('settings_add_category')}
                 </button>
                 {selectedCategory ? (
                   <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={() => setSettingsForm((prev) => ({ ...prev, category_id: '' }))}>
-                    Remove category
+                    {t('settings_remove_category')}
                   </button>
                 ) : null}
               </div>
               {(showCategoryPicker || selectedCategory) ? (
                 <div className={styles.sectionCard}>
                   <label className={styles.settingsFieldGroup}>
-                    <span>Assigned category</span>
+                    <span>{t('settings_assigned_category')}</span>
                     <select disabled={lockedExamFields} value={settingsForm.category_id} onChange={setTextField('category_id')}>
-                      <option value="">Uncategorized</option>
+                      <option value="">{t('settings_uncategorized')}</option>
                       {categories.map((cat) => (
                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                       ))}
                     </select>
                   </label>
-                  {selectedCategory ? <div className={styles.inlineDetailCopy}>Current category: {selectedCategory.name}</div> : null}
+                  {selectedCategory ? <div className={styles.inlineDetailCopy}>{t('settings_current_category')}: {selectedCategory.name}</div> : null}
                 </div>
               ) : null}
               <div className={styles.editorCard}>
                 <div className={styles.editorHeader}>
-                  <h5>Create a new category</h5>
-                  <p>Create and immediately assign a new test category without leaving this page.</p>
+                  <h5>{t('settings_create_new_category')}</h5>
+                  <p>{t('settings_create_new_category_desc')}</p>
                 </div>
                 {categoryError ? <div className={styles.error}>{categoryError}</div> : null}
                 <div className={styles.inlineFormGrid}>
                   <label className={styles.settingsFieldGroup}>
-                    <span>Category name</span>
+                    <span>{t('settings_category_name')}</span>
                     <input value={categoryDraft.name} disabled={lockedExamFields || categoryBusy} onChange={(event) => setCategoryDraft((prev) => ({ ...prev, name: event.target.value }))} />
                   </label>
                   <label className={`${styles.settingsFieldGroup} ${styles.editorWideField}`}>
-                    <span>Description</span>
+                    <span>{t('settings_description')}</span>
                     <textarea rows={3} value={categoryDraft.description} disabled={lockedExamFields || categoryBusy} onChange={(event) => setCategoryDraft((prev) => ({ ...prev, description: event.target.value }))} />
                   </label>
                 </div>
                 <div className={styles.inlineActions}>
                   <button type="button" className={styles.blueBtn} disabled={lockedExamFields || categoryBusy} onClick={() => void handleCreateCategory()}>
-                    {categoryBusy ? 'Creating...' : 'Create category'}
+                    {categoryBusy ? t('settings_creating') : t('settings_create_category')}
                   </button>
                 </div>
               </div>
               <p className={styles.sectionDescription}>
-                Tests that don&apos;t belong to any category will be added to &quot;Uncategorized&quot; category once test settings changes are saved.
+                {t('settings_uncategorized_note')}
               </p>
             </div>
             {renderSettingsFooter()}
@@ -3730,16 +3738,16 @@ export default function AdminManageTestPage() {
                     </svg>
                   </span>
                   <div>
-                    <h3>Basic information</h3>
-                    <p>This section contains essential test information and primary actions.</p>
+                    <h3>{t('settings_basic_info')}</h3>
+                    <p>{t('settings_basic_info_desc')}</p>
                   </div>
                 </div>
               </div>
               <div className={styles.basicInfoActions}>
-                <button type="button" className={styles.greenBtn} onClick={handlePreview}>Preview</button>
-                {!isPublished && !isArchived ? <button type="button" className={styles.blueBtn} onClick={handlePublish}>Publish test</button> : null}
+                <button type="button" className={styles.greenBtn} onClick={handlePreview}>{t('settings_preview')}</button>
+                {!isPublished && !isArchived ? <button type="button" className={styles.blueBtn} onClick={handlePublish}>{t('settings_publish_test')}</button> : null}
                 <button type="button" className={styles.ghostBtn} disabled={lockedExamFields} onClick={() => navigate(`/admin/tests/${exam.id}/edit`)}>
-                  Options
+                  {t('settings_options')}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="m6 9 6 6 6-6" />
                   </svg>
@@ -3750,40 +3758,40 @@ export default function AdminManageTestPage() {
             <div className={styles.basicInfoLayout}>
               <div className={styles.basicInfoMain}>
                 <div className={styles.basicInfoTopRow}>
-                  <label className={styles.basicInfoWideField}>Test name *<input value={settingsForm.title} disabled={isArchived} onChange={(e) => setSettingsForm((p) => ({ ...p, title: e.target.value }))} /></label>
-                  <label>Test status<input value={basicPageStatus} readOnly /></label>
-                  <label>Test ID<input value={settingsForm.code || String(exam.id).slice(0, 6)} readOnly /></label>
+                  <label className={styles.basicInfoWideField}>{t('settings_test_name')}<input value={settingsForm.title} disabled={isArchived} onChange={(e) => setSettingsForm((p) => ({ ...p, title: e.target.value }))} /></label>
+                  <label>{t('settings_test_status')}<input value={basicPageStatus} readOnly /></label>
+                  <label>{t('settings_test_id')}<input value={settingsForm.code || String(exam.id).slice(0, 6)} readOnly /></label>
                 </div>
 
-                <label>Test description<textarea className={styles.basicDescriptionField} value={settingsForm.description} disabled={isArchived} onChange={(e) => setSettingsForm((p) => ({ ...p, description: e.target.value }))} rows={8} /></label>
+                <label>{t('settings_test_desc')}<textarea className={styles.basicDescriptionField} value={settingsForm.description} disabled={isArchived} onChange={(e) => setSettingsForm((p) => ({ ...p, description: e.target.value }))} rows={8} /></label>
 
-                <label>Descriptive label<input value={settingsForm.descriptive_label} disabled={lockedExamFields} onChange={(e) => setSettingsForm((p) => ({ ...p, descriptive_label: e.target.value }))} placeholder="Optional short label shown in listings" /></label>
+                <label>{t('settings_descriptive_label')}<input value={settingsForm.descriptive_label} disabled={lockedExamFields} onChange={(e) => setSettingsForm((p) => ({ ...p, descriptive_label: e.target.value }))} placeholder="Optional short label shown in listings" /></label>
 
                 <div className={styles.row}>
-                  <label>Creation type
+                  <label>{t('settings_creation_type')}
                     <select value={settingsForm.creation_type} disabled={lockedExamFields} onChange={(e) => setSettingsForm((p) => ({ ...p, creation_type: e.target.value }))}>
-                      <option value="Test with sections">Test with sections</option>
-                      <option value="Single flow test">Single flow test</option>
-                      <option value="Adaptive test">Adaptive test</option>
+                      <option value="Test with sections">{t('settings_creation_type_sections')}</option>
+                      <option value="Single flow test">{t('settings_creation_type_single')}</option>
+                      <option value="Adaptive test">{t('settings_creation_type_adaptive')}</option>
                     </select>
                   </label>
-                  <label>Test sections<input type="number" min="0" max="99" value={settingsForm.section_count} disabled={lockedExamFields} onChange={(e) => setSettingsForm((p) => ({ ...p, section_count: e.target.value }))} /></label>
+                  <label>{t('settings_test_sections')}<input type="number" min="0" max="99" value={settingsForm.section_count} disabled={lockedExamFields} onChange={(e) => setSettingsForm((p) => ({ ...p, section_count: e.target.value }))} /></label>
                 </div>
 
                 <div className={styles.basicToggleRow}>
                   <label className={styles.toggleItem}>
                     <input type="checkbox" disabled={lockedExamFields} checked={Boolean(settingsForm.allow_section_selection)} onChange={(e) => setSettingsForm((p) => ({ ...p, allow_section_selection: e.target.checked }))} />
-                    <span>Enable section selection</span>
+                    <span>{t('settings_enable_section_selection')}</span>
                   </label>
                 </div>
 
                 <div className={styles.row}>
-                  <label>Created by<input value={createdByLabel} readOnly /></label>
-                  <label>Creation time<input value={formatMetadataDate(exam.created_at)} readOnly /></label>
+                  <label>{t('settings_created_by')}<input value={createdByLabel} readOnly /></label>
+                  <label>{t('settings_creation_time')}<input value={formatMetadataDate(exam.created_at)} readOnly /></label>
                 </div>
                 <div className={styles.row}>
-                  <label>Updated by<input value={updatedByLabel} readOnly /></label>
-                  <label>Update time<input value={formatMetadataDate(exam.updated_at)} readOnly /></label>
+                  <label>{t('settings_updated_by')}<input value={updatedByLabel} readOnly /></label>
+                  <label>{t('settings_update_time')}<input value={formatMetadataDate(exam.updated_at)} readOnly /></label>
                 </div>
               </div>
 

@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ..core.i18n import translate as _t
 from ..core.config import get_settings
 from ..core.security import hash_password
 from ..db.base import Base
@@ -25,7 +26,7 @@ def _clear_seed_tables(db: Session) -> None:
 
 def reset_seed(db: Session):
     if not settings.E2E_SEED_ENABLED:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Seed endpoint disabled")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("seed_endpoint_disabled"))
 
     # Avoid TRUNCATE here. E2E uses the live app process, and TRUNCATE takes
     # stronger locks that can block behind routine reads (for example settings

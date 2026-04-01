@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ...models import ExamTemplate, RoleEnum
 from ...schemas import ExamTemplateCreate, ExamTemplateRead, Message
 from ...services.sanitization import sanitize_plain_text
+from ...core.i18n import translate as _t
 from ..deps import get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -29,7 +30,7 @@ def _query_first(db: Session, statement):
 def _clean_required_text(value: str | None, field_name: str) -> str:
     text = sanitize_plain_text(str(value or "").strip()) or ""
     if not text:
-        raise HTTPException(status_code=422, detail=f"{field_name} is required")
+        raise HTTPException(status_code=422, detail=_t("field_required", field_name=field_name))
     return text
 
 
@@ -46,7 +47,7 @@ def _ensure_unique_template_name(db: Session, name: str, existing_template_id=No
         select(ExamTemplate).where(func.lower(ExamTemplate.name) == normalized)
     )
     if existing and getattr(existing, "id", None) != existing_template_id:
-        raise HTTPException(status_code=409, detail="Template name exists")
+        raise HTTPException(status_code=409, detail=_t("template_name_exists"))
 
 
 def _normalize_template_payload(body: ExamTemplateCreate) -> dict:
@@ -78,21 +79,21 @@ def list_templates(db: Session = Depends(get_db_dep), current=Depends(require_pe
 
 @router.get("/{template_id}", response_model=ExamTemplateRead)
 def get_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    template_pk = parse_uuid_param(template_id, detail="Not found")
+    template_pk = parse_uuid_param(template_id, detail=_t("not_found"))
     tpl = db.get(ExamTemplate, template_pk)
     if not tpl:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     return tpl
 
 
 @router.put("/{template_id}", response_model=ExamTemplateRead)
 def update_template(template_id: str, body: ExamTemplateCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    template_pk = parse_uuid_param(template_id, detail="Not found")
+    template_pk = parse_uuid_param(template_id, detail=_t("not_found"))
     tpl = db.get(ExamTemplate, template_pk)
     if not tpl:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     if current.role == RoleEnum.INSTRUCTOR and tpl.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     payload = _normalize_template_payload(body)
     _ensure_unique_template_name(db, payload["name"], existing_template_id=tpl.id)
     tpl.name = payload["name"]
@@ -106,10 +107,10 @@ def update_template(template_id: str, body: ExamTemplateCreate, db: Session = De
 
 @router.delete("/{template_id}", response_model=Message)
 def delete_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
-    template_pk = parse_uuid_param(template_id, detail="Not found")
+    template_pk = parse_uuid_param(template_id, detail=_t("not_found"))
     tpl = db.get(ExamTemplate, template_pk)
     if not tpl:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_t("not_found"))
     db.delete(tpl)
     db.commit()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ...models import Attempt, Course, CourseStatus, Exam, Node, RoleEnum
 from ...schemas import CourseCreate, CourseRead, CourseBase, Message
 from ...services.sanitization import sanitize_plain_text
+from ...core.i18n import translate as _t
 from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission
 
 router = APIRouter()
@@ -36,7 +37,7 @@ def _clean_required_text(value: str | None, field_name: str) -> str:
     if not text:
         raise HTTPException(
             status_code=422,
-            detail=f"{field_name} is required",
+            detail=_t("field_required", field_name=field_name),
         )
     return text
 
@@ -53,7 +54,7 @@ def _ensure_unique_course_title(db: Session, title: str, existing_course_id=None
         select(Course).where(func.lower(Course.title) == normalized)
     )
     if existing and getattr(existing, "id", None) != existing_course_id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Course title exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_t("course_title_exists"))
 
 
 def _normalize_course_payload(body: CourseBase) -> dict:
@@ -104,19 +105,19 @@ def create_course(body: CourseCreate, db: Session = Depends(get_db_dep), current
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Course title already exists")
+        raise HTTPException(status_code=409, detail=_t("course_title_already_exists"))
     db.refresh(course)
     return course
 
 
 @router.get("/{course_id}", response_model=CourseRead)
 def get_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
-    course_pk = parse_uuid_param(course_id, detail="Course not found")
+    course_pk = parse_uuid_param(course_id, detail=_t("course_not_found"))
     course = db.get(Course, course_pk)
     if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(status_code=404, detail=_t("course_not_found"))
     if current.role == RoleEnum.LEARNER and course.status == CourseStatus.DRAFT:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_t("course_not_found"))
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
     return course
@@ -124,12 +125,12 @@ def get_course(course_id: str, db: Session = Depends(get_db_dep), current=Depend
 
 @router.put("/{course_id}", response_model=CourseRead)
 def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    course_pk = parse_uuid_param(course_id, detail="Course not found")
+    course_pk = parse_uuid_param(course_id, detail=_t("course_not_found"))
     course = db.get(Course, course_pk)
     if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(status_code=404, detail=_t("course_not_found"))
     if current.role == RoleEnum.INSTRUCTOR and course.created_by_id != current.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     payload = _normalize_course_payload(body)
     _ensure_unique_course_title(db, payload["title"], existing_course_id=course.id)
     for field, value in payload.items():
@@ -140,17 +141,17 @@ def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Course title already exists")
+        raise HTTPException(status_code=409, detail=_t("course_title_already_exists"))
     db.refresh(course)
     return course
 
 
 @router.delete("/{course_id}", response_model=Message)
 def delete_course(course_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
-    course_pk = parse_uuid_param(course_id, detail="Course not found")
+    course_pk = parse_uuid_param(course_id, detail=_t("course_not_found"))
     course = db.get(Course, course_pk)
     if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(status_code=404, detail=_t("course_not_found"))
     attempt_count = int(
         db.scalar(
             select(func.count(Attempt.id))
@@ -164,8 +165,8 @@ def delete_course(course_id: str, db: Session = Depends(get_db_dep), current=Dep
     if attempt_count:
         raise HTTPException(
             status_code=409,
-            detail="Cannot delete a course that has learner attempts",
+            detail=_t("cannot_delete_course_attempts"),
         )
     db.delete(course)
     db.commit()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))

@@ -295,8 +295,8 @@ export default function QuestionPoolDetail() {
                 <label className={styles.label} htmlFor="pool-question-boolean-answer">{t('admin_pool_detail_correct_answer')}</label>
                 <select id="pool-question-boolean-answer" className={styles.select} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))}>
                   <option value="">{t('admin_pool_detail_select')}</option>
-                  <option value="True">True</option>
-                  <option value="False">False</option>
+                  <option value="True">{t('bool_true')}</option>
+                  <option value="False">{t('bool_false')}</option>
                 </select>
               </>
             )}

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ...models import Attempt, Exam, ExamStatus, RoleEnum, User
 from ...services.normalized_relations import is_exam_pool_library
+from ...core.i18n import translate as _t
 from ..deps import get_current_user, get_db_dep, learner_can_access_exam, load_permission_rows, permission_allowed
 
 router = APIRouter()
@@ -17,7 +18,7 @@ def _is_pool_library_exam(exam: Exam) -> bool:
 def search(q: str, db: Session = Depends(get_db_dep), current=Depends(get_current_user)):
     query = q.strip().lower()
     if not query:
-        raise HTTPException(status_code=400, detail="Search query is required")
+        raise HTTPException(status_code=400, detail=_t("search_query_required"))
     rows = load_permission_rows(db)
     can_edit_tests = permission_allowed(rows, current.role, "Edit Tests")
     can_view_attempt_analysis = permission_allowed(rows, current.role, "View Attempt Analysis")

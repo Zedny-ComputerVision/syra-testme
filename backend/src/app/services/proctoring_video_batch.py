@@ -7,6 +7,7 @@ from typing import Any
 from celery.result import AsyncResult
 
 from ..core.celery_app import celery_app
+from ..core.i18n import translate as _t
 from ..core.config import get_settings
 from ..tasks.proctoring_video import process_uploaded_proctoring_video
 
@@ -105,9 +106,9 @@ def get_proctoring_video_job_status(job_id: str) -> dict[str, Any]:
     return _build_job_status_payload(
         str(job_id),
         result=result,
-        queued_detail="Video processing is queued.",
-        processing_detail="Video processing is still running.",
-        completed_detail="Video processing completed.",
+        queued_detail=_t("video_processing_queued"),
+        processing_detail=_t("video_processing_running"),
+        completed_detail=_t("video_processing_completed"),
     )
 
 
@@ -116,7 +117,7 @@ def get_video_batch_job_status(job_id: str) -> dict[str, Any]:
     return _build_job_status_payload(
         str(job_id),
         result=result,
-        queued_detail="Batch video analysis is queued.",
-        processing_detail="Batch video analysis is still running.",
-        completed_detail="Batch video analysis completed.",
+        queued_detail=_t("batch_analysis_queued"),
+        processing_detail=_t("batch_analysis_running"),
+        completed_detail=_t("batch_analysis_completed"),
     )

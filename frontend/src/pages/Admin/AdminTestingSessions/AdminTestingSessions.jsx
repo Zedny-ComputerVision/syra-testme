@@ -606,8 +606,8 @@ export default function AdminTestingSessions() {
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="create-session-mode">Access Mode</label>
               <select id="create-session-mode" className={styles.select} value={form.access_mode} onChange={(event) => setForm((currentForm) => ({ ...currentForm, access_mode: event.target.value }))}>
-                <option value="OPEN">Open (anytime)</option>
-                <option value="RESTRICTED">Restricted (by schedule)</option>
+                <option value="OPEN">{t('settings_open_anytime')}</option>
+                <option value="RESTRICTED">{t('settings_restricted_by_schedule')}</option>
               </select>
             </div>
             <div className={styles.formGroup}>

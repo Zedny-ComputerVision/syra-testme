@@ -3,11 +3,11 @@
 <table>
   <thead>
     <tr>
-      <th>Attempt</th>
-      <th>User</th>
-      <th>Test</th>
-      <th>High Alerts</th>
-      <th>Medium Alerts</th>
+      <th>{{ labels.attempt }}</th>
+      <th>{{ labels.user }}</th>
+      <th>{{ labels.test }}</th>
+      <th>{{ labels.high_alerts }}</th>
+      <th>{{ labels.medium_alerts }}</th>
     </tr>
   </thead>
   <tbody>
@@ -23,7 +23,7 @@
       {% endfor %}
     {% else %}
       <tr>
-        <td colspan="5">No alert data found.</td>
+        <td colspan="5">{{ labels.no_alert_data }}</td>
       </tr>
     {% endif %}
   </tbody>

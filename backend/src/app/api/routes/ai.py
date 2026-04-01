@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 from ...core.config import get_settings
 from ...models import RoleEnum
+from ...core.i18n import translate as _t
 from ..deps import require_permission
 
 router = APIRouter()
@@ -28,7 +29,7 @@ def generate_questions(
     _=Depends(require_permission("Create Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
 ):
     if not body.topic or not body.topic.strip():
-        raise HTTPException(status_code=422, detail="Topic is required")
+        raise HTTPException(status_code=422, detail=_t("topic_required"))
     settings = get_settings()
     # Offline-friendly fallback: if no OpenAI key, synthesize simple questions locally.
     if not settings.OPENAI_API_KEY:

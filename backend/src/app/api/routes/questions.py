@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ...models import Question, Exam, ExamStatus, RoleEnum
 from ...schemas import QuestionCreate, QuestionRead, QuestionBase, Message
 from ...services.sanitization import sanitize_question_payload
+from ...core.i18n import translate as _t
 from ..deps import ensure_exam_owner, ensure_permission, get_current_user, get_db_dep, learner_can_access_exam, require_permission
 
 router = APIRouter()
@@ -33,10 +34,10 @@ def _learner_question_response(question: Question) -> dict:
 def create_question(body: QuestionCreate, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     exam = db.get(Exam, body.exam_id)
     if not exam:
-        raise HTTPException(status_code=404, detail="Test not found")
-    ensure_exam_owner(exam, current, detail="Not allowed", status_code=403)
+        raise HTTPException(status_code=404, detail=_t("test_not_found"))
+    ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=403)
     if exam.status == ExamStatus.OPEN:
-        raise HTTPException(status_code=409, detail="Cannot add questions to a published test")
+        raise HTTPException(status_code=409, detail=_t("cannot_add_to_published"))
     now = datetime.now(timezone.utc)
     q = Question(**sanitize_question_payload(body.model_dump()), created_at=now, updated_at=now)
     db.add(q)
@@ -50,22 +51,22 @@ def list_questions(exam_id: str | None = None, db: Session = Depends(get_db_dep)
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
     elif not exam_id:
-        raise HTTPException(status_code=403, detail="exam_id is required")
+        raise HTTPException(status_code=403, detail=_t("exam_id_required"))
 
     query = select(Question)
     if exam_id:
         try:
             parsed_exam_id = str(UUID(exam_id))
         except (TypeError, ValueError):
-            raise HTTPException(status_code=422, detail="Invalid exam_id")
+            raise HTTPException(status_code=422, detail=_t("invalid_exam_id"))
         if current.role == RoleEnum.LEARNER:
             exam = db.get(Exam, parsed_exam_id)
             if not learner_can_access_exam(db, exam, current):
-                raise HTTPException(status_code=404, detail="Test not found")
+                raise HTTPException(status_code=404, detail=_t("test_not_found"))
         else:
             exam = db.get(Exam, parsed_exam_id)
             if not exam:
-                raise HTTPException(status_code=404, detail="Test not found")
+                raise HTTPException(status_code=404, detail=_t("test_not_found"))
             ensure_exam_owner(exam, current)
         query = query.where(Question.exam_id == parsed_exam_id)
     elif current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
@@ -87,7 +88,7 @@ def get_question(
     parsed_id = _parse_uuid(question_id, "Question not found")
     q = db.get(Question, parsed_id)
     if not q:
-        raise HTTPException(status_code=404, detail="Question not found")
+        raise HTTPException(status_code=404, detail=_t("question_not_found"))
     if current.role == RoleEnum.LEARNER:
         return JSONResponse(content=_learner_question_response(q))
     ensure_exam_owner(q.exam, current)
@@ -99,10 +100,10 @@ def update_question(question_id: str, body: QuestionBase, db: Session = Depends(
     parsed_id = _parse_uuid(question_id, "Question not found")
     q = db.get(Question, parsed_id)
     if not q:
-        raise HTTPException(status_code=404, detail="Question not found")
-    ensure_exam_owner(q.exam, current, detail="Not allowed", status_code=403)
+        raise HTTPException(status_code=404, detail=_t("question_not_found"))
+    ensure_exam_owner(q.exam, current, detail=_t("not_allowed"), status_code=403)
     if q.exam and q.exam.status == ExamStatus.OPEN:
-        raise HTTPException(status_code=409, detail="Cannot modify questions on a published test")
+        raise HTTPException(status_code=409, detail=_t("cannot_modify_published"))
     protected = {"exam_id", "created_at"}
     now = datetime.now(timezone.utc)
     for field, value in sanitize_question_payload(body.model_dump()).items():
@@ -120,10 +121,10 @@ def delete_question(question_id: str, db: Session = Depends(get_db_dep), current
     parsed_id = _parse_uuid(question_id, "Question not found")
     q = db.get(Question, parsed_id)
     if not q:
-        raise HTTPException(status_code=404, detail="Question not found")
-    ensure_exam_owner(q.exam, current, detail="Not allowed", status_code=403)
+        raise HTTPException(status_code=404, detail=_t("question_not_found"))
+    ensure_exam_owner(q.exam, current, detail=_t("not_allowed"), status_code=403)
     if q.exam and q.exam.status == ExamStatus.OPEN:
-        raise HTTPException(status_code=409, detail="Cannot delete questions on a published test")
+        raise HTTPException(status_code=409, detail=_t("cannot_delete_published"))
     db.delete(q)
     db.commit()
-    return Message(detail="Deleted")
+    return Message(detail=_t("deleted"))
