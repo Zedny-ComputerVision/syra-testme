@@ -5,6 +5,7 @@ import useAuth from '../../hooks/useAuth'
 import useLanguage from '../../hooks/useLanguage'
 import { ThemeContext } from '../../context/ThemeContext'
 import { getUnreadCount, markAllRead, listNotifications, markRead } from '../../services/notification.service'
+import { translateEventType, translateSeverity } from '../../utils/proctoringLabels'
 import { searchAll } from '../../services/search.service'
 import styles from './Navbar.module.scss'
 
@@ -39,47 +40,39 @@ function getNotifType(notification) {
   return 'default'
 }
 
-const PROCTORING_EVENT_KEY_MAP = {
-  'FACE_MISMATCH': 'admin_wizard_alert_face_mismatch',
-  'CAMERA_COVERED': 'admin_wizard_alert_camera_covered',
-  'FULLSCREEN_EXIT': 'admin_wizard_alert_fullscreen_exit',
-  'TAB_SWITCH': 'admin_wizard_alert_tab_switch',
-  'FOCUS_LOSS': 'admin_wizard_alert_focus_loss',
-  'NO_FACE': 'admin_wizard_alert_no_face',
-  'MULTIPLE_FACES': 'admin_wizard_alert_multiple_faces',
-  'LOUD_AUDIO': 'admin_wizard_alert_loud_audio',
-  'AUDIO_ANOMALY': 'admin_wizard_alert_audio_anomaly',
-  'FORBIDDEN_OBJ': 'admin_wizard_alert_forbidden_obj',
-  'EYE_MOVEMENT': 'admin_wizard_alert_eye_movement',
-  'HEAD_POSE': 'admin_wizard_alert_head_pose',
-  'MOUTH_MOVEMENT': 'admin_wizard_alert_mouth_movement',
-}
-
-const PROCTORING_DETAIL_KEY_MAP = [
-  ['camera view is blocked or too dark', 'admin_wizard_alert_camera_covered_desc'],
-  ['live face differs from verified identity', 'admin_wizard_alert_face_mismatch_desc'],
-  ['fullscreen mode exited during exam', 'admin_wizard_alert_fullscreen_exit_desc'],
-  ['fullscreen exited while screen is being recorded', 'admin_wizard_alert_fullscreen_exit_desc'],
-  ['a proctoring event was detected', 'notif_detail_proctoring_default'],
-]
-
 function translateNotifTitle(title, t) {
   if (!title) return title
   const match = title.match(/^Proctoring Alert:\s*(.+)$/i)
   if (!match) return title
   const eventType = match[1].trim().toUpperCase().replace(/\s+/g, '_')
-  const key = PROCTORING_EVENT_KEY_MAP[eventType]
-  if (!key) return title
-  return `${t('notif_proctoring_alert')}: ${t(key)}`
+  const translated = translateEventType(eventType, t)
+  if (translated === eventType.replace(/_/g, ' ')) return title
+  return `${t('notif_proctoring_alert')}: ${translated}`
 }
+
+const NOTIF_DETAIL_PATTERNS = [
+  ['camera view is blocked or too dark', 'proctor_detail_camera_blocked'],
+  ['live face differs from verified identity', 'proctor_detail_face_mismatch'],
+  ['face not detected for', 'admin_wizard_alert_no_face_desc'],
+  ['fullscreen mode exited', 'proctor_detail_fullscreen_exit_exam'],
+  ['fullscreen exited while screen', 'proctor_detail_fullscreen_exit_recording'],
+  ['tab hidden / switched', 'proctor_detail_tab_hidden'],
+  ['browser developer tools', 'proctor_detail_devtools_open'],
+  ['no mouse movement', 'proctor_detail_mouse_inactive'],
+  ['screen sharing was interrupted', 'proctor_detail_screen_share_lost'],
+  ['a proctoring event was detected', 'notif_detail_proctoring_default'],
+]
 
 function translateNotifMessage(message, t) {
   if (!message) return message
-  const lower = message.toLowerCase()
-  for (const [pattern, key] of PROCTORING_DETAIL_KEY_MAP) {
-    if (lower.startsWith(pattern)) return t(key)
+  // Unwrap "High-severity proctoring event on 'TestName': detail..."
+  const sevMatch = message.match(/^High-severity proctoring event on '.*?':\s*(.+)$/i)
+  const detail = sevMatch ? sevMatch[1] : message
+  const lower = detail.toLowerCase()
+  for (const [pattern, key] of NOTIF_DETAIL_PATTERNS) {
+    if (lower.startsWith(pattern) || lower.includes(pattern)) return t(key)
   }
-  return message
+  return detail
 }
 
 function getErrorMessage(error, fallback) {
