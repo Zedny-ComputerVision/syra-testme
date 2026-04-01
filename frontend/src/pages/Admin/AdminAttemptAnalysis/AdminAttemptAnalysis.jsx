@@ -4,6 +4,7 @@ import useLanguage from '../../../hooks/useLanguage'
 import { adminApi } from '../../../services/admin.service'
 import { certificateIssueRuleLabel } from '../../../utils/certificates'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
+import { translateEventType, translateSeverity } from '../../../utils/proctoringLabels'
 import { readPaginatedItems } from '../../../utils/pagination'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import styles from './AdminAttemptAnalysis.module.scss'
@@ -585,10 +586,10 @@ export default function AdminAttemptAnalysis() {
                   <tbody>
                     {Object.values(violationCounts).map((violation) => (
                       <tr key={violation.type}>
-                        <td>{violation.type.replace(/_/g, ' ')}</td>
+                        <td>{translateEventType(violation.type, t)}</td>
                         <td>
                           <span className={`${styles.severityBadge} ${getSeverityClass('severity', violation.severity, styles)}`}>
-                            {violation.severity}
+                            {translateSeverity(violation.severity, t)}
                           </span>
                         </td>
                         <td>{violation.count}</td>
@@ -610,8 +611,8 @@ export default function AdminAttemptAnalysis() {
                     <div className={styles.eventTime}>{formatTime(event.occurred_at)}</div>
                     <div className={styles.eventContent}>
                       <div className={styles.eventType}>
-                        {event.event_type?.replace(/_/g, ' ')}{' '}
-                        <span className={`${styles.severityBadge} ${getSeverityClass('severity', event.severity, styles)}`}>{event.severity}</span>
+                        {translateEventType(event.event_type, t)}{' '}
+                        <span className={`${styles.severityBadge} ${getSeverityClass('severity', event.severity, styles)}`}>{translateSeverity(event.severity, t)}</span>
                       </div>
                       <div className={styles.eventDetail}>
                         {event.detail || formatConfidence(event.ai_confidence, t)}
@@ -732,10 +733,10 @@ export default function AdminAttemptAnalysis() {
                     )}
                     <div className={styles.evidenceMeta}>
                       <div className={styles.evidenceMetaTop}>
-                        <span className={`${styles.severityBadge} ${getSeverityClass('severity', event.severity, styles)}`}>{event.severity}</span>
+                        <span className={`${styles.severityBadge} ${getSeverityClass('severity', event.severity, styles)}`}>{translateSeverity(event.severity, t)}</span>
                         <span>{formatConfidence(event.ai_confidence, t)}</span>
                       </div>
-                      <div className={styles.evidenceLabel}>{event.event_type?.replace(/_/g, ' ')}</div>
+                      <div className={styles.evidenceLabel}>{translateEventType(event.event_type, t)}</div>
                       <div>{event.detail || t('admin_analysis_evidence_captured')}</div>
                       <div className={styles.evidenceTimestamp}>{t('admin_analysis_captured_at')} {formatTime(event.occurred_at)}</div>
                     </div>
@@ -777,16 +778,16 @@ export default function AdminAttemptAnalysis() {
                   <img
                     className={styles.lightboxImg}
                     src={evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)]}
-                    alt={`${selectedEvidence.event_type?.replace(/_/g, ' ')} ${t('admin_analysis_evidence').toLowerCase()}`}
+                    alt={`${translateEventType(selectedEvidence.event_type, t)} ${t('admin_analysis_evidence').toLowerCase()}`}
                   />
                 ) : (
                   <div className={styles.lightboxImg} />
                 )}
                 <div className={styles.lightboxMeta}>
                   <div className={styles.lightboxHeader}>
-                    <span className={styles.lightboxTitle}>{selectedEvidence.event_type?.replace(/_/g, ' ')}</span>
+                    <span className={styles.lightboxTitle}>{translateEventType(selectedEvidence.event_type, t)}</span>
                     <span className={`${styles.severityBadge} ${getSeverityClass('severity', selectedEvidence.severity, styles)}`}>
-                      {selectedEvidence.severity}
+                      {translateSeverity(selectedEvidence.severity, t)}
                     </span>
                   </div>
                   <div>{selectedEvidence.detail || t('admin_analysis_evidence_captured')}</div>

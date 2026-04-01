@@ -3,6 +3,7 @@ import Hls from 'hls.js'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
+import { translateEventType, translateSeverity } from '../../../utils/proctoringLabels'
 import { readPaginatedItems } from '../../../utils/pagination'
 import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminAttemptVideos.module.scss'
@@ -926,7 +927,7 @@ export default function AdminAttemptVideos() {
                       type="button"
                       className={`${styles.warningTick} ${event.severity === 'HIGH' ? styles.warningTickHigh : styles.warningTickMedium}`}
                       style={{ left: `${pct}%` }}
-                      title={`${event.severity} - ${event.event_type} - ${formatSeconds(event.second)}`}
+                      title={`${translateSeverity(event.severity, t)} - ${translateEventType(event.event_type, t)} - ${formatSeconds(event.second)}`}
                       onClick={(e) => { e.stopPropagation(); selectEvent(event) }}
                     />
                   )
@@ -1004,13 +1005,13 @@ export default function AdminAttemptVideos() {
                       onClick={() => selectEvent(e)}
                     >
                       <div className={styles.eventBtnTop}>
-                        <span className={`${styles.eventSeverity} ${severityClass(e.severity)}`}>{e.severity}</span>
+                        <span className={`${styles.eventSeverity} ${severityClass(e.severity)}`}>{translateSeverity(e.severity, t)}</span>
                         {typeof e.ai_confidence === 'number' && (
                           <span className={styles.eventConfidence}>{Math.round(e.ai_confidence * 100)}%</span>
                         )}
                         <span className={styles.eventTimestamp}>{formatSeconds(e.second)}</span>
                       </div>
-                      <span className={styles.eventMeta}>{e.event_type}</span>
+                      <span className={styles.eventMeta}>{translateEventType(e.event_type, t)}</span>
                       <span className={styles.eventDetail}>{e.detail || t('admin_videos_warning_detected')}</span>
                     </button>
                   ))}
@@ -1018,12 +1019,12 @@ export default function AdminAttemptVideos() {
                 {selectedEvent && (
                   <div className={styles.eventInspector}>
                     <div className={styles.inspectorHeader}>
-                      <span className={`${styles.eventSeverity} ${severityClass(selectedEvent.severity)}`}>{selectedEvent.severity}</span>
+                      <span className={`${styles.eventSeverity} ${severityClass(selectedEvent.severity)}`}>{translateSeverity(selectedEvent.severity, t)}</span>
                       <span className={styles.inspectorTime}>
                         {t('admin_videos_event')} {filteredWarningEvents.indexOf(selectedEvent) + 1} {t('admin_videos_of')} {filteredWarningEvents.length} - {formatSeconds(selectedEvent.second)}
                       </span>
                     </div>
-                    <div className={styles.inspectorTitle}>{selectedEvent.event_type}</div>
+                    <div className={styles.inspectorTitle}>{translateEventType(selectedEvent.event_type, t)}</div>
                     <div className={styles.inspectorDetail}>{selectedEvent.detail || t('admin_videos_warning_detected_monitoring')}</div>
                     <div className={styles.inspectorMeta}>
                       <span>{selectedEvent.occurred_at ? new Date(selectedEvent.occurred_at).toLocaleString() : '-'}</span>
@@ -1050,7 +1051,7 @@ export default function AdminAttemptVideos() {
                         <img
                           className={styles.inspectorImage}
                           src={selectedEvidenceUrl}
-                          alt={`${selectedEvent.event_type} ${t('admin_videos_evidence')}`}
+                          alt={`${translateEventType(selectedEvent.event_type, t)} ${t('admin_videos_evidence')}`}
                         />
                       ) : (
                         <div className={styles.inspectorImage} />
