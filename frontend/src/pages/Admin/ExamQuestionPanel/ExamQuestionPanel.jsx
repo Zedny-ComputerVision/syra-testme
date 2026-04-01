@@ -28,13 +28,20 @@ function normalizeOptions(questionType, options) {
   return (options || []).map((entry) => entry.trim()).filter(Boolean)
 }
 
-function labelForType(types, value) {
-  return types.find((type) => type.value === value)?.label || value
+function resolveLabel(type, t) {
+  if (type.label) return type.label
+  if (type.labelKey) return t(type.labelKey)
+  return type.value
+}
+
+function labelForType(types, value, t) {
+  const type = types.find((tp) => tp.value === value)
+  return type ? resolveLabel(type, t) : value
 }
 
 export default function ExamQuestionPanel({ examId, questions = [], onUpdate, questionTypes }) {
   const { t } = useLanguage()
-  const types = questionTypes || DEFAULT_TYPES
+  const types = (questionTypes || DEFAULT_TYPES).map((tp) => ({ ...tp, label: resolveLabel(tp, t) }))
   const defaultType = types[0]?.value || 'MCQ'
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ ...createEmptyQuestion(defaultType) })
@@ -51,7 +58,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
     [questions],
   )
 
-  const activeTypeLabel = labelForType(types, form.question_type)
+  const activeTypeLabel = labelForType(types, form.question_type, t)
   const currentOptions = form.options || []
   const trimmedOptions = normalizeOptions(form.question_type, currentOptions)
 
@@ -239,7 +246,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
             <div className={styles.qTopRow}>
               <div className={styles.qText}>{question.text}</div>
               <div className={styles.qChips}>
-                <span className={styles.qChip}>{labelForType(types, question.question_type)}</span>
+                <span className={styles.qChip}>{labelForType(types, question.question_type, t)}</span>
                 <span className={styles.qChip}>{Number(question.points || 1)} pts</span>
               </div>
             </div>
