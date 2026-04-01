@@ -136,6 +136,8 @@
   "nav_manage_users": "Manage Users",
   "nav_my_schedule": "My Schedule",
   "nav_notification": "Notification",
+  "notif_proctoring_alert": "Proctoring Alert",
+  "notif_detail_proctoring_default": "A proctoring event was detected.",
   "nav_all_caught_up": "All caught up",
   "nav_unread": "unread",
   "nav_use_accent": "Use accent",

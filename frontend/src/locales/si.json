@@ -136,6 +136,8 @@
   "nav_manage_users": "පරිශීලකයන් කළමනාකරණය",
   "nav_my_schedule": "මගේ කාලසටහන",
   "nav_notification": "දැනුම්දීම",
+  "notif_proctoring_alert": "අධීක්ෂණ ඇඟවීම",
+  "notif_detail_proctoring_default": "අධීක්ෂණ සිදුවීමක් හඳුනාගන්නා ලදී.",
   "nav_all_caught_up": "සියල්ල කියවා ඇත",
   "nav_unread": "නොකියවූ",
   "nav_use_accent": "වර්ණය භාවිතා කරන්න",

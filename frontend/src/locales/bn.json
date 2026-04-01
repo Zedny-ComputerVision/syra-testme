@@ -136,6 +136,8 @@
   "nav_manage_users": "ব্যবহারকারী পরিচালনা",
   "nav_my_schedule": "আমার সময়সূচি",
   "nav_notification": "বিজ্ঞপ্তি",
+  "notif_proctoring_alert": "তদারকি সতর্কতা",
+  "notif_detail_proctoring_default": "একটি তদারকি ঘটনা সনাক্ত করা হয়েছে।",
   "nav_all_caught_up": "সব পড়া হয়ে গেছে",
   "nav_unread": "অপঠিত",
   "nav_use_accent": "রঙ ব্যবহার করুন",

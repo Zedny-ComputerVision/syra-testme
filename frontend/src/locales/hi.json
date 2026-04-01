@@ -136,6 +136,8 @@
   "nav_manage_users": "उपयोगकर्ता प्रबंधन",
   "nav_my_schedule": "मेरी अनुसूची",
   "nav_notification": "सूचना",
+  "notif_proctoring_alert": "प्रॉक्टरिंग अलर्ट",
+  "notif_detail_proctoring_default": "एक प्रॉक्टरिंग घटना का पता चला।",
   "nav_all_caught_up": "सब पढ़ लिया",
   "nav_unread": "अपठित",
   "nav_use_accent": "रंग उपयोग करें",

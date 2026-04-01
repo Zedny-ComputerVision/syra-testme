@@ -136,6 +136,8 @@
   "nav_manage_users": "प्रयोगकर्ता व्यवस्थापन",
   "nav_my_schedule": "मेरो तालिका",
   "nav_notification": "सूचना",
+  "notif_proctoring_alert": "निगरानी अलर्ट",
+  "notif_detail_proctoring_default": "निगरानी घटना पत्ता लागियो।",
   "nav_all_caught_up": "सबै पढिसकियो",
   "nav_unread": "नपढिएको",
   "nav_use_accent": "रङ प्रयोग गर्नुहोस्",

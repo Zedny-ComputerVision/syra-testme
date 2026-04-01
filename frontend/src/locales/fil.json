@@ -136,6 +136,8 @@
   "nav_manage_users": "Pamahalaan ang mga Gumagamit",
   "nav_my_schedule": "Aking Iskedyul",
   "nav_notification": "Notification",
+  "notif_proctoring_alert": "Alerto ng Pagbabantay",
+  "notif_detail_proctoring_default": "May nakitang pangyayari sa pagbabantay.",
   "nav_all_caught_up": "Lahat ay nabasa na",
   "nav_unread": "hindi pa nabasa",
   "nav_use_accent": "Gamitin ang kulay",

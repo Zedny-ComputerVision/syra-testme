@@ -136,6 +136,8 @@
   "nav_manage_users": "ተጠቃሚዎችን አስተዳድር",
   "nav_my_schedule": "የእኔ መርሐ ግብር",
   "nav_notification": "ማሳወቂያ",
+  "notif_proctoring_alert": "የክትትል ማንቂያ",
+  "notif_detail_proctoring_default": "የክትትል ክስተት ተገኝቷል።",
   "nav_all_caught_up": "ሁሉም ተነቧል",
   "nav_unread": "ያልተነበበ",
   "nav_use_accent": "ቀለም ተጠቀም",

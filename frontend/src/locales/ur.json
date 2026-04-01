@@ -136,6 +136,8 @@
   "nav_manage_users": "صارفین کا انتظام",
   "nav_my_schedule": "میرا شیڈول",
   "nav_notification": "اطلاع",
+  "notif_proctoring_alert": "نگرانی الرٹ",
+  "notif_detail_proctoring_default": "ایک نگرانی واقعہ کا پتہ چلا۔",
   "nav_all_caught_up": "سب پڑھ لیا",
   "nav_unread": "غیر پڑھی",
   "nav_use_accent": "ایکسنٹ رنگ استعمال کریں",

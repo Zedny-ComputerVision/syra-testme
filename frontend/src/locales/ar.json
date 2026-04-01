@@ -136,6 +136,8 @@
   "nav_manage_users": "إدارة المستخدمين",
   "nav_my_schedule": "جدولي",
   "nav_notification": "إشعار",
+  "notif_proctoring_alert": "تنبيه المراقبة",
+  "notif_detail_proctoring_default": "تم اكتشاف حدث مراقبة.",
   "nav_all_caught_up": "لا إشعارات جديدة",
   "nav_unread": "غير مقروء",
   "nav_use_accent": "استخدم لوناً مميزاً",

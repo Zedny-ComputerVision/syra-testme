@@ -39,6 +39,49 @@ function getNotifType(notification) {
   return 'default'
 }
 
+const PROCTORING_EVENT_KEY_MAP = {
+  'FACE_MISMATCH': 'admin_wizard_alert_face_mismatch',
+  'CAMERA_COVERED': 'admin_wizard_alert_camera_covered',
+  'FULLSCREEN_EXIT': 'admin_wizard_alert_fullscreen_exit',
+  'TAB_SWITCH': 'admin_wizard_alert_tab_switch',
+  'FOCUS_LOSS': 'admin_wizard_alert_focus_loss',
+  'NO_FACE': 'admin_wizard_alert_no_face',
+  'MULTIPLE_FACES': 'admin_wizard_alert_multiple_faces',
+  'LOUD_AUDIO': 'admin_wizard_alert_loud_audio',
+  'AUDIO_ANOMALY': 'admin_wizard_alert_audio_anomaly',
+  'FORBIDDEN_OBJ': 'admin_wizard_alert_forbidden_obj',
+  'EYE_MOVEMENT': 'admin_wizard_alert_eye_movement',
+  'HEAD_POSE': 'admin_wizard_alert_head_pose',
+  'MOUTH_MOVEMENT': 'admin_wizard_alert_mouth_movement',
+}
+
+const PROCTORING_DETAIL_KEY_MAP = [
+  ['camera view is blocked or too dark', 'admin_wizard_alert_camera_covered_desc'],
+  ['live face differs from verified identity', 'admin_wizard_alert_face_mismatch_desc'],
+  ['fullscreen mode exited during exam', 'admin_wizard_alert_fullscreen_exit_desc'],
+  ['fullscreen exited while screen is being recorded', 'admin_wizard_alert_fullscreen_exit_desc'],
+  ['a proctoring event was detected', 'notif_detail_proctoring_default'],
+]
+
+function translateNotifTitle(title, t) {
+  if (!title) return title
+  const match = title.match(/^Proctoring Alert:\s*(.+)$/i)
+  if (!match) return title
+  const eventType = match[1].trim().toUpperCase().replace(/\s+/g, '_')
+  const key = PROCTORING_EVENT_KEY_MAP[eventType]
+  if (!key) return title
+  return `${t('notif_proctoring_alert')}: ${t(key)}`
+}
+
+function translateNotifMessage(message, t) {
+  if (!message) return message
+  const lower = message.toLowerCase()
+  for (const [pattern, key] of PROCTORING_DETAIL_KEY_MAP) {
+    if (lower.startsWith(pattern)) return t(key)
+  }
+  return message
+}
+
 function getErrorMessage(error, fallback) {
   const detail = error?.response?.data?.detail
   if (typeof detail === 'string' && detail.trim()) return detail
@@ -567,8 +610,8 @@ export default function Navbar({ onMenuToggle }) {
                           {type === 'default' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>}
                         </span>
                         <div className={styles.notifContent}>
-                          {n.title && <div className={styles.notifItemTitle}>{n.title}</div>}
-                          <div className={styles.notifMsg}>{n.message || n.title || t('nav_notification')}</div>
+                          {n.title && <div className={styles.notifItemTitle}>{translateNotifTitle(n.title, t)}</div>}
+                          <div className={styles.notifMsg}>{translateNotifMessage(n.message || n.title, t) || t('nav_notification')}</div>
                           {n.created_at && <div className={styles.notifTime}>{timeAgo(n.created_at, t)}</div>}
                         </div>
                       </button>

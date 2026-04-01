@@ -136,6 +136,8 @@
   "nav_manage_users": "Kelola Pengguna",
   "nav_my_schedule": "Jadwal Saya",
   "nav_notification": "Notifikasi",
+  "notif_proctoring_alert": "Peringatan Pengawasan",
+  "notif_detail_proctoring_default": "Peristiwa pengawasan terdeteksi.",
   "nav_all_caught_up": "Semua sudah dibaca",
   "nav_unread": "belum dibaca",
   "nav_use_accent": "Gunakan aksen",
