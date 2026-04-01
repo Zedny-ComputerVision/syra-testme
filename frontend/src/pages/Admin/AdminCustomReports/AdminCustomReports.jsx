@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { adminApi } from '../../../services/admin.service'
 import { readBlobErrorMessage } from '../../../utils/httpErrors'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminCustomReports.module.scss'
 
 const DATASETS = {
@@ -29,6 +30,7 @@ function downloadBlob(blob, filename) {
 }
 
 export default function AdminCustomReports() {
+  const { t } = useLanguage()
   const [datasetKey, setDatasetKey] = useState('attempts')
   const [selectedCols, setSelectedCols] = useState(DATASETS.attempts.columns)
   const [search, setSearch] = useState('')
@@ -78,7 +80,7 @@ export default function AdminCustomReports() {
         setAvailableColumns(data?.available_columns || DATASETS[datasetKey].columns)
       } catch (err) {
         if (cancelled) return
-        setPreviewError(err.response?.data?.detail || 'Failed to load dataset preview.')
+        setPreviewError(err.response?.data?.detail || t('admin_custom_reports_failed_preview'))
         setPreviewRows([])
         setTotalRows(0)
       } finally {
@@ -120,9 +122,9 @@ export default function AdminCustomReports() {
         search: search.trim() || null,
       })
       downloadBlob(data, `${datasetKey}_report.csv`)
-      setNotice(`Exported ${totalRows} row${totalRows === 1 ? '' : 's'} from ${dataset.label.toLowerCase()}.`)
+      setNotice(`${t('admin_custom_reports_exported')} ${totalRows} ${totalRows === 1 ? t('admin_custom_reports_row') : t('admin_custom_reports_rows')} ${t('admin_custom_reports_from')} ${dataset.label.toLowerCase()}.`)
     } catch (err) {
-      setActionError(await readBlobErrorMessage(err, 'Failed to export report.'))
+      setActionError(await readBlobErrorMessage(err, t('admin_custom_reports_failed_export')))
     } finally {
       setExporting(false)
     }
@@ -130,14 +132,14 @@ export default function AdminCustomReports() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Report Builder" subtitle="Export server-backed CSV reports with filters and selected columns" />
+      <AdminPageHeader title={t('admin_custom_reports_title')} subtitle={t('admin_custom_reports_subtitle')} />
 
       {actionError && <div className={styles.error}>{actionError}</div>}
       {notice && <div className={styles.notice}>{notice}</div>}
 
       <div className={styles.toolbar}>
         <div className={styles.controls}>
-          <label className={styles.label} htmlFor="custom-report-dataset">Dataset</label>
+          <label className={styles.label} htmlFor="custom-report-dataset">{t('admin_custom_reports_dataset')}</label>
           <select id="custom-report-dataset" className={styles.select} value={datasetKey} onChange={(e) => setDatasetKey(e.target.value)}>
             {Object.entries(DATASETS).map(([key, value]) => (
               <option key={key} value={key}>{value.label}</option>
@@ -146,18 +148,18 @@ export default function AdminCustomReports() {
         </div>
 
         <div className={styles.searchGroup}>
-          <label className={styles.label} htmlFor="custom-report-search">Search</label>
+          <label className={styles.label} htmlFor="custom-report-search">{t('admin_custom_reports_search')}</label>
           <div className={styles.searchRow}>
             <input
               id="custom-report-search"
               className={styles.input}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Filter ${dataset.label.toLowerCase()}...`}
+              placeholder={`${t('admin_custom_reports_filter')} ${dataset.label.toLowerCase()}...`}
             />
             {hasCustomFilters && (
               <button type="button" className={styles.secondaryBtn} onClick={resetFilters} disabled={loading || exporting}>
-                Clear filters
+                {t('admin_custom_reports_clear_filters')}
               </button>
             )}
           </div>
@@ -165,25 +167,25 @@ export default function AdminCustomReports() {
       </div>
 
       <div className={styles.summaryRow}>
-        <div className={styles.summaryChip}>Dataset: {dataset.label}</div>
-        <div className={styles.summaryChip}>Selected columns: {selectedCols.length} / {availableColumns.length}</div>
-        <div className={styles.summaryChip}>Matching rows: {loading ? 'Loading...' : totalRows}</div>
+        <div className={styles.summaryChip}>{t('admin_custom_reports_dataset')}: {dataset.label}</div>
+        <div className={styles.summaryChip}>{t('admin_custom_reports_selected_columns')}: {selectedCols.length} / {availableColumns.length}</div>
+        <div className={styles.summaryChip}>{t('admin_custom_reports_matching_rows')}: {loading ? t('admin_custom_reports_loading') : totalRows}</div>
       </div>
 
       <div className={styles.panel}>
         <div className={styles.panelHeader}>
           <div>
-            <div className={styles.panelTitle}>Columns</div>
-            <div className={styles.muted}>The export is generated on the backend using the selected dataset, search, and columns.</div>
+            <div className={styles.panelTitle}>{t('admin_custom_reports_columns')}</div>
+            <div className={styles.muted}>{t('admin_custom_reports_export_description')}</div>
           </div>
           <div className={styles.actionGroup}>
             {previewError && (
               <button type="button" className={styles.secondaryBtn} onClick={retryPreview} disabled={loading || exporting}>
-                Retry preview
+                {t('admin_custom_reports_retry_preview')}
               </button>
             )}
             <button type="button" className={styles.btnPrimary} onClick={exportCSV} disabled={loading || exporting || noColumnsSelected || Boolean(previewError)}>
-              {exporting ? 'Exporting...' : 'Export CSV'}
+              {exporting ? t('admin_custom_reports_exporting') : t('admin_custom_reports_export_csv')}
             </button>
           </div>
         </div>
@@ -200,24 +202,24 @@ export default function AdminCustomReports() {
       <div className={styles.panel}>
         <div className={styles.panelHeader}>
           <div>
-            <div className={styles.panelTitle}>Preview</div>
+            <div className={styles.panelTitle}>{t('admin_custom_reports_preview')}</div>
             <div className={styles.muted}>
-              {loading ? 'Loading preview...' : `Showing ${previewRows.length} of ${totalRows} matching row${totalRows === 1 ? '' : 's'}`}
+              {loading ? t('admin_custom_reports_loading_preview') : `${t('admin_custom_reports_showing')} ${previewRows.length} ${t('admin_custom_reports_of')} ${totalRows} ${totalRows === 1 ? t('admin_custom_reports_matching_row') : t('admin_custom_reports_matching_rows_plural')}`}
             </div>
           </div>
         </div>
 
         {noColumnsSelected ? (
-          <div className={styles.empty}>Select at least one column to preview or export this report.</div>
+          <div className={styles.empty}>{t('admin_custom_reports_select_column')}</div>
         ) : previewError ? (
           <div className={styles.retryRow}>
             <span className={styles.errorInline}>{previewError}</span>
             <button type="button" className={styles.secondaryBtn} onClick={retryPreview} disabled={loading}>
-              Retry preview
+              {t('admin_custom_reports_retry_preview')}
             </button>
           </div>
         ) : !loading && previewRows.length === 0 ? (
-          <div className={styles.empty}>{search.trim() ? 'No rows matched the current filters.' : 'No rows are available for this dataset yet.'}</div>
+          <div className={styles.empty}>{search.trim() ? t('admin_custom_reports_no_rows_match') : t('admin_custom_reports_no_rows_available')}</div>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>

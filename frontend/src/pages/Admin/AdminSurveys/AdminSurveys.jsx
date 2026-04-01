@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { createSurvey, deleteSurvey, listResponses, listSurveys, updateSurvey } from '../../../services/survey.service'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminSurveys.module.scss'
 
-const SURVEY_QUESTION_TYPES = [
-  { value: 'TEXT', label: 'Text Response' },
-  { value: 'MCQ', label: 'Single Choice' },
-  { value: 'MULTI_SELECT', label: 'Multiple Choice' },
-  { value: 'RATING', label: 'Rating (1-5)' },
-  { value: 'BOOLEAN', label: 'Yes / No' },
+const useSurveyQuestionTypes = (t) => [
+  { value: 'TEXT', label: t('survey_question_type_text') },
+  { value: 'MCQ', label: t('survey_question_type_mcq') },
+  { value: 'MULTI_SELECT', label: t('survey_question_type_multi_select') },
+  { value: 'RATING', label: t('survey_question_type_rating') },
+  { value: 'BOOLEAN', label: t('survey_question_type_boolean') },
 ]
 
 const CHOICE_TYPES = new Set(['MCQ', 'MULTI_SELECT'])
@@ -37,12 +38,14 @@ function resolveError(err) {
     err.response?.data?.error?.message ||
     err.response?.data?.error?.detail ||
     err.message ||
-    'Action failed.'
+    null
   )
 }
 
 export default function AdminSurveys() {
   const { user } = useAuth()
+  const { t } = useLanguage()
+  const SURVEY_QUESTION_TYPES = useSurveyQuestionTypes(t)
   const isAdmin = user?.role === 'ADMIN'
   const currentUserId = String(user?.id || '')
   const [surveys, setSurveys] = useState([])
@@ -73,7 +76,7 @@ export default function AdminSurveys() {
       setSurveys(data || [])
       setError('')
     } catch (err) {
-      setError(resolveError(err) || 'Failed to load surveys')
+      setError(resolveError(err) || t('admin_surveys_load_failed'))
     } finally {
       setLoading(false)
     }
@@ -135,16 +138,16 @@ export default function AdminSurveys() {
       .filter((question) => question.text)
 
     if (!title.trim()) {
-      setError('Title is required')
+      setError(t('admin_surveys_title_required'))
       return
     }
     if (!cleanedQuestions.length) {
-      setError('Add at least one question')
+      setError(t('admin_surveys_add_question'))
       return
     }
     const invalidChoice = cleanedQuestions.find((question) => CHOICE_TYPES.has(question.question_type) && (question.options?.length || 0) < 2)
     if (invalidChoice) {
-      setError('Single and multiple choice questions need at least two options.')
+      setError(t('admin_surveys_choice_min_options'))
       return
     }
 
@@ -160,15 +163,15 @@ export default function AdminSurveys() {
       }
       if (editingId) {
         await updateSurvey(editingId, payload)
-        setNotice('Survey updated.')
+        setNotice(t('admin_surveys_updated'))
       } else {
         await createSurvey(payload)
-        setNotice('Survey created.')
+        setNotice(t('admin_surveys_created'))
       }
       resetForm()
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to save survey')
+      setError(resolveError(err) || t('admin_surveys_save_failed'))
     } finally {
       setSaving(false)
     }
@@ -183,7 +186,7 @@ export default function AdminSurveys() {
       setResponses(data || [])
     } catch (err) {
       setResponses([])
-      setError(resolveError(err) || 'Failed to load responses')
+      setError(resolveError(err) || t('admin_surveys_responses_load_failed'))
     } finally {
       setResponsesLoading(false)
     }
@@ -195,10 +198,10 @@ export default function AdminSurveys() {
     setNotice('')
     try {
       await updateSurvey(survey.id, { is_active: !(survey.is_active !== false) })
-      setNotice(survey.is_active ? 'Survey deactivated.' : 'Survey activated.')
+      setNotice(survey.is_active ? t('admin_surveys_deactivated') : t('admin_surveys_activated'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to update survey status')
+      setError(resolveError(err) || t('admin_surveys_status_update_failed'))
     } finally {
       setStatusBusyId(null)
     }
@@ -219,10 +222,10 @@ export default function AdminSurveys() {
         setSelectedSurvey(null)
         setResponses([])
       }
-      setNotice('Survey deleted.')
+      setNotice(t('admin_surveys_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Delete failed')
+      setError(resolveError(err) || t('admin_surveys_delete_failed'))
     } finally {
       setDeleteBusyId(null)
     }
@@ -233,7 +236,7 @@ export default function AdminSurveys() {
     if (!responses.length) return
     const questionKeys = Object.keys(responses[0]?.answers || {})
     const rows = [
-      ['#', 'Date', ...questionKeys],
+      ['#', t('admin_surveys_date'), ...questionKeys],
       ...responses.map((r, i) => [
         i + 1,
         r.created_at ? new Date(r.created_at).toLocaleString() : '',
@@ -267,26 +270,26 @@ export default function AdminSurveys() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Surveys" subtitle="Create and review surveys" />
+      <AdminPageHeader title={t('admin_surveys_title')} subtitle={t('admin_surveys_subtitle')} />
       {error && (
         <div className={styles.helperRow}>
           <div className={styles.errorBanner}>{error}</div>
-          <button className={styles.btnSecondary} type="button" onClick={() => void load()}>Retry</button>
+          <button className={styles.btnSecondary} type="button" onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
       {notice && <div className={styles.noticeBanner}>{notice}</div>}
       <div className={styles.grid}>
         <form className={styles.card} onSubmit={save}>
-          <div className={styles.sectionTitle}>{editingId ? 'Edit Survey' : 'New Survey'}</div>
-          <label className={styles.label} htmlFor="survey-title">Title</label>
+          <div className={styles.sectionTitle}>{editingId ? t('admin_surveys_edit_survey') : t('admin_surveys_new_survey')}</div>
+          <label className={styles.label} htmlFor="survey-title">{t('admin_surveys_field_title')}</label>
           <input id="survey-title" className={styles.input} value={title} onChange={(event) => setTitle(event.target.value)} required />
-          <label className={styles.label} htmlFor="survey-description">Description</label>
+          <label className={styles.label} htmlFor="survey-description">{t('admin_surveys_field_description')}</label>
           <textarea id="survey-description" className={styles.textarea} value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
           <label className={`${styles.label} ${styles.checkboxLabel}`}>
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
-            Active (visible to learners)
+            {t('admin_surveys_active_label')}
           </label>
-          <div className={styles.sectionTitle}>Questions</div>
+          <div className={styles.sectionTitle}>{t('admin_surveys_questions')}</div>
           {questions.map((question, index) => (
             <div key={index} className={styles.questionCard}>
               <div className={styles.questionHeader}>
@@ -294,7 +297,7 @@ export default function AdminSurveys() {
                   className={styles.input}
                   value={question.text}
                   onChange={(event) => updateQuestion(index, { text: event.target.value })}
-                  placeholder={`Question ${index + 1}`}
+                  placeholder={`${t('admin_surveys_question_label')} ${index + 1}`}
                 />
                 <select
                   className={`${styles.input} ${styles.typeSelect}`}
@@ -306,7 +309,7 @@ export default function AdminSurveys() {
                   ))}
                 </select>
                 {questions.length > 1 && (
-                  <button type="button" className={styles.deleteBtn} onClick={() => removeQuestion(index)}>Remove</button>
+                  <button type="button" className={styles.deleteBtn} onClick={() => removeQuestion(index)}>{t('remove')}</button>
                 )}
               </div>
 
@@ -318,91 +321,91 @@ export default function AdminSurveys() {
                         className={styles.input}
                         value={option}
                         onChange={(event) => updateOption(index, optionIdx, event.target.value)}
-                        placeholder={`Option ${optionIdx + 1}`}
+                        placeholder={`${t('admin_surveys_option_label')} ${optionIdx + 1}`}
                       />
                       {(question.options || []).length > 2 && (
-                        <button type="button" className={styles.deleteBtn} onClick={() => removeOption(index, optionIdx)}>Remove</button>
+                        <button type="button" className={styles.deleteBtn} onClick={() => removeOption(index, optionIdx)}>{t('remove')}</button>
                       )}
                     </div>
                   ))}
-                  <button type="button" className={styles.btnSecondary} onClick={() => addOption(index)}>+ Option</button>
+                  <button type="button" className={styles.btnSecondary} onClick={() => addOption(index)}>{t('admin_surveys_add_option')}</button>
                 </div>
               )}
 
               {question.question_type === 'RATING' && (
-                <div className={styles.rowSub}>Learners will see a 1 to 5 rating scale.</div>
+                <div className={styles.rowSub}>{t('admin_surveys_rating_hint')}</div>
               )}
 
               {question.question_type === 'BOOLEAN' && (
-                <div className={styles.rowSub}>Learners will answer Yes or No.</div>
+                <div className={styles.rowSub}>{t('admin_surveys_boolean_hint')}</div>
               )}
             </div>
           ))}
           <div className={styles.qActions}>
-            <button type="button" className={styles.btnSecondary} onClick={addQuestion}>+ Question</button>
-            {editingId && <button type="button" className={styles.btnSecondary} onClick={resetForm}>Cancel Edit</button>}
-            <button className={styles.btnPrimary} type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Survey'}</button>
+            <button type="button" className={styles.btnSecondary} onClick={addQuestion}>{t('admin_surveys_add_question_btn')}</button>
+            {editingId && <button type="button" className={styles.btnSecondary} onClick={resetForm}>{t('admin_surveys_cancel_edit')}</button>}
+            <button className={styles.btnPrimary} type="submit" disabled={saving}>{saving ? t('saving') : t('admin_surveys_save_survey')}</button>
           </div>
         </form>
 
         <div className={styles.card}>
           <div className={styles.listHeader}>
-            <div className={styles.sectionTitle}>All Surveys <span className={styles.countChip}>{filteredSurveys.length}</span></div>
+            <div className={styles.sectionTitle}>{t('admin_surveys_all_surveys')} <span className={styles.countChip}>{filteredSurveys.length}</span></div>
             <div className={styles.listControls}>
               <input
                 className={styles.searchInput}
                 type="text"
-                placeholder="Search surveys..."
+                placeholder={t('admin_surveys_search_placeholder')}
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               />
               <button type="button" className={styles.sortBtn}
                 onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
               >
-                {sortDir === 'desc' ? 'Newest first ↓' : 'Oldest first ↑'}
+                {sortDir === 'desc' ? t('admin_surveys_newest_first') : t('admin_surveys_oldest_first')}
               </button>
             </div>
           </div>
-          {loading && <div className={styles.loadingText}>Loading...</div>}
+          {loading && <div className={styles.loadingText}>{t('loading')}</div>}
           {paginatedSurveys.map((survey) => (
             <div key={survey.id} className={styles.row}>
               <div>
                 <div className={styles.rowTitle}>
                   {survey.title}
                   {survey.is_active
-                    ? <span className={styles.activeBadge}>Active</span>
-                    : <span className={styles.inactiveBadge}>Inactive</span>}
+                    ? <span className={styles.activeBadge}>{t('admin_surveys_active')}</span>
+                    : <span className={styles.inactiveBadge}>{t('admin_surveys_inactive')}</span>}
                 </div>
                 <div className={styles.rowSub}>
-                  {(survey.questions || []).length} question(s)
+                  {(survey.questions || []).length} {t('admin_surveys_questions_count')}
                   {survey.response_count != null && (
-                    <span className={styles.responseChip}>{survey.response_count} response{survey.response_count !== 1 ? 's' : ''}</span>
+                    <span className={styles.responseChip}>{survey.response_count} {t('admin_surveys_response_count')}</span>
                   )}
                 </div>
                 {survey.description && <div className={styles.rowSub}>{survey.description}</div>}
-                {!canManageSurvey(survey) && <div className={styles.rowSub}>Read-only — only the owner or an admin can edit.</div>}
+                {!canManageSurvey(survey) && <div className={styles.rowSub}>{t('admin_surveys_read_only')}</div>}
               </div>
               <div className={styles.rowActions}>
                 {canManageSurvey(survey) && (
                   <>
-                    <button className={styles.btnSecondary} type="button" onClick={() => startEdit(survey)} aria-label={`Edit survey ${survey.title || 'this survey'}`} title={`Edit survey ${survey.title || 'this survey'}`}>Edit</button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => void toggleActive(survey)} disabled={statusBusyId === survey.id} aria-label={`${survey.is_active ? 'Deactivate' : 'Activate'} survey ${survey.title || 'this survey'}`}>
-                      {statusBusyId === survey.id ? 'Saving...' : survey.is_active ? 'Deactivate' : 'Activate'}
+                    <button className={styles.btnSecondary} type="button" onClick={() => startEdit(survey)} aria-label={`${t('edit')} ${survey.title || ''}`} title={`${t('edit')} ${survey.title || ''}`}>{t('edit')}</button>
+                    <button className={styles.btnSecondary} type="button" onClick={() => void toggleActive(survey)} disabled={statusBusyId === survey.id} aria-label={`${survey.is_active ? t('admin_surveys_deactivate') : t('admin_surveys_activate')} ${survey.title || ''}`}>
+                      {statusBusyId === survey.id ? t('saving') : survey.is_active ? t('admin_surveys_deactivate') : t('admin_surveys_activate')}
                     </button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => void openResponses(survey.id)} disabled={responsesLoading && selectedSurvey === survey.id} aria-label={`Open responses for survey ${survey.title || 'this survey'}`}>
-                      {responsesLoading && selectedSurvey === survey.id ? 'Loading...' : 'Responses'}
+                    <button className={styles.btnSecondary} type="button" onClick={() => void openResponses(survey.id)} disabled={responsesLoading && selectedSurvey === survey.id} aria-label={`${t('admin_surveys_responses')} ${survey.title || ''}`}>
+                      {responsesLoading && selectedSurvey === survey.id ? t('admin_surveys_loading') : t('admin_surveys_responses')}
                     </button>
                   </>
                 )}
                 {isAdmin && (deleteConfirmId === survey.id ? (
                   <>
-                    <button className={styles.dangerBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id} aria-label={`Confirm delete for survey ${survey.title || 'this survey'}`}>
-                      {deleteBusyId === survey.id ? 'Deleting...' : 'Confirm'}
+                    <button className={styles.dangerBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id} aria-label={`${t('confirm')} ${t('delete').toLowerCase()} ${survey.title || ''}`}>
+                      {deleteBusyId === survey.id ? t('admin_surveys_deleting') : t('confirm')}
                     </button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === survey.id} aria-label={`Keep survey ${survey.title || 'this survey'}`}>Cancel</button>
+                    <button className={styles.btnSecondary} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === survey.id} aria-label={`${t('cancel')} ${survey.title || ''}`}>{t('cancel')}</button>
                   </>
                 ) : (
-                  <button className={styles.deleteBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id} aria-label={`Delete survey ${survey.title || 'this survey'}`} title={`Delete survey ${survey.title || 'this survey'}`}>Delete</button>
+                  <button className={styles.deleteBtn} type="button" onClick={() => void handleDelete(survey.id)} disabled={deleteBusyId === survey.id} aria-label={`${t('delete')} ${survey.title || ''}`} title={`${t('delete')} ${survey.title || ''}`}>{t('delete')}</button>
                 ))}
               </div>
             </div>
@@ -410,28 +413,28 @@ export default function AdminSurveys() {
 
           {totalPages > 1 && (
             <div className={styles.pagination}>
-              <span className={styles.pageInfo}>{filteredSurveys.length} surveys · Page {page} of {totalPages}</span>
-              <button type="button" className={styles.pageBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>← Prev</button>
-              <button type="button" className={styles.pageBtn} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next →</button>
+              <span className={styles.pageInfo}>{filteredSurveys.length} {t('admin_surveys_surveys_label')} · {t('admin_surveys_page')} {page} {t('admin_surveys_of')} {totalPages}</span>
+              <button type="button" className={styles.pageBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>{t('admin_surveys_prev')}</button>
+              <button type="button" className={styles.pageBtn} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>{t('admin_surveys_next')}</button>
             </div>
           )}
 
           {selectedSurvey && (
             <div className={styles.responses}>
               <div className={styles.responsesHeader}>
-                <div className={styles.sectionTitle}>Responses ({responses.length})</div>
+                <div className={styles.sectionTitle}>{t('admin_surveys_responses')} ({responses.length})</div>
                 {responses.length > 0 && (
-                  <button type="button" className={styles.exportBtn} onClick={exportResponsesCSV}>Export CSV</button>
+                  <button type="button" className={styles.exportBtn} onClick={exportResponsesCSV}>{t('admin_surveys_export_csv')}</button>
                 )}
               </div>
-              {responsesLoading && <div className={styles.loadingText}>Loading responses...</div>}
-              {!responsesLoading && responses.length === 0 && <div className={styles.rowSub}>No responses yet.</div>}
+              {responsesLoading && <div className={styles.loadingText}>{t('admin_surveys_loading_responses')}</div>}
+              {!responsesLoading && responses.length === 0 && <div className={styles.rowSub}>{t('admin_surveys_no_responses')}</div>}
               {!responsesLoading && responses.map((response, index) => {
                 const answers = response.answers || {}
                 return (
                   <div key={index} className={styles.responseCard}>
                     <div className={styles.responseHeader}>
-                      Response #{index + 1}
+                      {t('admin_surveys_response_number')} #{index + 1}
                       {response.created_at && <span className={styles.responseTime}>{new Date(response.created_at).toLocaleString()}</span>}
                     </div>
                     {Object.entries(answers).map(([question, answer]) => (

@@ -3,6 +3,7 @@ import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import { readPaginatedItems } from '../../../utils/pagination'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminUserGroups.module.scss'
 
 function resolveError(err) {
@@ -16,6 +17,7 @@ function resolveError(err) {
 }
 
 export default function AdminUserGroups() {
+  const { t } = useLanguage()
   const [groups, setGroups] = useState([])
   const [users, setUsers] = useState([])
   const [allTests, setAllTests] = useState([])
@@ -101,15 +103,15 @@ export default function AdminUserGroups() {
       }
 
       if (groupsRes.status === 'rejected') {
-        setError(resolveError(groupsRes.reason) || 'Failed to load groups.')
+        setError(resolveError(groupsRes.reason) || t('admin_groups_failed_load_groups'))
       } else {
         setError('')
       }
 
       if (groupsRes.status === 'rejected') {
-        setBootstrapMessage('Group data could not be loaded. Retry to continue.')
+        setBootstrapMessage(t('admin_groups_bootstrap_groups_failed'))
       } else if (partialFailures.length > 0) {
-        setBootstrapMessage('Some group management data could not be loaded. Retry to enable member assignment and bulk scheduling.')
+        setBootstrapMessage(t('admin_groups_bootstrap_partial_failed'))
       } else {
         setBootstrapMessage('')
       }
@@ -123,8 +125,8 @@ export default function AdminUserGroups() {
       setUsersReady(false)
       setTestsReady(false)
       setSchedulesReady(false)
-      setBootstrapMessage('Group management data could not be loaded. Retry to continue.')
-      setError(resolveError(err) || 'Failed to load groups.')
+      setBootstrapMessage(t('admin_groups_bootstrap_load_failed'))
+      setError(resolveError(err) || t('admin_groups_failed_load_groups'))
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
@@ -149,7 +151,7 @@ export default function AdminUserGroups() {
       setError('')
     } catch (err) {
       setMembers([])
-      setError(resolveError(err) || 'Failed to load group members')
+      setError(resolveError(err) || t('admin_groups_failed_load_members'))
     } finally {
       setMemberLoading(false)
     }
@@ -158,7 +160,7 @@ export default function AdminUserGroups() {
   const create = async (event) => {
     event.preventDefault()
     if (!form.name.trim()) {
-      setError('Group name is required.')
+      setError(t('admin_groups_name_required'))
       return
     }
     setSaving(true)
@@ -170,13 +172,13 @@ export default function AdminUserGroups() {
         description: form.description.trim() || null,
       })
       setForm({ name: '', description: '' })
-      setNotice('Group created.')
+      setNotice(t('admin_groups_group_created'))
       await load()
       if (data?.id) {
         await loadMembers(data)
       }
     } catch (err) {
-      setError(resolveError(err) || 'Failed to create group')
+      setError(resolveError(err) || t('admin_groups_failed_create'))
     } finally {
       setSaving(false)
     }
@@ -197,10 +199,10 @@ export default function AdminUserGroups() {
         setSelectedGroup(null)
         setMembers([])
       }
-      setNotice('Group deleted.')
+      setNotice(t('admin_groups_group_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to delete group')
+      setError(resolveError(err) || t('admin_groups_failed_delete'))
     } finally {
       setDeletingGroupId(null)
     }
@@ -209,7 +211,7 @@ export default function AdminUserGroups() {
   const addMember = async () => {
     if (!selectedGroup) return
     if (!addUserId) {
-      setError('Select a learner to add.')
+      setError(t('admin_groups_select_learner'))
       return
     }
     setError('')
@@ -218,10 +220,10 @@ export default function AdminUserGroups() {
     try {
       await adminApi.addUserGroupMember(selectedGroup.id, addUserId)
       setAddUserId('')
-      setNotice('Member added.')
+      setNotice(t('admin_groups_member_added'))
       await loadMembers(selectedGroup)
     } catch (err) {
-      setError(resolveError(err) || 'Failed to add member')
+      setError(resolveError(err) || t('admin_groups_failed_add_member'))
     } finally {
       setAddingMember(false)
     }
@@ -236,10 +238,10 @@ export default function AdminUserGroups() {
       const { data } = await adminApi.addUserGroupMembersBulk(selectedGroup.id, selectedUserIds)
       setSelectedUserIds([])
       setMemberSearch('')
-      setNotice(data?.detail || `${selectedUserIds.length} members added.`)
+      setNotice(data?.detail || t('admin_groups_members_added'))
       await loadMembers(selectedGroup)
     } catch (err) {
-      setError(resolveError(err) || 'Failed to add members')
+      setError(resolveError(err) || t('admin_groups_failed_add_members'))
     } finally {
       setAddingMember(false)
     }
@@ -255,10 +257,10 @@ export default function AdminUserGroups() {
     setRemovingMemberId(userId)
     try {
       await adminApi.removeUserGroupMember(selectedGroup.id, userId)
-      setNotice('Member removed.')
+      setNotice(t('admin_groups_member_removed'))
       await loadMembers(selectedGroup)
     } catch (err) {
-      setError(resolveError(err) || 'Failed to remove member')
+      setError(resolveError(err) || t('admin_groups_failed_remove_member'))
     } finally {
       setRemovingMemberId(null)
     }
@@ -267,7 +269,7 @@ export default function AdminUserGroups() {
   const handleBulkAssign = async (event) => {
     event.preventDefault()
     if (!bulkTestId || !bulkScheduledAt || members.length === 0) {
-      setError('Choose a test, a schedule, and at least one member.')
+      setError(t('admin_groups_bulk_assign_required'))
       return
     }
     setBulkBusy(true)
@@ -294,7 +296,7 @@ export default function AdminUserGroups() {
       setAllSchedules(data || [])
       setBulkNotice(`Done: ${created} created, ${updated} updated for ${members.length} member${members.length === 1 ? '' : 's'}.`)
     } catch (err) {
-      setError(resolveError(err) || 'Bulk assignment failed.')
+      setError(resolveError(err) || t('admin_groups_bulk_assign_failed'))
     } finally {
       setBulkBusy(false)
     }
@@ -312,45 +314,45 @@ export default function AdminUserGroups() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="User Groups" subtitle="Organize learners into cohorts" />
+      <AdminPageHeader title={t('admin_groups_title')} subtitle={t('admin_groups_subtitle')} />
       {error && <div className={styles.errorMsg}>{error}</div>}
       {bootstrapMessage && (
         <div className={styles.helperRow}>
           <span className={styles.empty}>{bootstrapMessage}</span>
-          <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>Retry</button>
+          <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>{t('admin_groups_retry')}</button>
         </div>
       )}
       {notice && <div className={styles.noticeMsg}>{notice}</div>}
       <div className={styles.grid}>
         <div>
           <form className={styles.card} onSubmit={create}>
-            <div className={styles.sectionTitle}>New Group</div>
-            <label className={styles.label}>Name</label>
+            <div className={styles.sectionTitle}>{t('admin_groups_new_group')}</div>
+            <label className={styles.label}>{t('admin_groups_name_label')}</label>
             <input className={styles.input} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
-            <label className={styles.label}>Description</label>
+            <label className={styles.label}>{t('admin_groups_description_label')}</label>
             <textarea className={styles.textarea} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} />
-            <button className={styles.btnPrimary} type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Group'}</button>
+            <button className={styles.btnPrimary} type="submit" disabled={saving}>{saving ? t('admin_groups_saving') : t('admin_groups_save_group')}</button>
           </form>
 
           <div className={styles.card}>
-            <div className={styles.sectionTitle}>Groups</div>
-            {loading && <div className={styles.empty}>Loading groups...</div>}
-            {!loading && groups.length === 0 && <div className={styles.empty}>No groups yet.</div>}
+            <div className={styles.sectionTitle}>{t('admin_groups_groups')}</div>
+            {loading && <div className={styles.empty}>{t('admin_groups_loading')}</div>}
+            {!loading && groups.length === 0 && <div className={styles.empty}>{t('admin_groups_no_groups')}</div>}
             {groups.map((group) => (
               <div key={group.id} className={`${styles.row} ${selectedGroup?.id === group.id ? styles.rowActive : ''}`}>
                 <button type="button" className={styles.rowBtn} onClick={() => loadMembers(group)} aria-label={`Open group ${group.name}`} title={`Open group ${group.name}`}>
                   <div className={styles.rowTitle}>{group.name}</div>
-                  <div className={styles.rowSub}>{group.description || 'No description'}</div>
+                  <div className={styles.rowSub}>{group.description || t('admin_groups_no_description')}</div>
                 </button>
                 {deleteConfirmId === group.id ? (
                   <>
                     <button type="button" className={`${styles.deleteBtn} ${styles.deleteConfirmBtn}`} onClick={() => remove(group.id)} disabled={deletingGroupId === group.id} aria-label={`Confirm delete for group ${group.name}`}>
-                      {deletingGroupId === group.id ? 'Deleting...' : 'Confirm'}
+                      {deletingGroupId === group.id ? t('admin_groups_deleting') : t('admin_groups_confirm')}
                     </button>
-                    <button type="button" className={styles.deleteBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingGroupId === group.id} aria-label={`Keep group ${group.name}`}>Cancel</button>
+                    <button type="button" className={styles.deleteBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingGroupId === group.id} aria-label={`Keep group ${group.name}`}>{t('admin_groups_cancel')}</button>
                   </>
                 ) : (
-                  <button type="button" className={styles.deleteBtn} onClick={() => remove(group.id)} disabled={deletingGroupId === group.id} aria-label={`Delete group ${group.name}`} title={`Delete group ${group.name}`}>Delete</button>
+                  <button type="button" className={styles.deleteBtn} onClick={() => remove(group.id)} disabled={deletingGroupId === group.id} aria-label={`Delete group ${group.name}`} title={`Delete group ${group.name}`}>{t('admin_groups_delete')}</button>
                 )}
               </div>
             ))}
@@ -359,17 +361,17 @@ export default function AdminUserGroups() {
 
         {selectedGroup && (
           <div className={styles.card}>
-            <div className={styles.sectionTitle}>Members - {selectedGroup.name}</div>
+            <div className={styles.sectionTitle}>{t('admin_groups_members')} - {selectedGroup.name}</div>
             {!usersReady && (
               <div className={styles.helperRow}>
-                <span className={styles.empty}>Learner lookup is temporarily unavailable. Retry to manage group members.</span>
-                <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>Retry</button>
+                <span className={styles.empty}>{t('admin_groups_learner_lookup_unavailable')}</span>
+                <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>{t('admin_groups_retry')}</button>
               </div>
             )}
             <div className={styles.addSection}>
               <input
                 className={styles.input}
-                placeholder="Search learners by name, email, or ID..."
+                placeholder={t('admin_groups_search_learners_placeholder')}
                 value={memberSearch}
                 onChange={(event) => setMemberSearch(event.target.value)}
                 disabled={!usersReady}
@@ -377,7 +379,7 @@ export default function AdminUserGroups() {
               {usersReady && nonMembers.length > 0 && (
                 <div className={styles.userChecklist}>
                   {filteredNonMembers.length === 0 && (
-                    <div className={styles.empty}>No learners match your search.</div>
+                    <div className={styles.empty}>{t('admin_groups_no_learners_match')}</div>
                   )}
                   {filteredNonMembers.map((user) => (
                     <label key={user.id} className={styles.checklistItem}>
@@ -396,17 +398,17 @@ export default function AdminUserGroups() {
               )}
               {selectedUserIds.length > 0 && (
                 <button type="button" className={styles.btnPrimary} onClick={addSelectedMembers} disabled={addingMember}>
-                  {addingMember ? 'Adding...' : `Add ${selectedUserIds.length} selected member${selectedUserIds.length !== 1 ? 's' : ''}`}
+                  {addingMember ? t('admin_groups_adding') : t('admin_groups_add_selected_members')}
                 </button>
               )}
             </div>
             {usersReady && !memberLoading && nonMembers.length === 0 && (
-              <div className={styles.empty}>All available learners are already assigned to this group.</div>
+              <div className={styles.empty}>{t('admin_groups_all_learners_assigned')}</div>
             )}
             {memberLoading ? (
-              <div className={styles.empty}>Loading...</div>
+              <div className={styles.empty}>{t('admin_groups_loading_members')}</div>
             ) : members.length === 0 ? (
-              <div className={styles.empty}>No members in this group.</div>
+              <div className={styles.empty}>{t('admin_groups_no_members')}</div>
             ) : (
               members.map((member) => (
                 <div key={member.id} className={styles.memberRow}>
@@ -415,39 +417,39 @@ export default function AdminUserGroups() {
                     <div className={styles.rowSub}>{member.email}</div>
                   </div>
                   <button type="button" className={styles.deleteBtn} onClick={() => removeMember(member.id)} disabled={removingMemberId === member.id}>
-                    {removingMemberId === member.id ? 'Removing...' : 'Remove'}
+                    {removingMemberId === member.id ? t('admin_groups_removing') : t('admin_groups_remove')}
                   </button>
                 </div>
               ))
             )}
 
             <div className={styles.bulkSection}>
-              <div className={`${styles.sectionTitle} ${styles.subsectionTitle}`}>Bulk test assignment</div>
-              <p className={styles.empty}>Assign all {members.length} group member{members.length === 1 ? '' : 's'} to a test at once.</p>
+              <div className={`${styles.sectionTitle} ${styles.subsectionTitle}`}>{t('admin_groups_bulk_assignment')}</div>
+              <p className={styles.empty}>{t('admin_groups_bulk_assignment_description')}</p>
               {(!testsReady || !schedulesReady) && (
                 <div className={styles.helperRow}>
-                  <span className={styles.empty}>Test and schedule data are temporarily unavailable. Retry before running bulk assignments.</span>
-                  <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>Retry</button>
+                  <span className={styles.empty}>{t('admin_groups_test_schedule_unavailable')}</span>
+                  <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>{t('admin_groups_retry')}</button>
                 </div>
               )}
               {bulkNotice && <div className={styles.bulkNotice}>{bulkNotice}</div>}
               <form onSubmit={handleBulkAssign}>
-                <label className={styles.label}>Test</label>
+                <label className={styles.label}>{t('admin_groups_test_label')}</label>
                 <select className={styles.select} value={bulkTestId} onChange={(event) => setBulkTestId(event.target.value)} required disabled={!testsReady}>
-                  <option value="">Select test...</option>
+                  <option value="">{t('admin_groups_select_test')}</option>
                   {allTests.map((test) => (
                     <option key={test.id} value={test.id}>{test.title || test.name} ({test.status || '-'})</option>
                   ))}
                 </select>
-                <label className={styles.label}>Scheduled date/time</label>
+                <label className={styles.label}>{t('admin_groups_scheduled_datetime')}</label>
                 <input type="datetime-local" className={styles.input} value={bulkScheduledAt} onChange={(event) => setBulkScheduledAt(event.target.value)} required disabled={!testsReady || !schedulesReady} />
-                <label className={styles.label}>Access mode</label>
+                <label className={styles.label}>{t('admin_groups_access_mode')}</label>
                 <select className={styles.select} value={bulkAccessMode} onChange={(event) => setBulkAccessMode(event.target.value)} disabled={!testsReady || !schedulesReady}>
                   <option value="OPEN">OPEN</option>
                   <option value="RESTRICTED">RESTRICTED</option>
                 </select>
                 <button className={styles.btnPrimary} type="submit" disabled={bulkBusy || members.length === 0 || !bulkTestId || !bulkScheduledAt || !testsReady || !schedulesReady}>
-                  {bulkBusy ? 'Assigning...' : `Assign all ${members.length} members`}
+                  {bulkBusy ? t('admin_groups_assigning') : t('admin_groups_assign_all_members')}
                 </button>
               </form>
             </div>

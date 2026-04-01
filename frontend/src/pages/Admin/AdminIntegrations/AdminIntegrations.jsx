@@ -1,13 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { adminApi } from '../../../services/admin.service'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminIntegrations.module.scss'
-
-const INTEGRATIONS = [
-  { key: 'slack', name: 'Slack', desc: 'Send alerts to a Slack channel', urlLabel: 'Webhook URL' },
-  { key: 'teams', name: 'Microsoft Teams', desc: 'Send alerts to Teams webhook', urlLabel: 'Webhook URL' },
-  { key: 'webhook', name: 'Webhook', desc: 'POST test events to your webhook', urlLabel: 'Endpoint URL' },
-]
 
 const KEY = 'integrations_config'
 const URL_RE = /^https?:\/\//i
@@ -34,6 +29,14 @@ const normalizeConfig = (config = {}) => Object.fromEntries(
 )
 
 export default function AdminIntegrations() {
+  const { t } = useLanguage()
+
+  const INTEGRATIONS = [
+    { key: 'slack', name: t('admin_integrations_slack'), desc: t('admin_integrations_slack_desc'), urlLabel: t('admin_integrations_webhook_url') },
+    { key: 'teams', name: t('admin_integrations_teams'), desc: t('admin_integrations_teams_desc'), urlLabel: t('admin_integrations_webhook_url') },
+    { key: 'webhook', name: t('admin_integrations_webhook'), desc: t('admin_integrations_webhook_desc'), urlLabel: t('admin_integrations_endpoint_url') },
+  ]
+
   const [saved, setSaved] = useState({})
   const [drafts, setDrafts] = useState({})
   const [loading, setLoading] = useState(true)
@@ -63,7 +66,7 @@ export default function AdminIntegrations() {
       setReady(true)
     } catch {
       setSaved({})
-      setError('Failed to load integrations.')
+      setError(t('admin_integrations_load_error'))
       setReady(false)
     } finally {
       setLoading(false)
@@ -90,11 +93,11 @@ export default function AdminIntegrations() {
   const validateConfig = (integration, nextState, action = 'save') => {
     const normalizedUrl = String(nextState.url || '').trim()
     if (nextState.enabled && !normalizedUrl) {
-      setError(`${integration.name} requires a URL before you can ${action} it.`)
+      setError(t('admin_integrations_url_required', { name: integration.name, action }))
       return false
     }
     if (normalizedUrl && !URL_RE.test(normalizedUrl)) {
-      setError(`${integration.name} requires an http:// or https:// URL.`)
+      setError(t('admin_integrations_url_invalid', { name: integration.name }))
       return false
     }
     return true
@@ -132,24 +135,24 @@ export default function AdminIntegrations() {
   const testedCount = Object.keys(testResults).filter((key) => testResults[key]).length
   const summaryCards = [
     {
-      label: 'Available integrations',
+      label: t('admin_integrations_available'),
       value: INTEGRATIONS.length,
-      helper: 'Webhook integrations exposed in the current MVP',
+      helper: t('admin_integrations_available_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_integrations_visible_now'),
       value: visibleIntegrations.length,
-      helper: hasActiveFilters ? 'Matching the active filters' : 'All available integrations',
+      helper: hasActiveFilters ? t('admin_integrations_matching_filters') : t('admin_integrations_all_available'),
     },
     {
-      label: 'Enabled',
+      label: t('admin_integrations_enabled'),
       value: enabledCount,
-      helper: 'Currently active integrations',
+      helper: t('admin_integrations_enabled_helper'),
     },
     {
-      label: 'Draft changes',
+      label: t('admin_integrations_draft_changes'),
       value: dirtyCount,
-      helper: testedCount > 0 ? `${testedCount} card${testedCount === 1 ? '' : 's'} with test feedback` : 'No pending test results',
+      helper: testedCount > 0 ? t('admin_integrations_cards_with_feedback', { count: testedCount }) : t('admin_integrations_no_test_results'),
     },
   ]
 
@@ -196,10 +199,10 @@ export default function AdminIntegrations() {
         delete updated[key]
         return updated
       })
-      setNotice(`${integration.name} ${nextState.enabled ? 'enabled' : 'disabled'}.`)
+      setNotice(nextState.enabled ? t('admin_integrations_enabled_notice', { name: integration.name }) : t('admin_integrations_disabled_notice', { name: integration.name }))
       clearSavedIndicator(key)
     } catch (e) {
-      setError(e.response?.data?.detail || `Failed to update ${integration.name}.`)
+      setError(e.response?.data?.detail || t('admin_integrations_update_failed', { name: integration.name }))
     } finally {
       setSavingKey('')
     }
@@ -234,10 +237,10 @@ export default function AdminIntegrations() {
         delete updated[key]
         return updated
       })
-      setNotice(`${integration.name} settings saved.`)
+      setNotice(t('admin_integrations_saved_notice', { name: integration.name }))
       clearSavedIndicator(key)
     } catch (e) {
-      setError(e.response?.data?.detail || `Failed to save ${integration.name}.`)
+      setError(e.response?.data?.detail || t('admin_integrations_save_failed', { name: integration.name }))
     } finally {
       setSavingKey('')
     }
@@ -264,9 +267,9 @@ export default function AdminIntegrations() {
     try {
       const { data } = await adminApi.testIntegrations(runtimeConfig)
       setTestResults((prev) => ({ ...prev, [key]: data?.results?.[key] || 'sent' }))
-      setNotice(`${integration.name} test completed.`)
+      setNotice(t('admin_integrations_test_completed', { name: integration.name }))
     } catch (e) {
-      setError(e.response?.data?.detail || 'Test failed')
+      setError(e.response?.data?.detail || t('admin_integrations_test_failed'))
     } finally {
       setTestingKey('')
     }
@@ -274,8 +277,8 @@ export default function AdminIntegrations() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Integrations" subtitle="Connect SYRA to external systems" />
-      <div className={styles.helper}>Webhook-based integrations are supported in the current MVP. Non-webhook archive providers are hidden until their storage pipeline is implemented.</div>
+      <AdminPageHeader title={t('admin_integrations_title')} subtitle={t('admin_integrations_subtitle')} />
+      <div className={styles.helper}>{t('admin_integrations_helper')}</div>
       <section className={styles.summaryGrid}>
         {summaryCards.map((card) => (
           <article key={card.label} className={styles.summaryCard}>
@@ -287,62 +290,62 @@ export default function AdminIntegrations() {
       </section>
       {notice && <div className={styles.notice}>{notice}</div>}
       {error && <div className={styles.error}>{error}</div>}
-      {loading && <div className={styles.muted}>Loading integrations...</div>}
+      {loading && <div className={styles.muted}>{t('admin_integrations_loading')}</div>}
       {!loading && !ready && (
         <div className={styles.retryRow}>
-          <span className={styles.muted}>Retry loading settings before editing to avoid overwriting the saved integration configuration.</span>
-          <button type="button" className={styles.retryBtn} onClick={load}>Retry</button>
+          <span className={styles.muted}>{t('admin_integrations_retry_hint')}</span>
+          <button type="button" className={styles.retryBtn} onClick={load}>{t('admin_integrations_retry')}</button>
         </div>
       )}
       <div className={styles.toolbar}>
         <div className={styles.toolbarFilters}>
           <div className={styles.filterGroup}>
-            <label className={styles.filterLabel} htmlFor="integration-search">Search integrations</label>
+            <label className={styles.filterLabel} htmlFor="integration-search">{t('admin_integrations_search_label')}</label>
             <input
               id="integration-search"
               className={styles.input}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search provider or URL..."
+              placeholder={t('admin_integrations_search_placeholder')}
             />
           </div>
           <div className={styles.filterGroup}>
-            <label className={styles.filterLabel} htmlFor="integration-status-filter">Status</label>
+            <label className={styles.filterLabel} htmlFor="integration-status-filter">{t('admin_integrations_status_label')}</label>
             <select
               id="integration-status-filter"
               className={styles.input}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="ALL">All integrations</option>
-              <option value="ENABLED">Enabled</option>
-              <option value="DISABLED">Disabled</option>
-              <option value="DIRTY">Draft changes</option>
+              <option value="ALL">{t('admin_integrations_filter_all')}</option>
+              <option value="ENABLED">{t('admin_integrations_filter_enabled')}</option>
+              <option value="DISABLED">{t('admin_integrations_filter_disabled')}</option>
+              <option value="DIRTY">{t('admin_integrations_filter_dirty')}</option>
             </select>
           </div>
         </div>
         <div className={styles.toolbarActions}>
           <button type="button" className={styles.retryBtn} onClick={load} disabled={loading}>
-            {loading ? 'Refreshing...' : 'Refresh'}
+            {loading ? t('admin_integrations_refreshing') : t('admin_integrations_refresh')}
           </button>
           <button type="button" className={styles.retryBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-            Clear filters
+            {t('admin_integrations_clear_filters')}
           </button>
         </div>
       </div>
       <div className={styles.filterMeta}>
-        Showing {visibleIntegrations.length} integration{visibleIntegrations.length !== 1 ? 's' : ''} across {INTEGRATIONS.length} available.
+        {t('admin_integrations_showing', { visible: visibleIntegrations.length, total: INTEGRATIONS.length })}
       </div>
       <div className={styles.list}>
         {!loading && visibleIntegrations.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>{hasActiveFilters ? 'No integrations match the current filters.' : 'No integrations available.'}</div>
+            <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_integrations_no_match') : t('admin_integrations_none_available')}</div>
             <div className={styles.emptyText}>
               {hasActiveFilters
-                ? 'Clear the current search or status filter to restore the available integration cards.'
-                : 'Webhook integration cards will appear here when they are exposed in the current MVP.'}
+                ? t('admin_integrations_clear_to_restore')
+                : t('admin_integrations_cards_appear')}
             </div>
-            {hasActiveFilters && <button type="button" className={styles.retryBtn} onClick={clearFilters}>Clear filters</button>}
+            {hasActiveFilters && <button type="button" className={styles.retryBtn} onClick={clearFilters}>{t('admin_integrations_clear_filters')}</button>}
           </div>
         ) : visibleIntegrations.map((integration) => {
           const state = getState(integration.key)
@@ -354,36 +357,36 @@ export default function AdminIntegrations() {
                 <div className={styles.sub}>{integration.desc}</div>
                 <div className={styles.cardMeta}>
                   <span className={`${styles.statusBadge} ${state.enabled ? styles.statusEnabled : styles.statusDisabled}`}>
-                    {state.enabled ? 'Enabled' : 'Disabled'}
+                    {state.enabled ? t('admin_integrations_enabled') : t('admin_integrations_disabled')}
                   </span>
-                  {dirty && <span className={styles.dirtyBadge}>Draft changes</span>}
+                  {dirty && <span className={styles.dirtyBadge}>{t('admin_integrations_draft_changes')}</span>}
                 </div>
               </div>
               <div className={styles.fields}>
                 <label className={styles.label} htmlFor={`${integration.key}-url`}>{integration.urlLabel}</label>
                 <input id={`${integration.key}-url`} className={styles.input} value={state.url || ''} onChange={(e) => updateField(integration.key, 'url', e.target.value)} disabled={!ready || loading || savingKey === integration.key || Boolean(testingKey)} />
-                <label className={styles.label} htmlFor={`${integration.key}-secret`}>Secret / Token (optional)</label>
+                <label className={styles.label} htmlFor={`${integration.key}-secret`}>{t('admin_integrations_secret_label')}</label>
                 <input id={`${integration.key}-secret`} className={styles.input} value={state.secret || ''} onChange={(e) => updateField(integration.key, 'secret', e.target.value)} disabled={!ready || loading || savingKey === integration.key || Boolean(testingKey)} />
               </div>
               {testResults[integration.key] ? (
-                <div className={styles.resultRow}><strong>Last test:</strong> {testResults[integration.key]}</div>
+                <div className={styles.resultRow}><strong>{t('admin_integrations_last_test')}</strong> {testResults[integration.key]}</div>
               ) : null}
               <div className={styles.actions}>
-                <button type="button" className={styles.toggle} onClick={() => toggle(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={`${state.enabled ? 'Disable' : 'Enable'} integration ${integration.name}`}>
-                  {state.enabled ? 'Disable' : 'Enable'}
+                <button type="button" className={styles.toggle} onClick={() => toggle(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={state.enabled ? t('admin_integrations_disable_aria', { name: integration.name }) : t('admin_integrations_enable_aria', { name: integration.name })}>
+                  {state.enabled ? t('admin_integrations_disable') : t('admin_integrations_enable')}
                 </button>
                 {savingKey === integration.key ? (
-                  <span className={styles.savingText}>Saving...</span>
+                  <span className={styles.savingText}>{t('admin_integrations_saving')}</span>
                 ) : savedKey === integration.key ? (
-                  <span className={styles.savedText}>Saved</span>
+                  <span className={styles.savedText}>{t('admin_integrations_saved')}</span>
                 ) : (
-                  <button type="button" className={styles.saveBtn} onClick={() => saveIntegration(integration.key)} disabled={!ready || !dirty || Boolean(testingKey) || loading} aria-label={`Save changes for integration ${integration.name}`} title={`Save changes for integration ${integration.name}`}>Save</button>
+                  <button type="button" className={styles.saveBtn} onClick={() => saveIntegration(integration.key)} disabled={!ready || !dirty || Boolean(testingKey) || loading} aria-label={t('admin_integrations_save_aria', { name: integration.name })} title={t('admin_integrations_save_aria', { name: integration.name })}>{t('admin_integrations_save')}</button>
                 )}
                 {dirty ? (
-                  <button type="button" className={styles.testBtn} onClick={() => resetDraft(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={`Reset draft changes for integration ${integration.name}`} title={`Reset draft changes for integration ${integration.name}`}>Reset</button>
+                  <button type="button" className={styles.testBtn} onClick={() => resetDraft(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={t('admin_integrations_reset_aria', { name: integration.name })} title={t('admin_integrations_reset_aria', { name: integration.name })}>{t('admin_integrations_reset')}</button>
                 ) : null}
-                <button type="button" className={styles.testBtn} onClick={() => sendTest(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={`Send test event for integration ${integration.name}`} title={`Send test event for integration ${integration.name}`}>
-                  {testingKey === integration.key ? 'Testing...' : 'Send Test'}
+                <button type="button" className={styles.testBtn} onClick={() => sendTest(integration.key)} disabled={!ready || savingKey === integration.key || Boolean(testingKey) || loading} aria-label={t('admin_integrations_test_aria', { name: integration.name })} title={t('admin_integrations_test_aria', { name: integration.name })}>
+                  {testingKey === integration.key ? t('admin_integrations_testing') : t('admin_integrations_send_test')}
                 </button>
               </div>
             </div>

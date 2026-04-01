@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import api from '../../../services/api'
 import styles from './AdminLiveMonitor.module.scss'
 
@@ -24,6 +25,7 @@ function SessionCard({ session, onWatch }) {
 }
 
 function LiveViewer({ attemptId, token, onClose }) {
+  const { t } = useLanguage()
   const canvasRef = useRef(null)
   const wsRef = useRef(null)
   const reconnectTimer = useRef(null)
@@ -82,15 +84,15 @@ function LiveViewer({ attemptId, token, onClose }) {
         } else if (data.type === 'live_summary') {
           setSummary(data)
         } else if (data.type === 'session_ended') {
-          setError('Session ended — learner disconnected.')
+          setError(t('admin_monitor_session_ended'))
           setConnected(false)
           intentionalClose.current = true
         } else if (data.type === 'force_submitted') {
           setForceSubmitted(true)
-          setError('Attempt was force-submitted.')
+          setError(t('admin_monitor_attempt_force_submitted'))
           intentionalClose.current = true
         } else if (data.type === 'error') {
-          setError(data.detail || 'Unknown error')
+          setError(data.detail || t('admin_monitor_unknown_error'))
         }
       } catch {
         // ignore parse errors
@@ -110,7 +112,7 @@ function LiveViewer({ attemptId, token, onClose }) {
 
     ws.onerror = () => {
       if (!intentionalClose.current) {
-        setError('WebSocket connection failed')
+        setError(t('admin_monitor_ws_connection_failed'))
       }
     }
   }, [attemptId, token])
@@ -134,9 +136,9 @@ function LiveViewer({ attemptId, token, onClose }) {
     try {
       await api.post(`/proctoring/admin/sessions/${attemptId}/force-submit`)
       setForceSubmitted(true)
-      setError('Attempt was force-submitted.')
+      setError(t('admin_monitor_attempt_force_submitted'))
     } catch (err) {
-      const detail = err.response?.data?.detail || 'Failed to force-submit'
+      const detail = err.response?.data?.detail || t('admin_monitor_force_submit_failed')
       setError(detail)
     } finally {
       setForceSubmitting(false)
@@ -148,7 +150,7 @@ function LiveViewer({ attemptId, token, onClose }) {
       <div className={styles.viewerHeader}>
         <div className={styles.viewerTitle}>
           <span className={`${styles.statusDot} ${connected ? styles.connected : styles.disconnected}`} />
-          {sessionInfo?.user_name || 'Loading...'} — {sessionInfo?.exam_title || ''}
+          {sessionInfo?.user_name || t('admin_monitor_loading')} — {sessionInfo?.exam_title || ''}
         </div>
         <div className={styles.viewerActions}>
           {!forceSubmitted && (
@@ -204,6 +206,7 @@ function LiveViewer({ attemptId, token, onClose }) {
 
 export default function AdminLiveMonitor() {
   const { tokens } = useAuth()
+  const { t } = useLanguage()
   const [searchParams] = useSearchParams()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -261,7 +264,7 @@ export default function AdminLiveMonitor() {
         </p>
       </div>
 
-      {loading && <p>Loading...</p>}
+      {loading && <p>{t('admin_monitor_loading')}</p>}
 
       <div className={styles.sessionGrid}>
         {sessions.map((session) => (

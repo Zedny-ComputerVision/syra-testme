@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import useLanguage from '../../../hooks/useLanguage'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import {
   CERTIFICATE_ISSUE_RULE_OPTIONS,
@@ -34,6 +35,7 @@ function normalizeCertificate(value) {
 }
 
 export default function AdminCertificates() {
+  const { t } = useLanguage()
   const [exams, setExams] = useState([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
@@ -50,7 +52,7 @@ export default function AdminCertificates() {
       const { data } = await adminApi.allTests()
       setExams((data?.items || []).map(normalizeAdminTest))
     } catch (err) {
-      setError(resolveError(err, 'Failed to load tests'))
+      setError(resolveError(err, t('admin_certs_load_error')))
     } finally {
       setLoading(false)
     }
@@ -93,7 +95,7 @@ export default function AdminCertificates() {
     if (exam.status !== 'DRAFT') {
       setSaveErrors((prev) => ({
         ...prev,
-        [exam.id]: 'Only draft tests can update certificate settings.',
+        [exam.id]: t('admin_certs_draft_only'),
       }))
       return
     }
@@ -119,14 +121,14 @@ export default function AdminCertificates() {
       )
       resetDraft(exam.id)
       setSavedId(exam.id)
-      setNotice(certificate ? 'Certificate settings saved.' : 'Certificate settings removed.')
+      setNotice(certificate ? t('admin_certs_saved') : t('admin_certs_removed'))
       setTimeout(() => {
         setSavedId((current) => (current === exam.id ? null : current))
       }, 2000)
     } catch (err) {
       setSaveErrors((prev) => ({
         ...prev,
-        [exam.id]: resolveError(err, 'Failed to save certificate.'),
+        [exam.id]: resolveError(err, t('admin_certs_save_error')),
       }))
     } finally {
       setSavingId(null)
@@ -140,17 +142,17 @@ export default function AdminCertificates() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Certificates" subtitle="Configure completion certificates per test" />
+      <AdminPageHeader title={t('admin_certs_title')} subtitle={t('admin_certs_subtitle')} />
 
       {error && (
         <div className={styles.helperRow}>
           <div className={styles.errorBanner}>{error}</div>
-          <button className={styles.secondaryBtn} onClick={() => void load()}>Retry</button>
+          <button className={styles.secondaryBtn} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
       {!error && notice && <div className={styles.noticeBanner}>{notice}</div>}
-      {loading && <div className={styles.state}>Loading certificate settings...</div>}
-      {!loading && !error && exams.length === 0 && <div className={styles.state}>No tests available for certificate configuration.</div>}
+      {loading && <div className={styles.state}>{t('admin_certs_loading')}</div>}
+      {!loading && !error && exams.length === 0 && <div className={styles.state}>{t('admin_certs_no_tests')}</div>}
       <div className={styles.list}>
         {exams.map((exam) => {
           const cert = getDraft(exam)
@@ -160,20 +162,20 @@ export default function AdminCertificates() {
               <div className={styles.cardHeader}>
                 <div>
                   <div className={styles.title}>{exam.title}</div>
-                  <div className={styles.sub}>{exam.code || 'No code'} - {exam.status || 'DRAFT'}</div>
+                  <div className={styles.sub}>{exam.code || t('admin_certs_no_code')} - {exam.status || 'DRAFT'}</div>
                 </div>
                 <div className={styles.cardActions}>
                   {savingId === exam.id ? (
-                    <span className={styles.saving}>Saving...</span>
+                    <span className={styles.saving}>{t('saving')}</span>
                   ) : savedId === exam.id ? (
-                    <span className={styles.saved}>Saved</span>
+                    <span className={styles.saved}>{t('admin_certs_saved_label')}</span>
                   ) : (
                     <button
                       className={styles.saveBtn}
                       disabled={!dirty || exam.status !== 'DRAFT'}
                       onClick={() => void saveCertificate(exam)}
                     >
-                      Save
+                      {t('save')}
                     </button>
                   )}
                   <button
@@ -181,20 +183,20 @@ export default function AdminCertificates() {
                     disabled={!dirty || savingId === exam.id}
                     onClick={() => resetDraft(exam.id)}
                   >
-                    Reset
+                    {t('reset')}
                   </button>
                 </div>
               </div>
               {saveErrors[exam.id] && <div className={styles.cardError}>{saveErrors[exam.id]}</div>}
               {exam.status !== 'DRAFT' && (
                 <div className={styles.cardHint}>
-                  Published and archived tests are locked. Work from a draft to change certificate content.
+                  {t('admin_certs_locked_hint')}
                 </div>
               )}
 
               <div className={styles.grid}>
                 <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Issue rule</span>
+                  <span className={styles.fieldLabel}>{t('admin_certs_issue_rule')}</span>
                   <select
                     className={styles.input}
                     value={cert.issue_rule}
@@ -207,43 +209,43 @@ export default function AdminCertificates() {
                   </select>
                 </label>
                 <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Certificate Title</span>
+                  <span className={styles.fieldLabel}>{t('admin_certs_cert_title')}</span>
                   <input
                     className={styles.input}
                     value={cert.title}
                     disabled={exam.status !== 'DRAFT'}
                     onChange={(e) => setDraft(exam.id, 'title', e.target.value)}
-                    placeholder="Certificate of Completion"
+                    placeholder={t('admin_certs_title_placeholder')}
                   />
                 </label>
                 <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Subtitle</span>
+                  <span className={styles.fieldLabel}>{t('admin_certs_subtitle_label')}</span>
                   <input
                     className={styles.input}
                     value={cert.subtitle}
                     disabled={exam.status !== 'DRAFT'}
                     onChange={(e) => setDraft(exam.id, 'subtitle', e.target.value)}
-                    placeholder="Awarded to learners who..."
+                    placeholder={t('admin_certs_subtitle_placeholder')}
                   />
                 </label>
                 <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Issuer / Organization</span>
+                  <span className={styles.fieldLabel}>{t('admin_certs_issuer')}</span>
                   <input
                     className={styles.input}
                     value={cert.issuer}
                     disabled={exam.status !== 'DRAFT'}
                     onChange={(e) => setDraft(exam.id, 'issuer', e.target.value)}
-                    placeholder="SYRA Learning Institute"
+                    placeholder={t('admin_certs_issuer_placeholder')}
                   />
                 </label>
                 <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Signer Name</span>
+                  <span className={styles.fieldLabel}>{t('admin_certs_signer')}</span>
                   <input
                     className={styles.input}
                     value={cert.signer}
                     disabled={exam.status !== 'DRAFT'}
                     onChange={(e) => setDraft(exam.id, 'signer', e.target.value)}
-                    placeholder="Dr. Jane Doe"
+                    placeholder={t('admin_certs_signer_placeholder')}
                   />
                 </label>
               </div>

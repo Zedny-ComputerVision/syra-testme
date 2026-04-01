@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { adminApi } from '../../../services/admin.service'
 import { canonicalizePermissionRows, DEFAULT_PERMISSION_ROWS } from '../../../utils/permissions'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminRolesPermissions.module.scss'
 
 const DEFAULTS = DEFAULT_PERMISSION_ROWS
@@ -13,11 +14,13 @@ function serializeRows(rows) {
 }
 
 export default function AdminRolesPermissions() {
+  const { t } = useLanguage()
   const [permissions, setPermissions] = useState(DEFAULTS)
   const [savedPermissions, setSavedPermissions] = useState(DEFAULTS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
+  const [noticeType, setNoticeType] = useState('success')
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -42,13 +45,13 @@ export default function AdminRolesPermissions() {
       } catch {
         setPermissions(DEFAULTS)
         setSavedPermissions(DEFAULTS)
-        setLoadError('Stored permissions were invalid. Showing default values.')
+        setLoadError(t('admin_roles_invalid_permissions'))
       }
     }).catch(() => {
       if (cancelled) return
       setPermissions(DEFAULTS)
       setSavedPermissions(DEFAULTS)
-      setLoadError('Failed to load permission settings. Showing defaults.')
+      setLoadError(t('admin_roles_load_error'))
     }).finally(() => {
       if (!cancelled) setLoading(false)
     })
@@ -77,11 +80,13 @@ export default function AdminRolesPermissions() {
       await adminApi.updateSetting(KEY, JSON.stringify(canonical))
       setPermissions(canonical)
       setSavedPermissions(canonical)
-      setNotice('Permissions saved.')
+      setNotice(t('admin_roles_saved'))
+      setNoticeType('success')
       setTimeout(() => setNotice(''), 3000)
     } catch (error) {
-      const detail = error.response?.data?.detail || 'Failed to save.'
-      setNotice(`Failed to save: ${detail}`)
+      const detail = error.response?.data?.detail || t('admin_roles_save_failed')
+      setNotice(`${t('admin_roles_save_failed_prefix')}: ${detail}`)
+      setNoticeType('error')
     } finally {
       setSaving(false)
     }
@@ -89,7 +94,8 @@ export default function AdminRolesPermissions() {
 
   const handleReset = () => {
     setPermissions(DEFAULTS)
-    setNotice('Restored the default matrix. Save to apply it.')
+    setNotice(t('admin_roles_defaults_restored'))
+    setNoticeType('success')
     setTimeout(() => setNotice(''), 3000)
   }
 
@@ -98,11 +104,11 @@ export default function AdminRolesPermissions() {
     setReloadKey((current) => current + 1)
   }
 
-  const noticeClassName = `${styles.alert} ${notice.includes('Failed') ? styles.alertError : styles.alertSuccess}`
+  const noticeClassName = `${styles.alert} ${noticeType === 'error' ? styles.alertError : styles.alertSuccess}`
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Roles & Permissions" subtitle="Configure role-based access control">
+      <AdminPageHeader title={t('admin_roles_title')} subtitle={t('admin_roles_subtitle')}>
         <div className={styles.actionGroup}>
           <button
             type="button"
@@ -110,7 +116,7 @@ export default function AdminRolesPermissions() {
             disabled={loading || saving}
             className={styles.secondaryButton}
           >
-            Restore Defaults
+            {t('admin_roles_restore_defaults')}
           </button>
           <button
             type="button"
@@ -118,7 +124,7 @@ export default function AdminRolesPermissions() {
             disabled={loading || saving || !dirty}
             className={styles.primaryButton}
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('admin_roles_saving') : t('admin_roles_save')}
           </button>
         </div>
       </AdminPageHeader>
@@ -132,7 +138,7 @@ export default function AdminRolesPermissions() {
             onClick={handleReload}
             disabled={loading || saving}
           >
-            Reload
+            {t('admin_roles_reload')}
           </button>
         </div>
       )}
@@ -143,23 +149,23 @@ export default function AdminRolesPermissions() {
       )}
       {!loading && dirty && (
         <div className={`${styles.alert} ${styles.alertInfo}`}>
-          You have unsaved permission changes.
+          {t('admin_roles_unsaved_changes')}
         </div>
       )}
 
       {loading ? (
         <div className={styles.legend}>
-          <div className={styles.legendTitle}>Loading permission matrix...</div>
+          <div className={styles.legendTitle}>{t('admin_roles_loading')}</div>
         </div>
       ) : (
         <div className={styles.matrixWrap}>
           <table className={styles.matrix}>
             <thead>
               <tr>
-                <th>Permission</th>
-                <th><span className={`${styles.roleBadge} ${styles.roleAdmin}`}>Admin</span></th>
-                <th><span className={`${styles.roleBadge} ${styles.roleInstructor}`}>Instructor</span></th>
-                <th><span className={`${styles.roleBadge} ${styles.roleLearner}`}>Learner</span></th>
+                <th>{t('admin_roles_permission')}</th>
+                <th><span className={`${styles.roleBadge} ${styles.roleAdmin}`}>{t('admin_roles_admin')}</span></th>
+                <th><span className={`${styles.roleBadge} ${styles.roleInstructor}`}>{t('admin_roles_instructor')}</span></th>
+                <th><span className={`${styles.roleBadge} ${styles.roleLearner}`}>{t('admin_roles_learner')}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -185,19 +191,19 @@ export default function AdminRolesPermissions() {
       )}
 
       <div className={styles.legend}>
-        <div className={styles.legendTitle}>Role Access Model</div>
+        <div className={styles.legendTitle}>{t('admin_roles_access_model')}</div>
         <div className={styles.legendItems}>
           <div className={styles.legendItem}>
-            <span className={`${styles.roleBadge} ${styles.roleAdmin}`}>Admin</span>
-            Full platform access, including system settings, user groups, and role management.
+            <span className={`${styles.roleBadge} ${styles.roleAdmin}`}>{t('admin_roles_admin')}</span>
+            {t('admin_roles_admin_desc')}
           </div>
           <div className={styles.legendItem}>
-            <span className={`${styles.roleBadge} ${styles.roleInstructor}`}>Instructor</span>
-            Can reach only the admin utility pages that are explicitly granted in this matrix, such as attempt analysis or scheduling.
+            <span className={`${styles.roleBadge} ${styles.roleInstructor}`}>{t('admin_roles_instructor')}</span>
+            {t('admin_roles_instructor_desc')}
           </div>
           <div className={styles.legendItem}>
-            <span className={`${styles.roleBadge} ${styles.roleLearner}`}>Learner</span>
-            Self-service access to assigned tests, schedules, and personal attempt history.
+            <span className={`${styles.roleBadge} ${styles.roleLearner}`}>{t('admin_roles_learner')}</span>
+            {t('admin_roles_learner_desc')}
           </div>
         </div>
       </div>

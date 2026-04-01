@@ -1,33 +1,36 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { adminApi } from '../../../services/admin.service'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminMaintenance.module.scss'
 
-const MODES = [
-  {
-    value: 'off',
-    label: 'Off',
-    audience: 'Everyone can use the platform normally.',
-    impact: 'No maintenance banner is required.',
-    defaultBanner: '',
-  },
-  {
-    value: 'read-only',
-    label: 'Read-only',
-    audience: 'Non-admins can view pages but should avoid write actions.',
-    impact: 'Use this while validating data or preparing a release.',
-    defaultBanner: 'Scheduled maintenance is in progress. Changes may be temporarily limited.',
-  },
-  {
-    value: 'down',
-    label: 'Down',
-    audience: 'Non-admins are redirected to the maintenance screen.',
-    impact: 'Use this for outages, schema changes, or deploy windows.',
-    defaultBanner: 'Scheduled maintenance is in progress. Please check back shortly.',
-  },
-]
-
 export default function AdminMaintenance() {
+  const { t } = useLanguage()
+
+  const MODES = [
+    {
+      value: 'off',
+      label: t('admin_maint_mode_off'),
+      audience: t('admin_maint_mode_off_audience'),
+      impact: t('admin_maint_mode_off_impact'),
+      defaultBanner: '',
+    },
+    {
+      value: 'read-only',
+      label: t('admin_maint_mode_readonly'),
+      audience: t('admin_maint_mode_readonly_audience'),
+      impact: t('admin_maint_mode_readonly_impact'),
+      defaultBanner: t('admin_maint_banner_readonly_default'),
+    },
+    {
+      value: 'down',
+      label: t('admin_maint_mode_down'),
+      audience: t('admin_maint_mode_down_audience'),
+      impact: t('admin_maint_mode_down_impact'),
+      defaultBanner: t('admin_maint_banner_down_default'),
+    },
+  ]
+
   const [mode, setMode] = useState('off')
   const [banner, setBanner] = useState('')
   const [loading, setLoading] = useState(true)
@@ -47,19 +50,19 @@ export default function AdminMaintenance() {
   const usingDefaultBanner = !trimmedBanner && Boolean(modeMeta.defaultBanner)
   const summaryCards = [
     {
-      label: 'Selected mode',
+      label: t('admin_maint_selected_mode'),
       value: modeMeta.label,
       helper: modeMeta.audience,
     },
     {
-      label: 'Banner source',
-      value: usingDefaultBanner ? 'Default' : trimmedBanner ? 'Custom' : 'None',
-      helper: usingDefaultBanner ? 'Using the mode default banner text' : trimmedBanner ? 'Custom banner will be shown to users' : 'No banner text will be shown',
+      label: t('admin_maint_banner_source'),
+      value: usingDefaultBanner ? t('admin_maint_default') : trimmedBanner ? t('admin_maint_custom') : t('admin_maint_none'),
+      helper: usingDefaultBanner ? t('admin_maint_using_default_banner') : trimmedBanner ? t('admin_maint_custom_banner_shown') : t('admin_maint_no_banner_shown'),
     },
     {
-      label: 'Draft state',
-      value: dirty ? 'Unsaved' : 'Saved',
-      helper: ready ? 'Settings are ready to edit' : 'Retry loading before editing',
+      label: t('admin_maint_draft_state'),
+      value: dirty ? t('admin_maint_unsaved') : t('admin_maint_saved'),
+      helper: ready ? t('admin_maint_ready_to_edit') : t('admin_maint_retry_before_edit'),
     },
   ]
 
@@ -77,7 +80,7 @@ export default function AdminMaintenance() {
       setError('')
       setReady(true)
     } catch {
-      setError('Failed to load maintenance settings.')
+      setError(t('admin_maint_load_error'))
       setReady(false)
     } finally {
       setLoading(false)
@@ -104,9 +107,9 @@ export default function AdminMaintenance() {
       await adminApi.updateSetting('maintenance_banner', trimmedBanner)
       setBaseline({ mode, banner: trimmedBanner })
       setBanner(trimmedBanner)
-      setNotice('Maintenance settings saved.')
+      setNotice(t('admin_maint_saved_notice'))
     } catch {
-      setError('Failed to save settings.')
+      setError(t('admin_maint_save_error'))
     } finally {
       setSaving(false)
     }
@@ -120,12 +123,12 @@ export default function AdminMaintenance() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Maintenance" subtitle="Control maintenance mode, audience impact, and the public-facing banner" />
+      <AdminPageHeader title={t('admin_maint_title')} subtitle={t('admin_maint_subtitle')} />
 
       <div className={styles.summaryRow}>
-        <span className={styles.summaryChip}>Mode: {modeMeta.label}</span>
-        <span className={styles.summaryChip}>{dirty ? 'Unsaved changes' : 'Saved state'}</span>
-        <span className={styles.summaryChip}>{ready ? 'Settings loaded' : 'Retry required'}</span>
+        <span className={styles.summaryChip}>{t('admin_maint_mode_chip', { mode: modeMeta.label })}</span>
+        <span className={styles.summaryChip}>{dirty ? t('admin_maint_unsaved_changes') : t('admin_maint_saved_state')}</span>
+        <span className={styles.summaryChip}>{ready ? t('admin_maint_settings_loaded') : t('admin_maint_retry_required')}</span>
       </div>
       <section className={styles.summaryGrid}>
         {summaryCards.map((card) => (
@@ -142,11 +145,11 @@ export default function AdminMaintenance() {
 
       <div className={styles.layout}>
         <div className={styles.card}>
-          {loading && <div className={styles.loadingText}>Loading maintenance settings...</div>}
+          {loading && <div className={styles.loadingText}>{t('admin_maint_loading')}</div>}
           {!loading && !ready && (
             <div className={styles.retryRow}>
-              <span className={styles.loadingText}>Retry loading settings before editing to avoid overwriting the saved maintenance state.</span>
-              <button type="button" className={styles.retryBtn} onClick={load}>Retry</button>
+              <span className={styles.loadingText}>{t('admin_maint_retry_hint')}</span>
+              <button type="button" className={styles.retryBtn} onClick={load}>{t('admin_maint_retry')}</button>
             </div>
           )}
 
@@ -167,7 +170,7 @@ export default function AdminMaintenance() {
           </div>
 
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="maintenance-mode">Mode</label>
+            <label className={styles.label} htmlFor="maintenance-mode">{t('admin_maint_mode_label')}</label>
             <select id="maintenance-mode" className={styles.input} value={mode} onChange={(e) => setMode(e.target.value)} disabled={loading || saving || !ready}>
               {MODES.map((entry) => (
                 <option key={entry.value} value={entry.value}>{entry.label}</option>
@@ -177,18 +180,18 @@ export default function AdminMaintenance() {
           </div>
 
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="maintenance-banner">Banner Message</label>
+            <label className={styles.label} htmlFor="maintenance-banner">{t('admin_maint_banner_label')}</label>
             <textarea
               id="maintenance-banner"
               className={styles.textarea}
               value={banner}
               onChange={(e) => setBanner(e.target.value)}
               rows={4}
-              placeholder={modeMeta.defaultBanner || 'No banner is required while maintenance mode is off.'}
+              placeholder={modeMeta.defaultBanner || t('admin_maint_no_banner_required')}
               disabled={loading || saving || !ready}
             />
             <div className={styles.helper}>
-              Leave the banner empty to use the default message for the selected mode.
+              {t('admin_maint_banner_hint')}
             </div>
             <div className={styles.bannerActions}>
               <button
@@ -197,7 +200,7 @@ export default function AdminMaintenance() {
                 onClick={applyDefaultBanner}
                 disabled={loading || saving || !ready || !modeMeta.defaultBanner || trimmedBanner === modeMeta.defaultBanner}
               >
-                Use default banner
+                {t('admin_maint_use_default_banner')}
               </button>
               <button
                 type="button"
@@ -205,34 +208,34 @@ export default function AdminMaintenance() {
                 onClick={() => setBanner('')}
                 disabled={loading || saving || !ready || banner === ''}
               >
-                Clear custom banner
+                {t('admin_maint_clear_custom_banner')}
               </button>
             </div>
           </div>
 
           <div className={styles.formActions}>
             <button type="button" className={styles.secondaryBtn} onClick={reset} disabled={!dirty || saving || loading || !ready}>
-              Reset changes
+              {t('admin_maint_reset_changes')}
             </button>
             <button type="button" className={styles.btn} onClick={save} disabled={saving || loading || !ready || !dirty}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t('admin_maint_saving') : t('admin_maint_save')}
             </button>
           </div>
         </div>
 
         <div className={styles.previewCard}>
-          <div className={styles.previewTitle}>Impact Preview</div>
+          <div className={styles.previewTitle}>{t('admin_maint_impact_preview')}</div>
           <div className={styles.previewSub}>{modeMeta.audience}</div>
 
           <div className={styles.previewSection}>
-            <div className={styles.previewLabel}>Banner shown to users</div>
-            <div className={styles.previewBanner}>{effectiveBanner || 'No maintenance banner will be shown.'}</div>
+            <div className={styles.previewLabel}>{t('admin_maint_banner_shown')}</div>
+            <div className={styles.previewBanner}>{effectiveBanner || t('admin_maint_no_banner_will_show')}</div>
           </div>
 
           <div className={styles.previewSection}>
-            <div className={styles.previewLabel}>Admin note</div>
+            <div className={styles.previewLabel}>{t('admin_maint_admin_note')}</div>
             <div className={styles.previewMeta}>
-              Admins keep access while this mode is active, so use the preview to verify the banner text before saving.
+              {t('admin_maint_admin_note_text')}
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminTemplates.module.scss'
 
 function resolveError(err) {
@@ -15,6 +16,7 @@ function resolveError(err) {
 }
 
 export default function AdminTemplates() {
+  const { t } = useLanguage()
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
   const currentUserId = String(user?.id || '')
@@ -41,7 +43,7 @@ export default function AdminTemplates() {
       setTemplates(data || [])
       setLoadError('')
     } catch (err) {
-      setLoadError(resolveError(err) || 'Failed to load templates')
+      setLoadError(resolveError(err) || t('admin_templates_load_error'))
     } finally {
       setLoading(false)
     }
@@ -80,24 +82,24 @@ export default function AdminTemplates() {
   const readOnlyCount = templates.filter((template) => !canManageTemplate(template)).length
   const summaryCards = [
     {
-      label: 'Saved templates',
+      label: t('admin_templates_saved_templates'),
       value: templates.length,
-      helper: 'Reusable blueprints currently loaded',
+      helper: t('admin_templates_blueprints_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_stat_visible_now'),
       value: filteredTemplates.length,
-      helper: hasActiveFilters ? 'Matching the active filters' : 'All loaded templates',
+      helper: hasActiveFilters ? t('admin_stat_matching_filters') : t('admin_templates_all_loaded'),
     },
     {
-      label: 'Owned by you',
+      label: t('admin_templates_owned_by_you'),
       value: ownTemplatesCount,
-      helper: 'Templates you can edit directly',
+      helper: t('admin_templates_owned_helper'),
     },
     {
-      label: 'Read-only',
+      label: t('admin_templates_read_only'),
       value: readOnlyCount,
-      helper: 'Shared templates owned by other users',
+      helper: t('admin_templates_read_only_helper'),
     },
   ]
 
@@ -127,7 +129,7 @@ export default function AdminTemplates() {
     event.preventDefault()
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setError('Template name is required.')
+      setError(t('admin_templates_name_required'))
       return
     }
     setError('')
@@ -136,7 +138,7 @@ export default function AdminTemplates() {
     try {
       const parsed = config ? JSON.parse(config) : {}
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('Config must be a JSON object.')
+        throw new Error(t('admin_templates_config_must_be_object'))
       }
       if (editingId) {
         await adminApi.updateExamTemplate(editingId, {
@@ -144,19 +146,19 @@ export default function AdminTemplates() {
           description: description.trim() || null,
           config: parsed,
         })
-        setNotice('Template updated.')
+        setNotice(t('admin_templates_updated_notice'))
       } else {
         await adminApi.createExamTemplate({
           name: trimmedName,
           description: description.trim() || null,
           config: parsed,
         })
-        setNotice('Template created.')
+        setNotice(t('admin_templates_created_notice'))
       }
       resetForm()
       await load()
     } catch (err) {
-      setError(resolveError(err) || err.message || 'Could not save template. Check JSON config.')
+      setError(resolveError(err) || err.message || t('admin_templates_save_failed'))
     } finally {
       setSaving(false)
     }
@@ -174,10 +176,10 @@ export default function AdminTemplates() {
     try {
       await adminApi.deleteExamTemplate(id)
       setDeleteConfirmId(null)
-      setNotice('Template deleted.')
+      setNotice(t('admin_templates_deleted_notice'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to delete template.')
+      setError(resolveError(err) || t('admin_templates_delete_failed'))
       setDeleteConfirmId(null)
     } finally {
       setDeletingId(null)
@@ -186,11 +188,11 @@ export default function AdminTemplates() {
 
   return (
     <section className={styles.page}>
-      <AdminPageHeader title="Test Templates" subtitle="Create reusable test blueprints" />
+      <AdminPageHeader title={t('admin_templates_page_title')} subtitle={t('admin_templates_page_subtitle')} />
       {loadError && (
         <div className={styles.helperRow}>
           <div className={styles.error}>{loadError}</div>
-          <button className={styles.editBtn} type="button" onClick={() => void load()}>Retry</button>
+          <button className={styles.editBtn} type="button" onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
 
@@ -206,77 +208,77 @@ export default function AdminTemplates() {
 
       <section className={styles.grid}>
         <form className={styles.card} onSubmit={handleSubmit}>
-          <div className={styles.sectionTitle}>{editingId ? 'Edit Template' : 'New Template'}</div>
+          <div className={styles.sectionTitle}>{editingId ? t('admin_templates_edit_template') : t('admin_templates_new_template')}</div>
           {error && <div className={styles.error}>{error}</div>}
           {notice && <div className={styles.notice}>{notice}</div>}
-          <label className={styles.label}>Name</label>
+          <label className={styles.label}>{t('admin_templates_name_label')}</label>
           <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} required />
 
-          <label className={styles.label}>Description</label>
+          <label className={styles.label}>{t('admin_templates_description_label')}</label>
           <input className={styles.input} value={description} onChange={(event) => setDescription(event.target.value)} />
 
-          <label className={styles.label}>Config JSON</label>
+          <label className={styles.label}>{t('admin_templates_config_json_label')}</label>
           <textarea className={styles.textarea} value={config} onChange={(event) => setConfig(event.target.value)} rows={6} />
 
           <div className={styles.formActions}>
-            <button type="submit" className={styles.btnPrimary} disabled={saving}>{saving ? 'Saving...' : editingId ? 'Update Template' : 'Save Template'}</button>
-            {editingId && <button type="button" className={styles.btnCancel} onClick={resetForm}>Cancel</button>}
+            <button type="submit" className={styles.btnPrimary} disabled={saving}>{saving ? t('saving') : editingId ? t('admin_templates_update_template') : t('admin_templates_save_template')}</button>
+            {editingId && <button type="button" className={styles.btnCancel} onClick={resetForm}>{t('cancel')}</button>}
           </div>
         </form>
 
         <section className={styles.card}>
-          <div className={styles.sectionTitle}>Saved Templates</div>
+          <div className={styles.sectionTitle}>{t('admin_templates_saved_section')}</div>
           <div className={styles.toolbar}>
             <div className={styles.toolbarFilters}>
               <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="template-search">Search templates</label>
+                <label className={styles.label} htmlFor="template-search">{t('admin_templates_search_label')}</label>
                 <input
                   id="template-search"
                   className={styles.input}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search name or description..."
+                  placeholder={t('admin_templates_search_placeholder')}
                 />
               </div>
               <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="template-ownership-filter">Ownership</label>
+                <label className={styles.label} htmlFor="template-ownership-filter">{t('admin_templates_ownership_label')}</label>
                 <select
                   id="template-ownership-filter"
                   className={styles.input}
                   value={ownershipFilter}
                   onChange={(event) => setOwnershipFilter(event.target.value)}
                 >
-                  <option value="ALL">All templates</option>
-                  <option value="MINE">Owned by you</option>
-                  <option value="READ_ONLY">Read-only shared</option>
+                  <option value="ALL">{t('admin_templates_filter_all')}</option>
+                  <option value="MINE">{t('admin_templates_owned_by_you')}</option>
+                  <option value="READ_ONLY">{t('admin_templates_filter_read_only')}</option>
                 </select>
               </div>
             </div>
             <div className={styles.toolbarActions}>
               <button type="button" className={styles.editBtn} onClick={() => setSortDir((current) => (current === 'ASC' ? 'DESC' : 'ASC'))}>
-                Sort: name {sortDir === 'ASC' ? 'A-Z' : 'Z-A'}
+                {t('admin_sort_name')} {sortDir === 'ASC' ? 'A-Z' : 'Z-A'}
               </button>
               <button type="button" className={styles.editBtn} onClick={() => void load()} disabled={loading}>
-                {loading ? 'Refreshing...' : 'Refresh'}
+                {loading ? t('admin_refreshing') : t('admin_refresh')}
               </button>
               <button type="button" className={styles.editBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-                Clear filters
+                {t('admin_clear_filters')}
               </button>
             </div>
           </div>
           <div className={styles.filterMeta}>
-            Showing {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''} across {templates.length} loaded.
+            {t('admin_templates_showing_count', { filtered: filteredTemplates.length, total: templates.length })}
           </div>
-          {loading && <div className={styles.muted}>Loading...</div>}
+          {loading && <div className={styles.muted}>{t('loading')}</div>}
           {!loading && !loadError && filteredTemplates.length === 0 && (
             <div className={styles.emptyState}>
-              <div className={styles.emptyTitle}>{hasActiveFilters ? 'No templates match the current filters.' : 'No templates yet.'}</div>
+              <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_templates_no_match') : t('admin_templates_none_yet')}</div>
               <div className={styles.emptyText}>
                 {hasActiveFilters
-                  ? 'Clear the search or ownership filter to restore the current template list.'
-                  : 'Saved reusable templates will appear here once you create or import them.'}
+                  ? t('admin_templates_clear_filters_hint')
+                  : t('admin_templates_empty_state')}
               </div>
-              {hasActiveFilters && <button type="button" className={styles.editBtn} onClick={clearFilters}>Clear filters</button>}
+              {hasActiveFilters && <button type="button" className={styles.editBtn} onClick={clearFilters}>{t('admin_clear_filters')}</button>}
             </div>
           )}
 
@@ -293,25 +295,25 @@ export default function AdminTemplates() {
                   <div className={styles.rowMeta}>
                     {canManageTemplate(template)
                       ? String(template?.created_by_id || '') === currentUserId
-                        ? 'Owned by you'
-                        : 'Editable as admin'
-                      : 'Read-only shared template'}
+                        ? t('admin_templates_owned_by_you')
+                        : t('admin_templates_editable_as_admin')
+                      : t('admin_templates_read_only_shared')}
                     {' · '}
-                    {Object.keys(template?.config || {}).length} config field{Object.keys(template?.config || {}).length !== 1 ? 's' : ''}
+                    {t('admin_templates_config_fields_count', { count: Object.keys(template?.config || {}).length })}
                   </div>
-                  {!canManageTemplate(template) && <div className={styles.rowSub}>Read-only template. Only the owner or an admin can edit this template.</div>}
+                  {!canManageTemplate(template) && <div className={styles.rowSub}>{t('admin_templates_read_only_notice')}</div>}
                 </div>
                 <div className={styles.rowBtns}>
-                  {canManageTemplate(template) && <button className={styles.editBtn} type="button" onClick={() => startEdit(template)} aria-label={`Edit template ${template.name || 'this template'}`} title={`Edit template ${template.name || 'this template'}`}>Edit</button>}
+                  {canManageTemplate(template) && <button className={styles.editBtn} type="button" onClick={() => startEdit(template)} aria-label={`${t('edit')} ${template.name || t('admin_templates_this_template')}`} title={`${t('edit')} ${template.name || t('admin_templates_this_template')}`}>{t('edit')}</button>}
                   {isAdmin && (deleteConfirmId === template.id ? (
                     <>
-                      <button className={`${styles.deleteBtn} ${styles.dangerBtn}`} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`Confirm delete for template ${template.name || 'this template'}`}>
-                        {deletingId === template.id ? 'Deleting...' : 'Confirm'}
+                      <button className={`${styles.deleteBtn} ${styles.dangerBtn}`} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`${t('confirm')} ${t('delete')} ${template.name || t('admin_templates_this_template')}`}>
+                        {deletingId === template.id ? t('admin_deleting') : t('confirm')}
                       </button>
-                      <button className={styles.editBtn} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deletingId === template.id} aria-label={`Keep template ${template.name || 'this template'}`}>Cancel</button>
+                      <button className={styles.editBtn} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deletingId === template.id} aria-label={`${t('admin_templates_keep')} ${template.name || t('admin_templates_this_template')}`}>{t('cancel')}</button>
                     </>
                   ) : (
-                    <button className={styles.deleteBtn} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`Delete template ${template.name || 'this template'}`} title={`Delete template ${template.name || 'this template'}`}>Delete</button>
+                    <button className={styles.deleteBtn} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`${t('delete')} ${template.name || t('admin_templates_this_template')}`} title={`${t('delete')} ${template.name || t('admin_templates_this_template')}`}>{t('delete')}</button>
                   ))}
                 </div>
               </div>

@@ -4,11 +4,12 @@ import { adminApi } from '../../../services/admin.service'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminCourses.module.scss'
 
-const COURSE_STATUS_OPTIONS = [
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'PUBLISHED', label: 'Published' },
+const COURSE_STATUS_KEYS = [
+  { value: 'DRAFT', labelKey: 'draft' },
+  { value: 'PUBLISHED', labelKey: 'published' },
 ]
 
 function resolveError(err) {
@@ -17,13 +18,14 @@ function resolveError(err) {
     err.response?.data?.error?.message ||
     err.response?.data?.error?.detail ||
     err.message ||
-    'Action failed.'
+    ''
   )
 }
 
 export default function AdminCourses() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const isAdmin = user?.role === 'ADMIN'
   const currentUserId = String(user?.id || '')
   const [courses, setCourses] = useState([])
@@ -59,7 +61,7 @@ export default function AdminCourses() {
         setCourses([])
         setNodes({})
         setAllTests([])
-        setError(resolveError(coursesRes.reason) || 'Failed to load courses')
+        setError(resolveError(coursesRes.reason) || t('admin_courses_load_error'))
         return
       }
 
@@ -70,7 +72,7 @@ export default function AdminCourses() {
         setAllTests(testRows.map(normalizeAdminTest))
       } else {
         setAllTests([])
-        setWarning('Linked tests could not be loaded. Courses and modules remain available, but linked test counts may be incomplete until you retry.')
+        setWarning(t('admin_courses_tests_warning'))
       }
 
       const nodeMap = Object.fromEntries(courseList.map((course) => [course.id, []]))
@@ -84,8 +86,8 @@ export default function AdminCourses() {
       } else {
         setWarning((current) => (
           current
-            ? `${current} Course modules could not be loaded until you retry.`
-            : 'Course modules could not be loaded until you retry.'
+            ? `${current} ${t('admin_courses_modules_warning')}`
+            : t('admin_courses_modules_warning')
         ))
       }
 
@@ -97,7 +99,7 @@ export default function AdminCourses() {
       setCourses([])
       setNodes({})
       setAllTests([])
-      setError(resolveError(err) || 'Failed to load courses')
+      setError(resolveError(err) || t('admin_courses_load_error'))
     } finally {
       setLoading(false)
     }
@@ -115,7 +117,7 @@ export default function AdminCourses() {
   const createCourse = async (event) => {
     event.preventDefault()
     if (!form.title.trim()) {
-      setError('Course title is required.')
+      setError(t('admin_courses_title_required'))
       return
     }
     setSavingCourseForm(true)
@@ -128,10 +130,10 @@ export default function AdminCourses() {
         status: form.status,
       })
       setForm({ title: '', description: '', status: 'DRAFT' })
-      setNotice('Course created.')
+      setNotice(t('admin_courses_created'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to create course')
+      setError(resolveError(err) || t('admin_courses_create_error'))
     } finally {
       setSavingCourseForm(false)
     }
@@ -140,7 +142,7 @@ export default function AdminCourses() {
   const saveCourseEdit = async (event) => {
     event.preventDefault()
     if (!editingCourse?.title?.trim()) {
-      setError('Course title is required.')
+      setError(t('admin_courses_title_required'))
       return
     }
     setSavingCourseId(editingCourse.id)
@@ -153,10 +155,10 @@ export default function AdminCourses() {
         status: editingCourse.status,
       })
       setEditingCourse(null)
-      setNotice('Course updated.')
+      setNotice(t('admin_courses_updated'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to update course')
+      setError(resolveError(err) || t('admin_courses_update_error'))
     } finally {
       setSavingCourseId(null)
     }
@@ -172,10 +174,10 @@ export default function AdminCourses() {
         description: course.description,
         status: course.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED',
       })
-      setNotice(course.status === 'PUBLISHED' ? 'Course moved back to draft.' : 'Course published.')
+      setNotice(course.status === 'PUBLISHED' ? t('admin_courses_moved_draft') : t('admin_courses_published'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to update course status')
+      setError(resolveError(err) || t('admin_courses_status_error'))
     } finally {
       setSavingCourseId(null)
     }
@@ -192,10 +194,10 @@ export default function AdminCourses() {
     setNotice('')
     try {
       await adminApi.deleteCourse(id)
-      setNotice('Course deleted.')
+      setNotice(t('admin_courses_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to delete course')
+      setError(resolveError(err) || t('admin_courses_delete_error'))
     } finally {
       setSavingCourseId(null)
     }
@@ -204,7 +206,7 @@ export default function AdminCourses() {
   const addNode = async (courseId) => {
     const nodeTitle = String(nodeTitles[courseId] || '').trim()
     if (!nodeTitle) {
-      setError('Module title is required.')
+      setError(t('admin_courses_module_title_required'))
       return
     }
     setBusyNodeId(courseId)
@@ -213,10 +215,10 @@ export default function AdminCourses() {
     try {
       await adminApi.createNode({ course_id: courseId, title: nodeTitle, order: (nodes[courseId]?.length || 0) + 1 })
       setNodeTitles((prev) => ({ ...prev, [courseId]: '' }))
-      setNotice('Module added.')
+      setNotice(t('admin_courses_module_added'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to add module')
+      setError(resolveError(err) || t('admin_courses_add_module_error'))
     } finally {
       setBusyNodeId(null)
     }
@@ -224,7 +226,7 @@ export default function AdminCourses() {
 
   const saveNodeEdit = async (node) => {
     if (!editNodeTitle.trim()) {
-      setError('Module title is required.')
+      setError(t('admin_courses_module_title_required'))
       return
     }
     setBusyNodeId(node.id)
@@ -233,10 +235,10 @@ export default function AdminCourses() {
     try {
       await adminApi.updateNode(node.id, { title: editNodeTitle.trim(), order: node.order })
       setEditingNode(null)
-      setNotice('Module updated.')
+      setNotice(t('admin_courses_module_updated'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to update module')
+      setError(resolveError(err) || t('admin_courses_update_module_error'))
     } finally {
       setBusyNodeId(null)
     }
@@ -253,10 +255,10 @@ export default function AdminCourses() {
     setNotice('')
     try {
       await adminApi.deleteNode(nodeId)
-      setNotice('Module deleted.')
+      setNotice(t('admin_courses_module_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || 'Failed to delete module')
+      setError(resolveError(err) || t('admin_courses_delete_module_error'))
     } finally {
       setBusyNodeId(null)
     }
@@ -264,11 +266,11 @@ export default function AdminCourses() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Training Courses" subtitle="Manage courses and modules" />
+      <AdminPageHeader title={t('admin_courses_title')} subtitle={t('admin_courses_subtitle')} />
       {error && (
         <div className={styles.helperRow}>
           <div className={styles.errorMsg}>{error}</div>
-          <button className={styles.btnSecondary} onClick={() => void load()}>Retry</button>
+          <button className={styles.btnSecondary} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
       {warning && <div className={styles.warningMsg}>{warning}</div>}
@@ -276,29 +278,29 @@ export default function AdminCourses() {
 
       <div className={styles.grid}>
         <form className={styles.card} onSubmit={createCourse}>
-          <div className={styles.sectionTitle}>New Course</div>
-          <label className={styles.label} htmlFor="course-form-title">Title</label>
+          <div className={styles.sectionTitle}>{t('admin_courses_new_course')}</div>
+          <label className={styles.label} htmlFor="course-form-title">{t('title')}</label>
           <input id="course-form-title" className={styles.input} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
-          <label className={styles.label} htmlFor="course-form-description">Description</label>
+          <label className={styles.label} htmlFor="course-form-description">{t('description')}</label>
           <textarea id="course-form-description" className={styles.textarea} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} />
-          <label className={styles.label} htmlFor="course-form-status">Status</label>
+          <label className={styles.label} htmlFor="course-form-status">{t('status')}</label>
           <select id="course-form-status" className={styles.input} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-            {COURSE_STATUS_OPTIONS.map((statusOption) => (
-              <option key={statusOption.value} value={statusOption.value}>{statusOption.label}</option>
+            {COURSE_STATUS_KEYS.map((statusOption) => (
+              <option key={statusOption.value} value={statusOption.value}>{t(statusOption.labelKey)}</option>
             ))}
           </select>
-          <button className={styles.btnPrimary} type="submit" disabled={savingCourseForm}>{savingCourseForm ? 'Saving...' : 'Save Course'}</button>
+          <button className={styles.btnPrimary} type="submit" disabled={savingCourseForm}>{savingCourseForm ? t('saving') : t('admin_courses_save_course')}</button>
         </form>
 
         <div className={styles.card}>
-          <div className={styles.sectionTitle}>Courses</div>
-          {loading && <div className={styles.empty}>Loading...</div>}
-          {!loading && courses.length === 0 && <div className={styles.empty}>No courses yet.</div>}
+          <div className={styles.sectionTitle}>{t('admin_courses_courses')}</div>
+          {loading && <div className={styles.empty}>{t('loading')}</div>}
+          {!loading && courses.length === 0 && <div className={styles.empty}>{t('admin_courses_no_courses')}</div>}
           {!loading && courses.map((course) => (
             <div key={course.id} className={styles.courseCard}>
               {!canManageCourse(course) && (
                 <div className={`${styles.courseSub} ${styles.courseHint}`}>
-                  Read-only course. Only the course owner or an admin can edit modules and publishing settings.
+                  {t('admin_courses_read_only')}
                 </div>
               )}
               {editingCourse?.id === course.id ? (
@@ -306,13 +308,13 @@ export default function AdminCourses() {
                   <input className={styles.input} value={editingCourse.title} onChange={(event) => setEditingCourse((current) => ({ ...current, title: event.target.value }))} required />
                   <textarea className={styles.textarea} rows={2} value={editingCourse.description || ''} onChange={(event) => setEditingCourse((current) => ({ ...current, description: event.target.value }))} />
                   <select className={styles.input} value={editingCourse.status || 'DRAFT'} onChange={(event) => setEditingCourse((current) => ({ ...current, status: event.target.value }))}>
-                    {COURSE_STATUS_OPTIONS.map((statusOption) => (
-                      <option key={statusOption.value} value={statusOption.value}>{statusOption.label}</option>
+                    {COURSE_STATUS_KEYS.map((statusOption) => (
+                      <option key={statusOption.value} value={statusOption.value}>{t(statusOption.labelKey)}</option>
                     ))}
                   </select>
                   <div className={styles.editActions}>
-                    <button className={styles.btnPrimary} type="submit" disabled={savingCourseId === course.id}>{savingCourseId === course.id ? 'Saving...' : 'Save'}</button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => setEditingCourse(null)} disabled={savingCourseId === course.id}>Cancel</button>
+                    <button className={styles.btnPrimary} type="submit" disabled={savingCourseId === course.id}>{savingCourseId === course.id ? t('saving') : t('save')}</button>
+                    <button className={styles.btnSecondary} type="button" onClick={() => setEditingCourse(null)} disabled={savingCourseId === course.id}>{t('cancel')}</button>
                   </div>
                 </form>
               ) : (
@@ -320,26 +322,26 @@ export default function AdminCourses() {
                   <div>
                     <div className={styles.courseTitle}>{course.title}</div>
                     <div className={styles.courseSub}>{course.description}</div>
-                    <div className={styles.courseSub}>Status: {course.status === 'PUBLISHED' ? 'Published' : 'Draft'}</div>
+                    <div className={styles.courseSub}>{t('status')}: {course.status === 'PUBLISHED' ? t('published') : t('draft')}</div>
                   </div>
                   <div className={styles.courseActions}>
                     {canManageCourse(course) && (
                       <>
-                        <button className={styles.btnSecondary} onClick={() => void toggleCourseStatus(course)} disabled={savingCourseId === course.id} aria-label={`${course.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'} course ${course.title || 'this course'}`} title={`${course.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'} course ${course.title || 'this course'}`}>
-                          {savingCourseId === course.id ? 'Saving...' : course.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
+                        <button className={styles.btnSecondary} onClick={() => void toggleCourseStatus(course)} disabled={savingCourseId === course.id} aria-label={`${course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')} ${t('admin_courses_course')} ${course.title || t('admin_courses_this_course')}`} title={`${course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')} ${t('admin_courses_course')} ${course.title || t('admin_courses_this_course')}`}>
+                          {savingCourseId === course.id ? t('saving') : course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')}
                         </button>
-                        <button className={styles.btnSecondary} onClick={() => setEditingCourse({ ...course })} disabled={savingCourseId === course.id} aria-label={`Edit course ${course.title || 'this course'}`} title={`Edit course ${course.title || 'this course'}`}>Edit</button>
+                        <button className={styles.btnSecondary} onClick={() => setEditingCourse({ ...course })} disabled={savingCourseId === course.id} aria-label={`${t('edit')} ${course.title || t('admin_courses_this_course')}`} title={`${t('edit')} ${course.title || t('admin_courses_this_course')}`}>{t('edit')}</button>
                       </>
                     )}
                     {isAdmin && (deleteCourseConfirmId === course.id ? (
                       <>
-                        <button className={styles.dangerBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`Confirm delete for course ${course.title || 'this course'}`}>
-                          {savingCourseId === course.id ? 'Deleting...' : 'Confirm'}
+                        <button className={styles.dangerBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`${t('confirm_delete')} ${course.title || t('admin_courses_this_course')}`}>
+                          {savingCourseId === course.id ? t('admin_courses_deleting') : t('confirm')}
                         </button>
-                        <button className={styles.btnSecondary} onClick={() => setDeleteCourseConfirmId(null)} disabled={savingCourseId === course.id} aria-label={`Keep course ${course.title || 'this course'}`}>Cancel</button>
+                        <button className={styles.btnSecondary} onClick={() => setDeleteCourseConfirmId(null)} disabled={savingCourseId === course.id} aria-label={`${t('cancel_delete')} ${course.title || t('admin_courses_this_course')}`}>{t('cancel')}</button>
                       </>
                     ) : (
-                      <button className={styles.deleteBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`Delete course ${course.title || 'this course'}`} title={`Delete course ${course.title || 'this course'}`}>Delete</button>
+                      <button className={styles.deleteBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`${t('delete')} ${course.title || t('admin_courses_this_course')}`} title={`${t('delete')} ${course.title || t('admin_courses_this_course')}`}>{t('delete')}</button>
                     ))}
                   </div>
                 </div>
@@ -351,22 +353,22 @@ export default function AdminCourses() {
                     {editingNode === node.id ? (
                       <>
                         <input className={styles.input} value={editNodeTitle} onChange={(event) => setEditNodeTitle(event.target.value)} autoFocus />
-                        <button type="button" className={styles.btnPrimary} onClick={() => void saveNodeEdit(node)} disabled={busyNodeId === node.id} aria-label={`Save module ${node.title || 'this module'} in ${course.title || 'this course'}`}>{busyNodeId === node.id ? 'Saving...' : 'Save'}</button>
-                        <button type="button" className={styles.btnSecondary} onClick={() => setEditingNode(null)} disabled={busyNodeId === node.id} aria-label={`Cancel editing module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Cancel</button>
+                        <button type="button" className={styles.btnPrimary} onClick={() => void saveNodeEdit(node)} disabled={busyNodeId === node.id} aria-label={`${t('save')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{busyNodeId === node.id ? t('saving') : t('save')}</button>
+                        <button type="button" className={styles.btnSecondary} onClick={() => setEditingNode(null)} disabled={busyNodeId === node.id} aria-label={`${t('cancel')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('cancel')}</button>
                       </>
                     ) : (
                       <>
                         <span className={styles.moduleChip}>{node.title}</span>
                         {canManageCourse(course) && (
                           <>
-                            <button type="button" className={styles.iconBtn} onClick={() => { setEditingNode(node.id); setEditNodeTitle(node.title) }} disabled={busyNodeId === node.id} aria-label={`Edit module ${node.title || 'this module'} in ${course.title || 'this course'}`} title={`Edit module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Edit</button>
+                            <button type="button" className={styles.iconBtn} onClick={() => { setEditingNode(node.id); setEditNodeTitle(node.title) }} disabled={busyNodeId === node.id} aria-label={`${t('edit')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`} title={`${t('edit')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('edit')}</button>
                             {deleteNodeConfirmId === node.id ? (
                               <>
-                                <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`Confirm delete for module ${node.title || 'this module'} in ${course.title || 'this course'}`}>{busyNodeId === node.id ? 'Deleting...' : 'Confirm'}</button>
-                                <button type="button" className={styles.iconBtn} onClick={() => setDeleteNodeConfirmId(null)} disabled={busyNodeId === node.id} aria-label={`Keep module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Cancel</button>
+                                <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`${t('confirm_delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{busyNodeId === node.id ? t('admin_courses_deleting') : t('confirm')}</button>
+                                <button type="button" className={styles.iconBtn} onClick={() => setDeleteNodeConfirmId(null)} disabled={busyNodeId === node.id} aria-label={`${t('cancel_delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('cancel')}</button>
                               </>
                             ) : (
-                              <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`Delete module ${node.title || 'this module'} in ${course.title || 'this course'}`} title={`Delete module ${node.title || 'this module'} in ${course.title || 'this course'}`}>Delete</button>
+                              <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`${t('delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`} title={`${t('delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('delete')}</button>
                             )}
                           </>
                         )}
@@ -378,11 +380,11 @@ export default function AdminCourses() {
                   <div className={styles.addModule}>
                     <input
                       className={styles.input}
-                      placeholder="New module title"
+                      placeholder={t('admin_courses_new_module_title')}
                       value={nodeTitles[course.id] || ''}
                       onChange={(event) => setNodeTitles((prev) => ({ ...prev, [course.id]: event.target.value }))}
                     />
-                    <button type="button" className={styles.btnSecondary} onClick={() => void addNode(course.id)} disabled={busyNodeId === course.id}>{busyNodeId === course.id ? 'Adding...' : 'Add'}</button>
+                    <button type="button" className={styles.btnSecondary} onClick={() => void addNode(course.id)} disabled={busyNodeId === course.id}>{busyNodeId === course.id ? t('admin_courses_adding') : t('add')}</button>
                   </div>
                 )}
               </div>
@@ -393,15 +395,15 @@ export default function AdminCourses() {
                   className={styles.examsToggle}
                   onClick={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
                 >
-                  {expandedCourse === course.id ? 'Hide' : 'Show'} linked tests ({getTestsForCourse(course.id).length})
+                  {expandedCourse === course.id ? t('admin_courses_hide') : t('admin_courses_show')} {t('admin_courses_linked_tests')} ({getTestsForCourse(course.id).length})
                 </button>
                 {expandedCourse === course.id && (
                   <div className={styles.examsTable}>
                     {getTestsForCourse(course.id).length === 0 ? (
-                      <div className={styles.empty}>No tests linked to this course yet.</div>
+                      <div className={styles.empty}>{t('admin_courses_no_linked_tests')}</div>
                     ) : (
                       <table className={styles.examListTable}>
-                        <thead><tr><th>Title</th><th>Status</th><th>Type</th>{isAdmin && <th></th>}</tr></thead>
+                        <thead><tr><th>{t('title')}</th><th>{t('status')}</th><th>{t('type')}</th>{isAdmin && <th></th>}</tr></thead>
                         <tbody>
                           {getTestsForCourse(course.id).map((test) => (
                             <tr key={test.id}>
@@ -410,7 +412,7 @@ export default function AdminCourses() {
                               <td>{test.type || '-'}</td>
                               {isAdmin && (
                                 <td>
-                                  <button type="button" className={styles.compactBtn} onClick={() => navigate(`/admin/tests/${test.id}/manage`)} aria-label={`Manage linked test ${test.title || 'test'} from course ${course.title || 'this course'}`} title={`Manage linked test ${test.title || 'test'} from course ${course.title || 'this course'}`}>Manage test</button>
+                                  <button type="button" className={styles.compactBtn} onClick={() => navigate(`/admin/tests/${test.id}/manage`)} aria-label={`${t('admin_courses_manage_test')} ${test.title || t('admin_courses_test')} ${t('admin_courses_from_course')} ${course.title || t('admin_courses_this_course')}`} title={`${t('admin_courses_manage_test')} ${test.title || t('admin_courses_test')} ${t('admin_courses_from_course')} ${course.title || t('admin_courses_this_course')}`}>{t('admin_courses_manage_test')}</button>
                                 </td>
                               )}
                             </tr>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
+import useLanguage from '../../../hooks/useLanguage'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import { readPaginatedItems } from '../../../utils/pagination'
 import styles from './AdminSchedules.module.scss'
@@ -12,6 +13,7 @@ function resolveError(err, fallback) {
 }
 
 export default function AdminSchedules() {
+  const { t } = useLanguage()
   const [schedules, setSchedules] = useState([])
   const [tests, setTests] = useState([])
   const [users, setUsers] = useState([])
@@ -48,7 +50,7 @@ export default function AdminSchedules() {
         setSchedules([])
         setSchedulesReady(false)
         failures.push('schedules')
-        setError(resolveError(sRes.reason, 'Failed to load schedules.'))
+        setError(resolveError(sRes.reason, t('admin_schedules_load_failed')))
       }
 
       if (tRes.status === 'fulfilled') {
@@ -67,9 +69,9 @@ export default function AdminSchedules() {
 
       setCreateReady(failures.length === 0)
       if (failures.includes('schedules')) {
-        setBootstrapMessage('Existing schedules could not be loaded. Retry before editing or assigning schedules.')
+        setBootstrapMessage(t('admin_schedules_bootstrap_schedules_failed'))
       } else if (failures.length > 0) {
-        setBootstrapMessage('Some assignment lookup data could not be loaded. Existing schedules remain visible, but assigning new schedules is temporarily disabled.')
+        setBootstrapMessage(t('admin_schedules_bootstrap_partial_failed'))
       }
     } finally {
       setLoading(false)
@@ -82,7 +84,7 @@ export default function AdminSchedules() {
 
   const handleAssign = async () => {
     if (!form.user_id || !form.exam_id || !form.scheduled_at) {
-      setError('User, test, and scheduled time are required.')
+      setError(t('admin_schedules_required_fields'))
       return
     }
 
@@ -95,11 +97,11 @@ export default function AdminSchedules() {
         notes: form.notes.trim() || null,
       })
       setForm(EMPTY_FORM)
-      setNotice('Schedule assigned successfully.')
+      setNotice(t('admin_schedules_assigned'))
       setShowForm(false)
       await load()
     } catch (err) {
-      setError(resolveError(err, 'Failed to assign schedule'))
+      setError(resolveError(err, t('admin_schedules_assign_failed')))
     } finally {
       setSaving(false)
     }
@@ -111,11 +113,11 @@ export default function AdminSchedules() {
     try {
       await adminApi.deleteSchedule(id)
       setDeleteConfirmId(null)
-      setNotice('Schedule deleted.')
+      setNotice(t('admin_schedules_deleted'))
       await load()
     } catch (err) {
       setDeleteConfirmId(null)
-      setError(resolveError(err, 'Failed to delete schedule'))
+      setError(resolveError(err, t('admin_schedules_delete_failed')))
     } finally {
       setDeleteBusyId(null)
     }
@@ -150,24 +152,24 @@ export default function AdminSchedules() {
   const restrictedCount = schedules.filter((schedule) => String(schedule.access_mode || '').toUpperCase() === 'RESTRICTED').length
   const summaryCards = [
     {
-      label: 'Assigned schedules',
+      label: t('admin_schedules_assigned_schedules'),
       value: schedules.length,
-      helper: schedulesReady ? 'All learner schedule records currently loaded' : 'Schedule list needs a retry before editing',
+      helper: schedulesReady ? t('admin_schedules_all_loaded') : t('admin_schedules_needs_retry'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_schedules_visible_now'),
       value: filteredSchedules.length,
-      helper: hasActiveFilters ? 'Matching the active filters' : 'All loaded schedules',
+      helper: hasActiveFilters ? t('admin_schedules_matching_filters') : t('admin_schedules_all_schedules'),
     },
     {
-      label: 'Restricted',
+      label: t('admin_schedules_restricted'),
       value: restrictedCount,
-      helper: 'Schedule-gated access windows',
+      helper: t('admin_schedules_restricted_helper'),
     },
     {
-      label: 'Upcoming',
+      label: t('admin_schedules_upcoming'),
       value: upcomingCount,
-      helper: 'Scheduled for now or later',
+      helper: t('admin_schedules_upcoming_helper'),
     },
   ]
 
@@ -178,16 +180,16 @@ export default function AdminSchedules() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Schedules" subtitle="Assign tests to learners">
+      <AdminPageHeader title={t('admin_schedules_title')} subtitle={t('admin_schedules_subtitle')}>
         <button type="button" className={styles.btnPrimary} onClick={() => setShowForm((current) => !current)} disabled={!createReady}>
-          {showForm ? 'Hide Form' : '+ Assign'}
+          {showForm ? t('admin_schedules_hide_form') : t('admin_schedules_assign_btn')}
         </button>
       </AdminPageHeader>
 
       {error && (
         <div className={styles.helperRow}>
           <div className={styles.errorMsg}>{error}</div>
-          <button className={styles.actionBtn} onClick={() => void load()}>Retry</button>
+          <button className={styles.actionBtn} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
       {!error && bootstrapMessage && <div className={styles.warningMsg}>{bootstrapMessage}</div>}
@@ -205,41 +207,41 @@ export default function AdminSchedules() {
 
       {showForm && (
         <div className={styles.assignForm}>
-          <h3 className={styles.assignTitle}>Assign Test</h3>
-          {!createReady && <div className={styles.errorMsg}>{bootstrapMessage || 'Assignment is disabled until schedules, tests, and users load successfully.'}</div>}
+          <h3 className={styles.assignTitle}>{t('admin_schedules_assign_test')}</h3>
+          {!createReady && <div className={styles.errorMsg}>{bootstrapMessage || t('admin_schedules_assignment_disabled')}</div>}
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="schedule-form-user">User</label>
+              <label className={styles.label} htmlFor="schedule-form-user">{t('admin_schedules_user')}</label>
               <select id="schedule-form-user" className={styles.select} value={form.user_id} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, user_id: e.target.value }))}>
-                <option value="">Select user...</option>
+                <option value="">{t('admin_schedules_select_user')}</option>
                 {users.map((user) => <option key={user.id} value={user.id}>{user.user_id} - {user.name}</option>)}
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="schedule-form-test">Test</label>
+              <label className={styles.label} htmlFor="schedule-form-test">{t('admin_schedules_test')}</label>
               <select id="schedule-form-test" className={styles.select} value={form.exam_id} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, exam_id: e.target.value }))}>
-                <option value="">Select test...</option>
+                <option value="">{t('admin_schedules_select_test')}</option>
                 {tests.map((test) => <option key={test.id} value={test.id}>{test.title}</option>)}
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="schedule-form-datetime">Scheduled At</label>
+              <label className={styles.label} htmlFor="schedule-form-datetime">{t('admin_schedules_scheduled_at')}</label>
               <input id="schedule-form-datetime" className={styles.input} type="datetime-local" value={form.scheduled_at} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, scheduled_at: e.target.value }))} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="schedule-form-mode">Access Mode</label>
+              <label className={styles.label} htmlFor="schedule-form-mode">{t('admin_schedules_access_mode')}</label>
               <select id="schedule-form-mode" className={styles.select} value={form.access_mode} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, access_mode: e.target.value }))}>
-                <option value="OPEN">Open (anytime)</option>
-                <option value="RESTRICTED">Restricted (by schedule)</option>
+                <option value="OPEN">{t('admin_schedules_mode_open')}</option>
+                <option value="RESTRICTED">{t('admin_schedules_mode_restricted')}</option>
               </select>
             </div>
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.label} htmlFor="schedule-form-notes">Notes</label>
+            <label className={styles.label} htmlFor="schedule-form-notes">{t('admin_schedules_notes')}</label>
             <textarea id="schedule-form-notes" className={styles.textarea} value={form.notes} disabled={!createReady || saving} onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))} />
           </div>
           <button type="button" className={styles.btnPrimary} onClick={() => void handleAssign()} disabled={!createReady || saving || !form.user_id || !form.exam_id || !form.scheduled_at}>
-            {saving ? 'Assigning...' : 'Assign'}
+            {saving ? t('admin_schedules_assigning') : t('admin_schedules_assign')}
           </button>
         </div>
       )}
@@ -248,24 +250,24 @@ export default function AdminSchedules() {
         <div className={styles.toolbar}>
           <div className={styles.toolbarFilters}>
             <div className={styles.filterGroup}>
-              <label className={styles.label} htmlFor="schedule-search">Search schedules</label>
+              <label className={styles.label} htmlFor="schedule-search">{t('admin_schedules_search_label')}</label>
               <input
                 id="schedule-search"
                 className={styles.input}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by learner, test, or note..."
+                placeholder={t('admin_schedules_search_placeholder')}
               />
             </div>
             <div className={styles.filterGroup}>
-              <label className={styles.label} htmlFor="schedule-mode-filter">Mode</label>
+              <label className={styles.label} htmlFor="schedule-mode-filter">{t('admin_schedules_mode_label')}</label>
               <select
                 id="schedule-mode-filter"
                 className={styles.select}
                 value={modeFilter}
                 onChange={(e) => setModeFilter(e.target.value)}
               >
-                <option value="">All modes</option>
+                <option value="">{t('admin_schedules_all_modes')}</option>
                 <option value="OPEN">OPEN</option>
                 <option value="RESTRICTED">RESTRICTED</option>
               </select>
@@ -273,29 +275,29 @@ export default function AdminSchedules() {
           </div>
           <div className={styles.toolbarActions}>
             <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>
-              {loading ? 'Refreshing...' : 'Refresh'}
+              {loading ? t('admin_schedules_refreshing') : t('admin_schedules_refresh')}
             </button>
             <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-              Clear filters
+              {t('admin_schedules_clear_filters')}
             </button>
           </div>
         </div>
         <div className={styles.tableMeta}>
-          Showing {filteredSchedules.length} schedule{filteredSchedules.length !== 1 ? 's' : ''} across {schedules.length} loaded.
+          {t('admin_schedules_showing')} {filteredSchedules.length} {t('admin_schedules_schedule_count')} {t('admin_schedules_across')} {schedules.length} {t('admin_schedules_loaded')}.
         </div>
         {loading ? (
-          <div className={styles.empty}>Loading...</div>
+          <div className={styles.empty}>{t('loading')}</div>
         ) : filteredSchedules.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>{hasActiveFilters ? 'No schedules match the current filters.' : 'No schedules yet.'}</div>
+            <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_schedules_no_match') : t('admin_schedules_no_schedules')}</div>
             <div className={styles.emptyText}>
               {hasActiveFilters
-                ? 'Clear the search or mode filter to restore the current schedule list.'
-                : 'Assigned learner schedules will appear here once tests are scheduled.'}
+                ? t('admin_schedules_clear_filters_hint')
+                : t('admin_schedules_empty_hint')}
             </div>
             {hasActiveFilters && (
               <button type="button" className={styles.actionBtn} onClick={clearFilters}>
-                Clear filters
+                {t('admin_schedules_clear_filters')}
               </button>
             )}
           </div>
@@ -303,12 +305,12 @@ export default function AdminSchedules() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>User</th>
-                <th>Test</th>
-                <th>Scheduled</th>
-                <th>Mode</th>
-                <th>Notes</th>
-                <th>Actions</th>
+                <th>{t('admin_schedules_user')}</th>
+                <th>{t('admin_schedules_test')}</th>
+                <th>{t('admin_schedules_scheduled')}</th>
+                <th>{t('admin_schedules_mode_label')}</th>
+                <th>{t('admin_schedules_notes')}</th>
+                <th>{t('admin_schedules_actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -319,7 +321,7 @@ export default function AdminSchedules() {
                   <td>{formatDate(schedule.scheduled_at)}</td>
                   <td>
                     <span className={`${styles.modeBadge} ${schedule.access_mode === 'OPEN' ? styles.modeOpen : styles.modeScheduled}`}>
-                      {schedule.access_mode || 'Scheduled'}
+                      {schedule.access_mode || t('admin_schedules_scheduled')}
                     </span>
                   </td>
                   <td>{schedule.notes || '-'}</td>
@@ -327,15 +329,15 @@ export default function AdminSchedules() {
                     {deleteConfirmId === schedule.id ? (
                       <span className={styles.actionGroup}>
                         <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(schedule.id)} disabled={deleteBusyId === schedule.id}>
-                          {deleteBusyId === schedule.id ? 'Deleting...' : 'Confirm'}
+                          {deleteBusyId === schedule.id ? t('admin_schedules_deleting') : t('confirm')}
                         </button>
                         <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === schedule.id}>
-                          Cancel
+                          {t('cancel')}
                         </button>
                       </span>
                     ) : (
                       <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(schedule.id)} disabled={deleteBusyId === schedule.id}>
-                        Delete
+                        {t('delete')}
                       </button>
                     )}
                   </td>

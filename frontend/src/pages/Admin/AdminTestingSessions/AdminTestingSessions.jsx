@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { adminApi } from '../../../services/admin.service'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { normalizeAdminTest } from '../../../utils/assessmentAdapters'
 import styles from './AdminTestingSessions.module.scss'
@@ -25,6 +26,7 @@ function utcToLocalDatetimeInput(utcString) {
 }
 
 export default function AdminTestingSessions() {
+  const { t } = useLanguage()
   const { hasPermission } = useAuth()
   const [sessions, setSessions] = useState([])
   const [tests, setTests] = useState([])
@@ -79,7 +81,7 @@ export default function AdminTestingSessions() {
         setSessions([])
         setSessionsReady(false)
         failures.push('sessions')
-        setError(resolveError(sRes.reason, 'Failed to load sessions.'))
+        setError(resolveError(sRes.reason, t('admin_sessions_error_load_sessions')))
       }
 
       if (tRes.status === 'fulfilled') {
@@ -101,9 +103,9 @@ export default function AdminTestingSessions() {
       }
 
       if (failures.includes('sessions')) {
-        setBootstrapMessage('Existing sessions could not be loaded. Retry before editing or creating schedules.')
+        setBootstrapMessage(t('admin_sessions_bootstrap_sessions_failed'))
       } else if (failures.length > 0) {
-        setBootstrapMessage('Some scheduling lookup data could not be loaded. Existing sessions remain visible, but creating new sessions is temporarily disabled.')
+        setBootstrapMessage(t('admin_sessions_bootstrap_lookup_failed'))
       } else {
         setBootstrapMessage('')
       }
@@ -115,8 +117,8 @@ export default function AdminTestingSessions() {
       setSessionsReady(false)
       setTestsReady(false)
       setUsersReady(false)
-      setBootstrapMessage('Scheduling data could not be loaded. Retry to continue.')
-      setError(resolveError(err, 'Failed to load sessions.'))
+      setBootstrapMessage(t('admin_sessions_bootstrap_all_failed'))
+      setError(resolveError(err, t('admin_sessions_error_load_sessions')))
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
@@ -175,24 +177,24 @@ export default function AdminTestingSessions() {
   const editTarget = editId ? sessions.find((session) => session.id === editId) : null
   const summaryCards = [
     {
-      label: 'Loaded sessions',
+      label: t('admin_sessions_loaded_sessions'),
       value: sessions.length,
-      helper: sessionsReady ? 'Currently available in the schedule list' : 'Session feed needs a retry',
+      helper: sessionsReady ? t('admin_sessions_helper_available') : t('admin_sessions_helper_needs_retry'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_sessions_visible_now'),
       value: sorted.length,
-      helper: hasActiveFilters ? 'Matching the current search and status filters' : 'All loaded sessions',
+      helper: hasActiveFilters ? t('admin_sessions_helper_matching_filters') : t('admin_sessions_helper_all_loaded'),
     },
     {
-      label: 'Upcoming',
+      label: t('admin_sessions_upcoming'),
       value: upcomingCount,
-      helper: 'Scheduled for a future date and time',
+      helper: t('admin_sessions_helper_scheduled_future'),
     },
     {
-      label: 'Restricted access',
+      label: t('admin_sessions_restricted_access'),
       value: restrictedCount,
-      helper: 'Require a scheduled access window',
+      helper: t('admin_sessions_helper_require_window'),
     },
   ]
 
@@ -221,7 +223,7 @@ export default function AdminTestingSessions() {
     if (editSaving) return
     setEditError('')
     if (!editForm.scheduled_at) {
-      setEditError('Scheduled date and time is required.')
+      setEditError(t('admin_sessions_error_date_required'))
       return
     }
     setEditSaving(true)
@@ -233,11 +235,11 @@ export default function AdminTestingSessions() {
       })
       setEditModal(false)
       setEditId(null)
-      setNotice('Session updated.')
+      setNotice(t('admin_sessions_notice_updated'))
       setTimeout(() => setNotice(''), 3000)
       await load()
     } catch (err) {
-      setEditError(err.response?.data?.detail || 'Failed to update session.')
+      setEditError(err.response?.data?.detail || t('admin_sessions_error_update_session'))
     } finally {
       setEditSaving(false)
     }
@@ -247,11 +249,11 @@ export default function AdminTestingSessions() {
     if (saving) return
     setModalError('')
     if (!form.exam_id || !form.user_id) {
-      setModalError('Select a test and learner before saving the session.')
+      setModalError(t('admin_sessions_error_select_test_learner'))
       return
     }
     if (!form.scheduled_at) {
-      setModalError('Scheduled date and time is required.')
+      setModalError(t('admin_sessions_error_date_required'))
       return
     }
     setSaving(true)
@@ -277,11 +279,11 @@ export default function AdminTestingSessions() {
       }
       setModal(false)
       setForm({ exam_id: '', user_id: '', scheduled_at: '', access_mode: 'OPEN', notes: '' })
-      setNotice(existing?.id ? 'Session updated.' : 'Session created.')
+      setNotice(existing?.id ? t('admin_sessions_notice_updated') : t('admin_sessions_notice_created'))
       setTimeout(() => setNotice(''), 3000)
       await load()
     } catch (err) {
-      setModalError(err.response?.data?.detail || 'Failed to save session.')
+      setModalError(err.response?.data?.detail || t('admin_sessions_error_save_session'))
     } finally {
       setSaving(false)
     }
@@ -297,12 +299,12 @@ export default function AdminTestingSessions() {
     try {
       await adminApi.deleteSchedule(id)
       setDeleteConfirmId(null)
-      setNotice('Session deleted.')
+      setNotice(t('admin_sessions_notice_deleted'))
       setTimeout(() => setNotice(''), 3000)
       await load()
     } catch (err) {
       setDeleteConfirmId(null)
-      setError(err.response?.data?.detail || 'Failed to delete session.')
+      setError(err.response?.data?.detail || t('admin_sessions_error_delete_session'))
       setTimeout(() => setError(''), 4000)
     } finally {
       setDeleteBusyId(null)
@@ -311,7 +313,7 @@ export default function AdminTestingSessions() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Testing Sessions" subtitle="Manage test schedules and candidate assignments">
+      <AdminPageHeader title={t('admin_sessions_title')} subtitle={t('admin_sessions_subtitle')}>
         {canAssignSchedules && (
           <button
             type="button"
@@ -322,7 +324,7 @@ export default function AdminTestingSessions() {
             }}
             disabled={!canCreateSession || saving}
           >
-            + New Session
+            {t('admin_sessions_new_session')}
           </button>
         )}
       </AdminPageHeader>
@@ -333,7 +335,7 @@ export default function AdminTestingSessions() {
         <div className={styles.helperRow}>
           <span className={styles.emptyHint}>{bootstrapMessage}</span>
           <button type="button" className={styles.btnSecondary} onClick={() => void load()} disabled={loading}>
-            {loading ? 'Retrying...' : 'Retry'}
+            {loading ? t('admin_sessions_retrying') : t('admin_sessions_retry')}
           </button>
         </div>
       )}
@@ -352,7 +354,7 @@ export default function AdminTestingSessions() {
         <div className={styles.toolbar}>
           <input
             className={styles.search}
-            placeholder="Search by test name, code, or learner..."
+            placeholder={t('admin_sessions_search_placeholder')}
             value={search}
             onChange={(event) => {
               setSearch(event.target.value)
@@ -386,52 +388,52 @@ export default function AdminTestingSessions() {
             className={styles.sortBtn}
             onClick={() => setSortOrder((order) => (order === 'asc' ? 'desc' : 'asc'))}
           >
-            {sortOrder === 'asc' ? 'Sort: soonest first' : 'Sort: latest first'}
+            {sortOrder === 'asc' ? t('admin_sessions_sort_soonest') : t('admin_sessions_sort_latest')}
           </button>
           <div className={styles.toolbarActions}>
             <button type="button" className={styles.btnSecondary} onClick={() => void load()} disabled={loading}>
-              {loading ? 'Refreshing...' : 'Refresh'}
+              {loading ? t('admin_sessions_refreshing') : t('admin_sessions_refresh')}
             </button>
             <button type="button" className={styles.btnSecondary} onClick={clearFilters} disabled={!hasActiveFilters}>
-              Clear filters
+              {t('admin_sessions_clear_filters')}
             </button>
           </div>
         </div>
         <div className={styles.filterMeta}>
-          Showing {sorted.length} matching session{sorted.length !== 1 ? 's' : ''} across {sessions.length} loaded.
+          {t('admin_sessions_showing')} {sorted.length} {t('admin_sessions_matching_session')}{sorted.length !== 1 ? t('admin_sessions_plural_s') : ''} {t('admin_sessions_across')} {sessions.length} {t('admin_sessions_loaded')}.
         </div>
       </div>
 
       {loading ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>Loading testing sessions...</div>
-          <div className={styles.emptyText}>Fetching scheduled assignments and learner availability.</div>
+          <div className={styles.emptyTitle}>{t('admin_sessions_loading_title')}</div>
+          <div className={styles.emptyText}>{t('admin_sessions_loading_text')}</div>
         </div>
       ) : !sessionsReady ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>Unable to load testing sessions</div>
-          <div className={styles.emptyText}>Retry to restore the schedule list before editing or assigning sessions.</div>
+          <div className={styles.emptyTitle}>{t('admin_sessions_unable_to_load')}</div>
+          <div className={styles.emptyText}>{t('admin_sessions_unable_to_load_text')}</div>
           <button type="button" className={styles.btnSecondary} onClick={() => void load()} disabled={loading}>
-            Retry
+            {t('admin_sessions_retry')}
           </button>
         </div>
       ) : sorted.length === 0 && hasActiveFilters ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>No sessions match the current filters.</div>
-          <div className={styles.emptyText}>Clear the search, status, or sort filters to see the full schedule again.</div>
+          <div className={styles.emptyTitle}>{t('admin_sessions_no_match_title')}</div>
+          <div className={styles.emptyText}>{t('admin_sessions_no_match_text')}</div>
           <button type="button" className={styles.btnSecondary} onClick={clearFilters}>
-            Clear filters
+            {t('admin_sessions_clear_filters')}
           </button>
         </div>
       ) : sorted.length === 0 ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>No testing sessions yet</div>
-          <div className={styles.emptyText}>Create a session to assign a learner to a scheduled test run.</div>
+          <div className={styles.emptyTitle}>{t('admin_sessions_no_sessions_title')}</div>
+          <div className={styles.emptyText}>{t('admin_sessions_no_sessions_text')}</div>
         </div>
       ) : paginated.length === 0 ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>No sessions available on this page.</div>
-          <div className={styles.emptyText}>Move to another page or refresh the schedule list.</div>
+          <div className={styles.emptyTitle}>{t('admin_sessions_no_page_title')}</div>
+          <div className={styles.emptyText}>{t('admin_sessions_no_page_text')}</div>
         </div>
       ) : (
         <div className={styles.grid}>
@@ -446,17 +448,17 @@ export default function AdminTestingSessions() {
               <div key={session.id} className={styles.card}>
                 <div className={styles.cardHeader}>
                   <div>
-                    <div className={styles.cardTitle}>{session.test_title || session.exam_title || 'Test'}</div>
-                    <div className={styles.cardSub}>{session.user_name || session.user_id || 'Candidate'}</div>
+                    <div className={styles.cardTitle}>{session.test_title || session.exam_title || t('admin_sessions_test')}</div>
+                    <div className={styles.cardSub}>{session.user_name || session.user_id || t('admin_sessions_candidate')}</div>
                   </div>
                   <div className={styles.statusMeta}>
-                    <span className={styles.statusLabel}>{upcoming ? 'Upcoming' : 'Past'}</span>
-                    <div className={`${styles.statusDot} ${upcoming ? styles.statusUpcoming : styles.statusPast}`} title={upcoming ? 'Upcoming' : 'Past'} />
+                    <span className={styles.statusLabel}>{upcoming ? t('admin_sessions_upcoming') : t('admin_sessions_past')}</span>
+                    <div className={`${styles.statusDot} ${upcoming ? styles.statusUpcoming : styles.statusPast}`} title={upcoming ? t('admin_sessions_upcoming') : t('admin_sessions_past')} />
                   </div>
                 </div>
                 <div className={styles.cardBody}>
                   <div className={styles.detailRow}>
-                    <span>Scheduled</span>
+                    <span>{t('admin_sessions_scheduled')}</span>
                     <span>{formatDate(session.scheduled_at)}</span>
                   </div>
                   <div className={styles.modeRow}>
@@ -467,17 +469,17 @@ export default function AdminTestingSessions() {
                   <div className={styles.detailList}>
                     {testCode && (
                       <div className={styles.detailRow}>
-                        <span>Test code</span>
+                        <span>{t('admin_sessions_test_code')}</span>
                         <span>{testCode}</span>
                       </div>
                     )}
                     <div className={styles.detailRow}>
-                      <span>Candidate ID</span>
+                      <span>{t('admin_sessions_candidate_id')}</span>
                       <span>{session.user_id || '-'}</span>
                     </div>
                   </div>
                   <div className={session.notes ? styles.notes : styles.notesEmpty}>
-                    {session.notes || 'No notes added for this session.'}
+                    {session.notes || t('admin_sessions_no_notes')}
                   </div>
                 </div>
                 <div className={styles.cardFooter}>
@@ -490,7 +492,7 @@ export default function AdminTestingSessions() {
                         aria-label={`Edit session for ${sessionLabel}`}
                         title={`Edit session for ${sessionLabel}`}
                       >
-                        Edit session
+                        {t('admin_sessions_edit_session')}
                       </button>
                       {deleteConfirmId === session.id ? (
                         <>
@@ -501,7 +503,7 @@ export default function AdminTestingSessions() {
                             disabled={deleteBusyId === session.id}
                             aria-label={`Confirm delete for session ${sessionLabel}`}
                           >
-                            {deleteBusyId === session.id ? 'Deleting...' : 'Confirm delete'}
+                            {deleteBusyId === session.id ? t('admin_sessions_deleting') : t('admin_sessions_confirm_delete')}
                           </button>
                           <button
                             type="button"
@@ -510,7 +512,7 @@ export default function AdminTestingSessions() {
                             disabled={deleteBusyId === session.id}
                             aria-label={`Keep session for ${sessionLabel}`}
                           >
-                            Keep session
+                            {t('admin_sessions_keep_session')}
                           </button>
                         </>
                       ) : (
@@ -522,7 +524,7 @@ export default function AdminTestingSessions() {
                           aria-label={`Delete session for ${sessionLabel}`}
                           title={`Delete session for ${sessionLabel}`}
                         >
-                          Delete session
+                          {t('admin_sessions_delete_session')}
                         </button>
                       )}
                     </>
@@ -536,37 +538,37 @@ export default function AdminTestingSessions() {
 
       {totalPages > 1 && (
         <div className={styles.pagination}>
-          <span className={styles.pageInfo}>{sorted.length} session{sorted.length !== 1 ? 's' : ''} | Page {page} of {totalPages}</span>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))} disabled={page === 1}>Previous</button>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))} disabled={page === totalPages}>Next</button>
+          <span className={styles.pageInfo}>{sorted.length} {t('admin_sessions_session')}{sorted.length !== 1 ? t('admin_sessions_plural_s') : ''} | {t('admin_sessions_page')} {page} {t('admin_sessions_of')} {totalPages}</span>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))} disabled={page === 1}>{t('admin_sessions_previous')}</button>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))} disabled={page === totalPages}>{t('admin_sessions_next')}</button>
         </div>
       )}
 
       {modalRoot && editModal && createPortal(
         <div className={styles.modalOverlay} onClick={() => { if (!editSaving) { setEditModal(false); setEditError('') } }}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="edit-session-dialog-title" onClick={(event) => event.stopPropagation()}>
-            <h3 id="edit-session-dialog-title" className={styles.modalTitle}>Edit Session</h3>
+            <h3 id="edit-session-dialog-title" className={styles.modalTitle}>{t('admin_sessions_edit_session_title')}</h3>
             {editTarget && <div className={styles.modalMeta}>{describeSession(editTarget)}</div>}
             {editError && <div className={styles.modalError}>{editError}</div>}
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="edit-session-date">Scheduled Date and Time</label>
+              <label className={styles.label} htmlFor="edit-session-date">{t('admin_sessions_scheduled_date_time')}</label>
               <input id="edit-session-date" className={styles.input} type="datetime-local" value={editForm.scheduled_at} onChange={(event) => setEditForm((currentForm) => ({ ...currentForm, scheduled_at: event.target.value }))} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="edit-session-mode">Access Mode</label>
+              <label className={styles.label} htmlFor="edit-session-mode">{t('admin_sessions_access_mode')}</label>
               <select id="edit-session-mode" className={styles.select} value={editForm.access_mode} onChange={(event) => setEditForm((currentForm) => ({ ...currentForm, access_mode: event.target.value }))}>
-                <option value="OPEN">Open (anytime)</option>
-                <option value="RESTRICTED">Restricted (by schedule)</option>
+                <option value="OPEN">{t('admin_sessions_open_anytime')}</option>
+                <option value="RESTRICTED">{t('admin_sessions_restricted_by_schedule')}</option>
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="edit-session-notes">Notes</label>
-              <textarea id="edit-session-notes" className={styles.textarea} rows={3} value={editForm.notes} onChange={(event) => setEditForm((currentForm) => ({ ...currentForm, notes: event.target.value }))} placeholder="Optional notes..." />
+              <label className={styles.label} htmlFor="edit-session-notes">{t('admin_sessions_notes')}</label>
+              <textarea id="edit-session-notes" className={styles.textarea} rows={3} value={editForm.notes} onChange={(event) => setEditForm((currentForm) => ({ ...currentForm, notes: event.target.value }))} placeholder={t('admin_sessions_optional_notes')} />
             </div>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnCancel} onClick={() => { if (!editSaving) { setEditModal(false); setEditError('') } }} disabled={editSaving}>Cancel</button>
+              <button type="button" className={styles.btnCancel} onClick={() => { if (!editSaving) { setEditModal(false); setEditError('') } }} disabled={editSaving}>{t('admin_sessions_cancel')}</button>
               <button type="button" className={styles.btnPrimary} onClick={() => void handleEdit()} disabled={!editForm.scheduled_at || editSaving}>
-                {editSaving ? 'Saving...' : 'Save Changes'}
+                {editSaving ? t('admin_sessions_saving') : t('admin_sessions_save_changes')}
               </button>
             </div>
           </div>
@@ -577,12 +579,12 @@ export default function AdminTestingSessions() {
       {modalRoot && modal && createPortal(
         <div className={styles.modalOverlay} onClick={() => { if (!saving) { setModal(false); setModalError('') } }}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="create-session-dialog-title" onClick={(event) => event.stopPropagation()}>
-            <h3 id="create-session-dialog-title" className={styles.modalTitle}>New Testing Session</h3>
+            <h3 id="create-session-dialog-title" className={styles.modalTitle}>{t('admin_sessions_new_session_title')}</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="create-session-test">Test</label>
+              <label className={styles.label} htmlFor="create-session-test">{t('admin_sessions_test')}</label>
               <select id="create-session-test" className={styles.select} value={form.exam_id} onChange={(event) => setForm((currentForm) => ({ ...currentForm, exam_id: event.target.value }))} disabled={!testsReady}>
-                <option value="">Select test...</option>
+                <option value="">{t('admin_sessions_select_test')}</option>
                 {tests.map((test) => (
                   <option key={test.id} value={test.id}>
                     {test.name}{test.code ? ` (${test.code})` : ''} - {test.status}
@@ -591,9 +593,9 @@ export default function AdminTestingSessions() {
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="create-session-user">Candidate</label>
+              <label className={styles.label} htmlFor="create-session-user">{t('admin_sessions_candidate')}</label>
               <select id="create-session-user" className={styles.select} value={form.user_id} onChange={(event) => setForm((currentForm) => ({ ...currentForm, user_id: event.target.value }))} disabled={!usersReady}>
-                <option value="">Select learner...</option>
+                <option value="">{t('admin_sessions_select_learner')}</option>
                 {users.map((user) => <option key={user.id} value={user.id}>{user.user_id} - {user.name || user.email}</option>)}
               </select>
             </div>

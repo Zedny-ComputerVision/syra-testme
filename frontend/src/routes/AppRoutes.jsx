@@ -9,71 +9,73 @@ import ScrollTopButton from '../components/ScrollTopButton/ScrollTopButton'
 import Sidebar from '../components/Sidebar/Sidebar'
 import Loader from '../components/common/Loader/Loader'
 import useAuth from '../hooks/useAuth'
+import useLanguage from '../hooks/useLanguage'
 import api, { cancelRouteScopedRequests } from '../services/api'
 
 function lazyPage(importer, options = {}) {
   const LazyComponent = lazy(importer)
-  const { fullPage = false, label = 'Loading page...' } = options
+  const { fullPage = false, labelKey = 'loading' } = options
 
   return function LazyPage(props) {
+    const { t } = useLanguage()
     return (
-      <Suspense fallback={<Loader fullPage={fullPage} label={label} />}>
+      <Suspense fallback={<Loader fullPage={fullPage} label={t(labelKey)} />}>
         <LazyComponent {...props} />
       </Suspense>
     )
   }
 }
 
-const Login = lazyPage(() => import('../pages/Login/Login'), { fullPage: true, label: 'Loading sign-in...' })
-const Home = lazyPage(() => import('../pages/Home/Home'), { label: 'Loading dashboard...' })
-const Exams = lazyPage(() => import('../pages/Exams/Exams'), { label: 'Loading tests...' })
-const ExamInstructions = lazyPage(() => import('../pages/ExamInstructions/ExamInstructions'), { label: 'Loading instructions...' })
-const ForgotPassword = lazyPage(() => import('../pages/Auth/ForgotPassword'), { fullPage: true, label: 'Loading recovery...' })
-const ResetPassword = lazyPage(() => import('../pages/Auth/ResetPassword'), { fullPage: true, label: 'Loading reset form...' })
-const ChangePassword = lazyPage(() => import('../pages/Auth/ChangePassword'), { label: 'Loading password settings...' })
-const SignUp = lazyPage(() => import('../pages/Auth/SignUp'), { fullPage: true, label: 'Loading signup...' })
-const SystemCheckPage = lazyPage(() => import('../pages/SystemCheckPage/SystemCheckPage'), { label: 'Loading system check...' })
-const VerifyIdentityPage = lazyPage(() => import('../pages/VerifyIdentityPage/VerifyIdentityPage'), { label: 'Loading identity check...' })
-const RulesPage = lazyPage(() => import('../pages/RulesPage/RulesPage'), { label: 'Loading rules...' })
-const Proctoring = lazyPage(() => import('../pages/Proctoring/Proctoring'), { label: 'Loading test session...' })
-const Attempts = lazyPage(() => import('../pages/Attempts/Attempts'), { label: 'Loading attempts...' })
-const AttemptResult = lazyPage(() => import('../pages/AttemptResult/AttemptResult'), { label: 'Loading results...' })
-const Schedule = lazyPage(() => import('../pages/Schedule/Schedule'), { label: 'Loading schedule...' })
-const Profile = lazyPage(() => import('../pages/Profile/Profile'), { label: 'Loading profile...' })
-const NotFound = lazyPage(() => import('../pages/NotFound/NotFound'), { fullPage: true, label: 'Loading page...' })
-const AccessDenied = lazyPage(() => import('../pages/AccessDenied/AccessDenied'), { label: 'Checking access...' })
-const AdminDashboard = lazyPage(() => import('../pages/Admin/AdminDashboard/AdminDashboard'), { label: 'Loading admin dashboard...' })
-const AdminExams = lazyPage(() => import('../pages/Admin/AdminExams/AdminExams'), { label: 'Loading tests...' })
-const AdminNewTestWizard = lazyPage(() => import('../pages/Admin/AdminNewTestWizard/AdminNewTestWizard'), { label: 'Loading test editor...' })
-const AdminCategories = lazyPage(() => import('../pages/Admin/AdminCategories/AdminCategories'), { label: 'Loading categories...' })
-const AdminGradingScales = lazyPage(() => import('../pages/Admin/AdminGradingScales/AdminGradingScales'), { label: 'Loading grading scales...' })
-const AdminQuestionPools = lazyPage(() => import('../pages/Admin/AdminQuestionPools/AdminQuestionPools'), { label: 'Loading question pools...' })
-const AdminTestingSessions = lazyPage(() => import('../pages/Admin/AdminTestingSessions/AdminTestingSessions'), { label: 'Loading sessions...' })
-const AdminCandidates = lazyPage(() => import('../pages/Admin/AdminCandidates/AdminCandidates'), { label: 'Loading candidates...' })
-const AdminAttemptAnalysis = lazyPage(() => import('../pages/Admin/AdminAttemptAnalysis/AdminAttemptAnalysis'), { label: 'Loading attempt analysis...' })
-const AdminRolesPermissions = lazyPage(() => import('../pages/Admin/AdminRolesPermissions/AdminRolesPermissions'), { label: 'Loading role permissions...' })
-const AdminUsers = lazyPage(() => import('../pages/Admin/AdminUsers/AdminUsers'), { label: 'Loading users...' })
-const AdminTemplates = lazyPage(() => import('../pages/Admin/AdminTemplates/AdminTemplates'), { label: 'Loading templates...' })
-const AdminCertificates = lazyPage(() => import('../pages/Admin/AdminCertificates/AdminCertificates'), { label: 'Loading certificates...' })
-const AdminReports = lazyPage(() => import('../pages/Admin/AdminReports/AdminReports'), { label: 'Loading reports...' })
-const AdminCourses = lazyPage(() => import('../pages/Admin/AdminCourses/AdminCourses'), { label: 'Loading courses...' })
-const AdminUserGroups = lazyPage(() => import('../pages/Admin/AdminUserGroups/AdminUserGroups'), { label: 'Loading groups...' })
-const AdminSettings = lazyPage(() => import('../pages/Admin/AdminSettings/AdminSettings'), { label: 'Loading settings...' })
-const AdminSurveys = lazyPage(() => import('../pages/Admin/AdminSurveys/AdminSurveys'), { label: 'Loading surveys...' })
-const AdminAttemptVideos = lazyPage(() => import('../pages/Admin/AdminAttemptVideos/AdminAttemptVideos'), { label: 'Loading recordings...' })
-const AdminManageTestPage = lazyPage(() => import('../pages/Admin/AdminManageTestPage/AdminManageTestPage'), { label: 'Loading manage test...' })
-const QuestionPoolDetail = lazyPage(() => import('../pages/Admin/QuestionPoolDetail/QuestionPoolDetail'), { label: 'Loading pool details...' })
-const TrainingCourses = lazyPage(() => import('../pages/TrainingCourses/TrainingCourses'), { label: 'Loading training...' })
-const MySurveys = lazyPage(() => import('../pages/MySurveys/MySurveys'), { label: 'Loading surveys...' })
-const AdminPredefinedReports = lazyPage(() => import('../pages/Admin/AdminPredefinedReports/AdminPredefinedReports'), { label: 'Loading predefined reports...' })
-const AdminFavoriteReports = lazyPage(() => import('../pages/Admin/AdminFavoriteReports/AdminFavoriteReports'), { label: 'Loading favorites...' })
-const AdminIntegrations = lazyPage(() => import('../pages/Admin/AdminIntegrations/AdminIntegrations'), { label: 'Loading integrations...' })
-const AdminMaintenance = lazyPage(() => import('../pages/Admin/AdminMaintenance/AdminMaintenance'), { label: 'Loading maintenance...' })
-const AdminSubscribers = lazyPage(() => import('../pages/Admin/AdminSubscribers/AdminSubscribers'), { label: 'Loading subscribers...' })
-const AdminCustomReports = lazyPage(() => import('../pages/Admin/AdminCustomReports/AdminCustomReports'), { label: 'Loading custom reports...' })
-const AdminAuditLog = lazyPage(() => import('../pages/Admin/AdminAuditLog/AdminAuditLog'), { label: 'Loading audit log...' })
-const AdminLiveMonitor = lazyPage(() => import('../pages/Admin/AdminLiveMonitor/AdminLiveMonitor'), { label: 'Loading live monitor...' })
-const Maintenance = lazyPage(() => import('../pages/Maintenance/Maintenance'), { fullPage: true, label: 'Loading maintenance notice...' })
+const Login = lazyPage(() => import('../pages/Login/Login'), { fullPage: true, labelKey: 'loading_sign_in' })
+const Home = lazyPage(() => import('../pages/Home/Home'), { labelKey: 'loading_dashboard' })
+const Exams = lazyPage(() => import('../pages/Exams/Exams'), { labelKey: 'loading_tests' })
+const ExamInstructions = lazyPage(() => import('../pages/ExamInstructions/ExamInstructions'), { labelKey: 'loading_instructions' })
+const ForgotPassword = lazyPage(() => import('../pages/Auth/ForgotPassword'), { fullPage: true, labelKey: 'loading_recovery' })
+const ResetPassword = lazyPage(() => import('../pages/Auth/ResetPassword'), { fullPage: true, labelKey: 'loading_reset_form' })
+const ChangePassword = lazyPage(() => import('../pages/Auth/ChangePassword'), { labelKey: 'loading_password_settings' })
+const SignUp = lazyPage(() => import('../pages/Auth/SignUp'), { fullPage: true, labelKey: 'loading_signup' })
+const SystemCheckPage = lazyPage(() => import('../pages/SystemCheckPage/SystemCheckPage'), { labelKey: 'loading_system_check' })
+const VerifyIdentityPage = lazyPage(() => import('../pages/VerifyIdentityPage/VerifyIdentityPage'), { labelKey: 'loading_identity_check' })
+const RulesPage = lazyPage(() => import('../pages/RulesPage/RulesPage'), { labelKey: 'loading_rules' })
+const Proctoring = lazyPage(() => import('../pages/Proctoring/Proctoring'), { labelKey: 'loading_test_session' })
+const Attempts = lazyPage(() => import('../pages/Attempts/Attempts'), { labelKey: 'loading_attempts' })
+const AttemptResult = lazyPage(() => import('../pages/AttemptResult/AttemptResult'), { labelKey: 'loading_results' })
+const Schedule = lazyPage(() => import('../pages/Schedule/Schedule'), { labelKey: 'loading_schedule' })
+const Profile = lazyPage(() => import('../pages/Profile/Profile'), { labelKey: 'loading_profile' })
+const NotFound = lazyPage(() => import('../pages/NotFound/NotFound'), { fullPage: true, labelKey: 'loading_page' })
+const AccessDenied = lazyPage(() => import('../pages/AccessDenied/AccessDenied'), { labelKey: 'loading_checking_access' })
+const AdminDashboard = lazyPage(() => import('../pages/Admin/AdminDashboard/AdminDashboard'), { labelKey: 'loading_admin_dashboard' })
+const AdminExams = lazyPage(() => import('../pages/Admin/AdminExams/AdminExams'), { labelKey: 'loading_tests' })
+const AdminNewTestWizard = lazyPage(() => import('../pages/Admin/AdminNewTestWizard/AdminNewTestWizard'), { labelKey: 'loading_test_editor' })
+const AdminCategories = lazyPage(() => import('../pages/Admin/AdminCategories/AdminCategories'), { labelKey: 'loading_categories' })
+const AdminGradingScales = lazyPage(() => import('../pages/Admin/AdminGradingScales/AdminGradingScales'), { labelKey: 'loading_grading_scales' })
+const AdminQuestionPools = lazyPage(() => import('../pages/Admin/AdminQuestionPools/AdminQuestionPools'), { labelKey: 'loading_question_pools' })
+const AdminTestingSessions = lazyPage(() => import('../pages/Admin/AdminTestingSessions/AdminTestingSessions'), { labelKey: 'loading_sessions' })
+const AdminCandidates = lazyPage(() => import('../pages/Admin/AdminCandidates/AdminCandidates'), { labelKey: 'loading_candidates' })
+const AdminAttemptAnalysis = lazyPage(() => import('../pages/Admin/AdminAttemptAnalysis/AdminAttemptAnalysis'), { labelKey: 'loading_attempt_analysis' })
+const AdminRolesPermissions = lazyPage(() => import('../pages/Admin/AdminRolesPermissions/AdminRolesPermissions'), { labelKey: 'loading_role_permissions' })
+const AdminUsers = lazyPage(() => import('../pages/Admin/AdminUsers/AdminUsers'), { labelKey: 'loading_users' })
+const AdminTemplates = lazyPage(() => import('../pages/Admin/AdminTemplates/AdminTemplates'), { labelKey: 'loading_templates' })
+const AdminCertificates = lazyPage(() => import('../pages/Admin/AdminCertificates/AdminCertificates'), { labelKey: 'loading_certificates' })
+const AdminReports = lazyPage(() => import('../pages/Admin/AdminReports/AdminReports'), { labelKey: 'loading_reports' })
+const AdminCourses = lazyPage(() => import('../pages/Admin/AdminCourses/AdminCourses'), { labelKey: 'loading_courses' })
+const AdminUserGroups = lazyPage(() => import('../pages/Admin/AdminUserGroups/AdminUserGroups'), { labelKey: 'loading_groups' })
+const AdminSettings = lazyPage(() => import('../pages/Admin/AdminSettings/AdminSettings'), { labelKey: 'loading_settings' })
+const AdminSurveys = lazyPage(() => import('../pages/Admin/AdminSurveys/AdminSurveys'), { labelKey: 'loading_surveys' })
+const AdminAttemptVideos = lazyPage(() => import('../pages/Admin/AdminAttemptVideos/AdminAttemptVideos'), { labelKey: 'loading_recordings' })
+const AdminManageTestPage = lazyPage(() => import('../pages/Admin/AdminManageTestPage/AdminManageTestPage'), { labelKey: 'loading_manage_test' })
+const QuestionPoolDetail = lazyPage(() => import('../pages/Admin/QuestionPoolDetail/QuestionPoolDetail'), { labelKey: 'loading_pool_details' })
+const TrainingCourses = lazyPage(() => import('../pages/TrainingCourses/TrainingCourses'), { labelKey: 'loading_training' })
+const MySurveys = lazyPage(() => import('../pages/MySurveys/MySurveys'), { labelKey: 'loading_surveys' })
+const AdminPredefinedReports = lazyPage(() => import('../pages/Admin/AdminPredefinedReports/AdminPredefinedReports'), { labelKey: 'loading_predefined_reports' })
+const AdminFavoriteReports = lazyPage(() => import('../pages/Admin/AdminFavoriteReports/AdminFavoriteReports'), { labelKey: 'loading_favorites' })
+const AdminIntegrations = lazyPage(() => import('../pages/Admin/AdminIntegrations/AdminIntegrations'), { labelKey: 'loading_integrations' })
+const AdminMaintenance = lazyPage(() => import('../pages/Admin/AdminMaintenance/AdminMaintenance'), { labelKey: 'loading_maintenance' })
+const AdminSubscribers = lazyPage(() => import('../pages/Admin/AdminSubscribers/AdminSubscribers'), { labelKey: 'loading_subscribers' })
+const AdminCustomReports = lazyPage(() => import('../pages/Admin/AdminCustomReports/AdminCustomReports'), { labelKey: 'loading_custom_reports' })
+const AdminAuditLog = lazyPage(() => import('../pages/Admin/AdminAuditLog/AdminAuditLog'), { labelKey: 'loading_audit_log' })
+const AdminLiveMonitor = lazyPage(() => import('../pages/Admin/AdminLiveMonitor/AdminLiveMonitor'), { labelKey: 'loading_live_monitor' })
+const Maintenance = lazyPage(() => import('../pages/Maintenance/Maintenance'), { fullPage: true, labelKey: 'loading_maintenance_notice' })
 
 const MAINTENANCE_CACHE_TTL_MS = 120000
 let maintenanceCache = {
@@ -113,8 +115,9 @@ async function readMaintenanceStatus() {
 function RequireLogin({ children }) {
   const location = useLocation()
   const { user, loading } = useAuth()
+  const { t } = useLanguage()
 
-  if (loading) return <Loader fullPage label="Authenticating..." />
+  if (loading) return <Loader fullPage label={t('loading_authenticating')} />
   if (!user) {
     return (
       <Navigate
@@ -129,19 +132,20 @@ function RequireLogin({ children }) {
 
 function RequireAccess({ children, roles, permission }) {
   const { user, hasPermission, permissionsLoading, permissionsError } = useAuth()
+  const { t } = useLanguage()
 
   if (roles && roles.length > 0 && !roles.includes(user.role)) {
     return <Navigate to="/access-denied" replace />
   }
   if (permission && permissionsLoading) {
-    return <Loader fullPage label="Loading access..." />
+    return <Loader fullPage label={t('loading_access')} />
   }
   if (permission && permissionsError) {
     return (
       <div className="maintenance-page">
-        <h2>Permissions unavailable</h2>
+        <h2>{t('error_permissions_unavailable')}</h2>
         <p>{permissionsError}</p>
-        <button type="button" onClick={() => window.location.reload()}>Retry</button>
+        <button type="button" onClick={() => window.location.reload()}>{t('retry')}</button>
       </div>
     )
   }

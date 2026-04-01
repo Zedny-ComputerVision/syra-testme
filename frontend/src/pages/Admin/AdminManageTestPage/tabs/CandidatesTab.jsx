@@ -1,8 +1,10 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../../utils/authenticatedMedia'
+import useLanguage from '../../../../hooks/useLanguage'
 import styles from '../AdminManageTestPage.module.scss'
 
 function IdentityPhotos({ attemptId, selfiePath, idDocPath }) {
+  const { t } = useLanguage()
   const [urls, setUrls] = useState({ selfie: '', id: '' })
   const [expanded, setExpanded] = useState(false)
   const urlsRef = useRef({ selfie: '', id: '' })
@@ -46,30 +48,30 @@ function IdentityPhotos({ attemptId, selfiePath, idDocPath }) {
   return (
     <div className={styles.identityCell}>
       <button type="button" className={styles.identityToggle} onClick={handleToggle}>
-        {expanded ? 'Hide' : 'View'}
+        {expanded ? t('admin_candidates_hide') : t('admin_candidates_view')}
       </button>
       {expanded && (
         <div className={styles.identityPopover}>
           {urls.selfie ? (
             <div className={styles.identityThumb}>
-              <div className={styles.identityThumbLabel}>Selfie</div>
-              <img src={urls.selfie} alt="Selfie" className={styles.identityThumbImg} />
+              <div className={styles.identityThumbLabel}>{t('admin_candidates_selfie')}</div>
+              <img src={urls.selfie} alt={t('admin_candidates_selfie')} className={styles.identityThumbImg} />
             </div>
           ) : selfiePath ? (
             <div className={styles.identityThumb}>
-              <div className={styles.identityThumbLabel}>Selfie</div>
-              <div className={styles.identityThumbPlaceholder}>Loading...</div>
+              <div className={styles.identityThumbLabel}>{t('admin_candidates_selfie')}</div>
+              <div className={styles.identityThumbPlaceholder}>{t('loading')}</div>
             </div>
           ) : null}
           {urls.id ? (
             <div className={styles.identityThumb}>
-              <div className={styles.identityThumbLabel}>ID</div>
-              <img src={urls.id} alt="ID" className={styles.identityThumbImg} />
+              <div className={styles.identityThumbLabel}>{t('admin_candidates_id_doc')}</div>
+              <img src={urls.id} alt={t('admin_candidates_id_doc')} className={styles.identityThumbImg} />
             </div>
           ) : idDocPath ? (
             <div className={styles.identityThumb}>
-              <div className={styles.identityThumbLabel}>ID</div>
-              <div className={styles.identityThumbPlaceholder}>Loading...</div>
+              <div className={styles.identityThumbLabel}>{t('admin_candidates_id_doc')}</div>
+              <div className={styles.identityThumbPlaceholder}>{t('loading')}</div>
             </div>
           ) : null}
         </div>
@@ -92,18 +94,19 @@ function CandidatesTab({
   handleOpenVideo,
   handleOpenReport,
 }) {
+  const { t } = useLanguage()
   return (
     <section className={styles.full}>
-      <h3 className={styles.tabPanelHeader}>Candidates <span className={styles.countPill}>{candidateRows.length}</span></h3>
+      <h3 className={styles.tabPanelHeader}>{t('admin_candidates_tab_header')} <span className={styles.countPill}>{candidateRows.length}</span></h3>
       <p className={styles.sectionDescription}>
-        Assigned learners stay visible here even before they start the test, so the roster and attempt activity are tracked in one place.
+        {t('admin_candidates_tab_description')}
       </p>
       <div className={styles.tableCard}>
         <table className={styles.table}>
-          <thead><tr><th>Attempt</th><th>User</th><th>Status</th><th>Identity</th><th>Started</th><th>Score</th><th>Review</th><th>High</th><th>Medium</th><th>Actions</th></tr></thead>
+          <thead><tr><th>{t('admin_candidates_th_attempt')}</th><th>{t('admin_candidates_th_user')}</th><th>{t('status')}</th><th>{t('admin_candidates_th_identity')}</th><th>{t('admin_candidates_th_started')}</th><th>{t('score')}</th><th>{t('admin_candidates_th_review')}</th><th>{t('admin_candidates_th_high')}</th><th>{t('admin_candidates_th_medium')}</th><th>{t('actions')}</th></tr></thead>
           <tbody>
             {candidateRows.length === 0 ? (
-              <tr><td colSpan={10}>No learners or attempts are assigned to this test yet.</td></tr>
+              <tr><td colSpan={10}>{t('admin_candidates_no_learners')}</td></tr>
             ) : candidateRows.map((row) => (
               <tr key={row.id}>
                 <td>{row.attemptId}</td>
@@ -129,7 +132,7 @@ function CandidatesTab({
                 <td>
                   <div className={styles.reviewCell}>
                     <div className={styles.reviewState}>{row.reviewState}</div>
-                    {row.submittedAt && <div className={styles.reviewMeta}>Submitted {new Date(row.submittedAt).toLocaleString()}</div>}
+                    {row.submittedAt && <div className={styles.reviewMeta}>{t('admin_candidates_submitted')} {new Date(row.submittedAt).toLocaleString()}</div>}
                     {row.attemptIdFull && row.status !== 'IN_PROGRESS' ? (
                       <div className={styles.scoreEditor}>
                         <input
@@ -139,16 +142,16 @@ function CandidatesTab({
                           step="0.01"
                           value={gradeDrafts[row.id] ?? ''}
                           disabled={rowBusy[row.id]}
-                          aria-label={`Grade for ${row.username}`}
+                          aria-label={`${t('admin_candidates_grade_for')} ${row.username}`}
                           onChange={(e) => setGradeDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
                         />
                         <button type="button" className={styles.blueBtn} disabled={rowBusy[row.id]} onClick={() => handleSaveGrade(row)}>
-                          {rowBusy[row.id] ? 'Saving...' : row.status === 'GRADED' ? 'Update grade' : 'Save grade'}
+                          {rowBusy[row.id] ? t('saving') : row.status === 'GRADED' ? t('admin_candidates_update_grade') : t('admin_candidates_save_grade')}
                         </button>
                       </div>
                     ) : (
                       <div className={styles.reviewMeta}>
-                        {row.attemptIdFull ? 'Submit required before grading' : 'Learner has not started this test yet'}
+                        {row.attemptIdFull ? t('admin_candidates_submit_required') : t('admin_candidates_not_started')}
                       </div>
                     )}
                   </div>
@@ -156,11 +159,11 @@ function CandidatesTab({
                 <td>{row.highAlerts}</td>
                 <td>{row.mediumAlerts}</td>
                 <td className={styles.actionsCell}>
-                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => handleOpenResult(row)} aria-label={`Open result for ${row.username} attempt ${row.attemptId}`} title={`Open result for ${row.username} attempt ${row.attemptId}`}>Result</button>
-                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => navigate(`/admin/attempt-analysis?id=${row.attemptIdFull}`)} aria-label={`Review attempt analysis for ${row.username} attempt ${row.attemptId}`} title={`Review attempt analysis for ${row.username} attempt ${row.attemptId}`}>Analyze</button>
-                  <button type="button" onClick={() => handlePauseResume(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`${row.paused ? 'Resume' : 'Pause'} monitoring for ${row.username} attempt ${row.attemptId}`}>{row.paused ? 'Resume' : 'Pause'}</button>
-                  <button type="button" onClick={() => handleOpenVideo(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`Open video for ${row.username} attempt ${row.attemptId}`} title={`Open video for ${row.username} attempt ${row.attemptId}`}>Video</button>
-                  <button type="button" onClick={() => handleOpenReport(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`Open report for ${row.username} attempt ${row.attemptId}`} title={`Open report for ${row.username} attempt ${row.attemptId}`}>{rowBusy[row.id] ? 'Opening...' : 'Report'}</button>
+                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => handleOpenResult(row)} aria-label={`${t('result')} ${row.username} ${row.attemptId}`} title={`${t('result')} ${row.username} ${row.attemptId}`}>{t('result')}</button>
+                  <button type="button" disabled={rowBusy[row.id] || !row.attemptIdFull} onClick={() => navigate(`/admin/attempt-analysis?id=${row.attemptIdFull}`)} aria-label={`${t('admin_candidates_analyze')} ${row.username} ${row.attemptId}`} title={`${t('admin_candidates_analyze')} ${row.username} ${row.attemptId}`}>{t('admin_candidates_analyze')}</button>
+                  <button type="button" onClick={() => handlePauseResume(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`${row.paused ? t('admin_candidates_resume') : t('admin_candidates_pause')} ${row.username} ${row.attemptId}`}>{row.paused ? t('admin_candidates_resume') : t('admin_candidates_pause')}</button>
+                  <button type="button" onClick={() => handleOpenVideo(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`${t('admin_candidates_video')} ${row.username} ${row.attemptId}`} title={`${t('admin_candidates_video')} ${row.username} ${row.attemptId}`}>{t('admin_candidates_video')}</button>
+                  <button type="button" onClick={() => handleOpenReport(row)} disabled={rowBusy[row.id] || !row.attemptIdFull} aria-label={`${t('admin_candidates_report')} ${row.username} ${row.attemptId}`} title={`${t('admin_candidates_report')} ${row.username} ${row.attemptId}`}>{rowBusy[row.id] ? t('admin_candidates_opening') : t('admin_candidates_report')}</button>
                 </td>
               </tr>
             ))}

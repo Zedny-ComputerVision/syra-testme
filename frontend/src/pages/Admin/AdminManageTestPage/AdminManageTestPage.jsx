@@ -1068,24 +1068,24 @@ export default function AdminManageTestPage() {
         attemptIdFull: String(attempt.id),
         attemptId: String(attempt.id).slice(0, 8),
         username: attempt.user_student_id || user?.user_id || attempt.user_name || user?.name || String(attempt.user_id).slice(0, 8),
-        sessionName: session ? `Session ${String(session.id).slice(0, 6)}` : '-',
+        sessionName: session ? `${t('admin_manage_session_prefix')} ${String(session.id).slice(0, 6)}` : '-',
         status: attempt.status || '-',
         score: typeof attempt.score === 'number' ? attempt.score : null,
         needsManualReview,
         reviewState: needsManualReview
-          ? 'Awaiting manual grading'
+          ? t('admin_manage_review_awaiting')
           : attempt.status === 'GRADED'
-            ? 'Finalized'
+            ? t('admin_manage_review_finalized')
             : attempt.status === 'SUBMITTED'
-              ? 'Auto-scored'
-              : 'In progress',
+              ? t('admin_manage_review_auto_scored')
+              : t('admin_manage_review_in_progress'),
         paused: Boolean(attempt.paused),
         startedAt: attempt.started_at,
         submittedAt: attempt.submitted_at,
         userGroup: session?.access_mode || '-',
         comment: attempt.paused
-          ? 'Paused by proctor'
-          : (needsManualReview ? 'Manual grading required' : (attempt.status === 'GRADED' ? 'Reviewed' : attempt.status === 'SUBMITTED' ? 'Submitted' : '')),
+          ? t('admin_manage_comment_paused')
+          : (needsManualReview ? t('admin_manage_comment_manual_grading') : (attempt.status === 'GRADED' ? t('admin_manage_comment_reviewed') : attempt.status === 'SUBMITTED' ? t('admin_manage_comment_submitted') : '')),
         proctorRate: score,
         sessionId: session?.id || '',
         highAlerts,
@@ -1095,7 +1095,7 @@ export default function AdminManageTestPage() {
         idDocPath: attempt.id_doc_path || null,
       }, uploadStatus)
     })
-  }, [])
+  }, [t])
 
   const loadVideoUploadStatusMap = useCallback(async (signal, attemptIds = []) => {
     if (!id || id === 'undefined' || id === 'null') return new Map()
@@ -1166,7 +1166,7 @@ export default function AdminManageTestPage() {
         if (result.status === 'fulfilled') {
           payloads[key] = result.value?.data ?? result.value
         } else if (!isCanceledRequest(result.reason)) {
-          failures.push(readRequestError(result.reason, `Failed to load ${key}.`))
+          failures.push(readRequestError(result.reason, t('admin_manage_failed_load_resource')))
         }
       })
 
@@ -1194,7 +1194,7 @@ export default function AdminManageTestPage() {
       }
     } catch (e) {
       if (!isCanceledRequest(e)) {
-        setLoadError(readRequestError(e, 'Failed to load test data'))
+        setLoadError(readRequestError(e, t('admin_manage_failed_load_test_data')))
       }
     } finally {
       if (!controller.signal.aborted && loadAbortRef.current === controller) {
@@ -1422,26 +1422,26 @@ export default function AdminManageTestPage() {
 
   const monitoringSummaryCards = useMemo(() => [
     {
-      label: 'Loaded attempts',
+      label: t('admin_manage_card_loaded_attempts'),
       value: attemptRows.length,
-      helper: 'All attempts currently linked to this test',
+      helper: t('admin_manage_card_loaded_attempts_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_manage_card_visible_now'),
       value: filteredRows.length,
-      helper: monitoringHasFilters ? 'Matching the active proctoring filters' : 'All loaded attempts',
+      helper: monitoringHasFilters ? t('admin_manage_card_matching_filters') : t('admin_manage_card_all_loaded'),
     },
     {
-      label: 'Paused',
+      label: t('admin_manage_card_paused'),
       value: attemptRows.filter((row) => row.paused).length,
-      helper: 'Attempts currently paused by supervision rules',
+      helper: t('admin_manage_card_paused_helper'),
     },
     {
-      label: 'Flagged requests',
+      label: t('admin_manage_card_flagged_requests'),
       value: flaggedRows.length,
-      helper: 'Attempts with high or medium alert activity',
+      helper: t('admin_manage_card_flagged_helper'),
     },
-  ], [attemptRows, filteredRows.length, flaggedRows.length, monitoringHasFilters])
+  ], [attemptRows, filteredRows.length, flaggedRows.length, monitoringHasFilters, t])
 
   const clearMonitoringFilters = () => {
     setSelectedSession('')
@@ -1496,15 +1496,15 @@ export default function AdminManageTestPage() {
           status: 'NOT_STARTED',
           score: null,
           needsManualReview: false,
-          reviewState: 'Scheduled, not started',
+          reviewState: t('admin_manage_review_scheduled'),
           paused: false,
           startedAt: null,
           submittedAt: null,
           userGroup: session.access_mode || '-',
-          comment: session.notes || 'Waiting for learner to start',
+          comment: session.notes || t('admin_manage_comment_waiting'),
           proctorRate: 0,
           sessionId: session.id,
-          sessionName: `Session ${String(session.id).slice(0, 6)}`,
+          sessionName: `${t('admin_manage_session_prefix')} ${String(session.id).slice(0, 6)}`,
           highAlerts: 0,
           mediumAlerts: 0,
         }, defaultVideoUploadStatus())
@@ -1932,10 +1932,10 @@ export default function AdminManageTestPage() {
         points: Number(questionForm.points || 1),
         order: Number(questionForm.order || 0),
       }
-      if (!payload.text) throw new Error('Question text is required.')
-      if (!Number.isFinite(payload.points) || payload.points <= 0) throw new Error('Points must be positive.')
-      if (needsOptions && payload.options.length < 2) throw new Error('Provide at least 2 options.')
-      if (needsOptions && !payload.correct_answer) throw new Error('Correct answer is required.')
+      if (!payload.text) throw new Error(t('admin_manage_err_question_text_required'))
+      if (!Number.isFinite(payload.points) || payload.points <= 0) throw new Error(t('admin_manage_err_points_positive'))
+      if (needsOptions && payload.options.length < 2) throw new Error(t('admin_manage_err_min_options'))
+      if (needsOptions && !payload.correct_answer) throw new Error(t('admin_manage_err_correct_answer_required'))
 
       if (editingQuestionId) {
         await adminApi.updateQuestion(editingQuestionId, payload)
@@ -2083,58 +2083,58 @@ export default function AdminManageTestPage() {
   const restrictedSessions = sessions.filter((session) => session.access_mode === 'RESTRICTED').length
   const manageOverviewCards = [
     {
-      label: 'Status',
-      value: isPublished ? 'Published' : isArchived ? 'Archived' : 'Draft',
-      helper: isPublished ? 'Learners can access the test based on assignment rules' : 'Changes are still fully editable',
+      label: t('status'),
+      value: isPublished ? t('published') : isArchived ? t('archived') : t('draft'),
+      helper: isPublished ? t('admin_manage_overview_status_published_helper') : t('admin_manage_overview_status_draft_helper'),
     },
     {
-      label: 'Questions',
+      label: t('questions'),
       value: questions.length,
-      helper: questions.length > 0 ? 'Real question bank linked to this test' : 'Questions still need to be added',
+      helper: questions.length > 0 ? t('admin_manage_overview_questions_linked') : t('admin_manage_overview_questions_empty'),
     },
     {
-      label: 'Sessions',
+      label: t('admin_manage_overview_sessions'),
       value: sessions.length,
-      helper: sessions.length > 0 ? 'Learner assignments and schedules are persisted' : 'No learner sessions assigned yet',
+      helper: sessions.length > 0 ? t('admin_manage_overview_sessions_persisted') : t('admin_manage_overview_sessions_empty'),
     },
     {
-      label: 'Attempts',
+      label: t('admin_manage_overview_attempts'),
       value: attemptRows.length,
-      helper: attemptRows.length > 0 ? `${flaggedRows.length} flagged for review` : 'No learner attempts yet',
+      helper: attemptRows.length > 0 ? `${flaggedRows.length} ${t('admin_manage_overview_flagged')}` : t('admin_manage_overview_no_attempts'),
     },
     {
-      label: 'Reports',
-      value: settingsForm.show_score_report ? 'Candidate visible' : 'Admin only',
-      helper: settingsForm.show_answer_review ? 'Answer review is enabled after submission' : 'Answer review is hidden from learners',
+      label: t('admin_manage_overview_reports'),
+      value: settingsForm.show_score_report ? t('admin_manage_overview_candidate_visible') : t('admin_manage_overview_admin_only'),
+      helper: settingsForm.show_answer_review ? t('admin_manage_overview_review_enabled') : t('admin_manage_overview_review_hidden'),
     },
   ]
   const lifecycleCards = [
     {
-      label: 'Learner access',
-      value: sessions.length === 0 ? 'Not assigned' : `${openSessions} open / ${restrictedSessions} restricted`,
-      helper: sessions.length === 0 ? 'Assign at least one learner session to move this test into the live cycle.' : 'Based on persisted testing session records.',
+      label: t('admin_manage_lifecycle_learner_access'),
+      value: sessions.length === 0 ? t('admin_manage_lifecycle_not_assigned') : `${openSessions} ${t('admin_manage_lifecycle_open')} / ${restrictedSessions} ${t('admin_manage_lifecycle_restricted')}`,
+      helper: sessions.length === 0 ? t('admin_manage_lifecycle_assign_hint') : t('admin_manage_lifecycle_based_on_records'),
     },
     {
-      label: 'Proctoring profile',
-      value: activeProctoringChecks.length > 0 ? `${activeProctoringChecks.length} checks` : 'Monitoring off',
-      helper: activeProctoringChecks.length > 0 ? activeProctoringChecks.map((key) => PROCTOR_LABELS[key]).join(', ') : 'No live proctoring checks are enabled.',
+      label: t('admin_manage_lifecycle_proctoring_profile'),
+      value: activeProctoringChecks.length > 0 ? `${activeProctoringChecks.length} ${t('admin_manage_lifecycle_checks')}` : t('admin_manage_lifecycle_monitoring_off'),
+      helper: activeProctoringChecks.length > 0 ? activeProctoringChecks.map((key) => PROCTOR_LABELS[key]).join(', ') : t('admin_manage_lifecycle_no_proctoring'),
     },
     {
-      label: 'Certificates',
-      value: exam.certificate ? 'Enabled' : 'Disabled',
-      helper: exam.certificate ? `Issued by ${exam.certificate.signer || 'configured signer'}` : 'No post-pass certificate is currently issued.',
+      label: t('admin_manage_lifecycle_certificates'),
+      value: exam.certificate ? t('admin_manage_lifecycle_enabled') : t('admin_manage_lifecycle_disabled'),
+      helper: exam.certificate ? `${t('admin_manage_lifecycle_issued_by')} ${exam.certificate.signer || t('admin_manage_lifecycle_configured_signer')}` : t('admin_manage_lifecycle_no_certificate'),
     },
     {
-      label: 'Retake policy',
-      value: settingsForm.allow_retake ? 'Allowed' : 'Locked',
+      label: t('admin_manage_lifecycle_retake_policy'),
+      value: settingsForm.allow_retake ? t('admin_manage_lifecycle_allowed') : t('admin_manage_lifecycle_locked'),
       helper: settingsForm.allow_retake
-        ? `Cooldown ${settingsForm.retake_cooldown_hours || '0'} hour(s), max ${settingsForm.max_attempts} attempt(s)`
-        : 'Learners cannot open a new attempt after submission.',
+        ? `${t('admin_manage_lifecycle_cooldown')} ${settingsForm.retake_cooldown_hours || '0'} ${t('admin_manage_lifecycle_hours')}, ${t('admin_manage_lifecycle_max')} ${settingsForm.max_attempts} ${t('admin_manage_lifecycle_attempts')}`
+        : t('admin_manage_lifecycle_no_retake'),
     },
     {
-      label: 'Review queue',
+      label: t('admin_manage_lifecycle_review_queue'),
       value: flaggedRows.length,
-      helper: flaggedRows.length > 0 ? 'Attempts with high or medium proctoring alerts need review.' : 'No flagged attempts are waiting in the review queue.',
+      helper: flaggedRows.length > 0 ? t('admin_manage_lifecycle_flagged_need_review') : t('admin_manage_lifecycle_no_flagged'),
     },
   ]
   const createdByUser = users.find((user) => String(user.id) === String(exam.created_by_id || ''))
@@ -2349,7 +2349,7 @@ export default function AdminManageTestPage() {
       .map((line) => line.trim())
       .filter(Boolean)
     if (!lines.length) {
-      setAttachmentImportError('Paste at least one attachment URL or "Title | URL" row.')
+      setAttachmentImportError(t('admin_manage_err_attachment_import_empty'))
       return
     }
     const imported = lines
@@ -2366,7 +2366,7 @@ export default function AdminManageTestPage() {
       })
       .filter(Boolean)
     if (!imported.length) {
-      setAttachmentImportError('No valid attachment rows were found.')
+      setAttachmentImportError(t('admin_manage_err_attachment_import_invalid'))
       return
     }
     setSettingsForm((prev) => {
@@ -2380,7 +2380,7 @@ export default function AdminManageTestPage() {
     setAttachmentImportText('')
     setAttachmentImportError('')
     setShowAttachmentImporter(false)
-    withNotice(`${imported.length} attachment${imported.length === 1 ? '' : 's'} added. Save settings to persist them.`)
+    withNotice(t('admin_manage_attachments_imported'))
   }
   const handleGenerateCoupons = () => {
     const prefix = sanitizeCouponPrefix(couponGenerator.prefix)
@@ -2424,7 +2424,7 @@ export default function AdminManageTestPage() {
     setCouponError('')
     setShowCouponGenerator(false)
     setCouponGenerator(EMPTY_COUPON_GENERATOR)
-    withNotice(`${nextRows.length} coupon${nextRows.length === 1 ? '' : 's'} generated. Save settings to persist them.`)
+    withNotice(t('admin_manage_coupons_generated'))
   }
   const removeCouponEntry = (couponId) => {
     setSettingsForm((prev) => {
@@ -2499,7 +2499,7 @@ export default function AdminManageTestPage() {
     setShowCertificateEditor(true)
     setShowCertificateSync(false)
     setCertificateSyncError('')
-    withNotice(`Certificate synchronized from ${source?.name || 'the selected test'}. Save settings to persist it.`)
+    withNotice(t('admin_manage_cert_synced'))
   }
   const handleCreateCategory = async () => {
     const payload = {
@@ -2861,14 +2861,14 @@ export default function AdminManageTestPage() {
                     <tbody>
                       {translationRows.length === 0 ? (
                         <tr>
-                          <td colSpan={2} className={styles.tableEmptyCell}>No translations added.</td>
+                          <td colSpan={2} className={styles.tableEmptyCell}>{t('admin_manage_no_translations')}</td>
                         </tr>
                       ) : translationRows.map((translation) => (
                         <tr key={translation.id}>
                           <td>
                             <div className={styles.inlineDetailTitle}>{languageLabelOf(translation.language)}</div>
                             <div className={styles.inlineDetailCopy}>
-                              {translation.title || translation.description || translation.instructions_body || translation.completion_message || 'Translation drafted'}
+                              {translation.title || translation.description || translation.instructions_body || translation.completion_message || t('admin_manage_translation_drafted')}
                             </div>
                           </td>
                           <td>
@@ -3163,7 +3163,7 @@ export default function AdminManageTestPage() {
                     disabled={lockedExamFields}
                     onClick={() => {
                       setSettingsForm((prev) => ({ ...prev, custom_score_report_enabled: true }))
-                      withNotice('Custom score report settings enabled for this test.')
+                      withNotice(t('admin_manage_custom_score_report_enabled'))
                     }}
                   >
                     Create custom settings
@@ -3185,7 +3185,7 @@ export default function AdminManageTestPage() {
                           score_report_include_certificate_status: DEFAULT_SCORE_REPORT_SETTINGS.include_certificate_status,
                           score_report_include_pass_fail_badge: DEFAULT_SCORE_REPORT_SETTINGS.include_pass_fail_badge,
                         }))
-                        withNotice('Custom score report settings reset for this draft.')
+                        withNotice(t('admin_manage_custom_score_report_reset'))
                       }}
                     >
                       Reset custom settings
@@ -3244,7 +3244,7 @@ export default function AdminManageTestPage() {
                   </div>
                 ) : null}
                 {!settingsForm.custom_score_report_enabled ? (
-                  <div className={styles.settingsStatusNote}>No custom score report overrides are currently enabled for this test.</div>
+                  <div className={styles.settingsStatusNote}>{t('admin_manage_no_custom_score_report')}</div>
                 ) : null}
               </div>
             </div>
@@ -3280,7 +3280,7 @@ export default function AdminManageTestPage() {
                   <label className={styles.settingsFieldGroup}>
                     <span>Source test</span>
                     <select value={certificateSyncSourceId} disabled={certificateSyncLoading || lockedExamFields} onChange={(event) => setCertificateSyncSourceId(event.target.value)}>
-                      <option value="">{certificateSyncLoading ? 'Loading certificate sources...' : 'Select a test'}</option>
+                      <option value="">{certificateSyncLoading ? t('admin_manage_loading_cert_sources') : t('admin_manage_select_a_test')}</option>
                       {certificateSyncOptions.map((item) => (
                         <option key={item.id} value={item.id}>{item.name}</option>
                       ))}
@@ -3361,7 +3361,7 @@ export default function AdminManageTestPage() {
                 </div>
               ) : (
                 <div className={styles.settingsEmptyState}>
-                  This test does not have any certificates added.
+                  {t('admin_manage_no_certificates')}
                 </div>
               )}
             </div>
@@ -3477,11 +3477,11 @@ export default function AdminManageTestPage() {
                     </tr>
                     {couponRows.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className={styles.tableEmptyCell}>No coupons created.</td>
+                        <td colSpan={9} className={styles.tableEmptyCell}>{t('admin_manage_no_coupons')}</td>
                       </tr>
                     ) : filteredCouponRows.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className={styles.tableEmptyCell}>No coupons match the current filters.</td>
+                        <td colSpan={9} className={styles.tableEmptyCell}>{t('admin_manage_no_coupons_match_filters')}</td>
                       </tr>
                     ) : (
                       filteredCouponRows.map((row) => (
@@ -3590,7 +3590,7 @@ export default function AdminManageTestPage() {
                 </div>
               ) : null}
               {attachmentRows.length === 0 ? (
-                <div className={styles.settingsEmptyState}>No attachments linked to this test yet.</div>
+                <div className={styles.settingsEmptyState}>{t('admin_manage_no_attachments')}</div>
               ) : (
                 <div className={styles.tableCard}>
                   <div className={styles.tableToolbar}>
@@ -3868,11 +3868,11 @@ export default function AdminManageTestPage() {
 
           <div className={styles.quickActionRow}>
             {[
-              { label: 'Preview flow',    iconKey: 'preview',  onClick: handlePreview,                             primary: true },
-              { label: 'Sessions',        iconKey: 'sessions', onClick: () => openCycleTab('sessions') },
-              { label: 'Proctoring',      iconKey: 'shield',   onClick: () => openCycleTab('proctoring') },
-              { label: 'Reports',         iconKey: 'reports',  onClick: () => openCycleTab('reports') },
-              { label: 'Learner review',  iconKey: 'review',   onClick: () => openCycleTab('settings', 'reports') },
+              { label: t('admin_manage_qa_preview'),     iconKey: 'preview',  onClick: handlePreview,                             primary: true },
+              { label: t('admin_manage_qa_sessions'),    iconKey: 'sessions', onClick: () => openCycleTab('sessions') },
+              { label: t('admin_manage_qa_proctoring'),  iconKey: 'shield',   onClick: () => openCycleTab('proctoring') },
+              { label: t('admin_manage_qa_reports'),     iconKey: 'reports',  onClick: () => openCycleTab('reports') },
+              { label: t('admin_manage_qa_learner_review'), iconKey: 'review',   onClick: () => openCycleTab('settings', 'reports') },
             ].map((action) => (
               <button
                 key={action.label}
@@ -4286,12 +4286,12 @@ export default function AdminManageTestPage() {
                 {filteredRows.length === 0 ? (
                   <div className={styles.emptyPanel}>
                     <div className={styles.emptyTitle}>
-                      {monitoringHasFilters ? 'No attempts match the current monitoring filters.' : 'No test attempts yet.'}
+                      {monitoringHasFilters ? t('admin_manage_no_attempts_match_filters') : t('admin_manage_no_attempts_yet')}
                     </div>
                     <div className={styles.emptyText}>
                       {monitoringHasFilters
-                        ? 'Clear the current session or column filters to restore the full monitoring list.'
-                        : 'Attempts will appear here once learners begin this test.'}
+                        ? t('admin_manage_clear_filters_hint')
+                        : t('admin_manage_attempts_will_appear')}
                     </div>
                     {monitoringHasFilters && (
                       <button type="button" className={styles.ghostBtn} onClick={clearMonitoringFilters}>

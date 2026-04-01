@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './ExamQuestionPanel.module.scss'
 
 const EMPTY_MCQ = { text: '', question_type: 'MCQ', options: ['', '', '', ''], correct_answer: 'A', points: 1 }
@@ -32,6 +33,7 @@ function labelForType(types, value) {
 }
 
 export default function ExamQuestionPanel({ examId, questions = [], onUpdate, questionTypes }) {
+  const { t } = useLanguage()
   const types = questionTypes || DEFAULT_TYPES
   const defaultType = types[0]?.value || 'MCQ'
   const [showForm, setShowForm] = useState(false)
@@ -54,13 +56,13 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
   const trimmedOptions = normalizeOptions(form.question_type, currentOptions)
 
   const validationMessage = (() => {
-    if (!form.text.trim()) return 'Question text is required.'
-    if (!Number(form.points) || Number(form.points) <= 0) return 'Points must be greater than zero.'
+    if (!form.text.trim()) return t('admin_questions_text_required')
+    if (!Number(form.points) || Number(form.points) <= 0) return t('admin_questions_points_required')
     if (MCQ_TYPES.has(form.question_type) && (!trimmedOptions || trimmedOptions.length < 2)) {
-      return 'Add at least two answer options.'
+      return t('admin_questions_min_options')
     }
     if ((MCQ_TYPES.has(form.question_type) || form.question_type === 'TRUEFALSE') && !form.correct_answer) {
-      return 'Choose a valid correct answer.'
+      return t('admin_questions_correct_answer_required')
     }
     return ''
   })()
@@ -87,7 +89,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
       onUpdate?.(data || [])
       if (successMessage) setNotice(successMessage)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Question saved, but the list could not be refreshed.')
+      setError(e.response?.data?.detail || t('admin_questions_refresh_error'))
     } finally {
       setRefreshing(false)
     }
@@ -115,7 +117,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
 
   const handleSave = async () => {
     if (!examId) {
-      setError('Create the test first, then add questions.')
+      setError(t('admin_questions_create_test_first'))
       return
     }
     if (validationMessage) {
@@ -146,15 +148,15 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
     try {
       if (editId) {
         await adminApi.updateQuestion(editId, payload)
-        await refreshQuestions('Question updated.')
+        await refreshQuestions(t('admin_questions_question_updated'))
       } else {
         await adminApi.addQuestion(payload)
-        await refreshQuestions('Question added.')
+        await refreshQuestions(t('admin_questions_question_added'))
       }
       setShowForm(false)
       resetDraft(defaultType)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Could not save question.')
+      setError(e.response?.data?.detail || t('admin_questions_save_error'))
     } finally {
       setSaving(false)
     }
@@ -173,9 +175,9 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
     try {
       await adminApi.deleteQuestion(id)
       setDeleteConfirmId(null)
-      await refreshQuestions('Question deleted.')
+      await refreshQuestions(t('admin_questions_question_deleted'))
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to delete question.')
+      setError(e.response?.data?.detail || t('admin_questions_delete_error'))
     } finally {
       setDeletingId(null)
     }
@@ -191,9 +193,9 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
   return (
     <div className={styles.panel}>
       <div className={styles.summaryRow}>
-        <span className={styles.summaryChip}>Questions: {questions.length}</span>
-        <span className={styles.summaryChip}>Total points: {totalPoints}</span>
-        <span className={styles.summaryChip}>{examId ? 'Ready to add questions' : 'Save the test first to unlock the editor'}</span>
+        <span className={styles.summaryChip}>{t('admin_questions_questions_count')}: {questions.length}</span>
+        <span className={styles.summaryChip}>{t('admin_questions_total_points')}: {totalPoints}</span>
+        <span className={styles.summaryChip}>{examId ? t('admin_questions_ready') : t('admin_questions_save_test_first')}</span>
       </div>
 
       {notice && <div className={styles.notice}>{notice}</div>}
@@ -203,10 +205,10 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
         <div className={styles.quickAddSection}>
           <div className={styles.quickAddHeader}>
             <div>
-              <div className={styles.sectionTitle}>Quick Add</div>
-              <div className={styles.sectionSub}>Start a question draft with the exact type you need instead of always defaulting to MCQ.</div>
+              <div className={styles.sectionTitle}>{t('admin_questions_quick_add')}</div>
+              <div className={styles.sectionSub}>{t('admin_questions_quick_add_sub')}</div>
             </div>
-            {refreshing && <span className={styles.loadingPill}>Refreshing list...</span>}
+            {refreshing && <span className={styles.loadingPill}>{t('admin_questions_refreshing_list')}</span>}
           </div>
           <div className={styles.quickAddGrid}>
             {types.map((type) => (
@@ -217,7 +219,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
                 onClick={() => openAdd(type.value)}
                 disabled={!examId || refreshing || deletingId != null}
               >
-                Add {type.label}
+                {t('add')} {type.label}
               </button>
             ))}
           </div>
@@ -226,7 +228,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
 
       {questions.length === 0 && !showForm && (
         <div className={styles.empty}>
-          {examId ? 'No questions yet. Use the quick add buttons above to build the test.' : 'Save the test first, then return here to add questions.'}
+          {examId ? t('admin_questions_empty') : t('admin_questions_empty_no_test')}
         </div>
       )}
 
@@ -242,8 +244,8 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
               </div>
             </div>
             <div className={styles.qMeta}>
-              Correct answer: {question.correct_answer || '-'}
-              {question.options?.length ? ` | ${question.options.length} option(s)` : ''}
+              {t('admin_questions_correct_answer_label')}: {question.correct_answer || '-'}
+              {question.options?.length ? ` | ${question.options.length} ${t('admin_questions_options_count')}` : ''}
             </div>
             {question.options?.length ? (
               <div className={styles.optionList}>
@@ -256,7 +258,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
             ) : null}
           </div>
           <div className={styles.qActions}>
-            <button type="button" className={styles.qBtn} onClick={() => openEdit(question)} disabled={saving || deletingId != null} aria-label={`Edit ${question.text || `question ${index + 1}`}`} title={`Edit ${question.text || `question ${index + 1}`}`}>Edit</button>
+            <button type="button" className={styles.qBtn} onClick={() => openEdit(question)} disabled={saving || deletingId != null} aria-label={`${t('edit')} ${question.text || `${t('question')} ${index + 1}`}`} title={`${t('edit')} ${question.text || `${t('question')} ${index + 1}`}`}>{t('edit')}</button>
             {deleteConfirmId === question.id ? (
               <>
                 <button
@@ -264,14 +266,14 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
                   className={`${styles.qBtn} ${styles.qBtnDanger}`}
                   onClick={() => handleDelete(question.id)}
                   disabled={deletingId === question.id}
-                  aria-label={`Confirm delete for ${question.text || `question ${index + 1}`}`}
+                  aria-label={`${t('confirm_delete')} ${question.text || `${t('question')} ${index + 1}`}`}
                 >
-                  {deletingId === question.id ? 'Deleting...' : 'Confirm delete'}
+                  {deletingId === question.id ? t('admin_questions_deleting') : t('confirm_delete')}
                 </button>
-                <button type="button" className={styles.qBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingId === question.id} aria-label={`Keep ${question.text || `question ${index + 1}`}`}>Cancel</button>
+                <button type="button" className={styles.qBtn} onClick={() => setDeleteConfirmId(null)} disabled={deletingId === question.id} aria-label={`${t('admin_questions_keep')} ${question.text || `${t('question')} ${index + 1}`}`}>{t('cancel')}</button>
               </>
             ) : (
-              <button type="button" className={`${styles.qBtn} ${styles.qBtnDanger}`} onClick={() => handleDelete(question.id)} disabled={saving || deletingId != null} aria-label={`Delete ${question.text || `question ${index + 1}`}`} title={`Delete ${question.text || `question ${index + 1}`}`}>Delete</button>
+              <button type="button" className={`${styles.qBtn} ${styles.qBtnDanger}`} onClick={() => handleDelete(question.id)} disabled={saving || deletingId != null} aria-label={`${t('delete')} ${question.text || `${t('question')} ${index + 1}`}`} title={`${t('delete')} ${question.text || `${t('question')} ${index + 1}`}`}>{t('delete')}</button>
             )}
           </div>
         </div>
@@ -281,14 +283,14 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
         <div className={styles.addForm}>
           <div className={styles.addFormHeader}>
             <div>
-              <div className={styles.addFormTitle}>{editId ? 'Edit Question' : `Add ${activeTypeLabel}`}</div>
-              <div className={styles.addFormSub}>Complete the content, answer logic, and points before saving this question to the test.</div>
+              <div className={styles.addFormTitle}>{editId ? t('admin_questions_edit_question') : `${t('add')} ${activeTypeLabel}`}</div>
+              <div className={styles.addFormSub}>{t('admin_questions_form_sub')}</div>
             </div>
-            <span className={styles.formStatus}>{editId ? 'Editing existing question' : 'New question draft'}</span>
+            <span className={styles.formStatus}>{editId ? t('admin_questions_editing_existing') : t('admin_questions_new_draft')}</span>
           </div>
 
           <div className={styles.formGroup}>
-            <label className={styles.label}>Type</label>
+            <label className={styles.label}>{t('type')}</label>
             <select
               className={styles.select}
               value={form.question_type}
@@ -304,12 +306,12 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
           </div>
 
           <div className={styles.formGroup}>
-            <label className={styles.label}>Question Text</label>
+            <label className={styles.label}>{t('admin_questions_question_text')}</label>
             <input
               className={styles.input}
               value={form.text}
               onChange={(e) => setForm((current) => ({ ...current, text: e.target.value }))}
-              placeholder="Enter question..."
+              placeholder={t('admin_questions_enter_question')}
               disabled={saving}
             />
           </div>
@@ -317,7 +319,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
           {MCQ_TYPES.has(form.question_type) && (
             <>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Options</label>
+                <label className={styles.label}>{t('admin_questions_options')}</label>
                 <div className={styles.optionsEditor}>
                   {currentOptions.map((option, index) => (
                     <div key={index} className={styles.optionRow}>
@@ -332,10 +334,10 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
                     </div>
                   ))}
                 </div>
-                <div className={styles.helper}>Only filled options are saved. Add at least two answer options before saving.</div>
+                <div className={styles.helper}>{t('admin_questions_options_helper')}</div>
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Correct Answer</label>
+                <label className={styles.label}>{t('admin_questions_correct_answer_label')}</label>
                 <select
                   className={styles.select}
                   value={form.correct_answer}
@@ -352,7 +354,7 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
 
           {form.question_type === 'TRUEFALSE' && (
             <div className={styles.formGroup}>
-              <label className={styles.label}>Correct Answer</label>
+              <label className={styles.label}>{t('admin_questions_correct_answer_label')}</label>
               <select
                 className={styles.select}
                 value={form.correct_answer}
@@ -367,19 +369,19 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
 
           {!MCQ_TYPES.has(form.question_type) && form.question_type !== 'TRUEFALSE' && (
             <div className={styles.formGroup}>
-              <label className={styles.label}>Expected Answer (optional)</label>
+              <label className={styles.label}>{t('admin_questions_expected_answer')}</label>
               <input
                 className={styles.input}
                 value={form.correct_answer}
                 onChange={(e) => setForm((current) => ({ ...current, correct_answer: e.target.value }))}
-                placeholder="Expected answer..."
+                placeholder={t('admin_questions_expected_answer_placeholder')}
                 disabled={saving}
               />
             </div>
           )}
 
           <div className={styles.formGroup}>
-            <label className={styles.label}>Points</label>
+            <label className={styles.label}>{t('admin_questions_points')}</label>
             <input
               className={styles.input}
               type="number"
@@ -394,10 +396,10 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
           {validationMessage && <div className={styles.validationHint}>{validationMessage}</div>}
 
           <div className={styles.formActions}>
-            <button type="button" className={styles.btnCancel} onClick={closeEditor} disabled={saving}>Cancel</button>
-            <button type="button" className={styles.btnSecondary} onClick={() => resetDraft(form.question_type)} disabled={saving}>Reset</button>
+            <button type="button" className={styles.btnCancel} onClick={closeEditor} disabled={saving}>{t('cancel')}</button>
+            <button type="button" className={styles.btnSecondary} onClick={() => resetDraft(form.question_type)} disabled={saving}>{t('reset')}</button>
             <button type="button" className={styles.btnPrimary} onClick={handleSave} disabled={!canMutate || Boolean(validationMessage)}>
-              {saving ? (editId ? 'Updating...' : 'Adding...') : `${editId ? 'Update' : 'Add'} Question`}
+              {saving ? (editId ? t('admin_questions_updating') : t('admin_questions_adding')) : `${editId ? t('update') : t('add')} ${t('question')}`}
             </button>
           </div>
         </div>

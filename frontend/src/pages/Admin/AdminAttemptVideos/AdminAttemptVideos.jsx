@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
 import { readPaginatedItems } from '../../../utils/pagination'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminAttemptVideos.module.scss'
 
 const WARN_SEVERITIES = new Set(['HIGH', 'MEDIUM'])
@@ -27,10 +28,10 @@ function severityClass(severity) {
   return styles.eventLow
 }
 
-function formatVideoSource(source) {
-  if (source === 'screen') return 'Screen'
-  if (source === 'camera') return 'Camera'
-  return 'Recording'
+function formatVideoSource(source, t) {
+  if (source === 'screen') return t('admin_videos_source_screen')
+  if (source === 'camera') return t('admin_videos_source_camera')
+  return t('admin_videos_source_recording')
 }
 
 function isAbsoluteHttpUrl(url) {
@@ -79,37 +80,37 @@ function isVideoPlayable(video) {
   return video.ready_to_stream !== false
 }
 
-function describeVideoAvailability(video) {
+function describeVideoAvailability(video, t) {
   const status = normalizeVideoStatus(video)
   if (status === 'processing' || status === 'uploading' || status === 'queued' || status === 'pending' || status === 'inprogress') {
-    return 'This recording is still processing. Refresh in a moment.'
+    return t('admin_videos_still_processing')
   }
   if (status === 'error' || status === 'failed') {
-    return 'This recording failed to process and cannot be played.'
+    return t('admin_videos_failed_to_process')
   }
   if (!video?.url) {
-    return 'This recording does not have a playable file yet.'
+    return t('admin_videos_no_playable_file')
   }
   if (video?.ready_to_stream === false) {
-    return 'This recording is not ready to stream yet.'
+    return t('admin_videos_not_ready_to_stream')
   }
-  return 'Loading recording...'
+  return t('admin_videos_loading_recording')
 }
 
-function summarizeVideoState(video) {
-  if (!video) return 'Not saved'
+function summarizeVideoState(video, t) {
+  if (!video) return t('admin_videos_not_saved')
   if (isVideoPlayable(video)) {
     const seconds = readVideoDurationValue(video)
-    return seconds > 0 ? formatSeconds(seconds) : 'Saved'
+    return seconds > 0 ? formatSeconds(seconds) : t('admin_videos_saved')
   }
   const status = normalizeVideoStatus(video)
   if (status === 'processing' || status === 'uploading' || status === 'queued' || status === 'pending' || status === 'inprogress') {
-    return 'Processing'
+    return t('admin_videos_processing')
   }
   if (status === 'error' || status === 'failed') {
-    return 'Failed'
+    return t('admin_videos_failed')
   }
-  return 'Saved'
+  return t('admin_videos_saved')
 }
 
 function isAbortError(err) {
@@ -117,6 +118,7 @@ function isAbortError(err) {
 }
 
 export default function AdminAttemptVideos() {
+  const { t } = useLanguage()
   const { attemptId } = useParams()
   const [searchParams] = useSearchParams()
   const examIdFilter = searchParams.get('exam_id')
@@ -185,7 +187,7 @@ export default function AdminAttemptVideos() {
         setVideos([])
         setEvents([])
         setSelectedVideoName('')
-        setError(e.response?.data?.detail || 'Failed to load attempts for this test')
+        setError(e.response?.data?.detail || t('admin_videos_load_attempts_error'))
         setLoading(false)
       })
       .finally(() => {
@@ -211,7 +213,7 @@ export default function AdminAttemptVideos() {
       setEvents([])
       setSelectedVideoName('')
       if (!inSupervisionMode) {
-        setError('Invalid attempt id')
+        setError(t('admin_videos_invalid_attempt_id'))
       }
       if (!attemptsLoading) setLoading(false)
       return
@@ -236,7 +238,7 @@ export default function AdminAttemptVideos() {
           setAttempt(null)
           setVideos([])
           setEvents([])
-          setError(attemptResult.reason?.response?.data?.detail || 'Failed to load attempt recordings')
+          setError(attemptResult.reason?.response?.data?.detail || t('admin_videos_load_recordings_error'))
           return
         }
 
@@ -246,10 +248,10 @@ export default function AdminAttemptVideos() {
         const eventsData = eventsResult.status === 'fulfilled' ? (eventsResult.value.data || []) : []
 
         if (videosResult.status !== 'fulfilled') {
-          warnings.push('Video recordings could not be loaded. Retry to fetch the saved files.')
+          warnings.push(t('admin_videos_recordings_load_failed'))
         }
         if (eventsResult.status !== 'fulfilled') {
-          warnings.push('Warning events could not be loaded. Video playback remains available.')
+          warnings.push(t('admin_videos_events_load_failed'))
         }
 
         const sortedVideos = [...videosData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -265,7 +267,7 @@ export default function AdminAttemptVideos() {
         setWarning(warnings.join(' '))
       } catch (e) {
         if (isAbortError(e)) return
-        setError(e.response?.data?.detail || 'Failed to load attempt recordings')
+        setError(e.response?.data?.detail || t('admin_videos_load_recordings_error'))
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
@@ -408,7 +410,7 @@ export default function AdminAttemptVideos() {
       if (!selectedVideo) return
       if (!selectedVideoIsPlayable) return
       if (!isAbsoluteHttpUrl(selectedVideo.url)) {
-        setWarning((current) => current || 'The selected recording does not have a usable playback URL.')
+        setWarning((current) => current || t('admin_videos_no_playback_url'))
         return
       }
       try {
@@ -420,7 +422,7 @@ export default function AdminAttemptVideos() {
         setSelectedVideoUrl(objectUrl)
       } catch (err) {
         if (!isAbortError(err)) {
-          setWarning((current) => current || 'The selected recording could not be loaded.')
+          setWarning((current) => current || t('admin_videos_recording_load_failed'))
         }
       }
     }
@@ -449,7 +451,7 @@ export default function AdminAttemptVideos() {
         setSelectedEvidenceUrl(objectUrl)
       } catch (err) {
         if (!isAbortError(err)) {
-          setWarning((current) => current || 'Evidence screenshots could not be loaded.')
+          setWarning((current) => current || t('admin_videos_evidence_load_failed'))
         }
       }
     }
@@ -496,24 +498,24 @@ export default function AdminAttemptVideos() {
 
   const videoSummaryCards = [
     {
-      label: 'Recordings',
+      label: t('admin_videos_recordings'),
       value: videos.length,
-      helper: videos.length > 0 ? 'All saved browser recordings for this attempt' : 'No recording files saved yet',
+      helper: videos.length > 0 ? t('admin_videos_all_saved_recordings') : t('admin_videos_no_recordings_yet'),
     },
     {
-      label: 'Warnings',
+      label: t('admin_videos_warnings'),
       value: warningCounts.total,
-      helper: 'Current filtered warning count shown on the timeline',
+      helper: t('admin_videos_filtered_warning_count'),
     },
     {
-      label: 'High risk',
+      label: t('admin_videos_high_risk'),
       value: warningCounts.high,
-      helper: 'High-severity events in the active filter set',
+      helper: t('admin_videos_high_severity_events'),
     },
     {
-      label: 'Timeline span',
+      label: t('admin_videos_timeline_span'),
       value: formatSeconds(effectiveDuration || timelineSegments.safeDuration),
-      helper: 'Video or reconstructed event duration currently in view',
+      helper: t('admin_videos_timeline_duration'),
     },
   ]
 
@@ -627,7 +629,7 @@ export default function AdminAttemptVideos() {
     }
 
     if (!Hls.isSupported()) {
-      setWarning((current) => current || 'This browser cannot play the selected stream.')
+      setWarning((current) => current || t('admin_videos_browser_cannot_play'))
       return undefined
     }
 
@@ -642,7 +644,7 @@ export default function AdminAttemptVideos() {
     hls.on(Hls.Events.LEVEL_LOADED, () => syncDurationFromVideo(videoEl))
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (data?.fatal) {
-        setWarning((current) => current || 'The selected stream could not be played.')
+        setWarning((current) => current || t('admin_videos_stream_play_failed'))
       }
     })
 
@@ -668,7 +670,7 @@ export default function AdminAttemptVideos() {
     }
   }, [])
 
-  if (attemptsLoading || (loading && hasResolvedAttempt)) return <div className={`${styles.page} ${styles.loadingState}`}>Loading recordings...</div>
+  if (attemptsLoading || (loading && hasResolvedAttempt)) return <div className={`${styles.page} ${styles.loadingState}`}>{t('admin_videos_loading_recordings')}</div>
 
   return (
     <div className={styles.page}>
@@ -678,15 +680,15 @@ export default function AdminAttemptVideos() {
           if (window.history.length > 1) { navigate(-1); return }
           navigate('/admin/attempt-analysis')
         }}>
-          {window.opener ? 'Close tab' : 'Back'}
+          {window.opener ? t('admin_videos_close_tab') : t('admin_videos_back')}
         </button>
         <div className={styles.headContent}>
-          <h2>{inSupervisionMode ? 'Supervision Mode' : 'Video Review'}</h2>
+          <h2>{inSupervisionMode ? t('admin_videos_supervision_mode') : t('admin_videos_video_review')}</h2>
           {inSupervisionMode ? (
             <div className={styles.supervisionRow}>
-              <label className={styles.supervisionLabel} htmlFor="attempt-videos-candidate-select">Candidate:</label>
+              <label className={styles.supervisionLabel} htmlFor="attempt-videos-candidate-select">{t('admin_videos_candidate')}:</label>
               {examAttempts.length === 0 ? (
-                <span className={styles.supervisionHint}>No attempts yet</span>
+                <span className={styles.supervisionHint}>{t('admin_videos_no_attempts_yet')}</span>
               ) : (
                 <select
                   id="attempt-videos-candidate-select"
@@ -704,16 +706,16 @@ export default function AdminAttemptVideos() {
             <div className={styles.headMeta}>
               {attempt?.user_name && (
                 <span className={styles.metaItem}>
-                  <span className={styles.metaLabel}>Candidate</span> {attempt.user_name}
+                  <span className={styles.metaLabel}>{t('admin_videos_candidate')}</span> {attempt.user_name}
                 </span>
               )}
               {(attempt?.test_title || attempt?.exam_title) && (
                 <span className={styles.metaItem}>
-                  <span className={styles.metaLabel}>Test</span> {attempt.test_title || attempt.exam_title}
+                  <span className={styles.metaLabel}>{t('admin_videos_test')}</span> {attempt.test_title || attempt.exam_title}
                 </span>
               )}
               <span className={styles.metaItem}>
-                <span className={styles.metaLabel}>Attempt</span> {String(activeAttemptId).slice(0, 8)}
+                <span className={styles.metaLabel}>{t('admin_videos_attempt')}</span> {String(activeAttemptId).slice(0, 8)}
               </span>
               {attempt?.status && (
                 <span className={`${styles.statusBadge} ${attempt.status === 'SUBMITTED' || attempt.status === 'GRADED' ? styles.statusDone : attempt.status === 'IN_PROGRESS' ? styles.statusActive : ''}`}>
@@ -722,7 +724,7 @@ export default function AdminAttemptVideos() {
               )}
               {attempt?.started_at && (
                 <span className={styles.metaItem}>
-                  <span className={styles.metaLabel}>Started</span> {new Date(attempt.started_at).toLocaleString()}
+                  <span className={styles.metaLabel}>{t('admin_videos_started')}</span> {new Date(attempt.started_at).toLocaleString()}
                 </span>
               )}
             </div>
@@ -730,7 +732,7 @@ export default function AdminAttemptVideos() {
         </div>
         <div className={styles.headActions}>
           <button type="button" className={styles.refreshBtn} onClick={handleRetry} disabled={loading || attemptsLoading}>
-            Refresh
+            {t('admin_videos_refresh')}
           </button>
         </div>
       </div>
@@ -739,7 +741,7 @@ export default function AdminAttemptVideos() {
         <div className={styles.error}>
           <span>{error}</span>
           <button type="button" className={styles.errorAction} onClick={handleRetry}>
-            Retry
+            {t('admin_videos_retry')}
           </button>
         </div>
       ) : null}
@@ -748,38 +750,38 @@ export default function AdminAttemptVideos() {
         <div className={styles.warning}>
           <span>{warning}</span>
           <button type="button" className={styles.warningAction} onClick={handleRetry}>
-            Retry
+            {t('admin_videos_retry')}
           </button>
         </div>
       ) : null}
 
       {showEmptyAttemptsState ? (
-        <div className={styles.empty}>No attempts found for this test yet.</div>
+        <div className={styles.empty}>{t('admin_videos_no_attempts_found')}</div>
       ) : videos.length === 0 ? (
-        <div className={styles.empty}>No video recordings are saved yet for this attempt.</div>
+        <div className={styles.empty}>{t('admin_videos_no_recordings_saved')}</div>
       ) : (
         <div className={styles.layout}>
           <section className={styles.playerCard}>
             <div className={styles.statsStrip}>
               <div className={styles.statItem}>
                 <span className={styles.statValue}>{videos.length}</span>
-                <span className={styles.statLabel}>Recordings</span>
+                <span className={styles.statLabel}>{t('admin_videos_recordings')}</span>
               </div>
               <div className={styles.statItem}>
                 <span className={styles.statValue}>{warningCounts.total}</span>
-                <span className={styles.statLabel}>Warnings</span>
+                <span className={styles.statLabel}>{t('admin_videos_warnings')}</span>
               </div>
               <div className={`${styles.statItem} ${warningCounts.high > 0 ? styles.statDanger : ''}`}>
                 <span className={styles.statValue}>{warningCounts.high}</span>
-                <span className={styles.statLabel}>High risk</span>
+                <span className={styles.statLabel}>{t('admin_videos_high_risk')}</span>
               </div>
               <div className={styles.statItem}>
                 <span className={styles.statValue}>{warningCounts.medium}</span>
-                <span className={styles.statLabel}>Medium</span>
+                <span className={styles.statLabel}>{t('admin_videos_medium')}</span>
               </div>
               <div className={styles.statItem}>
                 <span className={styles.statValue}>{formatSeconds(effectiveDuration || timelineSegments.safeDuration)}</span>
-                <span className={styles.statLabel}>Timeline span</span>
+                <span className={styles.statLabel}>{t('admin_videos_timeline_span')}</span>
               </div>
             </div>
 
@@ -803,16 +805,16 @@ export default function AdminAttemptVideos() {
                           setDuration(sourcePlayable ? readVideoDurationValue(sourceVideo) : 0)
                         }}
                       >
-                        <span className={styles.sourceSwitchLabel}>{formatVideoSource(source)}</span>
+                        <span className={styles.sourceSwitchLabel}>{formatVideoSource(source, t)}</span>
                         <span className={styles.sourceSwitchMeta}>
-                          {summarizeVideoState(sourceVideo)}
+                          {summarizeVideoState(sourceVideo, t)}
                         </span>
                       </button>
                     )
                   })}
                 </div>
                 <label>
-                  Recording
+                  {t('admin_videos_source_recording')}
                   <select
                     value={selectedVideo?.name || ''}
                     onChange={(e) => {
@@ -824,19 +826,19 @@ export default function AdminAttemptVideos() {
                   >
                     {videos.map((v) => {
                       const suffix = v.ready_to_stream === false || v.status === 'error'
-                        ? ` (${v.status || 'unavailable'})`
+                        ? ` (${v.status || t('admin_videos_unavailable')})`
                         : ''
                       return (
-                        <option key={v.name} value={v.name}>{`${formatVideoSource(v.source)} - ${v.name}${suffix}`}</option>
+                        <option key={v.name} value={v.name}>{`${formatVideoSource(v.source, t)} - ${v.name}${suffix}`}</option>
                       )
                     })}
                   </select>
                 </label>
               </div>
               {selectedVideoUrl ? (
-                <a href={selectedVideoUrl} target="_blank" rel="noreferrer">Open file</a>
+                <a href={selectedVideoUrl} target="_blank" rel="noreferrer">{t('admin_videos_open_file')}</a>
               ) : (
-                <span className={styles.loadingFile}>{describeVideoAvailability(selectedVideo)}</span>
+                <span className={styles.loadingFile}>{describeVideoAvailability(selectedVideo, t)}</span>
               )}
             </div>
 
@@ -860,31 +862,31 @@ export default function AdminAttemptVideos() {
                   }}
                 />
               ) : (
-                <div className={styles.videoLoading}>{describeVideoAvailability(selectedVideo)}</div>
+                <div className={styles.videoLoading}>{describeVideoAvailability(selectedVideo, t)}</div>
               )}
             </div>
 
             <div className={styles.timelineWrap}>
               <div className={styles.timelineHeader}>
-                <strong>Warning Timeline</strong>
+                <strong>{t('admin_videos_warning_timeline')}</strong>
                 <div className={styles.timelineNav}>
                   <button
                     type="button"
                     className={styles.navBtn}
                     onClick={goToPrevWarning}
                     disabled={!selectedEvent || filteredWarningEvents.indexOf(selectedEvent) <= 0}
-                    title="Previous warning"
+                    title={t('admin_videos_previous_warning')}
                   >
-                    Prev
+                    {t('admin_videos_prev')}
                   </button>
                   <button
                     type="button"
                     className={styles.navBtn}
                     onClick={goToNextWarning}
                     disabled={!selectedEvent || filteredWarningEvents.indexOf(selectedEvent) >= filteredWarningEvents.length - 1}
-                    title="Next warning"
+                    title={t('admin_videos_next_warning')}
                   >
-                    Next
+                    {t('admin_videos_next')}
                   </button>
                   <div className={styles.timeDisplay}>
                     <span className={styles.timeNow}>
@@ -900,7 +902,7 @@ export default function AdminAttemptVideos() {
                 aria-valuemin={0}
                 aria-valuemax={timelineSegments.safeDuration}
                 aria-valuenow={currentTime}
-                aria-label="Video timeline - click to seek"
+                aria-label={t('admin_videos_timeline_aria')}
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect()
                   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
@@ -955,41 +957,41 @@ export default function AdminAttemptVideos() {
           <aside className={styles.sideCard}>
             <div className={styles.sideHeader}>
               <div className={styles.sideHeadLeft}>
-                <h3>Exam Events</h3>
+                <h3>{t('admin_videos_exam_events')}</h3>
                 <div className={styles.eventCountRow}>
-                  <span className={styles.badgeNeutral}>{warningCounts.total} total</span>
+                  <span className={styles.badgeNeutral}>{warningCounts.total} {t('admin_videos_total')}</span>
                 </div>
               </div>
             </div>
 
             <div className={styles.eventsFilters}>
               <label>
-                Severity
+                {t('admin_videos_severity')}
                 <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
-                  <option value="ALL">All severities</option>
-                  <option value="HIGH">High</option>
-                  <option value="MEDIUM">Medium</option>
+                  <option value="ALL">{t('admin_videos_all_severities')}</option>
+                  <option value="HIGH">{t('admin_videos_high')}</option>
+                  <option value="MEDIUM">{t('admin_videos_medium')}</option>
                 </select>
               </label>
               <label>
-                Event type
+                {t('admin_videos_event_type')}
                 <select value={eventTypeFilter} onChange={(e) => setEventTypeFilter(e.target.value)}>
-                  <option value="ALL">All types</option>
+                  <option value="ALL">{t('admin_videos_all_types')}</option>
                   {warningTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </label>
               <button type="button" className={styles.clearBtn} onClick={clearFilters} disabled={severityFilter === 'ALL' && eventTypeFilter === 'ALL'}>
-                Clear filters
+                {t('admin_videos_clear_filters')}
               </button>
             </div>
 
             {filteredWarningEvents.length === 0 ? (
               <div className={styles.emptySmall}>
                 {warningTimelineEvents.length === 0
-                  ? 'No warning events detected for this attempt.'
+                  ? t('admin_videos_no_warnings_detected')
                   : recordingWarningEvents.length === 0
-                    ? 'No warning events fall within the selected recording.'
-                    : 'No warning events match the active filters.'}
+                    ? t('admin_videos_no_warnings_in_recording')
+                    : t('admin_videos_no_warnings_match_filters')}
               </div>
             ) : (
               <>
@@ -1009,7 +1011,7 @@ export default function AdminAttemptVideos() {
                         <span className={styles.eventTimestamp}>{formatSeconds(e.second)}</span>
                       </div>
                       <span className={styles.eventMeta}>{e.event_type}</span>
-                      <span className={styles.eventDetail}>{e.detail || 'Warning detected'}</span>
+                      <span className={styles.eventDetail}>{e.detail || t('admin_videos_warning_detected')}</span>
                     </button>
                   ))}
                 </div>
@@ -1018,11 +1020,11 @@ export default function AdminAttemptVideos() {
                     <div className={styles.inspectorHeader}>
                       <span className={`${styles.eventSeverity} ${severityClass(selectedEvent.severity)}`}>{selectedEvent.severity}</span>
                       <span className={styles.inspectorTime}>
-                        Event {filteredWarningEvents.indexOf(selectedEvent) + 1} of {filteredWarningEvents.length} - {formatSeconds(selectedEvent.second)}
+                        {t('admin_videos_event')} {filteredWarningEvents.indexOf(selectedEvent) + 1} {t('admin_videos_of')} {filteredWarningEvents.length} - {formatSeconds(selectedEvent.second)}
                       </span>
                     </div>
                     <div className={styles.inspectorTitle}>{selectedEvent.event_type}</div>
-                    <div className={styles.inspectorDetail}>{selectedEvent.detail || 'Warning detected during monitoring.'}</div>
+                    <div className={styles.inspectorDetail}>{selectedEvent.detail || t('admin_videos_warning_detected_monitoring')}</div>
                     <div className={styles.inspectorMeta}>
                       <span>{selectedEvent.occurred_at ? new Date(selectedEvent.occurred_at).toLocaleString() : '-'}</span>
                     </div>
@@ -1030,7 +1032,7 @@ export default function AdminAttemptVideos() {
                       {typeof selectedEvent.ai_confidence === 'number' ? (
                         <>
                           <div className={styles.confidenceLabel}>
-                            AI Confidence: {Math.round(selectedEvent.ai_confidence * 100)}%
+                            {t('admin_videos_ai_confidence')}: {Math.round(selectedEvent.ai_confidence * 100)}%
                           </div>
                           <div className={styles.confidenceTrack}>
                             <div
@@ -1040,7 +1042,7 @@ export default function AdminAttemptVideos() {
                           </div>
                         </>
                       ) : (
-                        <div className={styles.confidenceLabel}>Confidence unavailable</div>
+                        <div className={styles.confidenceLabel}>{t('admin_videos_confidence_unavailable')}</div>
                       )}
                     </div>
                     {selectedEvent.meta?.evidence && (
@@ -1048,7 +1050,7 @@ export default function AdminAttemptVideos() {
                         <img
                           className={styles.inspectorImage}
                           src={selectedEvidenceUrl}
-                          alt={`${selectedEvent.event_type} evidence`}
+                          alt={`${selectedEvent.event_type} ${t('admin_videos_evidence')}`}
                         />
                       ) : (
                         <div className={styles.inspectorImage} />

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
 import { adminApi } from '../../../services/admin.service'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminFavoriteReports.module.scss'
 
 const SUPPORTED_APP_ROUTE_PREFIXES = [
@@ -80,6 +81,7 @@ const isValidFavoriteLink = (value) => {
 }
 
 export default function AdminFavoriteReports() {
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const { user } = useAuth()
   const [favorites, setFavorites] = useState([])
@@ -118,7 +120,7 @@ export default function AdminFavoriteReports() {
       setError('')
     } catch {
       setFavorites([])
-      setLoadError('Failed to load favorites.')
+      setLoadError(t('admin_fav_reports_failed_load'))
     } finally {
       setLoading(false)
     }
@@ -134,7 +136,7 @@ export default function AdminFavoriteReports() {
       await adminApi.updateMyPreference('favorite_reports', serializeFavorites(next))
       return true
     } catch {
-      setError('Failed to save. Please try again.')
+      setError(t('admin_favorites_save_failed'))
       return false
     } finally {
       setSaving(false)
@@ -145,15 +147,15 @@ export default function AdminFavoriteReports() {
     const nextTitle = title.trim()
     const nextLink = link.trim()
     if (!nextTitle || !nextLink) {
-      setError('Title and link are required.')
+      setError(t('admin_favorites_title_link_required'))
       return
     }
     if (favorites.some((favorite) => favorite.link === nextLink && favorite.title.toLowerCase() === nextTitle.toLowerCase())) {
-      setError('That favorite is already saved.')
+      setError(t('admin_favorites_already_saved'))
       return
     }
     if (!isValidFavoriteLink(nextLink)) {
-      setError('Links must use http(s):// or a supported admin route such as /admin/reports.')
+      setError(t('admin_favorites_invalid_link'))
       return
     }
     const next = [...favorites, { title: nextTitle, link: nextLink, isBroken: false }]
@@ -161,7 +163,7 @@ export default function AdminFavoriteReports() {
       setFavorites(next)
       setTitle('')
       setLink('')
-      setNotice('Favorite saved.')
+      setNotice(t('admin_favorites_saved_notice'))
     }
   }
 
@@ -175,14 +177,14 @@ export default function AdminFavoriteReports() {
     const next = favorites.filter((_, idx) => idx !== index)
     if (await persist(next)) {
       setFavorites(next)
-      setNotice('Favorite removed.')
+      setNotice(t('admin_favorites_removed_notice'))
     }
     setRemovingIndex(null)
   }
 
   const openFavorite = (favorite) => {
     if (favorite.isBroken) {
-      setError('This saved route is no longer available. Remove it or replace it with a supported page.')
+      setError(t('admin_favorites_route_unavailable'))
       return
     }
     if (favorite.link?.startsWith('http')) {
@@ -212,24 +214,24 @@ export default function AdminFavoriteReports() {
   const externalCount = favorites.filter((favorite) => /^https?:\/\//i.test(favorite.link)).length
   const summaryCards = [
     {
-      label: 'Saved favorites',
+      label: t('admin_favorites_saved_favorites'),
       value: favorites.length,
-      helper: 'Quick links currently loaded',
+      helper: t('admin_favorites_quick_links_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_stat_visible_now'),
       value: filteredFavorites.length,
-      helper: hasActiveFilters ? 'Matching the active filters' : 'All saved favorites',
+      helper: hasActiveFilters ? t('admin_stat_matching_filters') : t('admin_favorites_all_saved'),
     },
     {
-      label: 'External links',
+      label: t('admin_favorites_external_links'),
       value: externalCount,
-      helper: 'Public report URLs or other external pages',
+      helper: t('admin_favorites_external_links_helper'),
     },
     {
-      label: 'Needs update',
+      label: t('admin_favorites_needs_update'),
       value: staleCount,
-      helper: 'Saved internal routes that no longer exist',
+      helper: t('admin_favorites_stale_routes_helper'),
     },
   ]
 
@@ -240,13 +242,13 @@ export default function AdminFavoriteReports() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="My Favorite Reports" subtitle="Quick links to reports you use often" />
+      <AdminPageHeader title={t('admin_favorites_page_title')} subtitle={t('admin_favorites_page_subtitle')} />
       {loadError && (
         <div className={styles.errorBanner}>
           <div className={styles.bannerRow}>
             <span>{loadError}</span>
             <button type="button" className={styles.retryBtn} onClick={() => void load()} disabled={loading}>
-              {loading ? 'Retrying...' : 'Retry'}
+              {loading ? t('admin_favorites_retrying') : t('retry')}
             </button>
           </div>
         </div>
@@ -264,65 +266,65 @@ export default function AdminFavoriteReports() {
       </section>
       <div className={styles.grid}>
         <form className={styles.card} onSubmit={handleAddSubmit}>
-          <div className={styles.sectionTitle}>Add Favorite</div>
-          <label className={styles.filterLabel} htmlFor="favorite-title">Title</label>
-          <input id="favorite-title" className={styles.input} placeholder="Favorite title" value={title} onChange={e => setTitle(e.target.value)} />
-          <label className={styles.filterLabel} htmlFor="favorite-link">URL or path</label>
-          <input id="favorite-link" className={styles.input} placeholder="https://example.com/report or /admin/reports" value={link} onChange={e => setLink(e.target.value)} />
-          <div className={styles.empty}>Use a public URL or a supported admin route such as `/admin/reports`.</div>
-          <button type="submit" className={styles.btn} disabled={!title || !link || saving}>{saving ? 'Saving...' : 'Save'}</button>
+          <div className={styles.sectionTitle}>{t('admin_favorites_add_favorite')}</div>
+          <label className={styles.filterLabel} htmlFor="favorite-title">{t('admin_favorites_title_label')}</label>
+          <input id="favorite-title" className={styles.input} placeholder={t('admin_favorites_title_placeholder')} value={title} onChange={e => setTitle(e.target.value)} />
+          <label className={styles.filterLabel} htmlFor="favorite-link">{t('admin_favorites_link_label')}</label>
+          <input id="favorite-link" className={styles.input} placeholder={t('admin_favorites_link_placeholder')} value={link} onChange={e => setLink(e.target.value)} />
+          <div className={styles.empty}>{t('admin_favorites_link_hint')}</div>
+          <button type="submit" className={styles.btn} disabled={!title || !link || saving}>{saving ? t('saving') : t('save')}</button>
         </form>
         <div className={styles.card}>
-          <div className={styles.sectionTitle}>Saved</div>
+          <div className={styles.sectionTitle}>{t('admin_favorites_saved_section')}</div>
           <div className={styles.toolbar}>
             <div className={styles.toolbarFilters}>
               <div className={styles.filterGroup}>
-                <label className={styles.filterLabel} htmlFor="favorite-search">Search favorites</label>
+                <label className={styles.filterLabel} htmlFor="favorite-search">{t('admin_favorites_search_label')}</label>
                 <input
                   id="favorite-search"
                   className={styles.input}
-                  placeholder="Search saved favorites..."
+                  placeholder={t('admin_favorites_search_placeholder')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
               <div className={styles.filterGroup}>
-                <label className={styles.filterLabel} htmlFor="favorite-kind-filter">Type</label>
+                <label className={styles.filterLabel} htmlFor="favorite-kind-filter">{t('admin_favorites_type_label')}</label>
                 <select
                   id="favorite-kind-filter"
                   className={styles.input}
                   value={kindFilter}
                   onChange={(e) => setKindFilter(e.target.value)}
                 >
-                  <option value="ALL">All favorites</option>
-                  <option value="INTERNAL">Internal routes</option>
-                  <option value="EXTERNAL">External links</option>
-                  <option value="STALE">Needs update</option>
+                  <option value="ALL">{t('admin_favorites_filter_all')}</option>
+                  <option value="INTERNAL">{t('admin_favorites_filter_internal')}</option>
+                  <option value="EXTERNAL">{t('admin_favorites_filter_external')}</option>
+                  <option value="STALE">{t('admin_favorites_needs_update')}</option>
                 </select>
               </div>
             </div>
             <div className={styles.toolbarActions}>
               <button type="button" className={styles.retryBtn} onClick={() => void load()} disabled={loading}>
-                {loading ? 'Refreshing...' : 'Refresh'}
+                {loading ? t('admin_refreshing') : t('admin_refresh')}
               </button>
               <button type="button" className={styles.retryBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-                Clear filters
+                {t('admin_clear_filters')}
               </button>
             </div>
           </div>
           <div className={styles.filterMeta}>
-            Showing {filteredFavorites.length} favorite{filteredFavorites.length !== 1 ? 's' : ''} across {favorites.length} saved.
+            {t('admin_favorites_showing_count', { filtered: filteredFavorites.length, total: favorites.length })}
           </div>
-          {loading && <div className={styles.empty}>Loading favorites...</div>}
+          {loading && <div className={styles.empty}>{t('admin_favorites_loading')}</div>}
           {!loading && filteredFavorites.length === 0 && (
             <div className={styles.emptyState}>
-              <div className={styles.emptyTitle}>{hasActiveFilters ? 'No favorites match the current filters.' : 'No favorites yet.'}</div>
+              <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_favorites_no_match') : t('admin_favorites_none_yet')}</div>
               <div className={styles.emptyText}>
                 {hasActiveFilters
-                  ? 'Clear the current search or type filter to restore the saved report shortcuts.'
-                  : 'Saved report shortcuts will appear here once you add internal routes or external links.'}
+                  ? t('admin_favorites_clear_filters_hint')
+                  : t('admin_favorites_empty_state')}
               </div>
-              {hasActiveFilters && <button type="button" className={styles.retryBtn} onClick={clearFilters}>Clear filters</button>}
+              {hasActiveFilters && <button type="button" className={styles.retryBtn} onClick={clearFilters}>{t('admin_clear_filters')}</button>}
             </div>
           )}
           <div className={styles.list}>
@@ -339,14 +341,14 @@ export default function AdminFavoriteReports() {
                 >
                   <div className={styles.rowTitle}>
                     {favorite.title}
-                    {favorite.isBroken && <span className={styles.staleBadge}>Needs update</span>}
+                    {favorite.isBroken && <span className={styles.staleBadge}>{t('admin_favorites_needs_update')}</span>}
                   </div>
                   <div className={styles.rowSub}>{favorite.link}</div>
-                  <div className={styles.rowMeta}>{favorite.isBroken ? 'Internal route no longer available' : isExternal ? 'External shortcut' : 'Internal admin route'}</div>
-                  {favorite.isBroken && <div className={styles.rowWarning}>This saved route no longer exists in the current MVP navigation.</div>}
+                  <div className={styles.rowMeta}>{favorite.isBroken ? t('admin_favorites_route_unavailable_label') : isExternal ? t('admin_favorites_external_shortcut') : t('admin_favorites_internal_route')}</div>
+                  {favorite.isBroken && <div className={styles.rowWarning}>{t('admin_favorites_route_gone_warning')}</div>}
                 </button>
                 <button type="button" className={styles.deleteBtn} onClick={() => remove(index)} disabled={saving || removingIndex === index}>
-                  {removingIndex === index ? 'Removing...' : 'Remove'}
+                  {removingIndex === index ? t('admin_removing') : t('remove')}
                 </button>
               </div>
               )

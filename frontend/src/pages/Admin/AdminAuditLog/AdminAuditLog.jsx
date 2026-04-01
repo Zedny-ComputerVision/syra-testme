@@ -1,6 +1,7 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import { readPaginatedItems, readPaginatedTotal } from '../../../utils/pagination'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminAuditLog.module.scss'
 
 const PAGE_SIZE = 50
@@ -13,8 +14,8 @@ function formatDate(iso) {
   return d.toLocaleString()
 }
 
-function downloadCsv(rows) {
-  const header = ['Timestamp', 'User', 'Action', 'Resource Type', 'Resource ID', 'Detail', 'IP Address']
+function downloadCsv(rows, t) {
+  const header = [t('admin_audit_csv_timestamp'), t('admin_audit_csv_user'), t('admin_audit_csv_action'), t('admin_audit_csv_resource_type'), t('admin_audit_csv_resource_id'), t('admin_audit_csv_detail'), t('admin_audit_csv_ip_address')]
   const lines = rows.map((row) => [
     formatDate(row.created_at),
     row.user?.email || row.user_id || '-',
@@ -34,6 +35,7 @@ function downloadCsv(rows) {
 }
 
 export default function AdminAuditLog() {
+  const { t } = useLanguage()
   const [logs, setLogs] = useState([])
   const [totalLogs, setTotalLogs] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -63,7 +65,7 @@ export default function AdminAuditLog() {
       setTotalLogs(readPaginatedTotal(res.data))
       setExpanded(null)
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Failed to load audit logs.')
+      setError(e?.response?.data?.detail || t('admin_audit_load_error'))
     } finally {
       setLoading(false)
     }
@@ -93,21 +95,21 @@ export default function AdminAuditLog() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>Audit Log</h1>
-          <p className={styles.subtitle}>{totalLogs} matching entries</p>
+          <h1 className={styles.title}>{t('admin_audit_title')}</h1>
+          <p className={styles.subtitle}>{t('admin_audit_matching_entries', { count: totalLogs })}</p>
         </div>
         <div className={styles.headerActions}>
           {hasActiveFilters && (
             <button type="button" className={styles.refreshBtn} onClick={clearFilters} disabled={loading}>
-              Clear filters
+              {t('admin_audit_clear_filters')}
             </button>
           )}
           <button type="button" className={styles.refreshBtn} onClick={load} disabled={loading}>
-            {loading ? 'Loading...' : 'Refresh'}
+            {loading ? t('admin_audit_loading_btn') : t('admin_audit_refresh')}
           </button>
           {logs.length > 0 && (
-            <button type="button" className={styles.exportBtn} onClick={() => downloadCsv(logs)}>
-              Export CSV
+            <button type="button" className={styles.exportBtn} onClick={() => downloadCsv(logs, t)}>
+              {t('admin_audit_export_csv')}
             </button>
           )}
         </div>
@@ -117,7 +119,7 @@ export default function AdminAuditLog() {
         <div className={styles.errorRow}>
           <div className={styles.errorBanner}>{error}</div>
           <button type="button" className={styles.refreshBtn} onClick={load} disabled={loading}>
-            Retry
+            {t('admin_audit_retry')}
           </button>
         </div>
       )}
@@ -126,7 +128,7 @@ export default function AdminAuditLog() {
         <input
           className={styles.searchInput}
           type="text"
-          placeholder="Search action or resource ID..."
+          placeholder={t('admin_audit_search_placeholder')}
           value={q}
           onChange={(e) => { setQ(e.target.value); setPage(0) }}
         />
@@ -135,20 +137,20 @@ export default function AdminAuditLog() {
           value={action}
           onChange={(e) => { setAction(e.target.value); setPage(0) }}
         >
-          <option value="">All actions</option>
+          <option value="">{t('admin_audit_all_actions')}</option>
           {ACTION_TYPES.map((item) => (
             <option key={item} value={item}>{item}</option>
           ))}
         </select>
         <div className={styles.dateRow}>
-          <label className={styles.dateLabel}>From</label>
+          <label className={styles.dateLabel}>{t('admin_audit_from')}</label>
           <input
             type="date"
             className={styles.dateInput}
             value={fromDate}
             onChange={(e) => { setFromDate(e.target.value); setPage(0) }}
           />
-          <label className={styles.dateLabel}>To</label>
+          <label className={styles.dateLabel}>{t('admin_audit_to')}</label>
           <input
             type="date"
             className={styles.dateInput}
@@ -160,32 +162,32 @@ export default function AdminAuditLog() {
 
       <div className={styles.summaryGrid}>
           <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>Matching entries</div>
+          <div className={styles.summaryLabel}>{t('admin_audit_matching_entries_label')}</div>
             <div className={styles.summaryValue}>{totalLogs}</div>
           </div>
         <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>Visible on page</div>
+          <div className={styles.summaryLabel}>{t('admin_audit_visible_on_page')}</div>
           <div className={styles.summaryValue}>{visibleEntries}</div>
         </div>
         <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>Actors</div>
+          <div className={styles.summaryLabel}>{t('admin_audit_actors')}</div>
           <div className={styles.summaryValue}>{uniqueActors}</div>
         </div>
         <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>Actions</div>
+          <div className={styles.summaryLabel}>{t('admin_audit_actions')}</div>
           <div className={styles.summaryValue}>{uniqueActions}</div>
         </div>
       </div>
 
       <div className={styles.tableWrap}>
         {loading ? (
-          <div className={styles.loadingRow}>Loading audit logs...</div>
+          <div className={styles.loadingRow}>{t('admin_audit_loading')}</div>
         ) : paginated.length === 0 ? (
           <div className={styles.emptyRow}>
-            <span>No audit log entries match your filters.</span>
+            <span>{t('admin_audit_no_match')}</span>
             {hasActiveFilters && (
               <button type="button" className={styles.inlineBtn} onClick={clearFilters}>
-                Clear filters
+                {t('admin_audit_clear_filters')}
               </button>
             )}
           </div>
@@ -193,13 +195,13 @@ export default function AdminAuditLog() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Timestamp</th>
-                <th>User</th>
-                <th>Action</th>
-                <th>Resource</th>
-                <th>Resource ID</th>
-                <th>IP Address</th>
-                <th>Detail</th>
+                <th>{t('admin_audit_th_timestamp')}</th>
+                <th>{t('admin_audit_th_user')}</th>
+                <th>{t('admin_audit_th_action')}</th>
+                <th>{t('admin_audit_th_resource')}</th>
+                <th>{t('admin_audit_th_resource_id')}</th>
+                <th>{t('admin_audit_th_ip')}</th>
+                <th>{t('admin_audit_th_detail')}</th>
               </tr>
             </thead>
             <tbody>
@@ -224,7 +226,7 @@ export default function AdminAuditLog() {
                         onClick={() => setExpanded(expanded === log.id ? null : log.id)}
                         aria-expanded={expanded === log.id}
                       >
-                        {expanded === log.id ? 'Hide detail' : 'View detail'}
+                        {expanded === log.id ? t('admin_audit_hide_detail') : t('admin_audit_view_detail')}
                       </button>
                     </td>
                   </tr>
@@ -232,11 +234,11 @@ export default function AdminAuditLog() {
                     <tr className={styles.expandedRow}>
                       <td colSpan={7}>
                         <div className={styles.expandedContent}>
-                          <strong>Full Detail:</strong>
-                          <pre className={styles.detailPre}>{log.detail || 'No detail'}</pre>
+                          <strong>{t('admin_audit_full_detail')}</strong>
+                          <pre className={styles.detailPre}>{log.detail || t('admin_audit_no_detail')}</pre>
                           <div className={styles.expandedMeta}>
-                            <span>User ID: {log.user_id || '-'}</span>
-                            <span>Resource ID: {log.resource_id || '-'}</span>
+                            <span>{t('admin_audit_user_id')}: {log.user_id || '-'}</span>
+                            <span>{t('admin_audit_resource_id')}: {log.resource_id || '-'}</span>
                           </div>
                         </div>
                       </td>
@@ -252,7 +254,7 @@ export default function AdminAuditLog() {
       {totalPages > 1 && (
         <div className={styles.pagination}>
           <span className={styles.pageInfo}>
-            Page {page + 1} of {totalPages} ({totalLogs} matching)
+            {t('admin_audit_page_info', { current: page + 1, total: totalPages, matching: totalLogs })}
           </span>
           <button
             type="button"
@@ -260,7 +262,7 @@ export default function AdminAuditLog() {
             onClick={() => setPage((current) => Math.max(0, current - 1))}
             disabled={page === 0}
           >
-            Prev
+            {t('admin_audit_prev')}
           </button>
           <button
             type="button"
@@ -268,7 +270,7 @@ export default function AdminAuditLog() {
             onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
             disabled={page >= totalPages - 1 || totalPages === 0}
           >
-            Next
+            {t('admin_audit_next')}
           </button>
         </div>
       )}

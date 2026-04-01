@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminReports.module.scss'
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
@@ -16,14 +17,15 @@ function parseRecipients(raw) {
   )]
 }
 
-function formatDate(value) {
-  if (!value) return 'Never'
+function formatDate(value, t) {
+  if (!value) return t('admin_reports_never')
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Never'
+  if (Number.isNaN(date.getTime())) return t('admin_reports_never')
   return date.toLocaleString()
 }
 
 export default function AdminReports() {
+  const { t } = useLanguage()
   const [schedules, setSchedules] = useState([])
   const [form, setForm] = useState({ name: '', report_type: 'attempt-summary', schedule_cron: '0 8 * * *', recipients: '' })
   const [loading, setLoading] = useState(true)
@@ -48,7 +50,7 @@ export default function AdminReports() {
       setListError('')
     } catch (err) {
       setSchedules([])
-      setListError(err.response?.data?.detail || 'Failed to load schedules.')
+      setListError(err.response?.data?.detail || t('admin_reports_failed_load_schedules'))
     } finally {
       setLoading(false)
     }
@@ -58,21 +60,21 @@ export default function AdminReports() {
 
   const validateForm = () => {
     if (!form.name.trim()) {
-      setError('Schedule name is required.')
+      setError(t('admin_reports_name_required'))
       return null
     }
     if (!REPORT_TYPES.has(form.report_type)) {
-      setError('Select a valid report type.')
+      setError(t('admin_reports_select_valid_type'))
       return null
     }
     if (!form.schedule_cron.trim()) {
-      setError('Cron schedule is required.')
+      setError(t('admin_reports_cron_required'))
       return null
     }
     const recipients = parseRecipients(form.recipients)
     const invalidRecipient = recipients.find((entry) => !EMAIL_RE.test(entry))
     if (invalidRecipient) {
-      setError(`Invalid recipient email: ${invalidRecipient}`)
+      setError(`${t('admin_reports_invalid_recipient_email')}: ${invalidRecipient}`)
       return null
     }
     return recipients
@@ -96,10 +98,10 @@ export default function AdminReports() {
         is_active: true,
       })
       setForm({ name: '', report_type: 'attempt-summary', schedule_cron: '0 8 * * *', recipients: '' })
-      setNotice('Schedule created.')
+      setNotice(t('admin_reports_schedule_created'))
       await load()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Could not create schedule')
+      setError(err.response?.data?.detail || t('admin_reports_could_not_create'))
     } finally {
       setCreating(false)
     }
@@ -117,10 +119,10 @@ export default function AdminReports() {
     try {
       await adminApi.deleteReportSchedule(id)
       setDeleteConfirmId('')
-      setNotice('Schedule deleted.')
+      setNotice(t('admin_reports_schedule_deleted'))
       await load()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Could not delete schedule')
+      setError(err.response?.data?.detail || t('admin_reports_could_not_delete'))
     } finally {
       setDeletingId(null)
     }
@@ -133,11 +135,11 @@ export default function AdminReports() {
     setRunningId(id)
     try {
       const { data } = await adminApi.runReportSchedule(id)
-      setNotice(data?.detail || 'Report run completed successfully.')
+      setNotice(data?.detail || t('admin_reports_run_completed'))
       setNoticeLink(data?.report_url || '')
       await load()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Could not run schedule')
+      setError(err.response?.data?.detail || t('admin_reports_could_not_run'))
     } finally {
       setRunningId(null)
     }
@@ -150,11 +152,11 @@ export default function AdminReports() {
       const objectUrl = await fetchAuthenticatedMediaObjectUrl(noticeLink)
       const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer')
       if (!opened) {
-        setError('Popup blocked. Allow pop-ups to open the generated report.')
+        setError(t('admin_reports_popup_blocked'))
       }
       window.setTimeout(() => revokeObjectUrl(objectUrl), 60_000)
     } catch {
-      setError('Could not open the generated report.')
+      setError(t('admin_reports_could_not_open_report'))
     } finally {
       setOpeningNoticeLink(false)
     }
@@ -177,7 +179,7 @@ export default function AdminReports() {
         subscribers = []
       }
       if (subscribers.length === 0) {
-        setError('No subscribers configured yet.')
+        setError(t('admin_reports_no_subscribers'))
         setNoticeLink('')
         return
       }
@@ -185,7 +187,7 @@ export default function AdminReports() {
       setForm((current) => ({ ...current, recipients: merged.join(', ') }))
       setError('')
     } catch {
-      setError('Could not load subscribers.')
+      setError(t('admin_reports_could_not_load_subscribers'))
     } finally {
       setLoadingSubs(false)
     }
@@ -220,24 +222,24 @@ export default function AdminReports() {
   const ranAtLeastOnceCount = schedules.filter((schedule) => Boolean(schedule.last_run_at)).length
   const summaryCards = [
     {
-      label: 'Scheduled reports',
+      label: t('admin_reports_scheduled_reports'),
       value: schedules.length,
-      helper: 'Automation jobs currently loaded',
+      helper: t('admin_reports_automation_jobs_loaded'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_reports_visible_now'),
       value: filteredSchedules.length,
-      helper: hasActiveFilters ? 'Matching the active filters' : 'All loaded schedules',
+      helper: hasActiveFilters ? t('admin_reports_matching_active_filters') : t('admin_reports_all_loaded_schedules'),
     },
     {
-      label: 'Recipients',
+      label: t('admin_reports_recipients'),
       value: uniqueRecipientCount,
-      helper: 'Unique delivery targets across schedules',
+      helper: t('admin_reports_unique_delivery_targets'),
     },
     {
-      label: 'Run at least once',
+      label: t('admin_reports_run_at_least_once'),
       value: ranAtLeastOnceCount,
-      helper: 'Schedules with execution history',
+      helper: t('admin_reports_schedules_with_history'),
     },
   ]
 
@@ -248,7 +250,7 @@ export default function AdminReports() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Scheduled Reports" subtitle="Schedule automated proctoring and test reports" />
+      <AdminPageHeader title={t('admin_reports_title')} subtitle={t('admin_reports_subtitle')} />
       <section className={styles.summaryGrid}>
         {summaryCards.map((card) => (
           <article key={card.label} className={styles.summaryCard}>
@@ -261,7 +263,7 @@ export default function AdminReports() {
 
       <div className={styles.grid}>
         <form className={styles.card} onSubmit={handleCreate}>
-          <div className={styles.sectionTitle}>Create Schedule</div>
+          <div className={styles.sectionTitle}>{t('admin_reports_create_schedule')}</div>
           {error && <div className={styles.error}>{error}</div>}
           {notice && (
             <div className={styles.notice}>
@@ -276,101 +278,101 @@ export default function AdminReports() {
                   }}
                   aria-disabled={openingNoticeLink ? 'true' : 'false'}
                 >
-                  {openingNoticeLink ? 'Opening report...' : 'Open generated report'}
+                  {openingNoticeLink ? t('admin_reports_opening_report') : t('admin_reports_open_generated_report')}
                 </a>
               )}
             </div>
           )}
-          <label className={styles.label} htmlFor="report-schedule-name">Name</label>
+          <label className={styles.label} htmlFor="report-schedule-name">{t('admin_reports_name')}</label>
           <input id="report-schedule-name" className={styles.input} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} required />
 
-          <label className={styles.label} htmlFor="report-schedule-type">Report Type</label>
+          <label className={styles.label} htmlFor="report-schedule-type">{t('admin_reports_report_type')}</label>
           <select id="report-schedule-type" className={styles.input} value={form.report_type} onChange={(e) => setForm((current) => ({ ...current, report_type: e.target.value }))}>
-            <option value="attempt-summary">Attempt Summary</option>
-            <option value="risk-alerts">Risk Alerts</option>
-            <option value="usage">Usage</option>
+            <option value="attempt-summary">{t('admin_reports_attempt_summary')}</option>
+            <option value="risk-alerts">{t('admin_reports_risk_alerts')}</option>
+            <option value="usage">{t('admin_reports_usage')}</option>
           </select>
 
-          <label className={styles.label} htmlFor="report-schedule-cron">Cron</label>
+          <label className={styles.label} htmlFor="report-schedule-cron">{t('admin_reports_cron')}</label>
           <input id="report-schedule-cron" className={styles.input} value={form.schedule_cron} onChange={(e) => setForm((current) => ({ ...current, schedule_cron: e.target.value }))} />
-          <div className={styles.hint}>Example: 0 8 * * * (every day at 08:00)</div>
+          <div className={styles.hint}>{t('admin_reports_cron_example')}</div>
 
-          <label className={styles.label} htmlFor="report-schedule-recipients">Recipients (comma separated emails)</label>
+          <label className={styles.label} htmlFor="report-schedule-recipients">{t('admin_reports_recipients_label')}</label>
           <input id="report-schedule-recipients" className={styles.input} value={form.recipients} onChange={(e) => setForm((current) => ({ ...current, recipients: e.target.value }))} />
           <button type="button" className={styles.hintBtn} onClick={loadSubscribers} disabled={loadingSubs}>
-            {loadingSubs ? 'Loading...' : 'Load from Subscribers list'}
+            {loadingSubs ? t('admin_reports_loading') : t('admin_reports_load_from_subscribers')}
           </button>
-          <div className={styles.hint}>Tip: subscribers (System -&gt; Subscribers) are appended automatically on run.</div>
+          <div className={styles.hint}>{t('admin_reports_subscribers_tip')}</div>
 
           <div className={styles.formActions}>
             <button type="button" className={styles.secondaryBtn} onClick={resetForm} disabled={creating || loadingSubs}>
-              Reset
+              {t('admin_reports_reset')}
             </button>
             <button type="submit" className={styles.btnPrimary} disabled={creating}>
-              {creating ? 'Saving...' : 'Save Schedule'}
+              {creating ? t('admin_reports_saving') : t('admin_reports_save_schedule')}
             </button>
           </div>
         </form>
 
         <div className={styles.card}>
-          <div className={styles.sectionTitle}>Scheduled Reports</div>
+          <div className={styles.sectionTitle}>{t('admin_reports_scheduled_reports')}</div>
           <div className={styles.toolbar}>
             <div className={styles.toolbarFilters}>
               <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="report-schedule-search">Search schedules</label>
+                <label className={styles.label} htmlFor="report-schedule-search">{t('admin_reports_search_schedules')}</label>
                 <input
                   id="report-schedule-search"
                   className={styles.input}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name, recipient, or cron..."
+                  placeholder={t('admin_reports_search_placeholder')}
                 />
               </div>
               <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="report-type-filter">Report type</label>
+                <label className={styles.label} htmlFor="report-type-filter">{t('admin_reports_report_type')}</label>
                 <select
                   id="report-type-filter"
                   className={styles.input}
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
                 >
-                  <option value="ALL">All types</option>
-                  <option value="attempt-summary">Attempt Summary</option>
-                  <option value="risk-alerts">Risk Alerts</option>
-                  <option value="usage">Usage</option>
+                  <option value="ALL">{t('admin_reports_all_types')}</option>
+                  <option value="attempt-summary">{t('admin_reports_attempt_summary')}</option>
+                  <option value="risk-alerts">{t('admin_reports_risk_alerts')}</option>
+                  <option value="usage">{t('admin_reports_usage')}</option>
                 </select>
               </div>
             </div>
             <div className={styles.toolbarActions}>
               <button type="button" className={styles.secondaryBtn} onClick={load} disabled={loading}>
-                {loading ? 'Refreshing...' : 'Refresh'}
+                {loading ? t('admin_reports_refreshing') : t('admin_reports_refresh')}
               </button>
               <button type="button" className={styles.secondaryBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-                Clear filters
+                {t('admin_reports_clear_filters')}
               </button>
             </div>
           </div>
           <div className={styles.filterMeta}>
-            Showing {filteredSchedules.length} schedule{filteredSchedules.length !== 1 ? 's' : ''} across {schedules.length} loaded.
+            {t('admin_reports_showing')} {filteredSchedules.length} {filteredSchedules.length !== 1 ? t('admin_reports_schedules') : t('admin_reports_schedule')} {t('admin_reports_across')} {schedules.length} {t('admin_reports_loaded')}.
           </div>
           {listError && (
             <div className={styles.retryRow}>
               <span className={styles.muted}>{listError}</span>
               <button type="button" className={styles.secondaryBtn} onClick={load} disabled={loading}>
-                Retry
+                {t('admin_reports_retry')}
               </button>
             </div>
           )}
-          {loading && <div className={styles.muted}>Loading...</div>}
+          {loading && <div className={styles.muted}>{t('admin_reports_loading')}</div>}
           {!loading && !listError && filteredSchedules.length === 0 && (
             <div className={styles.emptyState}>
-              <div className={styles.emptyTitle}>{hasActiveFilters ? 'No schedules match the current filters.' : 'No schedules yet.'}</div>
+              <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_reports_no_match_filters') : t('admin_reports_no_schedules_yet')}</div>
               <div className={styles.emptyText}>
                 {hasActiveFilters
-                  ? 'Clear the search or report-type filter to restore the loaded report schedules.'
-                  : 'Scheduled report runs will appear here once an automated report is created.'}
+                  ? t('admin_reports_clear_filters_hint')
+                  : t('admin_reports_empty_hint')}
               </div>
-              {hasActiveFilters && <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>Clear filters</button>}
+              {hasActiveFilters && <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>{t('admin_reports_clear_filters')}</button>}
             </div>
           )}
           <div className={styles.list}>
@@ -379,9 +381,9 @@ export default function AdminReports() {
                 <div>
                   <div className={styles.rowTitle}>{schedule.name}</div>
                   <div className={styles.rowSub}>{schedule.report_type} - {schedule.schedule_cron}</div>
-                  <div className={styles.rowSub}>Recipients: {(schedule.recipients || []).join(', ')}</div>
-                  <div className={styles.rowMeta}>Last run: {formatDate(schedule.last_run_at)}</div>
-                  <div className={styles.rowMeta}>Created: {formatDate(schedule.created_at)}</div>
+                  <div className={styles.rowSub}>{t('admin_reports_recipients')}: {(schedule.recipients || []).join(', ')}</div>
+                  <div className={styles.rowMeta}>{t('admin_reports_last_run')}: {formatDate(schedule.last_run_at, t)}</div>
+                  <div className={styles.rowMeta}>{t('admin_reports_created')}: {formatDate(schedule.created_at, t)}</div>
                 </div>
                 <div className={styles.rowActions}>
                   <button
@@ -390,7 +392,7 @@ export default function AdminReports() {
                     onClick={() => handleRun(schedule.id)}
                     disabled={runningId === schedule.id || deletingId === schedule.id}
                   >
-                    {runningId === schedule.id ? 'Running...' : 'Run now'}
+                    {runningId === schedule.id ? t('admin_reports_running') : t('admin_reports_run_now')}
                   </button>
                   {deleteConfirmId === schedule.id ? (
                     <>
@@ -400,7 +402,7 @@ export default function AdminReports() {
                         onClick={() => handleDelete(schedule.id)}
                         disabled={runningId === schedule.id || deletingId === schedule.id}
                       >
-                        {deletingId === schedule.id ? 'Deleting...' : 'Confirm delete'}
+                        {deletingId === schedule.id ? t('admin_reports_deleting') : t('admin_reports_confirm_delete')}
                       </button>
                       <button
                         type="button"
@@ -408,7 +410,7 @@ export default function AdminReports() {
                         onClick={() => setDeleteConfirmId('')}
                         disabled={deletingId === schedule.id}
                       >
-                        Cancel
+                        {t('admin_reports_cancel')}
                       </button>
                     </>
                   ) : (
@@ -418,7 +420,7 @@ export default function AdminReports() {
                       onClick={() => handleDelete(schedule.id)}
                       disabled={runningId === schedule.id || deletingId === schedule.id}
                     >
-                      Delete
+                      {t('admin_reports_delete')}
                     </button>
                   )}
                 </div>

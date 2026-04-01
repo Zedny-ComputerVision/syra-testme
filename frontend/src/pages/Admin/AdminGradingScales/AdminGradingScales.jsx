@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminGradingScales.module.scss'
 
 const EMPTY_BAND = { label: '', min_score: 0, max_score: 100 }
@@ -20,25 +21,25 @@ function resolveError(err, fallback) {
   return err?.response?.data?.detail || fallback
 }
 
-function validateBands(bands) {
-  if (bands.length === 0) return 'Add at least one grade band.'
+function validateBands(bands, t) {
+  if (bands.length === 0) return t('admin_grading_add_at_least_one_band')
   const seenLabels = new Set()
   for (let index = 0; index < bands.length; index += 1) {
     const band = bands[index]
     const position = index + 1
     const label = String(band.label || '').trim()
-    if (!label) return `Band ${position} label is required.`
+    if (!label) return `${t('admin_grading_band')} ${position} ${t('admin_grading_label_required')}`
     const labelKey = label.toLowerCase()
-    if (seenLabels.has(labelKey)) return 'Band labels must be unique.'
+    if (seenLabels.has(labelKey)) return t('admin_grading_labels_unique')
     seenLabels.add(labelKey)
     if (!Number.isFinite(Number(band.min_score)) || !Number.isFinite(Number(band.max_score))) {
-      return `Band ${position} scores must be numeric.`
+      return `${t('admin_grading_band')} ${position} ${t('admin_grading_scores_numeric')}`
     }
     if (Number(band.min_score) < 0 || Number(band.min_score) > 100 || Number(band.max_score) < 0 || Number(band.max_score) > 100) {
-      return `Band ${position} scores must be between 0 and 100.`
+      return `${t('admin_grading_band')} ${position} ${t('admin_grading_scores_0_100')}`
     }
     if (Number(band.min_score) > Number(band.max_score)) {
-      return 'Band minimum scores cannot exceed the maximum.'
+      return t('admin_grading_min_exceeds_max')
     }
   }
 
@@ -51,7 +52,7 @@ function validateBands(bands) {
 
   for (let index = 1; index < ordered.length; index += 1) {
     if (ordered[index].min_score <= ordered[index - 1].max_score) {
-      return 'Grade bands cannot overlap.'
+      return t('admin_grading_bands_overlap')
     }
   }
 
@@ -60,6 +61,7 @@ function validateBands(bands) {
 
 export default function AdminGradingScales() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const isAdmin = user?.role === 'ADMIN'
   const [scales, setScales] = useState([])
   const [loading, setLoading] = useState(true)
@@ -84,7 +86,7 @@ export default function AdminGradingScales() {
       setScales((data || []).map(normalizeScale))
     } catch (err) {
       setScales([])
-      setLoadError(resolveError(err, 'Failed to load grading scales.'))
+      setLoadError(resolveError(err, t('admin_grading_load_error')))
     } finally {
       setLoading(false)
     }
@@ -129,24 +131,24 @@ export default function AdminGradingScales() {
   const totalBands = scales.reduce((sum, scale) => sum + (scale.bands || []).length, 0)
   const summaryCards = [
     {
-      label: 'Loaded scales',
+      label: t('admin_grading_loaded_scales'),
       value: scales.length,
-      helper: 'All grading scales available for test configuration',
+      helper: t('admin_grading_loaded_scales_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_grading_visible_now'),
       value: filteredScales.length,
-      helper: hasActiveFilters ? 'Matching the active search and sort state' : 'All loaded grading scales',
+      helper: hasActiveFilters ? t('admin_grading_matching_filters') : t('admin_grading_all_loaded'),
     },
     {
-      label: 'Total bands',
+      label: t('admin_grading_total_bands'),
       value: totalBands,
-      helper: 'Grade bands across the currently loaded scales',
+      helper: t('admin_grading_total_bands_helper'),
     },
     {
-      label: 'Average bands',
+      label: t('admin_grading_average_bands'),
       value: scales.length ? (totalBands / scales.length).toFixed(1) : '0.0',
-      helper: 'Average number of grade bands per scale',
+      helper: t('admin_grading_average_bands_helper'),
     },
   ]
 
@@ -168,8 +170,8 @@ export default function AdminGradingScales() {
 
   const handleSave = async () => {
     const validationError = !name.trim()
-      ? 'Scale name is required.'
-      : validateBands(bands)
+      ? t('admin_grading_name_required')
+      : validateBands(bands, t)
     if (validationError) {
       setModalError(validationError)
       return
@@ -190,15 +192,15 @@ export default function AdminGradingScales() {
     try {
       if (modal === 'create') {
         await adminApi.createGradingScale(data)
-        setNotice('Grading scale created.')
+        setNotice(t('admin_grading_created'))
       } else {
         await adminApi.updateGradingScale(modal.id, data)
-        setNotice('Grading scale updated.')
+        setNotice(t('admin_grading_updated'))
       }
       setModal(null)
       await load()
     } catch (err) {
-      setModalError(resolveError(err, 'Save failed'))
+      setModalError(resolveError(err, t('admin_grading_save_error')))
     } finally {
       setSaving(false)
     }
@@ -216,11 +218,11 @@ export default function AdminGradingScales() {
     try {
       await adminApi.deleteGradingScale(id)
       setDeleteConfirmId(null)
-      setNotice('Grading scale deleted.')
+      setNotice(t('admin_grading_deleted'))
       await load()
     } catch (err) {
       setDeleteConfirmId(null)
-      setDeleteError(resolveError(err, 'Failed to delete grading scale.'))
+      setDeleteError(resolveError(err, t('admin_grading_delete_error')))
     } finally {
       setDeleteBusyId(null)
     }
@@ -228,8 +230,8 @@ export default function AdminGradingScales() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Grading Scales" subtitle="Define grade bands for tests">
-        <button type="button" className={styles.btnPrimary} onClick={openCreate}>+ New Scale</button>
+      <AdminPageHeader title={t('admin_grading_title')} subtitle={t('admin_grading_subtitle')}>
+        <button type="button" className={styles.btnPrimary} onClick={openCreate}>{t('admin_grading_new_scale')}</button>
       </AdminPageHeader>
 
       {notice && <div className={styles.noticeBanner}>{notice}</div>}
@@ -237,7 +239,7 @@ export default function AdminGradingScales() {
       {loadError && (
         <div className={styles.helperRow}>
           <div className={styles.errorBanner}>{loadError}</div>
-          <button type="button" className={styles.actionBtn} onClick={() => void load()}>Retry</button>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
 
@@ -254,10 +256,10 @@ export default function AdminGradingScales() {
       <div className={styles.toolbarPanel}>
         <div className={styles.toolbar}>
           <input
-            aria-label="Search scales"
+            aria-label={t('admin_grading_search_scales')}
             type="text"
             className={styles.searchInput}
-            placeholder="Search scales..."
+            placeholder={t('admin_grading_search_placeholder')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -266,62 +268,62 @@ export default function AdminGradingScales() {
             className={styles.sortBtn}
             onClick={() => setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))}
           >
-            {sortDir === 'asc' ? 'Sort: name A-Z' : 'Sort: name Z-A'}
+            {sortDir === 'asc' ? t('sort_name_az') : t('sort_name_za')}
           </button>
           <div className={styles.toolbarActions}>
-            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>Refresh</button>
-            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>Clear filters</button>
+            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>{t('refresh')}</button>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>{t('clear_filters')}</button>
           </div>
         </div>
         <div className={styles.filterMeta}>
-          Showing {filteredScales.length} matching scale{filteredScales.length !== 1 ? 's' : ''} across {scales.length} loaded.
+          {t('showing')} {filteredScales.length} {t('admin_grading_matching_scales')} {t('admin_grading_across')} {scales.length} {t('admin_grading_loaded_label')}.
         </div>
       </div>
 
       {loading ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>Loading grading scales...</div>
-          <div className={styles.emptyText}>Fetching the current scale library and grade-band definitions.</div>
+          <div className={styles.emptyTitle}>{t('admin_grading_loading')}</div>
+          <div className={styles.emptyText}>{t('admin_grading_loading_text')}</div>
         </div>
       ) : filteredScales.length === 0 && hasActiveFilters ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>No grading scales match the current filters.</div>
-          <div className={styles.emptyText}>Clear the search or reset sorting to restore the full scale library.</div>
-          <button type="button" className={styles.actionBtn} onClick={clearFilters}>Clear filters</button>
+          <div className={styles.emptyTitle}>{t('admin_grading_no_match')}</div>
+          <div className={styles.emptyText}>{t('admin_grading_no_match_text')}</div>
+          <button type="button" className={styles.actionBtn} onClick={clearFilters}>{t('clear_filters')}</button>
         </div>
       ) : filteredScales.length === 0 ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>No grading scales yet.</div>
-          <div className={styles.emptyText}>Create a scale to define how scores map to grades on your tests.</div>
+          <div className={styles.emptyTitle}>{t('admin_grading_no_scales')}</div>
+          <div className={styles.emptyText}>{t('admin_grading_no_scales_text')}</div>
         </div>
       ) : (
         <div className={styles.grid}>
           {filteredScales.map((scale) => {
-            const scaleLabel = scale.name || 'this grading scale'
+            const scaleLabel = scale.name || t('admin_grading_this_scale')
 
             return (
             <div key={scale.id} className={styles.card}>
               <div className={styles.cardHeader}>
                 <div>
                   <span className={styles.cardTitle}>{scale.name}</span>
-                  <span className={styles.bandCount}>{(scale.bands || []).length} band{(scale.bands || []).length !== 1 ? 's' : ''}</span>
+                  <span className={styles.bandCount}>{(scale.bands || []).length} {t('admin_grading_bands_count')}</span>
                 </div>
                 <div className={styles.actionBtns}>
-                  <button type="button" className={styles.actionBtn} onClick={() => openEdit(scale)} disabled={deleteBusyId === scale.id} aria-label={`Edit grading scale ${scaleLabel}`} title={`Edit grading scale ${scaleLabel}`}>
-                    Edit
+                  <button type="button" className={styles.actionBtn} onClick={() => openEdit(scale)} disabled={deleteBusyId === scale.id} aria-label={`${t('edit')} ${t('admin_grading_grading_scale')} ${scaleLabel}`} title={`${t('edit')} ${t('admin_grading_grading_scale')} ${scaleLabel}`}>
+                    {t('edit')}
                   </button>
                   {isAdmin && (deleteConfirmId === scale.id ? (
                     <>
-                      <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(scale.id)} disabled={deleteBusyId === scale.id} aria-label={`Confirm delete for grading scale ${scaleLabel}`}>
-                        {deleteBusyId === scale.id ? 'Deleting...' : 'Confirm'}
+                      <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(scale.id)} disabled={deleteBusyId === scale.id} aria-label={`${t('confirm_delete')} ${t('admin_grading_grading_scale')} ${scaleLabel}`}>
+                        {deleteBusyId === scale.id ? t('admin_grading_deleting') : t('confirm')}
                       </button>
-                      <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === scale.id} aria-label={`Keep grading scale ${scaleLabel}`}>
-                        Cancel
+                      <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === scale.id} aria-label={`${t('admin_grading_keep')} ${t('admin_grading_grading_scale')} ${scaleLabel}`}>
+                        {t('cancel')}
                       </button>
                     </>
                   ) : (
-                    <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(scale.id)} disabled={deleteBusyId === scale.id} aria-label={`Delete grading scale ${scaleLabel}`} title={`Delete grading scale ${scaleLabel}`}>
-                      Delete
+                    <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(scale.id)} disabled={deleteBusyId === scale.id} aria-label={`${t('delete')} ${t('admin_grading_grading_scale')} ${scaleLabel}`} title={`${t('delete')} ${t('admin_grading_grading_scale')} ${scaleLabel}`}>
+                      {t('delete')}
                     </button>
                   ))}
                 </div>
@@ -349,34 +351,34 @@ export default function AdminGradingScales() {
       {modal && (
         <div className={styles.modalOverlay} onClick={close}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="grading-scale-dialog-title" onClick={(event) => event.stopPropagation()}>
-            <h3 id="grading-scale-dialog-title" className={styles.modalTitle}>{modal === 'create' ? 'New Grading Scale' : 'Edit Grading Scale'}</h3>
+            <h3 id="grading-scale-dialog-title" className={styles.modalTitle}>{modal === 'create' ? t('admin_grading_new_grading_scale') : t('admin_grading_edit_grading_scale')}</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="grading-scale-name">Scale Name</label>
-              <input id="grading-scale-name" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Standard Letter Grade" />
+              <label className={styles.label} htmlFor="grading-scale-name">{t('admin_grading_scale_name')}</label>
+              <input id="grading-scale-name" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder={t('admin_grading_name_placeholder')} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Grade Bands</label>
+              <label className={styles.label}>{t('admin_grading_grade_bands')}</label>
               {bands.map((band, index) => (
                 <div key={index} className={styles.bandRow}>
-                  <input aria-label={`Band ${index + 1} label`} className={`${styles.inputSmall} ${styles.inputSmallLabel}`} value={band.label} onChange={(event) => updateBand(index, 'label', event.target.value)} placeholder="Label" />
-                  <input aria-label={`Band ${index + 1} minimum score`} className={styles.inputSmall} type="number" value={band.min_score} onChange={(event) => updateBand(index, 'min_score', event.target.value)} placeholder="Min" />
+                  <input aria-label={`${t('admin_grading_band')} ${index + 1} ${t('admin_grading_label')}`} className={`${styles.inputSmall} ${styles.inputSmallLabel}`} value={band.label} onChange={(event) => updateBand(index, 'label', event.target.value)} placeholder={t('admin_grading_label')} />
+                  <input aria-label={`${t('admin_grading_band')} ${index + 1} ${t('admin_grading_minimum_score')}`} className={styles.inputSmall} type="number" value={band.min_score} onChange={(event) => updateBand(index, 'min_score', event.target.value)} placeholder={t('admin_grading_min')} />
                   <span className={styles.bandSeparator}>-</span>
-                  <input aria-label={`Band ${index + 1} maximum score`} className={styles.inputSmall} type="number" value={band.max_score} onChange={(event) => updateBand(index, 'max_score', event.target.value)} placeholder="Max" />
+                  <input aria-label={`${t('admin_grading_band')} ${index + 1} ${t('admin_grading_maximum_score')}`} className={styles.inputSmall} type="number" value={band.max_score} onChange={(event) => updateBand(index, 'max_score', event.target.value)} placeholder={t('admin_grading_max')} />
                   <span className={styles.percentSuffix}>%</span>
                   {bands.length > 1 && (
-                    <button className={styles.removeBand} type="button" onClick={() => removeBand(index)} disabled={saving} aria-label={`Remove band ${index + 1}`} title={`Remove band ${index + 1}`}>
+                    <button className={styles.removeBand} type="button" onClick={() => removeBand(index)} disabled={saving} aria-label={`${t('admin_grading_remove_band')} ${index + 1}`} title={`${t('admin_grading_remove_band')} ${index + 1}`}>
                       x
                     </button>
                   )}
                 </div>
               ))}
-              <button className={styles.addBandBtn} type="button" onClick={addBand} disabled={saving}>+ Add Band</button>
+              <button className={styles.addBandBtn} type="button" onClick={addBand} disabled={saving}>{t('admin_grading_add_band')}</button>
             </div>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnCancel} onClick={close} disabled={saving}>Cancel</button>
+              <button type="button" className={styles.btnCancel} onClick={close} disabled={saving}>{t('cancel')}</button>
               <button type="button" className={styles.btnPrimary} onClick={() => void handleSave()} disabled={saving || !name.trim() || bands.length === 0}>
-                {saving ? 'Saving...' : 'Save scale'}
+                {saving ? t('saving') : t('admin_grading_save_scale')}
               </button>
             </div>
           </div>

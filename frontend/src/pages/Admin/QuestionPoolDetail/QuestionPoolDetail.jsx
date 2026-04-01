@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './QuestionPoolDetail.module.scss'
 
 const POOL_QUESTION_TYPES = [
@@ -45,6 +46,7 @@ function resolveError(err, fallback) {
 }
 
 export default function QuestionPoolDetail() {
+  const { t } = useLanguage()
   const { id } = useParams()
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -88,12 +90,12 @@ export default function QuestionPoolDetail() {
         setQuestions(questionsResult.value.data || [])
       } else {
         setQuestions([])
-        setError(resolveError(questionsResult.reason, 'Failed to load questions for this pool.'))
+        setError(resolveError(questionsResult.reason, t('admin_pool_detail_load_questions_error')))
       }
     } catch (err) {
       setPool(null)
       setQuestions([])
-      setError(resolveError(err, 'Failed to load question pool.'))
+      setError(resolveError(err, t('admin_pool_detail_load_error')))
     } finally {
       setLoading(false)
     }
@@ -123,17 +125,17 @@ export default function QuestionPoolDetail() {
       }
       if (editingId) {
         await adminApi.updatePoolQuestion(id, editingId, payload)
-        setNotice('Question updated.')
+        setNotice(t('admin_pool_detail_question_updated'))
       } else {
         await adminApi.createPoolQuestion(id, payload)
-        setNotice('Question added.')
+        setNotice(t('admin_pool_detail_question_added'))
       }
       setShowForm(false)
       setEditingId(null)
       setForm(blankQuestion())
       await load()
     } catch (err) {
-      setError(resolveError(err, 'Failed to save question'))
+      setError(resolveError(err, t('admin_pool_detail_save_question_error')))
     } finally {
       setSaving(false)
     }
@@ -158,10 +160,10 @@ export default function QuestionPoolDetail() {
     setNotice('')
     try {
       await adminApi.deletePoolQuestion(id, questionId)
-      setNotice('Question deleted.')
+      setNotice(t('admin_pool_detail_question_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err, 'Failed to delete question'))
+      setError(resolveError(err, t('admin_pool_detail_delete_question_error')))
     } finally {
       setDeleteBusyId(null)
     }
@@ -178,10 +180,10 @@ export default function QuestionPoolDetail() {
         description: poolForm.description.trim(),
       })
       setEditingPool(false)
-      setNotice('Pool details saved.')
+      setNotice(t('admin_pool_detail_pool_saved'))
       await load()
     } catch (err) {
-      setError(resolveError(err, 'Failed to save pool details'))
+      setError(resolveError(err, t('admin_pool_detail_save_pool_error')))
     } finally {
       setSavingPool(false)
     }
@@ -195,7 +197,7 @@ export default function QuestionPoolDetail() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Question Pool" subtitle={pool?.name || ''}>
+      <AdminPageHeader title={t('admin_pool_detail_title')} subtitle={pool?.name || ''}>
         <div className={styles.qActions}>
           {canManagePool && (
             <>
@@ -207,10 +209,10 @@ export default function QuestionPoolDetail() {
                 }}
                 disabled={!pool}
               >
-                {editingPool ? 'Cancel Pool Edit' : 'Edit Pool'}
+                {editingPool ? t('admin_pool_detail_cancel_pool_edit') : t('admin_pool_detail_edit_pool')}
               </button>
               <button className={styles.btnPrimary} onClick={() => { setShowForm(true); setEditingId(null); setForm(blankQuestion()) }} disabled={!pool}>
-                + Add Question
+                {t('admin_pool_detail_add_question')}
               </button>
             </>
           )}
@@ -220,25 +222,25 @@ export default function QuestionPoolDetail() {
       {error && (
         <div className={styles.helperRow}>
           <div className={styles.errorMsg}>{error}</div>
-          <button className={styles.btnSecondary} onClick={() => void load()}>Retry</button>
+          <button className={styles.btnSecondary} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
       {notice && <div className={styles.noticeMsg}>{notice}</div>}
-      {loading && <div className={styles.empty}>Loading question pool...</div>}
-      {!loading && !pool && <div className={styles.empty}>Question pool not available.</div>}
-      {!loading && !canManagePool && pool && <div className={styles.meta}>Read-only pool. Only the owner or an admin can edit this question bank.</div>}
+      {loading && <div className={styles.empty}>{t('admin_pool_detail_loading')}</div>}
+      {!loading && !pool && <div className={styles.empty}>{t('admin_pool_detail_not_available')}</div>}
+      {!loading && !canManagePool && pool && <div className={styles.meta}>{t('admin_pool_detail_read_only')}</div>}
 
       {!loading && editingPool && pool && (
         <div className={styles.card}>
-          <div className={styles.sectionTitle}>Pool Details</div>
-          <label className={styles.label} htmlFor="pool-detail-name">Name</label>
+          <div className={styles.sectionTitle}>{t('admin_pool_detail_pool_details')}</div>
+          <label className={styles.label} htmlFor="pool-detail-name">{t('name')}</label>
           <input
             id="pool-detail-name"
             className={styles.input}
             value={poolForm.name}
             onChange={(event) => setPoolForm((current) => ({ ...current, name: event.target.value }))}
           />
-          <label className={styles.label} htmlFor="pool-detail-description">Description</label>
+          <label className={styles.label} htmlFor="pool-detail-description">{t('description')}</label>
           <textarea
             id="pool-detail-description"
             className={styles.textarea}
@@ -248,21 +250,21 @@ export default function QuestionPoolDetail() {
           />
           <div className={styles.formActions}>
             <button className={styles.btnPrimary} type="button" onClick={savePool} disabled={savingPool || !poolForm.name.trim()}>
-              {savingPool ? 'Saving...' : 'Save Pool'}
+              {savingPool ? t('saving') : t('admin_pool_detail_save_pool')}
             </button>
-            <button className={styles.btnSecondary} type="button" onClick={() => setEditingPool(false)} disabled={savingPool}>Cancel</button>
+            <button className={styles.btnSecondary} type="button" onClick={() => setEditingPool(false)} disabled={savingPool}>{t('cancel')}</button>
           </div>
         </div>
       )}
 
       {!loading && showForm && pool && (
         <div className={styles.card}>
-          <div className={styles.sectionTitle}>{editingId ? 'Edit Question' : 'New Question'}</div>
+          <div className={styles.sectionTitle}>{editingId ? t('admin_pool_detail_edit_question') : t('admin_pool_detail_new_question')}</div>
           <form onSubmit={handleSubmit}>
-            <label className={styles.label} htmlFor="pool-question-text">Question Text</label>
+            <label className={styles.label} htmlFor="pool-question-text">{t('admin_pool_detail_question_text')}</label>
             <textarea id="pool-question-text" className={styles.textarea} rows={3} value={form.text} onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))} required />
 
-            <label className={styles.label} htmlFor="pool-question-type">Type</label>
+            <label className={styles.label} htmlFor="pool-question-type">{t('type')}</label>
             <select
               id="pool-question-type"
               className={styles.select}
@@ -279,20 +281,20 @@ export default function QuestionPoolDetail() {
 
             {form.question_type === 'MCQ' && (
               <>
-                <label className={styles.label} htmlFor="pool-question-option-0">Options</label>
+                <label className={styles.label} htmlFor="pool-question-option-0">{t('admin_pool_detail_options')}</label>
                 {(form.options || []).map((option, index) => (
                   <input key={index} id={`pool-question-option-${index}`} className={styles.input} placeholder={`Option ${index + 1}`} value={option} onChange={(event) => setOption(index, event.target.value)} />
                 ))}
-                <label className={styles.label} htmlFor="pool-question-correct-answer">Correct Answer</label>
-                <input id="pool-question-correct-answer" className={styles.input} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))} placeholder="Must match one option exactly" />
+                <label className={styles.label} htmlFor="pool-question-correct-answer">{t('admin_pool_detail_correct_answer')}</label>
+                <input id="pool-question-correct-answer" className={styles.input} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))} placeholder={t('admin_pool_detail_match_option')} />
               </>
             )}
 
             {form.question_type === 'TRUEFALSE' && (
               <>
-                <label className={styles.label} htmlFor="pool-question-boolean-answer">Correct Answer</label>
+                <label className={styles.label} htmlFor="pool-question-boolean-answer">{t('admin_pool_detail_correct_answer')}</label>
                 <select id="pool-question-boolean-answer" className={styles.select} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))}>
-                  <option value="">Select...</option>
+                  <option value="">{t('admin_pool_detail_select')}</option>
                   <option value="True">True</option>
                   <option value="False">False</option>
                 </select>
@@ -301,14 +303,14 @@ export default function QuestionPoolDetail() {
 
             {form.question_type === 'TEXT' && (
               <>
-                <label className={styles.label} htmlFor="pool-question-expected-answer">Expected Answer</label>
+                <label className={styles.label} htmlFor="pool-question-expected-answer">{t('admin_pool_detail_expected_answer')}</label>
                 <input id="pool-question-expected-answer" className={styles.input} value={form.correct_answer} onChange={(event) => setForm((current) => ({ ...current, correct_answer: event.target.value }))} />
               </>
             )}
 
             <div className={styles.formActions}>
-              <button className={styles.btnPrimary} type="submit" disabled={saving}>{saving ? 'Saving...' : (editingId ? 'Update' : 'Add Question')}</button>
-              <button className={styles.btnSecondary} type="button" onClick={() => { setShowForm(false); setEditingId(null) }} disabled={saving}>Cancel</button>
+              <button className={styles.btnPrimary} type="submit" disabled={saving}>{saving ? t('saving') : (editingId ? t('update') : t('admin_pool_detail_add_question'))}</button>
+              <button className={styles.btnSecondary} type="button" onClick={() => { setShowForm(false); setEditingId(null) }} disabled={saving}>{t('cancel')}</button>
             </div>
           </form>
         </div>
@@ -317,33 +319,33 @@ export default function QuestionPoolDetail() {
       {!loading && pool && (
         <div className={styles.card}>
           <div className={styles.meta}>
-            <span><strong>Description:</strong> {pool?.description || '-'}</span>
-            <span><strong>{questions.length}</strong> question(s)</span>
+            <span><strong>{t('description')}:</strong> {pool?.description || '-'}</span>
+            <span><strong>{questions.length}</strong> {t('admin_pool_detail_question_count')}</span>
           </div>
           <div className={styles.list}>
-            {questions.length === 0 && <div className={styles.empty}>No questions yet. Add one above.</div>}
+            {questions.length === 0 && <div className={styles.empty}>{t('admin_pool_detail_no_questions')}</div>}
             {questions.map((question, index) => (
               <div key={question.id} className={styles.qCard}>
                 <div className={styles.qHeader}>
                   <span>Q{index + 1} <span className={styles.typeBadge}>{TYPE_LABELS[normalizeQuestionType(question.question_type)] || normalizeQuestionType(question.question_type)}</span></span>
                   {canManagePool && (
                     <div className={styles.qActions}>
-                      <button className={styles.btnSecondary} onClick={() => startEdit(question)} disabled={deleteBusyId === question.id} aria-label={`Edit ${question.text || `question ${index + 1}`}`} title={`Edit ${question.text || `question ${index + 1}`}`}>Edit</button>
+                      <button className={styles.btnSecondary} onClick={() => startEdit(question)} disabled={deleteBusyId === question.id} aria-label={`${t('edit')} ${question.text || `${t('question')} ${index + 1}`}`} title={`${t('edit')} ${question.text || `${t('question')} ${index + 1}`}`}>{t('edit')}</button>
                       {deleteConfirmId === question.id ? (
                         <>
-                          <button className={styles.dangerBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id} aria-label={`Confirm delete for ${question.text || `question ${index + 1}`}`}>
-                            {deleteBusyId === question.id ? 'Deleting...' : 'Confirm'}
+                          <button className={styles.dangerBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id} aria-label={`${t('confirm_delete')} ${question.text || `${t('question')} ${index + 1}`}`}>
+                            {deleteBusyId === question.id ? t('admin_pool_detail_deleting') : t('confirm')}
                           </button>
-                          <button className={styles.btnSecondary} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === question.id} aria-label={`Keep ${question.text || `question ${index + 1}`}`}>Cancel</button>
+                          <button className={styles.btnSecondary} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === question.id} aria-label={`${t('admin_pool_detail_keep')} ${question.text || `${t('question')} ${index + 1}`}`}>{t('cancel')}</button>
                         </>
                       ) : (
-                        <button className={styles.deleteBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id} aria-label={`Delete ${question.text || `question ${index + 1}`}`} title={`Delete ${question.text || `question ${index + 1}`}`}>Delete</button>
+                        <button className={styles.deleteBtn} onClick={() => void handleDelete(question.id)} disabled={deleteBusyId === question.id} aria-label={`${t('delete')} ${question.text || `${t('question')} ${index + 1}`}`} title={`${t('delete')} ${question.text || `${t('question')} ${index + 1}`}`}>{t('delete')}</button>
                       )}
                     </div>
                   )}
                 </div>
                 <div className={styles.qText}>{question.text}</div>
-                {question.correct_answer && <div className={styles.qAnswer}>Correct answer: {question.correct_answer}</div>}
+                {question.correct_answer && <div className={styles.qAnswer}>{t('admin_pool_detail_correct_answer')}: {question.correct_answer}</div>}
               </div>
             ))}
           </div>

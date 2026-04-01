@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { readPaginatedItems, readPaginatedTotal } from '../../../utils/pagination'
 import styles from './AdminUsers.module.scss'
@@ -11,12 +12,12 @@ const ROLES = ['ADMIN', 'INSTRUCTOR', 'LEARNER']
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const TEXT_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 const SORT_OPTIONS = [
-  { value: 'name_asc', label: 'Name A-Z' },
-  { value: 'name_desc', label: 'Name Z-A' },
-  { value: 'email_asc', label: 'Email A-Z' },
-  { value: 'role_asc', label: 'Role' },
-  { value: 'created_desc', label: 'Newest first' },
-  { value: 'created_asc', label: 'Oldest first' },
+  { value: 'name_asc', labelKey: 'admin_users_sort_name_az' },
+  { value: 'name_desc', labelKey: 'admin_users_sort_name_za' },
+  { value: 'email_asc', labelKey: 'admin_users_sort_email_az' },
+  { value: 'role_asc', labelKey: 'admin_users_sort_role' },
+  { value: 'created_desc', labelKey: 'admin_users_sort_newest' },
+  { value: 'created_asc', labelKey: 'admin_users_sort_oldest' },
 ]
 
 const SUMMARY_ROLES = ['ADMIN', 'INSTRUCTOR', 'LEARNER']
@@ -31,12 +32,12 @@ function resolveError(err) {
   )
 }
 
-function validateUserForm(form, isCreate) {
-  if (!form.user_id.trim()) return 'User ID is required.'
-  if (!form.name.trim()) return 'Name is required.'
-  if (!form.email.trim()) return 'Email is required.'
-  if (!EMAIL_RE.test(form.email.trim())) return 'Enter a valid email address.'
-  if (isCreate && form.password.length < 8) return 'Password must be at least 8 characters.'
+function validateUserForm(form, isCreate, t) {
+  if (!form.user_id.trim()) return t('admin_users_err_user_id_required')
+  if (!form.name.trim()) return t('admin_users_err_name_required')
+  if (!form.email.trim()) return t('admin_users_err_email_required')
+  if (!EMAIL_RE.test(form.email.trim())) return t('admin_users_err_email_invalid')
+  if (isCreate && form.password.length < 8) return t('admin_users_err_password_min')
   return ''
 }
 
@@ -96,6 +97,7 @@ function sortUsers(listedUsers, sortOption) {
 }
 
 export default function AdminUsers() {
+  const { t } = useLanguage()
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const searchParamValue = searchParams.get('search') || ''
@@ -157,7 +159,7 @@ export default function AdminUsers() {
       if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return
       setUsers([])
       setTotalUsers(0)
-      setLoadError(resolveError(err) || 'Could not load users.')
+      setLoadError(resolveError(err) || t('admin_users_err_load'))
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
@@ -180,10 +182,10 @@ export default function AdminUsers() {
   const inactiveUsers = Math.max(users.length - activeUsers, 0)
   const hasActiveFilters = Boolean(search.trim() || roleFilter !== 'All' || statusFilter !== 'All')
   const summaryCards = [
-    { label: 'Matching users', value: totalUsers, sub: hasActiveFilters ? 'Server-side filters are active' : 'All users matching the current sort' },
-    { label: 'Users on page', value: users.length, sub: `Page ${page} of ${totalPages}` },
-    { label: 'Active on page', value: activeUsers, sub: `${inactiveUsers} inactive account${inactiveUsers !== 1 ? 's' : ''} on this page` },
-    { label: isAdmin ? 'Selected users' : 'Your access', value: isAdmin ? selected.length : 'Read-only', sub: isAdmin ? 'Bulk actions use the current page selection' : 'Mutation controls stay hidden for non-admins' },
+    { label: t('admin_users_matching_users'), value: totalUsers, sub: hasActiveFilters ? t('admin_users_filters_active') : t('admin_users_all_matching_sort') },
+    { label: t('admin_users_users_on_page'), value: users.length, sub: `${t('admin_users_page')} ${page} ${t('admin_users_of')} ${totalPages}` },
+    { label: t('admin_users_active_on_page'), value: activeUsers, sub: `${inactiveUsers} ${t('admin_users_inactive_accounts_on_page')}` },
+    { label: isAdmin ? t('admin_users_selected_users') : t('admin_users_your_access'), value: isAdmin ? selected.length : t('admin_users_read_only'), sub: isAdmin ? t('admin_users_bulk_actions_hint') : t('admin_users_non_admin_hint') },
   ]
   const roleSummary = SUMMARY_ROLES.map((role) => ({
     role,
@@ -266,7 +268,7 @@ export default function AdminUsers() {
 
   const handleResetPassword = async () => {
     if (!resetPwValue.trim() || resetPwValue.length < 8) {
-      setError('New password must be at least 8 characters.')
+      setError(t('admin_users_err_new_password_min'))
       return
     }
     setResetPwSaving(true)
@@ -274,18 +276,18 @@ export default function AdminUsers() {
     setNotice('')
     try {
       await adminApi.resetUserPassword(modal.id, resetPwValue)
-      setNotice('Password reset successfully.')
+      setNotice(t('admin_users_password_reset_success'))
       setShowResetPw(false)
       setResetPwValue('')
     } catch (err) {
-      setError(resolveError(err) || 'Failed to reset password.')
+      setError(resolveError(err) || t('admin_users_err_reset_password'))
     } finally {
       setResetPwSaving(false)
     }
   }
 
   const handleSave = async () => {
-    const validationError = validateUserForm(form, modal === 'create')
+    const validationError = validateUserForm(form, modal === 'create', t)
     if (validationError) {
       setFieldErrors({})
       setError(validationError)
@@ -306,7 +308,7 @@ export default function AdminUsers() {
       if (modal === 'create') {
         const { data } = await adminApi.createUser(payload)
         createdUser = data
-        setNotice('User created.')
+        setNotice(t('admin_users_user_created'))
       } else {
         await adminApi.updateUser(modal.id, {
           user_id: payload.user_id,
@@ -314,7 +316,7 @@ export default function AdminUsers() {
           email: payload.email,
           ...(editingSelf ? {} : { role: payload.role, is_active: payload.is_active }),
         })
-        setNotice('User updated.')
+        setNotice(t('admin_users_user_updated'))
       }
       setModal(null)
       if (
@@ -340,7 +342,7 @@ export default function AdminUsers() {
       }
     } catch (err) {
       setFieldErrors(err.validation?.fields || {})
-      setError(resolveError(err) || 'Could not save user changes.')
+      setError(resolveError(err) || t('admin_users_err_save'))
     } finally {
       setSaving(false)
     }
@@ -353,14 +355,14 @@ export default function AdminUsers() {
     try {
       await adminApi.deleteUser(id)
       setDeleteId(null)
-      setNotice('User deleted.')
+      setNotice(t('admin_users_user_deleted'))
       if (page > 1 && users.length === 1) {
         setPage(page - 1)
       } else {
         await load()
       }
     } catch (err) {
-      setError(resolveError(err) || 'Could not delete user.')
+      setError(resolveError(err) || t('admin_users_err_delete'))
     } finally {
       setDeleteBusyId(null)
     }
@@ -385,9 +387,9 @@ export default function AdminUsers() {
       await load()
     }
     if (failed > 0) {
-      setError(`${failed} user(s) could not be deleted.`)
+      setError(`${failed} ${t('admin_users_err_bulk_delete_partial')}`)
     } else {
-      setNotice('Selected users deleted.')
+      setNotice(t('admin_users_selected_deleted'))
     }
     setBulkDeleting(false)
   }
@@ -396,11 +398,11 @@ export default function AdminUsers() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="User Profiles" subtitle="Manage system users">
+      <AdminPageHeader title={t('admin_users_title')} subtitle={t('admin_users_subtitle')}>
         {isAdmin ? (
-          <button type="button" className={styles.btnPrimary} onClick={openCreate} disabled={Boolean(deleteBusyId)}>+ New User</button>
+          <button type="button" className={styles.btnPrimary} onClick={openCreate} disabled={Boolean(deleteBusyId)}>+ {t('admin_users_new_user')}</button>
         ) : (
-          <span className={styles.readOnlyHint}>Read-only access</span>
+          <span className={styles.readOnlyHint}>{t('admin_users_read_only_access')}</span>
         )}
       </AdminPageHeader>
       {loadError && (
@@ -408,7 +410,7 @@ export default function AdminUsers() {
           <div className={styles.loadErrorRow}>
             <span>{loadError}</span>
             <button type="button" className={styles.retryBtn} onClick={() => void load()} disabled={loading}>
-              {loading ? 'Retrying...' : 'Retry'}
+              {loading ? t('admin_users_retrying') : t('admin_users_retry')}
             </button>
           </div>
         </div>
@@ -436,72 +438,72 @@ export default function AdminUsers() {
 
       <div className={styles.toolbarPanel}>
         <div className={styles.toolbar}>
-          <input className={styles.search} placeholder="Search by name, email, ID..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} />
+          <input className={styles.search} placeholder={t('admin_users_search_placeholder')} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} />
           <select className={styles.filterSelect} value={roleFilter} onChange={(event) => { setRoleFilter(event.target.value); setPage(1) }}>
-            <option value="All">All Roles</option>
+            <option value="All">{t('admin_users_all_roles')}</option>
             {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
           </select>
           <select className={styles.filterSelect} value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1) }}>
-            <option value="All">All Status</option>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
+            <option value="All">{t('admin_users_all_status')}</option>
+            <option value="Active">{t('admin_users_active')}</option>
+            <option value="Inactive">{t('admin_users_inactive')}</option>
           </select>
           <select className={styles.filterSelect} value={sortBy} onChange={(event) => { setSortBy(event.target.value); setPage(1) }}>
-            {SORT_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            {SORT_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>)}
           </select>
           <select className={`${styles.filterSelect} ${styles.pageSizeSelect}`} value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1) }}>
-            <option value={10}>10 / page</option>
-            <option value={25}>25 / page</option>
-            <option value={50}>50 / page</option>
+            <option value={10}>10 / {t('admin_users_page')}</option>
+            <option value={25}>25 / {t('admin_users_page')}</option>
+            <option value={50}>50 / {t('admin_users_page')}</option>
           </select>
           <button type="button" className={styles.exportBtn} onClick={exportCSV} disabled={pageUsers.length === 0}>
-            Export CSV
+            {t('admin_users_export_csv')}
           </button>
         </div>
         <div className={styles.toolbarActions}>
           <button type="button" className={styles.secondaryBtn} onClick={() => void load()} disabled={loading}>
-            {loading ? 'Refreshing...' : 'Refresh'}
+            {loading ? t('admin_users_refreshing') : t('admin_users_refresh')}
           </button>
           <button type="button" className={styles.secondaryBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-            Clear filters
+            {t('admin_users_clear_filters')}
           </button>
           <div className={styles.filterMeta}>
-            Showing {users.length} user{users.length !== 1 ? 's' : ''} on this page across {totalUsers} matching.
+            {t('admin_users_showing')} {users.length} {t('admin_users_users_label')} {t('admin_users_on_this_page_across')} {totalUsers} {t('admin_users_matching')}.
           </div>
         </div>
       </div>
 
       {isAdmin && selected.length > 0 && (
         <div className={styles.bulkBar}>
-          <span>{selected.length} selected on this page</span>
+          <span>{selected.length} {t('admin_users_selected_on_page')}</span>
           <button type="button" className={styles.btnDanger} onClick={handleBulkDelete} disabled={bulkDeleting}>
-            {bulkDeleting ? 'Deleting...' : 'Delete Selected'}
+            {bulkDeleting ? t('admin_users_deleting') : t('admin_users_delete_selected')}
           </button>
         </div>
       )}
 
       <div className={styles.tableWrap}>
         {loading ? (
-          <div className={styles.empty}>Loading user profiles...</div>
+          <div className={styles.empty}>{t('admin_users_loading')}</div>
         ) : totalUsers === 0 && hasActiveFilters ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>No matches</div>
-            <div className={styles.emptyText}>No users match the current filters. Clear the filters to see the full directory again.</div>
+            <div className={styles.emptyTitle}>{t('admin_users_no_matches')}</div>
+            <div className={styles.emptyText}>{t('admin_users_no_matches_text')}</div>
             <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>
-              Clear filters
+              {t('admin_users_clear_filters')}
             </button>
           </div>
         ) : users.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>No users yet</div>
-            <div className={styles.emptyText}>Create the first account to start assigning roles, schedules, and tests.</div>
+            <div className={styles.emptyTitle}>{t('admin_users_no_users_yet')}</div>
+            <div className={styles.emptyText}>{t('admin_users_no_users_yet_text')}</div>
           </div>
         ) : pageUsers.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>No matches</div>
-            <div className={styles.emptyText}>No users match the current filters. Clear the filters to see the full directory again.</div>
+            <div className={styles.emptyTitle}>{t('admin_users_no_matches')}</div>
+            <div className={styles.emptyText}>{t('admin_users_no_matches_text')}</div>
             <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>
-              Clear filters
+              {t('admin_users_clear_filters')}
             </button>
           </div>
         ) : (
@@ -509,13 +511,13 @@ export default function AdminUsers() {
             <thead>
               <tr>
                 {isAdmin && <th><input type="checkbox" checked={allPageSelected} onChange={toggleAll} /></th>}
-                <th>Avatar</th>
-                <th>User ID</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                {isAdmin && <th>Actions</th>}
+                <th>{t('admin_users_th_avatar')}</th>
+                <th>{t('admin_users_th_user_id')}</th>
+                <th>{t('admin_users_th_name')}</th>
+                <th>{t('admin_users_th_email')}</th>
+                <th>{t('admin_users_th_role')}</th>
+                <th>{t('admin_users_th_status')}</th>
+                {isAdmin && <th>{t('admin_users_th_actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -530,7 +532,7 @@ export default function AdminUsers() {
                   <td>{listedUser.name || '-'}</td>
                   <td className={styles.emailCell}>{listedUser.email || '-'}</td>
                   <td><span className={`${styles.roleBadge} ${styles['role' + listedUser.role]}`}>{listedUser.role}</span></td>
-                  <td><span className={`${styles.statusBadge} ${listedUser.is_active !== false ? styles.statusActive : styles.statusInactive}`}>{listedUser.is_active !== false ? 'Active' : 'Inactive'}</span></td>
+                  <td><span className={`${styles.statusBadge} ${listedUser.is_active !== false ? styles.statusActive : styles.statusInactive}`}>{listedUser.is_active !== false ? t('admin_users_active') : t('admin_users_inactive')}</span></td>
                   {isAdmin && (
                     <td>
                       <div className={styles.actionBtns}>
@@ -542,17 +544,17 @@ export default function AdminUsers() {
                           aria-label={`Edit user ${userActionLabel}`}
                           title={`Edit user ${userActionLabel}`}
                         >
-                          Edit
+                          {t('admin_users_edit')}
                         </button>
                         <button
                           type="button"
                           className={styles.actionBtnDanger}
                           onClick={() => setDeleteId(listedUser.id)}
                           disabled={deleteBusyId === listedUser.id || listedUser.id === user?.id}
-                          aria-label={`Delete user ${userActionLabel}`}
-                          title={`Delete user ${userActionLabel}`}
+                          aria-label={`${t('admin_users_delete')} ${userActionLabel}`}
+                          title={`${t('admin_users_delete')} ${userActionLabel}`}
                         >
-                          {deleteBusyId === listedUser.id ? 'Deleting...' : 'Delete'}
+                          {deleteBusyId === listedUser.id ? t('admin_users_deleting') : t('admin_users_delete')}
                         </button>
                       </div>
                     </td>
@@ -567,19 +569,20 @@ export default function AdminUsers() {
 
       {totalPages > 1 && (
         <div className={styles.pagination}>
-          <span className={styles.pageInfo}>{totalUsers} matching user{totalUsers !== 1 ? 's' : ''} | Page {page} of {totalPages}</span>
-          <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage((value) => value - 1)}>Previous</button>
-          <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage((value) => value + 1)}>Next</button>
+          <span className={styles.pageInfo}>{totalUsers} {t('admin_users_matching')} | {t('admin_users_page')} {page} {t('admin_users_of')} {totalPages}</span>
+          <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage((value) => value - 1)}>{t('admin_users_previous')}</button>
+          <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage((value) => value + 1)}>{t('admin_users_next')}</button>
         </div>
       )}
 
       {isAdmin && modal && (
         <div className={styles.modalOverlay} onClick={() => { if (!modalBusy) setModal(null) }}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby={userModalTitleId} onClick={(event) => event.stopPropagation()}>
-            <h3 id={userModalTitleId} className={styles.modalTitle}>{modal === 'create' ? 'Create User' : 'Edit User'}</h3>
+            <h3 id={userModalTitleId} className={styles.modalTitle}>{modal === 'create' ? t('admin_users_create_user') : t('admin_users_edit_user')}</h3>
             {['user_id', 'name', 'email'].map((field) => {
               const inputId = `user-modal-${field.replace('_', '-')}`
-              const label = field === 'user_id' ? 'User ID' : field.charAt(0).toUpperCase() + field.slice(1)
+              const labelKeys = { user_id: 'admin_users_th_user_id', name: 'admin_users_th_name', email: 'admin_users_th_email' }
+              const label = t(labelKeys[field])
 
               return (
               <div key={field} className={styles.formGroup}>
@@ -605,7 +608,7 @@ export default function AdminUsers() {
             })}
             {modal === 'create' && (
               <div className={styles.formGroup}>
-                <label className={styles.label} htmlFor="user-modal-password">Password</label>
+                <label className={styles.label} htmlFor="user-modal-password">{t('admin_users_password')}</label>
                 <input
                   id="user-modal-password"
                   type="password"
@@ -635,7 +638,7 @@ export default function AdminUsers() {
                   aria-expanded={showResetPw ? 'true' : 'false'}
                   aria-controls="user-reset-password-panel"
                 >
-                  {showResetPw ? 'Cancel Reset' : 'Reset Password'}
+                  {showResetPw ? t('admin_users_cancel_reset') : t('admin_users_reset_password')}
                 </button>
                 {showResetPw && (
                   <div id="user-reset-password-panel" className={styles.resetPwRow}>
@@ -643,7 +646,7 @@ export default function AdminUsers() {
                       id="user-modal-reset-password"
                       type="password"
                       className={styles.input}
-                      placeholder="New password (min 8 chars)"
+                      placeholder={t('admin_users_new_password_placeholder')}
                       value={resetPwValue}
                       onChange={(event) => setResetPwValue(event.target.value)}
                     />
@@ -653,14 +656,14 @@ export default function AdminUsers() {
                       onClick={handleResetPassword}
                       disabled={resetPwSaving || resetPwValue.length < 8}
                     >
-                      {resetPwSaving ? 'Saving...' : 'Set Password'}
+                      {resetPwSaving ? t('admin_users_saving') : t('admin_users_set_password')}
                     </button>
                   </div>
                 )}
               </div>
             )}
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="user-modal-role">Role</label>
+              <label className={styles.label} htmlFor="user-modal-role">{t('admin_users_th_role')}</label>
               <select
                 id="user-modal-role"
                 className={`${styles.select} ${fieldErrors.role ? styles.inputInvalid : ''}`}
@@ -690,16 +693,16 @@ export default function AdminUsers() {
                   disabled={editingSelf}
                   onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.checked }))}
                 />
-                <span className={styles.checkboxText}>Active</span>
+                <span className={styles.checkboxText}>{t('admin_users_active')}</span>
               </label>
             </div>
             {editingSelf && (
-              <div className={styles.notice}>Use another admin account to change your own role or activation status.</div>
+              <div className={styles.notice}>{t('admin_users_self_edit_notice')}</div>
             )}
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnCancel} onClick={() => setModal(null)} disabled={modalBusy}>Cancel</button>
+              <button type="button" className={styles.btnCancel} onClick={() => setModal(null)} disabled={modalBusy}>{t('admin_users_cancel')}</button>
               <button type="button" className={styles.btnPrimary} onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? t('admin_users_saving') : t('admin_users_save')}
               </button>
             </div>
           </div>

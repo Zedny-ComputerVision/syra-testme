@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import useLanguage from '../../../hooks/useLanguage'
 import { adminApi } from '../../../services/admin.service'
 import { certificateIssueRuleLabel } from '../../../utils/certificates'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
@@ -15,8 +16,8 @@ function getSeverityClass(prefix, severity, styles) {
   return styles[`${prefix}${normalized}`] || ''
 }
 
-function formatConfidence(value) {
-  return typeof value === 'number' ? `${Math.round(value * 100)}% confidence` : 'Confidence unavailable'
+function formatConfidence(value, t) {
+  return typeof value === 'number' ? `${Math.round(value * 100)}% ${t ? t('admin_analysis_confidence') : 'confidence'}` : (t ? t('admin_analysis_confidence_unavailable') : 'Confidence unavailable')
 }
 
 function resolveError(err, fallback) {
@@ -29,11 +30,11 @@ function resolveError(err, fallback) {
   )
 }
 
-function certificateDecisionLabel(value) {
-  if (value === 'APPROVED') return 'Approved'
-  if (value === 'REJECTED') return 'Rejected'
-  if (value === 'PENDING') return 'Pending review'
-  return 'Not required'
+function certificateDecisionLabel(value, t) {
+  if (value === 'APPROVED') return t ? t('admin_analysis_approved') : 'Approved'
+  if (value === 'REJECTED') return t ? t('admin_analysis_rejected') : 'Rejected'
+  if (value === 'PENDING') return t ? t('admin_analysis_pending_review') : 'Pending review'
+  return t ? t('admin_analysis_not_required') : 'Not required'
 }
 
 function evidenceKeyForEvent(event, index) {
@@ -45,6 +46,7 @@ function isAbortError(err) {
 }
 
 export default function AdminAttemptAnalysis() {
+  const { t } = useLanguage()
   const [searchParams, setSearchParams] = useSearchParams()
   const [attempts, setAttempts] = useState([])
   const [selectedId, setSelectedId] = useState(searchParams.get('id') || '')
@@ -94,7 +96,7 @@ export default function AdminAttemptAnalysis() {
       } catch (err) {
         if (isAbortError(err)) return
         setAttempts([])
-        setListError(resolveError(err, 'Failed to load attempts list.'))
+        setListError(resolveError(err, t('admin_analysis_load_attempts_error')))
       } finally {
         if (!controller.signal.aborted) setListLoading(false)
       }
@@ -148,7 +150,7 @@ export default function AdminAttemptAnalysis() {
       if (controller.signal.aborted) return
 
       if (attemptResponse.status !== 'fulfilled') {
-        setDetailError(resolveError(attemptResponse.reason, 'Failed to load attempt details.'))
+        setDetailError(resolveError(attemptResponse.reason, t('admin_analysis_load_details_error')))
         setLoading(false)
         return
       }
@@ -158,10 +160,10 @@ export default function AdminAttemptAnalysis() {
       setAnswers(answersResponse.status === 'fulfilled' ? answersResponse.value.data || [] : [])
 
       const missingSections = []
-      if (eventsResponse.status !== 'fulfilled') missingSections.push('timeline and evidence')
-      if (answersResponse.status !== 'fulfilled') missingSections.push('answers')
+      if (eventsResponse.status !== 'fulfilled') missingSections.push(t('admin_analysis_timeline_and_evidence'))
+      if (answersResponse.status !== 'fulfilled') missingSections.push(t('admin_analysis_answers_section'))
       if (missingSections.length > 0) {
-        setDetailWarning(`Some analysis data could not be loaded (${missingSections.join(', ')}). Retry to refresh.`)
+        setDetailWarning(`${t('admin_analysis_partial_load_warning')} (${missingSections.join(', ')})`)
       }
 
       setLoading(false)
@@ -296,7 +298,7 @@ export default function AdminAttemptAnalysis() {
 
     void loadEvidenceUrls().catch((err) => {
       if (!isAbortError(err)) {
-        setDetailWarning((current) => current || 'Some evidence screenshots could not be loaded.')
+        setDetailWarning((current) => current || t('admin_analysis_evidence_load_warning'))
       }
     })
 
@@ -375,11 +377,11 @@ export default function AdminAttemptAnalysis() {
       setAttempt(data || null)
       setReviewNotice(
         decision === 'APPROVED'
-          ? 'Certificate release approved after proctoring review.'
-          : 'Certificate release rejected after proctoring review.',
+          ? t('admin_analysis_certificate_approved_notice')
+          : t('admin_analysis_certificate_rejected_notice'),
       )
     } catch (err) {
-      setReviewError(resolveError(err, 'Failed to save certificate review decision.'))
+      setReviewError(resolveError(err, t('admin_analysis_save_review_error')))
     } finally {
       setReviewBusy(false)
     }
@@ -390,7 +392,7 @@ export default function AdminAttemptAnalysis() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Attempt Analysis" subtitle="Deep proctoring report" />
+      <AdminPageHeader title={t('admin_analysis_title')} subtitle={t('admin_analysis_subtitle')} />
 
       <div className={styles.selector}>
         <select
@@ -407,14 +409,14 @@ export default function AdminAttemptAnalysis() {
         >
           <option value="">
             {listLoading
-              ? 'Loading attempts...'
+              ? t('admin_analysis_loading_attempts')
               : attempts.length === 0
-                ? 'No attempts available'
-                : 'Select an attempt...'}
+                ? t('admin_analysis_no_attempts')
+                : t('admin_analysis_select_attempt')}
           </option>
           {attempts.map((entry) => (
             <option key={entry.id} value={entry.id}>
-              {entry.test_title || entry.exam_title || 'Test'} - {entry.user_name || entry.user_id || 'User'} ({entry.status})
+              {entry.test_title || entry.exam_title || t('admin_analysis_test')} - {entry.user_name || entry.user_id || t('admin_analysis_user')} ({entry.status})
             </option>
           ))}
         </select>
@@ -424,7 +426,7 @@ export default function AdminAttemptAnalysis() {
         <div className={styles.helperRow}>
           <div className={styles.errorBanner}>{listError}</div>
           <button type="button" className={styles.retryBtn} onClick={() => setListReloadKey((current) => current + 1)} disabled={listLoading}>
-            {listLoading ? 'Retrying...' : 'Retry'}
+            {listLoading ? t('admin_analysis_retrying') : t('retry')}
           </button>
         </div>
       )}
@@ -432,17 +434,17 @@ export default function AdminAttemptAnalysis() {
         <div className={styles.helperRow}>
           <div className={styles.errorBanner}>{detailError}</div>
           <button type="button" className={styles.retryBtn} onClick={() => setDetailReloadKey((current) => current + 1)} disabled={loading}>
-            {loading ? 'Retrying...' : 'Retry'}
+            {loading ? t('admin_analysis_retrying') : t('retry')}
           </button>
         </div>
       )}
       {detailWarning && <div className={styles.warningBanner}>{detailWarning}</div>}
       {reviewError && <div className={styles.errorBanner}>{reviewError}</div>}
       {reviewNotice && <div className={styles.warningBanner}>{reviewNotice}</div>}
-      {listLoading && <div className={styles.loading}>Loading attempts...</div>}
-      {showNoAttempts && <div className={styles.empty}>No attempts are available yet.</div>}
-      {showSelectionHint && <div className={styles.empty}>Select an attempt to review its integrity timeline, answers, and evidence.</div>}
-      {loading && <div className={styles.loading}>Loading analysis...</div>}
+      {listLoading && <div className={styles.loading}>{t('admin_analysis_loading_attempts')}</div>}
+      {showNoAttempts && <div className={styles.empty}>{t('admin_analysis_no_attempts_yet')}</div>}
+      {showSelectionHint && <div className={styles.empty}>{t('admin_analysis_select_attempt_hint')}</div>}
+      {loading && <div className={styles.loading}>{t('admin_analysis_loading_analysis')}</div>}
 
       {!loading && attempt && (
         <>
@@ -451,12 +453,12 @@ export default function AdminAttemptAnalysis() {
             <div className={styles.candidateInfo}>
               <div className={styles.candidateName}>{attempt.user_name || attempt.user_id}</div>
               <div className={styles.candidateMeta}>
-                Started: {attempt.started_at ? new Date(attempt.started_at).toLocaleString() : '-'}
-                {attempt.submitted_at && <> | Duration: {formatTime(attempt.submitted_at)}</>}
+                {t('admin_analysis_started')}: {attempt.started_at ? new Date(attempt.started_at).toLocaleString() : '-'}
+                {attempt.submitted_at && <> | {t('admin_analysis_duration')}: {formatTime(attempt.submitted_at)}</>}
               </div>
             </div>
             <div className={styles.gaugeWrap}>
-              <div className={styles.gaugeLabel}>Integrity</div>
+              <div className={styles.gaugeLabel}>{t('admin_analysis_integrity')}</div>
               <div className={`${styles.gaugeValue} ${integrityToneClass}`}>{integrity}%</div>
             </div>
           </div>
@@ -465,19 +467,19 @@ export default function AdminAttemptAnalysis() {
             <div className={styles.certificateReviewCard}>
               <div className={styles.certificateReviewHeader}>
                 <div>
-                  <div className={styles.certificateReviewTitle}>Certificate release</div>
+                  <div className={styles.certificateReviewTitle}>{t('admin_analysis_certificate_release')}</div>
                   <div className={styles.certificateReviewMeta}>
                     {certificateIssueRuleLabel(attempt.certificate_issue_rule)}
                   </div>
                 </div>
                 <div className={`${styles.certificateDecisionBadge} ${certificateDecisionToneClass}`}>
-                  {certificateDecisionLabel(certificateStatus)}
+                  {certificateDecisionLabel(certificateStatus, t)}
                 </div>
               </div>
               <div className={styles.certificateReviewCopy}>
                 {attempt.certificate_eligible
-                  ? 'The learner can download the certificate right now.'
-                  : (attempt.certificate_block_reason || 'Certificate is currently unavailable.')}
+                  ? t('admin_analysis_certificate_available')
+                  : (attempt.certificate_block_reason || t('admin_analysis_certificate_unavailable'))}
               </div>
               {requiresCertificateReview && (
                 <div className={styles.certificateReviewActions}>
@@ -487,7 +489,7 @@ export default function AdminAttemptAnalysis() {
                     disabled={reviewBusy}
                     onClick={() => void handleCertificateDecision('APPROVED')}
                   >
-                    {reviewBusy ? 'Saving...' : 'Approve certificate'}
+                    {reviewBusy ? t('admin_analysis_saving') : t('admin_analysis_approve_certificate')}
                   </button>
                   <button
                     type="button"
@@ -495,7 +497,7 @@ export default function AdminAttemptAnalysis() {
                     disabled={reviewBusy}
                     onClick={() => void handleCertificateDecision('REJECTED')}
                   >
-                    {reviewBusy ? 'Saving...' : 'Reject certificate'}
+                    {reviewBusy ? t('admin_analysis_saving') : t('admin_analysis_reject_certificate')}
                   </button>
                 </div>
               )}
@@ -505,47 +507,55 @@ export default function AdminAttemptAnalysis() {
           <div className={styles.metricsGrid}>
             <div className={styles.metric}>
               <div className={styles.metricValue}>{attempt.score ?? '-'}</div>
-              <div className={styles.metricLabel}>Score</div>
+              <div className={styles.metricLabel}>{t('admin_analysis_score')}</div>
             </div>
             <div className={styles.metric}>
               <div className={styles.metricValue}>{events.length}</div>
-              <div className={styles.metricLabel}>Violations</div>
+              <div className={styles.metricLabel}>{t('admin_analysis_violations')}</div>
             </div>
             <div className={styles.metric}>
               <div className={`${styles.metricValue} ${styles.toneBad}`}>{highCount}</div>
-              <div className={styles.metricLabel}>High</div>
+              <div className={styles.metricLabel}>{t('admin_analysis_high')}</div>
             </div>
             <div className={styles.metric}>
               <div className={`${styles.metricValue} ${styles.toneWarn}`}>{medCount}</div>
-              <div className={styles.metricLabel}>Medium</div>
+              <div className={styles.metricLabel}>{t('admin_analysis_medium')}</div>
             </div>
             <div className={styles.metric}>
               <div className={`${styles.metricValue} ${styles.toneInfo}`}>{lowCount}</div>
-              <div className={styles.metricLabel}>Low</div>
+              <div className={styles.metricLabel}>{t('admin_analysis_low')}</div>
             </div>
             <div className={styles.metric}>
               <div className={`${styles.metricValue} ${integrityToneClass}`}>{integrity}%</div>
-              <div className={styles.metricLabel}>Integrity</div>
+              <div className={styles.metricLabel}>{t('admin_analysis_integrity')}</div>
             </div>
           </div>
 
           <div className={styles.tabs}>
-            {TABS.map((tabName) => (
-              <button
-                key={tabName}
-                type="button"
-                className={`${styles.tab} ${tab === tabName ? styles.tabActive : ''}`}
-                onClick={() => setTab(tabName)}
-              >
-                {tabName}
-              </button>
-            ))}
+            {TABS.map((tabName) => {
+              const tabLabels = {
+                Overview: t('admin_analysis_tab_overview'),
+                Timeline: t('admin_analysis_tab_timeline'),
+                Answers: t('admin_analysis_tab_answers'),
+                Evidence: t('admin_analysis_tab_evidence'),
+              }
+              return (
+                <button
+                  key={tabName}
+                  type="button"
+                  className={`${styles.tab} ${tab === tabName ? styles.tabActive : ''}`}
+                  onClick={() => setTab(tabName)}
+                >
+                  {tabLabels[tabName] || tabName}
+                </button>
+              )
+            })}
           </div>
 
           {tab === 'Overview' && (
             <>
               <div className={styles.heatmapWrap}>
-                <div className={styles.heatmapTitle}>Activity Heatmap</div>
+                <div className={styles.heatmapTitle}>{t('admin_analysis_activity_heatmap')}</div>
                 <div className={styles.heatmap}>
                   {heatmap.map((value, index) => {
                     const pct = value / maxBucket
@@ -556,7 +566,7 @@ export default function AdminAttemptAnalysis() {
                       <div
                         key={index}
                         className={`${styles.heatmapBar} ${toneClass} ${heightClass}`}
-                        title={`Bucket ${index + 1}: ${value} events`}
+                        title={`${t('admin_analysis_bucket')} ${index + 1}: ${value} ${t('admin_analysis_events')}`}
                       />
                     )
                   })}
@@ -567,9 +577,9 @@ export default function AdminAttemptAnalysis() {
                 <table className={styles.violationsTable}>
                   <thead>
                     <tr>
-                      <th>Event Type</th>
-                      <th>Severity</th>
-                      <th>Count</th>
+                      <th>{t('admin_analysis_event_type')}</th>
+                      <th>{t('admin_analysis_severity')}</th>
+                      <th>{t('admin_analysis_count')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -593,7 +603,7 @@ export default function AdminAttemptAnalysis() {
           {tab === 'Timeline' && (
             <div className={styles.timeline}>
               {events.length === 0 ? (
-                <div className={styles.empty}>No events recorded.</div>
+                <div className={styles.empty}>{t('admin_analysis_no_events')}</div>
               ) : (
                 events.map((event, index) => (
                   <div key={`${event.id || event.occurred_at || index}`} className={`${styles.timelineEvent} ${getSeverityClass('event', event.severity, styles)}`}>
@@ -604,7 +614,7 @@ export default function AdminAttemptAnalysis() {
                         <span className={`${styles.severityBadge} ${getSeverityClass('severity', event.severity, styles)}`}>{event.severity}</span>
                       </div>
                       <div className={styles.eventDetail}>
-                        {event.detail || formatConfidence(event.ai_confidence)}
+                        {event.detail || formatConfidence(event.ai_confidence, t)}
                       </div>
                     </div>
                   </div>
@@ -616,16 +626,16 @@ export default function AdminAttemptAnalysis() {
           {tab === 'Answers' && (
             <div>
               {answers.length === 0 ? (
-                <div className={styles.empty}>No answers recorded for this attempt.</div>
+                <div className={styles.empty}>{t('admin_analysis_no_answers')}</div>
               ) : (
                 <table className={styles.violationsTable}>
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>Question</th>
-                      <th>Answer Given</th>
-                      <th>Result</th>
-                      <th>Points</th>
+                      <th>{t('admin_analysis_question')}</th>
+                      <th>{t('admin_analysis_answer_given')}</th>
+                      <th>{t('admin_analysis_result')}</th>
+                      <th>{t('admin_analysis_points')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -636,9 +646,9 @@ export default function AdminAttemptAnalysis() {
                           ? styles.answerWrong
                           : styles.answerUnknown
                       const resultText = answer.is_correct === true
-                        ? 'Correct'
+                        ? t('admin_analysis_correct')
                         : answer.is_correct === false
-                          ? 'Wrong'
+                          ? t('admin_analysis_wrong')
                           : '-'
 
                       return (
@@ -665,69 +675,69 @@ export default function AdminAttemptAnalysis() {
             <>
               {(identityPhotoUrls.selfie || identityPhotoUrls.id) && (
                 <div className={styles.identitySection}>
-                  <div className={styles.identitySectionTitle}>Identity Verification Photos</div>
+                  <div className={styles.identitySectionTitle}>{t('admin_analysis_identity_photos')}</div>
                   <div className={styles.identityPhotoRow}>
                     {identityPhotoUrls.selfie && (
                       <div className={styles.identityPhotoCard}>
-                        <div className={styles.identityPhotoLabel}>Selfie</div>
+                        <div className={styles.identityPhotoLabel}>{t('admin_analysis_selfie')}</div>
                         <img
                           className={styles.identityPhotoImg}
                           src={identityPhotoUrls.selfie}
-                          alt="Candidate selfie"
+                          alt={t('admin_analysis_candidate_selfie')}
                           onClick={() => setSelectedEvidence({ _identityType: 'selfie' })}
                         />
                       </div>
                     )}
                     {identityPhotoUrls.id && (
                       <div className={styles.identityPhotoCard}>
-                        <div className={styles.identityPhotoLabel}>ID Document</div>
+                        <div className={styles.identityPhotoLabel}>{t('admin_analysis_id_document')}</div>
                         <img
                           className={styles.identityPhotoImg}
                           src={identityPhotoUrls.id}
-                          alt="ID document"
+                          alt={t('admin_analysis_id_document')}
                           onClick={() => setSelectedEvidence({ _identityType: 'id' })}
                         />
                       </div>
                     )}
                   </div>
                   <div className={styles.identityStatus}>
-                    Identity verified: {attempt.identity_verified ? 'Yes' : 'No'}
+                    {t('admin_analysis_identity_verified')}: {attempt.identity_verified ? t('admin_analysis_yes') : t('admin_analysis_no')}
                   </div>
                 </div>
               )}
               {!identityPhotoUrls.selfie && !identityPhotoUrls.id && attempt.identity_verified != null && (
                 <div className={styles.identitySection}>
-                  <div className={styles.identitySectionTitle}>Identity Verification</div>
+                  <div className={styles.identitySectionTitle}>{t('admin_analysis_identity_verification')}</div>
                   <div className={styles.identityStatus}>
-                    {attempt.identity_verified ? 'Identity was verified (photos not available)' : 'Identity was not verified'}
+                    {attempt.identity_verified ? t('admin_analysis_identity_verified_no_photos') : t('admin_analysis_identity_not_verified')}
                   </div>
                 </div>
               )}
             <div className={styles.evidenceGrid}>
               {evidenceEvents.length === 0 && !identityPhotoUrls.selfie && !identityPhotoUrls.id ? (
-                <div className={styles.empty}>No evidence screenshots captured.</div>
+                <div className={styles.empty}>{t('admin_analysis_no_evidence')}</div>
               ) : evidenceEvents.length === 0 ? null : (
                 evidenceEvents.map((event, index) => (
                   <button
                     key={`${event.id || event.occurred_at || index}`}
                     type="button"
                     className={styles.evidenceCard}
-                    aria-label={`Evidence ${index + 1}`}
+                    aria-label={`${t('admin_analysis_evidence')} ${index + 1}`}
                     onClick={() => setSelectedEvidence(event)}
                   >
                     {evidenceUrls[evidenceKeyForEvent(event, index)] ? (
-                      <img className={styles.evidenceImg} src={evidenceUrls[evidenceKeyForEvent(event, index)]} alt={`Evidence ${index + 1}`} />
+                      <img className={styles.evidenceImg} src={evidenceUrls[evidenceKeyForEvent(event, index)]} alt={`${t('admin_analysis_evidence')} ${index + 1}`} />
                     ) : (
                       <div className={styles.evidenceImg} />
                     )}
                     <div className={styles.evidenceMeta}>
                       <div className={styles.evidenceMetaTop}>
                         <span className={`${styles.severityBadge} ${getSeverityClass('severity', event.severity, styles)}`}>{event.severity}</span>
-                        <span>{formatConfidence(event.ai_confidence)}</span>
+                        <span>{formatConfidence(event.ai_confidence, t)}</span>
                       </div>
                       <div className={styles.evidenceLabel}>{event.event_type?.replace(/_/g, ' ')}</div>
-                      <div>{event.detail || 'Evidence captured during proctoring review.'}</div>
-                      <div className={styles.evidenceTimestamp}>Captured at {formatTime(event.occurred_at)}</div>
+                      <div>{event.detail || t('admin_analysis_evidence_captured')}</div>
+                      <div className={styles.evidenceTimestamp}>{t('admin_analysis_captured_at')} {formatTime(event.occurred_at)}</div>
                     </div>
                   </button>
                 ))
@@ -739,26 +749,26 @@ export default function AdminAttemptAnalysis() {
       )}
 
       {selectedEvidence && (
-        <div className={styles.lightboxBackdrop} role="dialog" aria-modal="true" aria-label="Evidence preview" onClick={() => setSelectedEvidence(null)}>
+        <div className={styles.lightboxBackdrop} role="dialog" aria-modal="true" aria-label={t('admin_analysis_evidence_preview')} onClick={() => setSelectedEvidence(null)}>
           <div className={styles.lightboxCard} onClick={(event) => event.stopPropagation()}>
             <button type="button" className={styles.lightboxClose} onClick={() => setSelectedEvidence(null)}>
-              Close
+              {t('admin_analysis_close')}
             </button>
             {selectedEvidence._identityType ? (
               <>
                 <img
                   className={styles.lightboxImg}
                   src={identityPhotoUrls[selectedEvidence._identityType === 'selfie' ? 'selfie' : 'id']}
-                  alt={selectedEvidence._identityType === 'selfie' ? 'Candidate selfie' : 'ID document'}
+                  alt={selectedEvidence._identityType === 'selfie' ? t('admin_analysis_candidate_selfie') : t('admin_analysis_id_document')}
                 />
                 <div className={styles.lightboxMeta}>
                   <div className={styles.lightboxHeader}>
                     <span className={styles.lightboxTitle}>
-                      {selectedEvidence._identityType === 'selfie' ? 'Candidate Selfie' : 'ID Document'}
+                      {selectedEvidence._identityType === 'selfie' ? t('admin_analysis_candidate_selfie') : t('admin_analysis_id_document')}
                     </span>
                   </div>
-                  <div>Identity verification photo captured during precheck.</div>
-                  <div>Identity verified: {attempt?.identity_verified ? 'Yes' : 'No'}</div>
+                  <div>{t('admin_analysis_identity_photo_precheck')}</div>
+                  <div>{t('admin_analysis_identity_verified')}: {attempt?.identity_verified ? t('admin_analysis_yes') : t('admin_analysis_no')}</div>
                 </div>
               </>
             ) : (
@@ -767,7 +777,7 @@ export default function AdminAttemptAnalysis() {
                   <img
                     className={styles.lightboxImg}
                     src={evidenceUrls[evidenceKeyForEvent(selectedEvidence, 0)]}
-                    alt={`${selectedEvidence.event_type?.replace(/_/g, ' ')} evidence`}
+                    alt={`${selectedEvidence.event_type?.replace(/_/g, ' ')} ${t('admin_analysis_evidence').toLowerCase()}`}
                   />
                 ) : (
                   <div className={styles.lightboxImg} />
@@ -779,9 +789,9 @@ export default function AdminAttemptAnalysis() {
                       {selectedEvidence.severity}
                     </span>
                   </div>
-                  <div>{selectedEvidence.detail || 'Evidence captured during proctoring review.'}</div>
-                  <div>{formatConfidence(selectedEvidence.ai_confidence)}</div>
-                  <div>Captured at {formatTime(selectedEvidence.occurred_at)}</div>
+                  <div>{selectedEvidence.detail || t('admin_analysis_evidence_captured')}</div>
+                  <div>{formatConfidence(selectedEvidence.ai_confidence, t)}</div>
+                  <div>{t('admin_analysis_captured_at')} {formatTime(selectedEvidence.occurred_at)}</div>
                 </div>
               </>
             )}
@@ -790,7 +800,7 @@ export default function AdminAttemptAnalysis() {
       )}
 
       {!loading && !attempt && selectedId && !detailError && (
-        <div className={styles.empty}>Attempt not found.</div>
+        <div className={styles.empty}>{t('admin_analysis_not_found')}</div>
       )}
     </div>
   )

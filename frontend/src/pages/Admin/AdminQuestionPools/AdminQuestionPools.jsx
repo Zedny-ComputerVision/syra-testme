@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminQuestionPools.module.scss'
 
 function resolveError(err, fallback) {
@@ -10,6 +11,7 @@ function resolveError(err, fallback) {
 }
 
 export default function AdminQuestionPools() {
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -38,7 +40,7 @@ export default function AdminQuestionPools() {
       const { data } = await adminApi.questionPools()
       setPools(data || [])
     } catch (err) {
-      setError(resolveError(err, 'Failed to load question pools.'))
+      setError(resolveError(err, t('admin_pools_load_error')))
     } finally {
       setLoading(false)
     }
@@ -62,24 +64,24 @@ export default function AdminQuestionPools() {
   const readOnlyPools = pools.filter((pool) => !canManagePool(pool)).length
   const summaryCards = [
     {
-      label: 'Loaded pools',
+      label: t('admin_pools_loaded_pools'),
       value: pools.length,
-      helper: 'All reusable question banks in the current workspace',
+      helper: t('admin_pools_loaded_pools_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_pools_visible_now'),
       value: filtered.length,
-      helper: hasActiveFilters ? 'Matching the current search and sort state' : 'All loaded pools',
+      helper: hasActiveFilters ? t('admin_pools_visible_now_filtered') : t('admin_pools_visible_now_all'),
     },
     {
-      label: 'Indexed questions',
+      label: t('admin_pools_indexed_questions'),
       value: totalQuestions,
-      helper: 'Questions already attached to the loaded pools',
+      helper: t('admin_pools_indexed_questions_helper'),
     },
     {
-      label: 'Read-only pools',
+      label: t('admin_pools_read_only_pools'),
       value: readOnlyPools,
-      helper: 'Owned by another author and visible without edit rights',
+      helper: t('admin_pools_read_only_pools_helper'),
     },
   ]
 
@@ -101,7 +103,7 @@ export default function AdminQuestionPools() {
       setPoolQuestions((prev) => ({ ...prev, [poolId]: data || [] }))
       setExpanded((prev) => ({ ...prev, [poolId]: true }))
     } catch (err) {
-      setError(resolveError(err, 'Failed to load pool questions.'))
+      setError(resolveError(err, t('admin_pools_load_questions_error')))
     } finally {
       setExpandLoadingId(null)
     }
@@ -118,7 +120,7 @@ export default function AdminQuestionPools() {
   const handleCreate = async () => {
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setModalError('Pool name is required.')
+      setModalError(t('admin_pools_name_required'))
       return
     }
 
@@ -127,11 +129,11 @@ export default function AdminQuestionPools() {
     setNotice('')
     try {
       await adminApi.createQuestionPool({ name: trimmedName, description: description.trim() || null })
-      setNotice('Question pool created.')
+      setNotice(t('admin_pools_created'))
       resetModal()
       await load()
     } catch (err) {
-      setModalError(resolveError(err, 'Failed to create pool.'))
+      setModalError(resolveError(err, t('admin_pools_create_error')))
     } finally {
       setSaving(false)
     }
@@ -149,10 +151,10 @@ export default function AdminQuestionPools() {
     setNotice('')
     try {
       await adminApi.deleteQuestionPool(id)
-      setNotice('Question pool deleted.')
+      setNotice(t('admin_pools_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err, 'Failed to delete pool.'))
+      setError(resolveError(err, t('admin_pools_delete_error')))
     } finally {
       setDeleteBusyId(null)
     }
@@ -160,7 +162,7 @@ export default function AdminQuestionPools() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Question Pools" subtitle="Reusable question banks for test authoring">
+      <AdminPageHeader title={t('admin_pools_title')} subtitle={t('admin_pools_subtitle')}>
         <button
           type="button"
           className={styles.btnPrimary}
@@ -169,7 +171,7 @@ export default function AdminQuestionPools() {
             setModalError('')
           }}
         >
-          + New Pool
+          {t('admin_pools_new_pool')}
         </button>
       </AdminPageHeader>
 
@@ -177,7 +179,7 @@ export default function AdminQuestionPools() {
       {error && (
         <div className={styles.helperRow}>
           <div className={styles.errorBanner}>{error}</div>
-          <button type="button" className={styles.actionBtn} onClick={() => void load()}>Retry</button>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
 
@@ -196,7 +198,7 @@ export default function AdminQuestionPools() {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Search pools..."
+            placeholder={t('admin_pools_search_placeholder')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -205,81 +207,81 @@ export default function AdminQuestionPools() {
             className={styles.sortBtn}
             onClick={() => setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))}
           >
-            {sortDir === 'asc' ? 'Sort: name A-Z' : 'Sort: name Z-A'}
+            {sortDir === 'asc' ? t('sort_name_az') : t('sort_name_za')}
           </button>
           <div className={styles.toolbarActions}>
-            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>Refresh</button>
-            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>Clear filters</button>
+            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>{t('refresh')}</button>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>{t('clear_filters')}</button>
           </div>
         </div>
         <div className={styles.filterMeta}>
-          Showing {filtered.length} matching pool{filtered.length !== 1 ? 's' : ''} across {pools.length} loaded.
+          {t('admin_pools_showing_count', { filtered: filtered.length, total: pools.length })}
         </div>
       </div>
 
       {loading ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>Loading question pools...</div>
-          <div className={styles.emptyText}>Fetching reusable banks and question counts.</div>
+          <div className={styles.emptyTitle}>{t('admin_pools_loading')}</div>
+          <div className={styles.emptyText}>{t('admin_pools_loading_sub')}</div>
         </div>
       ) : filtered.length === 0 && hasActiveFilters ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>No pools match the current filters.</div>
-          <div className={styles.emptyText}>Clear the search or reset sorting to restore the full pool library.</div>
-          <button type="button" className={styles.actionBtn} onClick={clearFilters}>Clear filters</button>
+          <div className={styles.emptyTitle}>{t('admin_pools_no_match')}</div>
+          <div className={styles.emptyText}>{t('admin_pools_no_match_hint')}</div>
+          <button type="button" className={styles.actionBtn} onClick={clearFilters}>{t('clear_filters')}</button>
         </div>
       ) : filtered.length === 0 ? (
         <div className={styles.emptyState}>
-          <div className={styles.emptyTitle}>No question pools yet</div>
-          <div className={styles.emptyText}>Create a pool to build reusable banks for future tests.</div>
+          <div className={styles.emptyTitle}>{t('admin_pools_empty')}</div>
+          <div className={styles.emptyText}>{t('admin_pools_empty_hint')}</div>
         </div>
       ) : (
         <div className={styles.grid}>
           {filtered.map((pool) => {
-            const poolLabel = pool.name || 'this question pool'
+            const poolLabel = pool.name || t('admin_pools_this_pool')
 
             return (
             <div key={pool.id} className={styles.card}>
               {!canManagePool(pool) && (
-                <div className={styles.readOnlyNote}>Read-only - only the owner or an admin can manage this pool.</div>
+                <div className={styles.readOnlyNote}>{t('admin_pools_read_only_note')}</div>
               )}
               <div className={styles.cardHeader}>
                 <div>
                   <span className={styles.cardTitle}>{pool.name}</span>
                   {pool.question_count != null && (
-                    <span className={styles.qCountBadge}>{pool.question_count} questions</span>
+                    <span className={styles.qCountBadge}>{pool.question_count} {t('questions')}</span>
                   )}
                 </div>
                 <div className={styles.actionBtns}>
-                  <button type="button" className={styles.actionBtn} onClick={() => navigate(`/admin/question-pools/${pool.id}`)} disabled={deleteBusyId === pool.id} aria-label={`Open question pool ${poolLabel}`} title={`Open question pool ${poolLabel}`}>
-                    Open
+                  <button type="button" className={styles.actionBtn} onClick={() => navigate(`/admin/question-pools/${pool.id}`)} disabled={deleteBusyId === pool.id} aria-label={`${t('admin_pools_open')} ${poolLabel}`} title={`${t('admin_pools_open')} ${poolLabel}`}>
+                    {t('admin_pools_open')}
                   </button>
                   {canManagePool(pool) && (
                     deleteConfirmId === pool.id ? (
                       <>
-                        <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id} aria-label={`Confirm delete for question pool ${poolLabel}`}>
-                          {deleteBusyId === pool.id ? 'Deleting...' : 'Confirm'}
+                        <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id} aria-label={`${t('confirm_delete')} ${poolLabel}`}>
+                          {deleteBusyId === pool.id ? t('admin_pools_deleting') : t('confirm')}
                         </button>
-                        <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === pool.id} aria-label={`Keep question pool ${poolLabel}`}>
-                          Cancel
+                        <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === pool.id} aria-label={`${t('admin_pools_keep')} ${poolLabel}`}>
+                          {t('cancel')}
                         </button>
                       </>
                     ) : (
-                      <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id} aria-label={`Delete question pool ${poolLabel}`} title={`Delete question pool ${poolLabel}`}>
-                        Delete
+                      <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(pool.id)} disabled={deleteBusyId === pool.id} aria-label={`${t('delete')} ${poolLabel}`} title={`${t('delete')} ${poolLabel}`}>
+                        {t('delete')}
                       </button>
                     )
                   )}
                 </div>
               </div>
               <div className={pool.description ? styles.cardMeta : styles.cardMetaMuted}>
-                {pool.description || 'No description provided for this pool.'}
+                {pool.description || t('admin_pools_no_description')}
               </div>
 
               {expanded[pool.id] && poolQuestions[pool.id] && (
                 <div className={styles.questionList}>
                   {poolQuestions[pool.id].length === 0 ? (
-                    <div className={styles.questionEmpty}>No questions in this pool yet.</div>
+                    <div className={styles.questionEmpty}>{t('admin_pools_no_questions')}</div>
                   ) : (
                     poolQuestions[pool.id].map((question, index) => (
                       <div key={question.id || index} className={styles.questionItem}>
@@ -292,7 +294,7 @@ export default function AdminQuestionPools() {
               )}
 
               <button type="button" className={styles.expandBtn} onClick={() => void toggleExpand(pool.id)} disabled={expandLoadingId === pool.id}>
-                {expandLoadingId === pool.id ? 'Loading questions...' : expanded[pool.id] ? 'Hide questions' : 'Show questions'}
+                {expandLoadingId === pool.id ? t('admin_pools_loading_questions') : expanded[pool.id] ? t('admin_pools_hide_questions') : t('admin_pools_show_questions')}
               </button>
             </div>
             )
@@ -303,20 +305,20 @@ export default function AdminQuestionPools() {
       {modal && (
         <div className={styles.modalOverlay} onClick={resetModal}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="question-pool-dialog-title" onClick={(event) => event.stopPropagation()}>
-            <h3 id="question-pool-dialog-title" className={styles.modalTitle}>New Question Pool</h3>
+            <h3 id="question-pool-dialog-title" className={styles.modalTitle}>{t('admin_pools_new_pool_title')}</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="pool-name">Name</label>
+              <label className={styles.label} htmlFor="pool-name">{t('name')}</label>
               <input id="pool-name" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="pool-description">Description</label>
+              <label className={styles.label} htmlFor="pool-description">{t('description')}</label>
               <input id="pool-description" className={styles.input} value={description} onChange={(event) => setDescription(event.target.value)} />
             </div>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnCancel} onClick={resetModal} disabled={saving}>Cancel</button>
+              <button type="button" className={styles.btnCancel} onClick={resetModal} disabled={saving}>{t('cancel')}</button>
               <button type="button" className={styles.btnPrimary} onClick={() => void handleCreate()} disabled={saving || !name.trim()}>
-                {saving ? 'Creating...' : 'Create Pool'}
+                {saving ? t('admin_pools_creating') : t('admin_pools_create_pool')}
               </button>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { adminApi } from '../../../services/admin.service'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminSubscribers.module.scss'
 
 const KEY = 'subscribers'
@@ -37,6 +38,7 @@ const parseEmailInput = (raw) => {
 }
 
 export default function AdminSubscribers() {
+  const { t } = useLanguage()
   const [subs, setSubs] = useState([])
   const [email, setEmail] = useState('')
   const [search, setSearch] = useState('')
@@ -57,7 +59,7 @@ export default function AdminSubscribers() {
       setReady(true)
     } catch {
       setSubs([])
-      setError('Failed to load subscribers.')
+      setError(t('admin_subscribers_load_failed'))
       setReady(false)
     } finally {
       setLoading(false)
@@ -74,7 +76,7 @@ export default function AdminSubscribers() {
       await adminApi.updateSetting(KEY, JSON.stringify(next))
       return true
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save subscribers.')
+      setError(err.response?.data?.detail || t('admin_subscribers_save_failed'))
       return false
     } finally {
       setSaving(false)
@@ -86,12 +88,12 @@ export default function AdminSubscribers() {
     if (normalizedEntries.length === 0) return
     const invalid = normalizedEntries.find((entry) => !EMAIL_RE.test(entry))
     if (invalid) {
-      setError(`Enter a valid email address. Invalid value: ${invalid}`)
+      setError(t('admin_subscribers_invalid_email', { value: invalid }))
       return
     }
     const nextEntries = normalizedEntries.filter((entry) => !subs.includes(entry))
     if (nextEntries.length === 0) {
-      setError('These subscribers are already in the list.')
+      setError(t('admin_subscribers_already_in_list'))
       return
     }
 
@@ -99,7 +101,7 @@ export default function AdminSubscribers() {
     if (await persist(next)) {
       setSubs(next)
       setEmail('')
-      setNotice(nextEntries.length === 1 ? 'Subscriber added.' : `${nextEntries.length} subscribers added.`)
+      setNotice(nextEntries.length === 1 ? t('admin_subscribers_added_notice') : t('admin_subscribers_added_count_notice', { count: nextEntries.length }))
     }
   }
 
@@ -112,7 +114,7 @@ export default function AdminSubscribers() {
     if (await persist(next)) {
       setSubs(next)
       setPendingRemove('')
-      setNotice('Subscriber removed.')
+      setNotice(t('admin_subscribers_removed_notice'))
     }
   }
 
@@ -126,19 +128,19 @@ export default function AdminSubscribers() {
   const uniqueDomains = new Set(subs.map((entry) => entry.split('@')[1]).filter(Boolean))
   const summaryCards = [
     {
-      label: 'Subscribers',
+      label: t('admin_subscribers_label'),
       value: subs.length,
-      helper: 'Recipients currently saved for reports',
+      helper: t('admin_subscribers_recipients_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_stat_visible_now'),
       value: filteredSubs.length,
-      helper: hasActiveFilters ? 'Matching the active search' : 'All saved recipients',
+      helper: hasActiveFilters ? t('admin_stat_matching_search') : t('admin_subscribers_all_saved'),
     },
     {
-      label: 'Unique domains',
+      label: t('admin_subscribers_unique_domains'),
       value: uniqueDomains.size,
-      helper: 'Distinct email domains in the list',
+      helper: t('admin_subscribers_unique_domains_helper'),
     },
   ]
 
@@ -148,7 +150,7 @@ export default function AdminSubscribers() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Subscribers" subtitle="Report notification recipients" />
+      <AdminPageHeader title={t('admin_subscribers_page_title')} subtitle={t('admin_subscribers_page_subtitle')} />
       <section className={styles.summaryGrid}>
         {summaryCards.map((card) => (
           <article key={card.label} className={styles.summaryCard}>
@@ -163,11 +165,11 @@ export default function AdminSubscribers() {
         {error && <div className={styles.error}>{error}</div>}
         {!loading && !ready && (
           <div className={styles.helperRow}>
-            <span className={styles.empty}>Retry loading settings before editing to avoid overwriting unknown subscriber data.</span>
-            <button type="button" className={styles.secondaryBtn} onClick={load}>Retry</button>
+            <span className={styles.empty}>{t('admin_subscribers_retry_hint')}</span>
+            <button type="button" className={styles.secondaryBtn} onClick={load}>{t('retry')}</button>
           </div>
         )}
-        <label className={styles.filterLabel} htmlFor="subscriber-emails">Add subscribers</label>
+        <label className={styles.filterLabel} htmlFor="subscriber-emails">{t('admin_subscribers_add_label')}</label>
         <div className={styles.row}>
           <input
             id="subscriber-emails"
@@ -184,17 +186,17 @@ export default function AdminSubscribers() {
               }
             }}
           />
-          <button type="button" className={styles.btn} onClick={add} disabled={!email.trim() || saving || loading || !ready}>{saving ? 'Saving...' : 'Add'}</button>
+          <button type="button" className={styles.btn} onClick={add} disabled={!email.trim() || saving || loading || !ready}>{saving ? t('saving') : t('add')}</button>
         </div>
-        <div className={styles.empty}>Add one or multiple recipients separated by comma, space, or new line.</div>
+        <div className={styles.empty}>{t('admin_subscribers_input_hint')}</div>
         <div className={styles.toolbar}>
           <div className={styles.searchGroup}>
-            <label className={styles.filterLabel} htmlFor="subscriber-search">Search subscribers</label>
+            <label className={styles.filterLabel} htmlFor="subscriber-search">{t('admin_subscribers_search_label')}</label>
             <input
               id="subscriber-search"
               className={styles.input}
               type="text"
-              placeholder="Search email or domain..."
+              placeholder={t('admin_subscribers_search_placeholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               disabled={loading}
@@ -202,43 +204,43 @@ export default function AdminSubscribers() {
           </div>
           <div className={styles.toolbarActions}>
             <button type="button" className={styles.secondaryBtn} onClick={load} disabled={loading}>
-              {loading ? 'Refreshing...' : 'Refresh'}
+              {loading ? t('admin_refreshing') : t('admin_refresh')}
             </button>
             <button type="button" className={styles.secondaryBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-              Clear filters
+              {t('admin_clear_filters')}
             </button>
           </div>
         </div>
         <div className={styles.filterMeta}>
-          Showing {filteredSubs.length} subscriber{filteredSubs.length !== 1 ? 's' : ''} across {subs.length} saved.
+          {t('admin_subscribers_showing_count', { filtered: filteredSubs.length, total: subs.length })}
         </div>
         <div className={styles.list}>
-          {loading && <div className={styles.empty}>Loading subscribers...</div>}
+          {loading && <div className={styles.empty}>{t('admin_subscribers_loading')}</div>}
           {!loading && filteredSubs.map((entry) => (
             <div key={entry} className={styles.subRow}>
               <div>
                 <div className={styles.subTitle}>{entry}</div>
-                <div className={styles.subMeta}>Domain: {entry.split('@')[1] || 'unknown'}</div>
+                <div className={styles.subMeta}>{t('admin_subscribers_domain')}: {entry.split('@')[1] || t('admin_subscribers_unknown')}</div>
               </div>
               {pendingRemove === entry ? (
                 <div className={styles.inlineActions}>
-                  <button type="button" className={styles.deleteBtn} onClick={() => remove(entry)} disabled={saving || !ready}>{saving ? 'Removing...' : 'Confirm remove'}</button>
-                  <button type="button" className={styles.secondaryBtn} onClick={() => setPendingRemove('')} disabled={saving}>Cancel</button>
+                  <button type="button" className={styles.deleteBtn} onClick={() => remove(entry)} disabled={saving || !ready}>{saving ? t('admin_removing') : t('admin_subscribers_confirm_remove')}</button>
+                  <button type="button" className={styles.secondaryBtn} onClick={() => setPendingRemove('')} disabled={saving}>{t('cancel')}</button>
                 </div>
               ) : (
-                <button type="button" className={styles.deleteBtn} onClick={() => remove(entry)} disabled={saving || !ready}>Remove</button>
+                <button type="button" className={styles.deleteBtn} onClick={() => remove(entry)} disabled={saving || !ready}>{t('remove')}</button>
               )}
             </div>
           ))}
           {!loading && filteredSubs.length === 0 && (
             <div className={styles.emptyState}>
-              <div className={styles.emptyTitle}>{hasActiveFilters ? 'No subscribers match the current search.' : 'No subscribers yet.'}</div>
+              <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_subscribers_no_match') : t('admin_subscribers_none_yet')}</div>
               <div className={styles.emptyText}>
                 {hasActiveFilters
-                  ? 'Clear the current search to restore the saved recipients.'
-                  : 'Saved report recipients will appear here once you add email addresses.'}
+                  ? t('admin_subscribers_clear_search_hint')
+                  : t('admin_subscribers_empty_state')}
               </div>
-              {hasActiveFilters && <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>Clear filters</button>}
+              {hasActiveFilters && <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>{t('admin_clear_filters')}</button>}
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@ import React from 'react'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import { adminApi } from '../../../services/admin.service'
 import { readBlobErrorMessage } from '../../../utils/httpErrors'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminPredefinedReports.module.scss'
 
 const PREDEFINED = [
@@ -11,6 +12,7 @@ const PREDEFINED = [
 ]
 
 export default function AdminPredefinedReports() {
+  const { t } = useLanguage()
   const [loadingKey, setLoadingKey] = React.useState('')
   const [error, setError] = React.useState('')
   const [notice, setNotice] = React.useState('')
@@ -29,9 +31,9 @@ export default function AdminPredefinedReports() {
       a.download = `${key}.csv`
       a.click()
       URL.revokeObjectURL(url)
-      setNotice(`Downloaded ${report?.title || key} as CSV.`)
+      setNotice(`${t('admin_predef_reports_downloaded')} ${report?.title || key} ${t('admin_predef_reports_as_csv')}.`)
     } catch (e) {
-      setError(await readBlobErrorMessage(e, 'Failed to generate report.'))
+      setError(await readBlobErrorMessage(e, t('admin_predef_reports_failed_generate')))
     } finally {
       setLoadingKey('')
     }
@@ -39,8 +41,8 @@ export default function AdminPredefinedReports() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Predefined Reports" subtitle="One-click reports" />
-      <div className={styles.helper}>Each report exports live server data as CSV using the predefined structure shown on the card.</div>
+      <AdminPageHeader title={t('admin_predef_reports_title')} subtitle={t('admin_predef_reports_subtitle')} />
+      <div className={styles.helper}>{t('admin_predef_reports_helper')}</div>
       {error && <div className={styles.error}>{error}</div>}
       {notice && <div className={styles.notice}>{notice}</div>}
       <div className={styles.grid}>
@@ -49,15 +51,15 @@ export default function AdminPredefinedReports() {
             <div className={styles.title}>{r.title}</div>
             <div className={styles.sub}>{r.desc}</div>
             <div className={styles.metaRow}>
-              <span className={styles.metaChip}>{r.columns.length} columns</span>
-              <span className={styles.metaChip}>CSV export</span>
+              <span className={styles.metaChip}>{r.columns.length} {t('admin_predef_reports_columns')}</span>
+              <span className={styles.metaChip}>{t('admin_predef_reports_csv_export')}</span>
             </div>
-            <div className={styles.metaDetail}>Audience: {r.audience}</div>
+            <div className={styles.metaDetail}>{t('admin_predef_reports_audience')}: {r.audience}</div>
             <div className={styles.metaDetail}>{r.cadence}</div>
-            <div className={styles.colsLabel}>Columns:</div>
+            <div className={styles.colsLabel}>{t('admin_predef_reports_columns')}:</div>
             <div className={styles.chips}>{r.columns.map(c => <span key={c} className={styles.chip}>{c}</span>)}</div>
             <button type="button" className={styles.btn} onClick={() => generate(r.key)} disabled={loadingKey === r.key}>
-              {loadingKey === r.key ? 'Working...' : 'Generate'}
+              {loadingKey === r.key ? t('admin_predef_reports_working') : t('admin_predef_reports_generate')}
             </button>
           </div>
         ))}

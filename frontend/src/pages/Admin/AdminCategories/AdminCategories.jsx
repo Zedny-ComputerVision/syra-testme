@@ -2,15 +2,16 @@ import React, { useEffect, useState } from 'react'
 import { adminApi } from '../../../services/admin.service'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import useAuth from '../../../hooks/useAuth'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminCategories.module.scss'
 
-const CATEGORY_OPTIONS = [
-  { value: 'TEST', label: 'Test' },
-  { value: 'TRAINING', label: 'Training' },
-  { value: 'SURVEY', label: 'Survey' },
+const CATEGORY_OPTION_KEYS = [
+  { value: 'TEST', labelKey: 'admin_categories_type_test' },
+  { value: 'TRAINING', labelKey: 'admin_categories_type_training' },
+  { value: 'SURVEY', labelKey: 'admin_categories_type_survey' },
 ]
 
-const CATEGORY_LABELS = Object.fromEntries(CATEGORY_OPTIONS.map((option) => [option.value, option.label]))
+const CATEGORY_LABEL_KEYS = Object.fromEntries(CATEGORY_OPTION_KEYS.map((option) => [option.value, option.labelKey]))
 const EMPTY = { name: '', type: 'TEST', description: '' }
 const PAGE_SIZE = 10
 
@@ -20,6 +21,7 @@ function resolveError(err, fallback) {
 
 export default function AdminCategories() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const isAdmin = user?.role === 'ADMIN'
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,7 +46,7 @@ export default function AdminCategories() {
       const { data } = await adminApi.categories()
       setCategories(data || [])
     } catch (err) {
-      setError(resolveError(err, 'Failed to load categories.'))
+      setError(resolveError(err, t('admin_categories_load_error')))
     } finally {
       setLoading(false)
     }
@@ -71,30 +73,30 @@ export default function AdminCategories() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const hasActiveFilters = Boolean(normalizedSearch) || typeFilter !== 'ALL' || sortDir !== 'asc'
-  const typeCounts = ['ALL', ...CATEGORY_OPTIONS.map((option) => option.value)].reduce((counts, type) => {
+  const typeCounts = ['ALL', ...CATEGORY_OPTION_KEYS.map((option) => option.value)].reduce((counts, type) => {
     counts[type] = type === 'ALL' ? categories.length : categories.filter((category) => category.type === type).length
     return counts
   }, {})
   const summaryCards = [
     {
-      label: 'Loaded categories',
+      label: t('admin_categories_loaded'),
       value: categories.length,
-      helper: 'All category records currently available',
+      helper: t('admin_categories_loaded_helper'),
     },
     {
-      label: 'Visible now',
+      label: t('admin_categories_visible_now'),
       value: sorted.length,
-      helper: hasActiveFilters ? 'Matching the active search and type filters' : 'All loaded categories',
+      helper: hasActiveFilters ? t('admin_categories_matching_filters') : t('admin_categories_all_loaded'),
     },
     {
-      label: 'Test categories',
+      label: t('admin_categories_test_categories'),
       value: typeCounts.TEST || 0,
-      helper: 'Used for test and assessment classification',
+      helper: t('admin_categories_test_helper'),
     },
     {
-      label: 'Training and survey',
+      label: t('admin_categories_training_survey'),
       value: (typeCounts.TRAINING || 0) + (typeCounts.SURVEY || 0),
-      helper: 'Non-test category groups',
+      helper: t('admin_categories_training_survey_helper'),
     },
   ]
 
@@ -145,7 +147,7 @@ export default function AdminCategories() {
 
     if (!payload.name) {
       setFieldErrors({})
-      setModalError('Category name is required.')
+      setModalError(t('admin_categories_name_required'))
       return
     }
 
@@ -156,16 +158,16 @@ export default function AdminCategories() {
     try {
       if (modal === 'create') {
         await adminApi.createCategory(payload)
-        setNotice('Category created.')
+        setNotice(t('admin_categories_created'))
       } else {
         await adminApi.updateCategory(modal.id, payload)
-        setNotice('Category updated.')
+        setNotice(t('admin_categories_updated'))
       }
       setModal(null)
       await load()
     } catch (err) {
       setFieldErrors(err?.validation?.fields || {})
-      setModalError(resolveError(err, 'Failed to save category.'))
+      setModalError(resolveError(err, t('admin_categories_save_error')))
     } finally {
       setSaving(false)
     }
@@ -182,10 +184,10 @@ export default function AdminCategories() {
     setError('')
     try {
       await adminApi.deleteCategory(id)
-      setNotice('Category deleted.')
+      setNotice(t('admin_categories_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err, 'Failed to delete category.'))
+      setError(resolveError(err, t('admin_categories_delete_error')))
     } finally {
       setDeleteBusyId(null)
     }
@@ -193,15 +195,15 @@ export default function AdminCategories() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Categories" subtitle="Organize tests, surveys, and training by category">
-        <button type="button" className={styles.btnPrimary} onClick={openCreate}>+ New Category</button>
+      <AdminPageHeader title={t('admin_categories_title')} subtitle={t('admin_categories_subtitle')}>
+        <button type="button" className={styles.btnPrimary} onClick={openCreate}>{t('admin_categories_new')}</button>
       </AdminPageHeader>
 
       {notice && <div className={styles.noticeBanner}>{notice}</div>}
       {error && (
         <div className={styles.helperRow}>
           <div className={styles.errorBanner}>{error}</div>
-          <button type="button" className={styles.actionBtn} onClick={() => void load()}>Retry</button>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
 
@@ -220,7 +222,7 @@ export default function AdminCategories() {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Search categories..."
+            placeholder={t('admin_categories_search_placeholder')}
             value={search}
             onChange={(event) => {
               setSearch(event.target.value)
@@ -228,7 +230,7 @@ export default function AdminCategories() {
             }}
           />
           <div className={styles.filterTabs}>
-            {[{ value: 'ALL', label: 'All' }, ...CATEGORY_OPTIONS].map((option) => (
+            {[{ value: 'ALL', labelKey: 'all' }, ...CATEGORY_OPTION_KEYS].map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -238,7 +240,7 @@ export default function AdminCategories() {
                   setPage(1)
                 }}
               >
-                {option.label}
+                {t(option.labelKey)}
                 <span className={styles.tabCount}>{typeCounts[option.value] || 0}</span>
               </button>
             ))}
@@ -248,77 +250,77 @@ export default function AdminCategories() {
             className={styles.sortBtn}
             onClick={() => setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))}
           >
-            {sortDir === 'asc' ? 'Sort: name A-Z' : 'Sort: name Z-A'}
+            {sortDir === 'asc' ? t('sort_name_az') : t('sort_name_za')}
           </button>
           <div className={styles.toolbarActions}>
-            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>Refresh</button>
-            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>Clear filters</button>
+            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>{t('refresh')}</button>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>{t('clear_filters')}</button>
           </div>
         </div>
         <div className={styles.filterMeta}>
-          Showing {sorted.length} matching categor{sorted.length !== 1 ? 'ies' : 'y'} across {categories.length} loaded.
+          {t('showing')} {sorted.length} {t('admin_categories_matching')} {t('admin_categories_across')} {categories.length} {t('admin_categories_loaded_label')}.
         </div>
       </div>
 
       <div className={styles.tableWrap}>
         {loading ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>Loading categories...</div>
-            <div className={styles.emptyText}>Fetching the latest category records and type counts.</div>
+            <div className={styles.emptyTitle}>{t('admin_categories_loading')}</div>
+            <div className={styles.emptyText}>{t('admin_categories_loading_text')}</div>
           </div>
         ) : sorted.length === 0 && hasActiveFilters ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>No categories match the current filters.</div>
-            <div className={styles.emptyText}>Clear the search or type filter to restore the full category list.</div>
-            <button type="button" className={styles.actionBtn} onClick={clearFilters}>Clear filters</button>
+            <div className={styles.emptyTitle}>{t('admin_categories_no_match')}</div>
+            <div className={styles.emptyText}>{t('admin_categories_no_match_text')}</div>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters}>{t('clear_filters')}</button>
           </div>
         ) : sorted.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyTitle}>No categories yet</div>
-            <div className={styles.emptyText}>Create a category to organize tests, surveys, or training content.</div>
+            <div className={styles.emptyTitle}>{t('admin_categories_no_categories')}</div>
+            <div className={styles.emptyText}>{t('admin_categories_no_categories_text')}</div>
           </div>
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Description</th>
-                <th>Actions</th>
+                <th>{t('name')}</th>
+                <th>{t('type')}</th>
+                <th>{t('description')}</th>
+                <th>{t('actions')}</th>
               </tr>
             </thead>
             <tbody>
               {paginated.map((category) => {
-                const categoryLabel = category.name || 'this category'
+                const categoryLabel = category.name || t('admin_categories_this_category')
 
                 return (
                 <tr key={category.id}>
                   <td className={styles.nameCell}>{category.name}</td>
                   <td>
                     <span className={`${styles.typeBadge} ${styles[`type${category.type}`] || ''}`}>
-                      {CATEGORY_LABELS[category.type] || category.type || 'Test'}
+                      {t(CATEGORY_LABEL_KEYS[category.type] || 'admin_categories_type_test')}
                     </span>
                   </td>
                   <td className={styles.descCell}>
-                    {category.description || <span className={styles.mutedCell}>No description</span>}
+                    {category.description || <span className={styles.mutedCell}>{t('admin_categories_no_description')}</span>}
                   </td>
                   <td>
                     <div className={styles.actionBtns}>
-                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(category)} disabled={deleteBusyId === category.id} aria-label={`Edit category ${categoryLabel}`} title={`Edit category ${categoryLabel}`}>
-                        Edit
+                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(category)} disabled={deleteBusyId === category.id} aria-label={`${t('edit')} ${categoryLabel}`} title={`${t('edit')} ${categoryLabel}`}>
+                        {t('edit')}
                       </button>
                       {isAdmin && (deleteConfirmId === category.id ? (
                         <>
-                          <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id} aria-label={`Confirm delete for category ${categoryLabel}`}>
-                            {deleteBusyId === category.id ? 'Deleting...' : 'Confirm'}
+                          <button type="button" className={styles.actionBtnDanger} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id} aria-label={`${t('confirm_delete')} ${categoryLabel}`}>
+                            {deleteBusyId === category.id ? t('admin_categories_deleting') : t('confirm')}
                           </button>
-                          <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === category.id} aria-label={`Keep category ${categoryLabel}`}>
-                            Cancel
+                          <button type="button" className={styles.actionBtn} onClick={() => setDeleteConfirmId(null)} disabled={deleteBusyId === category.id} aria-label={`${t('cancel_delete')} ${categoryLabel}`}>
+                            {t('cancel')}
                           </button>
                         </>
                       ) : (
-                        <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id} aria-label={`Delete category ${categoryLabel}`} title={`Delete category ${categoryLabel}`}>
-                          Delete
+                        <button type="button" className={styles.actionBtn} onClick={() => void handleDelete(category.id)} disabled={deleteBusyId === category.id} aria-label={`${t('delete')} ${categoryLabel}`} title={`${t('delete')} ${categoryLabel}`}>
+                          {t('delete')}
                         </button>
                       ))}
                     </div>
@@ -333,19 +335,19 @@ export default function AdminCategories() {
 
       {totalPages > 1 && (
         <div className={styles.pagination}>
-          <span className={styles.pageInfo}>{sorted.length} categor{sorted.length !== 1 ? 'ies' : 'y'} | Page {page} of {totalPages}</span>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))} disabled={page === 1}>Previous</button>
-          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))} disabled={page === totalPages}>Next</button>
+          <span className={styles.pageInfo}>{sorted.length} {t('admin_categories_categories_count')} | {t('page')} {page} {t('of')} {totalPages}</span>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))} disabled={page === 1}>{t('admin_candidates_previous')}</button>
+          <button type="button" className={styles.pageBtn} onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))} disabled={page === totalPages}>{t('next')}</button>
         </div>
       )}
 
       {modal && (
         <div className={styles.modalOverlay} onClick={close}>
           <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="category-dialog-title" onClick={(event) => event.stopPropagation()}>
-            <h3 id="category-dialog-title" className={styles.modalTitle}>{modal === 'create' ? 'New Category' : 'Edit Category'}</h3>
+            <h3 id="category-dialog-title" className={styles.modalTitle}>{modal === 'create' ? t('admin_categories_new_category') : t('admin_categories_edit_category')}</h3>
             {modalError && <div className={styles.modalError}>{modalError}</div>}
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="category-name">Name</label>
+              <label className={styles.label} htmlFor="category-name">{t('name')}</label>
               <input
                 id="category-name"
                 className={`${styles.input} ${fieldErrors.name ? styles.inputInvalid : ''}`}
@@ -364,7 +366,7 @@ export default function AdminCategories() {
               {fieldErrors.name && <div className={styles.fieldError}>{fieldErrors.name}</div>}
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="category-type">Type</label>
+              <label className={styles.label} htmlFor="category-type">{t('type')}</label>
               <select
                 id="category-type"
                 className={`${styles.select} ${fieldErrors.type ? styles.inputInvalid : ''}`}
@@ -380,14 +382,14 @@ export default function AdminCategories() {
                   })
                 }}
               >
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                {CATEGORY_OPTION_KEYS.map((option) => (
+                  <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
                 ))}
               </select>
               {fieldErrors.type && <div className={styles.fieldError}>{fieldErrors.type}</div>}
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="category-description">Description</label>
+              <label className={styles.label} htmlFor="category-description">{t('description')}</label>
               <input
                 id="category-description"
                 className={`${styles.input} ${fieldErrors.description ? styles.inputInvalid : ''}`}
@@ -406,9 +408,9 @@ export default function AdminCategories() {
               {fieldErrors.description && <div className={styles.fieldError}>{fieldErrors.description}</div>}
             </div>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnCancel} onClick={close} disabled={saving}>Cancel</button>
+              <button type="button" className={styles.btnCancel} onClick={close} disabled={saving}>{t('cancel')}</button>
               <button type="button" className={styles.btnPrimary} onClick={() => void handleSave()} disabled={saving || !form.name.trim()}>
-                {saving ? 'Saving...' : modal === 'create' ? 'Create Category' : 'Save Changes'}
+                {saving ? t('saving') : modal === 'create' ? t('admin_categories_create_category') : t('admin_categories_save_changes')}
               </button>
             </div>
           </div>

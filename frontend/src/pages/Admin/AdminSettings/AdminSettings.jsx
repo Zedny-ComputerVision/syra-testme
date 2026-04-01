@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../../services/admin.service'
+import useLanguage from '../../../hooks/useLanguage'
 import AdminPageHeader from '../AdminPageHeader/AdminPageHeader'
 import styles from './AdminSettings.module.scss'
 
@@ -13,15 +14,16 @@ const MANAGED_KEYS = new Set([
   'permissions_config',
 ])
 
-const SYSTEM_LINKS = [
-  { title: 'Maintenance', subtitle: 'Control read-only and downtime modes', to: '/admin/maintenance' },
-  { title: 'Integrations', subtitle: 'Manage external hooks and delivery targets', to: '/admin/integrations' },
-  { title: 'Subscribers', subtitle: 'Maintain report recipients with validation', to: '/admin/subscribers' },
-  { title: 'Roles & Permissions', subtitle: 'Adjust navigation and access policy', to: '/admin/roles' },
-]
-
 export default function AdminSettings() {
+  const { t } = useLanguage()
   const navigate = useNavigate()
+
+  const SYSTEM_LINKS = [
+    { title: t('admin_settings_link_maintenance'), subtitle: t('admin_settings_link_maintenance_sub'), to: '/admin/maintenance' },
+    { title: t('admin_settings_link_integrations'), subtitle: t('admin_settings_link_integrations_sub'), to: '/admin/integrations' },
+    { title: t('admin_settings_link_subscribers'), subtitle: t('admin_settings_link_subscribers_sub'), to: '/admin/subscribers' },
+    { title: t('admin_settings_link_roles'), subtitle: t('admin_settings_link_roles_sub'), to: '/admin/roles' },
+  ]
   const [settings, setSettings] = useState([])
   const [edited, setEdited] = useState({})
   const [loading, setLoading] = useState(true)
@@ -50,7 +52,7 @@ export default function AdminSettings() {
       setError('')
       setSettingsReady(true)
     } catch {
-      setLoadError('Failed to load settings.')
+      setLoadError(t('admin_settings_load_error'))
       setSettings([])
       setSettingsReady(false)
     } finally {
@@ -79,7 +81,7 @@ export default function AdminSettings() {
       })
       await load()
     } catch (err) {
-      setSaveErrors((prev) => ({ ...prev, [key]: err.response?.data?.detail || 'Save failed.' }))
+      setSaveErrors((prev) => ({ ...prev, [key]: err.response?.data?.detail || t('admin_settings_save_failed') }))
     } finally {
       setSavingKey('')
     }
@@ -95,7 +97,7 @@ export default function AdminSettings() {
       setSavedKey('allow_signup')
       setTimeout(() => setSavedKey(''), 2000)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save self-registration setting.')
+      setError(err.response?.data?.detail || t('admin_settings_signup_save_error'))
     } finally {
       setSavingKey('')
     }
@@ -105,47 +107,47 @@ export default function AdminSettings() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title="Admin Settings" subtitle="System-wide configuration" />
+      <AdminPageHeader title={t('admin_settings_title')} subtitle={t('admin_settings_subtitle')} />
       {loadError && (
         <div className={styles.errorBanner}>
           <span>{loadError}</span>
           <button type="button" className={styles.retryBtn} onClick={load} disabled={loading}>
-            Retry
+            {t('admin_settings_retry')}
           </button>
         </div>
       )}
       {error && <div className={styles.errorBanner}>{error}</div>}
-      {loading && <div className={styles.loadingText}>Loading settings...</div>}
+      {loading && <div className={styles.loadingText}>{t('admin_settings_loading')}</div>}
 
       <div className={styles.grid}>
         <div className={styles.card}>
-          <div className={styles.sectionTitle}>Operational Settings</div>
+          <div className={styles.sectionTitle}>{t('admin_settings_operational_title')}</div>
           <div className={styles.settingRow}>
             <div>
-              <div className={styles.rowTitle}>Self-registration</div>
+              <div className={styles.rowTitle}>{t('admin_settings_self_registration')}</div>
               <div className={styles.rowSub}>
-                Control whether new learners can create accounts from the signup page.
-                {!settingsReady && !loading ? ' Retry loading settings to enable editing.' : ''}
+                {t('admin_settings_self_registration_desc')}
+                {!settingsReady && !loading ? ` ${t('admin_settings_retry_to_edit')}` : ''}
               </div>
             </div>
             <label className={styles.toggleRow}>
               <input type="checkbox" checked={signupAllowed} disabled={!settingsReady || loading} onChange={(e) => setSignupAllowed(e.target.checked)} />
-              <span>{signupAllowed ? 'Enabled' : 'Disabled'}</span>
+              <span>{signupAllowed ? t('admin_settings_enabled') : t('admin_settings_disabled')}</span>
             </label>
           </div>
           <div className={styles.actions}>
             {savingKey === 'allow_signup' ? (
-              <span className={styles.saving}>Saving...</span>
+              <span className={styles.saving}>{t('admin_settings_saving')}</span>
             ) : savedKey === 'allow_signup' ? (
-              <span className={styles.saved}>Saved</span>
+              <span className={styles.saved}>{t('admin_settings_saved')}</span>
             ) : (
-              <button type="button" className={styles.saveBtn} onClick={saveSignup} disabled={loading || !settingsReady || signupAllowed === savedSignupAllowed}>Save Self-registration</button>
+              <button type="button" className={styles.saveBtn} onClick={saveSignup} disabled={loading || !settingsReady || signupAllowed === savedSignupAllowed}>{t('admin_settings_save_self_registration')}</button>
             )}
           </div>
         </div>
 
         <div className={styles.card}>
-          <div className={styles.sectionTitle}>Managed Pages</div>
+          <div className={styles.sectionTitle}>{t('admin_settings_managed_pages')}</div>
           <div className={styles.linkGrid}>
             {SYSTEM_LINKS.map((link) => (
               <button key={link.to} type="button" className={styles.linkCard} onClick={() => navigate(link.to)}>
@@ -158,18 +160,18 @@ export default function AdminSettings() {
       </div>
 
       <div className={styles.card}>
-        <div className={styles.sectionTitle}>Advanced Settings</div>
+        <div className={styles.sectionTitle}>{t('admin_settings_advanced_title')}</div>
         <div className={`${styles.rowSub} ${styles.sectionHint}`}>
-          Only uncommon keys remain editable here. Core system settings are managed from their dedicated pages above.
+          {t('admin_settings_advanced_hint')}
         </div>
         {loadError && !loading ? (
-          <div className={styles.rowSub}>Retry to load unmanaged settings.</div>
+          <div className={styles.rowSub}>{t('admin_settings_retry_unmanaged')}</div>
         ) : settings.length === 0 ? (
-          <div className={styles.rowSub}>No unmanaged settings found.</div>
+          <div className={styles.rowSub}>{t('admin_settings_no_unmanaged')}</div>
         ) : (
           <table className={styles.table}>
             <thead>
-              <tr><th>Key</th><th>Value</th><th>Action</th></tr>
+              <tr><th>{t('admin_settings_th_key')}</th><th>{t('admin_settings_th_value')}</th><th>{t('admin_settings_th_action')}</th></tr>
             </thead>
             <tbody>
               {settings.map((setting) => (
@@ -184,9 +186,9 @@ export default function AdminSettings() {
                   </td>
                   <td className={styles.actionCell}>
                     {savingKey === setting.key ? (
-                      <span className={styles.saving}>Saving...</span>
+                      <span className={styles.saving}>{t('admin_settings_saving')}</span>
                     ) : savedKey === setting.key ? (
-                      <span className={styles.saved}>Saved</span>
+                      <span className={styles.saved}>{t('admin_settings_saved')}</span>
                     ) : (
                       <div className={styles.actionStack}>
                         <button
@@ -195,7 +197,7 @@ export default function AdminSettings() {
                           onClick={() => updateRaw(setting.key)}
                           disabled={!isDirty(setting.key, setting.value || '')}
                         >
-                          Save
+                          {t('admin_settings_save')}
                         </button>
                         {saveErrors[setting.key] && <span className={styles.errorText}>{saveErrors[setting.key]}</span>}
                       </div>
