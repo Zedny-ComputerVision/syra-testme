@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider } from './hooks/useLanguage';
 import AppRoutes from './routes/AppRoutes';
 import { clearChunkRecoveryQueryParam, isDynamicImportFailure, recoverFromChunkFailure } from './utils/chunkRecovery';
 import { installDevErrorOverlay } from './utils/devErrorOverlay';
@@ -39,11 +40,13 @@ window.addEventListener('error', (event) => {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <AuthProvider>
-        <ThemeProvider>
-          <AppRoutes />
-        </ThemeProvider>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <AppRoutes />
+          </ThemeProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
