@@ -15,6 +15,7 @@ import {
 } from 'recharts'
 import { MIX_ROW_COLORS, PIE_COLORS } from './dashboardConfig'
 import { ChartEmpty, ChartTooltip } from './DashboardChartHelpers'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminDashboard.module.scss'
 
 export default function DashboardAnalytics({
@@ -25,6 +26,7 @@ export default function DashboardAnalytics({
   testStatusBreakdown,
   trendData,
 }) {
+  const { t } = useLanguage()
   const maxRoleValue = roleDistribution.length ? Math.max(...roleDistribution.map((entry) => entry.value), 1) : 1
   const maxTestValue = testStatusBreakdown.length ? Math.max(...testStatusBreakdown.map((entry) => entry.value), 1) : 1
 
@@ -33,8 +35,8 @@ export default function DashboardAnalytics({
       <section className={styles.panelCard}>
         <div className={styles.panelHeader}>
           <div>
-            <div className={styles.panelEyebrow}>Trend</div>
-            <h3 className={styles.panelTitle}>Attempts in the last 7 days</h3>
+            <div className={styles.panelEyebrow}>{t('admin_dash_analytics_trend')}</div>
+            <h3 className={styles.panelTitle}>{t('admin_dash_analytics_attempts_last_7_days')}</h3>
           </div>
         </div>
         <div className={styles.chartBody}>
@@ -50,11 +52,11 @@ export default function DashboardAnalytics({
                 <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: 'var(--color-muted)', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis allowDecimals={false} tick={{ fill: 'var(--color-muted)', fontSize: 12 }} axisLine={false} tickLine={false} width={26} />
-                <Tooltip content={<ChartTooltip formatter={(value) => `${value} attempts`} />} />
+                <Tooltip content={<ChartTooltip formatter={(value) => `${value} ${t('admin_dash_analytics_attempts')}`} />} />
                 <Area
                   type="monotone"
                   dataKey="value"
-                  name="Attempts"
+                  name={t('admin_dash_analytics_attempts')}
                   stroke="#0891b2"
                   strokeWidth={3}
                   fill="url(#attemptTrendFill)"
@@ -62,7 +64,7 @@ export default function DashboardAnalytics({
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <ChartEmpty title="No recent attempts yet" />
+            <ChartEmpty title={t('admin_dash_analytics_no_recent_attempts')} />
           )}
         </div>
       </section>
@@ -70,10 +72,10 @@ export default function DashboardAnalytics({
       <section className={styles.panelCard}>
         <div className={styles.panelHeader}>
           <div>
-            <div className={styles.panelEyebrow}>Workflow</div>
-            <h3 className={styles.panelTitle}>Attempt status mix</h3>
+            <div className={styles.panelEyebrow}>{t('admin_dash_analytics_workflow')}</div>
+            <h3 className={styles.panelTitle}>{t('admin_dash_analytics_attempt_status_mix')}</h3>
           </div>
-          <div className={styles.panelMeta}>{dashboard.total_attempts} total</div>
+          <div className={styles.panelMeta}>{dashboard.total_attempts} {t('admin_dash_analytics_total')}</div>
         </div>
         <div className={styles.donutWrap}>
           {attemptStatusBreakdown.some((item) => item.value > 0) ? (
@@ -93,7 +95,7 @@ export default function DashboardAnalytics({
                       <Cell key={entry.key} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip content={<ChartTooltip formatter={(value) => `${value} attempts`} />} />
+                  <Tooltip content={<ChartTooltip formatter={(value) => `${value} ${t('admin_dash_analytics_attempts')}`} />} />
                 </PieChart>
               </ResponsiveContainer>
               <div className={styles.legendList}>
@@ -107,7 +109,7 @@ export default function DashboardAnalytics({
               </div>
             </>
           ) : (
-            <ChartEmpty title="No attempt statuses yet" />
+            <ChartEmpty title={t('admin_dash_analytics_no_attempt_statuses')} />
           )}
         </div>
       </section>
@@ -115,8 +117,8 @@ export default function DashboardAnalytics({
       <section className={styles.panelCard}>
         <div className={styles.panelHeader}>
           <div>
-            <div className={styles.panelEyebrow}>Performance</div>
-            <h3 className={styles.panelTitle}>Score distribution</h3>
+            <div className={styles.panelEyebrow}>{t('admin_dash_analytics_performance')}</div>
+            <h3 className={styles.panelTitle}>{t('admin_dash_analytics_score_distribution')}</h3>
           </div>
         </div>
         <div className={styles.chartBody}>
@@ -126,8 +128,8 @@ export default function DashboardAnalytics({
                 <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: 'var(--color-muted)', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis allowDecimals={false} tick={{ fill: 'var(--color-muted)', fontSize: 12 }} axisLine={false} tickLine={false} width={26} />
-                <Tooltip content={<ChartTooltip formatter={(value) => `${value} attempts`} />} />
-                <Bar dataKey="value" name="Attempts" radius={[8, 8, 0, 0]}>
+                <Tooltip content={<ChartTooltip formatter={(value) => `${value} ${t('admin_dash_analytics_attempts')}`} />} />
+                <Bar dataKey="value" name={t('admin_dash_analytics_attempts')} radius={[8, 8, 0, 0]}>
                   {scoreDistribution.map((entry, index) => (
                     <Cell key={entry.key} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
@@ -135,7 +137,7 @@ export default function DashboardAnalytics({
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <ChartEmpty title="No scores available yet" />
+            <ChartEmpty title={t('admin_dash_analytics_no_scores_available')} />
           )}
         </div>
       </section>
@@ -143,13 +145,13 @@ export default function DashboardAnalytics({
       <section className={styles.panelCard}>
         <div className={styles.panelHeader}>
           <div>
-            <div className={styles.panelEyebrow}>Composition</div>
-            <h3 className={styles.panelTitle}>Platform mix</h3>
+            <div className={styles.panelEyebrow}>{t('admin_dash_analytics_composition')}</div>
+            <h3 className={styles.panelTitle}>{t('admin_dash_analytics_platform_mix')}</h3>
           </div>
         </div>
         <div className={styles.mixSection}>
           <div className={styles.mixBlock}>
-            <div className={styles.mixTitle}>User roles</div>
+            <div className={styles.mixTitle}>{t('admin_dash_analytics_user_roles')}</div>
             {roleDistribution.length > 0 ? roleDistribution.map((item, index) => (
               <div key={item.key} className={styles.mixRow}>
                 <div className={styles.mixLabelRow}>
@@ -167,12 +169,12 @@ export default function DashboardAnalytics({
                 </div>
               </div>
             )) : (
-              <div className={styles.inlineEmpty}>No role data yet.</div>
+              <div className={styles.inlineEmpty}>{t('admin_dash_analytics_no_role_data')}</div>
             )}
           </div>
 
           <div className={styles.mixBlock}>
-            <div className={styles.mixTitle}>Test status</div>
+            <div className={styles.mixTitle}>{t('admin_dash_analytics_test_status')}</div>
             {testStatusBreakdown.length > 0 ? testStatusBreakdown.map((item, index) => (
               <div key={item.key} className={styles.mixRow}>
                 <div className={styles.mixLabelRow}>
@@ -190,7 +192,7 @@ export default function DashboardAnalytics({
                 </div>
               </div>
             )) : (
-              <div className={styles.inlineEmpty}>No test mix available yet.</div>
+              <div className={styles.inlineEmpty}>{t('admin_dash_analytics_no_test_mix')}</div>
             )}
           </div>
         </div>

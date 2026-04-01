@@ -1,4 +1,5 @@
 import React from 'react'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminDashboard.module.scss'
 
 export function ChartTooltip({ active, payload, label, formatter = (value) => value }) {
@@ -18,10 +19,11 @@ export function ChartTooltip({ active, payload, label, formatter = (value) => va
 }
 
 export function ChartEmpty({ title }) {
+  const { t } = useLanguage()
   return (
     <div className={styles.chartEmpty}>
       <div className={styles.chartEmptyTitle}>{title}</div>
-      <div className={styles.chartEmptyText}>Analytics will appear here once the platform has enough activity.</div>
+      <div className={styles.chartEmptyText}>{t('admin_dash_charts_empty_analytics_message')}</div>
     </div>
   )
 }
