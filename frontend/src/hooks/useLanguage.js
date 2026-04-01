@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createContext, createElement, useContext, useState, useCallback, useMemo } from 'react';
 import { translations, languages, rtlLanguages } from '../locales';
 
 const LanguageContext = createContext(null);
@@ -66,7 +66,7 @@ export function LanguageProvider({ children }) {
     [lang, t, setLanguage, dir, fontFamily]
   );
 
-  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+  return createElement(LanguageContext.Provider, { value }, children);
 }
 
 /**
