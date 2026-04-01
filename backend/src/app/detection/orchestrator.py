@@ -25,6 +25,8 @@ from concurrent.futures import ThreadPoolExecutor, Future
 import cv2
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 try:
     import mediapipe as _mp
     _MP_AVAILABLE = hasattr(_mp, "solutions") or hasattr(_mp, "tasks")
@@ -47,8 +49,6 @@ from .face_verification import FaceVerifier
 from .head_pose import HeadPoseDetector
 from .liveness import LivenessDetector
 from .emotion_detection import EmotionMonitor
-
-logger = logging.getLogger(__name__)
 
 # Module-level cached FaceMesh instance — shared across all orchestrator instances
 # to avoid re-loading the model for each new proctoring session.

@@ -1630,6 +1630,11 @@ async def upload_video_capture(
     current=Depends(get_current_user),
 ):
     _attempt_or_forbidden(attempt_id, db, current)
+
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > 500 * 1024 * 1024:  # 500MB limit
+        raise HTTPException(status_code=413, detail="Video upload exceeds maximum size (500MB)")
+
     normalized_source = _normalize_video_source(source)
     session_id = str(session_id or "").strip()
     if not session_id:
@@ -2446,6 +2451,9 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     # Collect serious events for post-commit notification
                     _serious_batch: list[ProctoringEvent] = []
                     _integration_batch: list[ProctoringEvent] = []
+                    # Collect WebSocket messages to send AFTER successful DB commit
+                    _ws_messages: list[dict] = []
+                    _forced_submit_msg: dict | None = None
 
                     for alert in alerts:
                         severity = SEVERITY_MAP.get(alert.get("severity", "LOW"), SeverityEnum.LOW)
@@ -2491,7 +2499,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         _integration_batch.append(event)
                         _integration_batch.extend(rule_result["created_events"])
 
-                        await websocket.send_json({
+                        # Queue alert messages for sending after DB commit
+                        _ws_messages.append({
                             "type": "alert",
                             "event_type": alert["event_type"],
                             "severity": alert["severity"],
@@ -2499,7 +2508,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             "confidence": alert.get("confidence", 0),
                         })
                         for rule_alert in rule_result["alerts"]:
-                            await websocket.send_json({
+                            _ws_messages.append({
                                 "type": "alert",
                                 "event_type": rule_alert["event_type"],
                                 "severity": rule_alert["severity"].value,
@@ -2508,8 +2517,28 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 "rule_id": rule_alert["rule_id"],
                             })
                         if rule_result["forced_submit"]:
-                            await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
+                            _forced_submit_msg = {"type": "forced_submit", "detail": rule_result["submit_reason"] or ""}
                             break
+
+                    # Commit to DB BEFORE sending alerts to client
+                    _commit_ok = True
+                    if alerts:
+                        try:
+                            await _async_db_commit()
+                        except Exception as commit_err:
+                            _commit_ok = False
+                            logger.warning("DB commit failed for frame alerts (attempt %s): %s", attempt_id, commit_err)
+                            try:
+                                db.rollback()
+                            except Exception:
+                                pass
+
+                    # Only send alerts to client after successful DB commit
+                    if _commit_ok:
+                        for _ws_msg in _ws_messages:
+                            await websocket.send_json(_ws_msg)
+                        if _forced_submit_msg:
+                            await websocket.send_json(_forced_submit_msg)
 
                     # Broadcast frame thumbnail + alerts to live admin viewers via Redis
                     _thumb_now = time.monotonic()
@@ -2547,16 +2576,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             **session_summary,
                         })
 
-                    # Single commit for all events from this frame
-                    if alerts:
-                        try:
-                            await _async_db_commit()
-                        except Exception as commit_err:
-                            logger.warning("DB commit failed for frame alerts (attempt %s): %s", attempt_id, commit_err)
-                            try:
-                                db.rollback()
-                            except Exception:
-                                pass
                     # Post-commit: notifications & integrations
                     for _evt in _serious_batch:
                         _handle_serious_proctoring_event(db, attempt, _evt)

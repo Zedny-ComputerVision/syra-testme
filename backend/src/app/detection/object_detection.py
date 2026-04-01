@@ -3,6 +3,7 @@
 import logging
 import os
 import threading
+import time
 
 import cv2
 import numpy as np
@@ -31,6 +32,8 @@ LABEL_CONFIDENCE_OVERRIDES = {
 }
 _model = None
 _model_load_failed = False
+_model_load_attempted_at: float = 0.0
+_MODEL_RETRY_SEC = 60.0
 _lock = threading.Lock()
 OBJECT_MODEL_PATH = os.environ.get("YOLO_OBJECT_MODEL", "yolov8n.pt")
 logger = logging.getLogger(__name__)
@@ -41,6 +44,7 @@ class ObjectDetector:
         self.forbidden_labels = forbidden_labels or FORBIDDEN_LABELS
         self.confidence_threshold = confidence_threshold
         self._warned_unavailable = False
+        self._load_failure_warned = False
 
     def _normalize_label(self, label: str) -> str:
         return str(label or "").strip().lower()
@@ -55,21 +59,48 @@ class ObjectDetector:
         return min(self.confidence_threshold, min(LABEL_CONFIDENCE_OVERRIDES.values()))
 
     def _get_model(self):
-        global _model, _model_load_failed
+        global _model, _model_load_failed, _model_load_attempted_at
         if _model is not None:
             return _model
-        if YOLO is None or _model_load_failed:
+        if YOLO is None:
+            return None
+        if _model_load_failed and (time.monotonic() - _model_load_attempted_at) < _MODEL_RETRY_SEC:
             return None
         with _lock:
             if _model is not None:
                 return _model
-            if _model_load_failed:
+            if _model_load_failed and (time.monotonic() - _model_load_attempted_at) < _MODEL_RETRY_SEC:
                 return None
             try:
-                _model = YOLO(OBJECT_MODEL_PATH)
+                resolved = os.path.abspath(OBJECT_MODEL_PATH)
+                if not os.path.isfile(resolved):
+                    logger.error(
+                        "YOLO object model file not found at %s (resolved: %s) — object detection disabled",
+                        OBJECT_MODEL_PATH, resolved,
+                    )
+                    _model_load_failed = True
+                    _model_load_attempted_at = time.monotonic()
+                    return None
+                loaded = YOLO(resolved)
+                available_labels = {str(v).strip().lower() for v in loaded.names.values()} if hasattr(loaded, "names") else set()
+                missing = FORBIDDEN_LABELS - available_labels
+                if missing:
+                    logger.warning(
+                        "Object model missing some forbidden labels (will never detect them): %s",
+                        missing,
+                    )
+                logger.info(
+                    "YOLO object model loaded from %s — %d classes, forbidden coverage: %s",
+                    resolved,
+                    len(loaded.names) if hasattr(loaded, "names") else -1,
+                    FORBIDDEN_LABELS & available_labels,
+                )
+                _model = loaded
+                _model_load_failed = False
             except Exception as exc:
-                logger.warning("Failed to load YOLO object model from %s: %s", OBJECT_MODEL_PATH, exc)
+                logger.error("Failed to load YOLO object model from %s: %s", OBJECT_MODEL_PATH, exc)
                 _model_load_failed = True
+                _model_load_attempted_at = time.monotonic()
                 return None
         return _model
 
@@ -82,6 +113,13 @@ class ObjectDetector:
             if not self._warned_unavailable:
                 logger.warning("Object detection model unavailable - detection disabled")
                 self._warned_unavailable = True
+            if _model_load_failed and not self._load_failure_warned:
+                logger.warning(
+                    "Object detection model failed to load (path=%s) — all object detection is inactive. "
+                    "Check YOLO_OBJECT_MODEL env var or model file availability.",
+                    OBJECT_MODEL_PATH,
+                )
+                self._load_failure_warned = True
             return []
 
         results = model.predict(
@@ -119,15 +157,5 @@ class ObjectDetector:
 
 def preload():
     """Eagerly load the object detection model so the first frame has no cold-start delay."""
-    global _model, _model_load_failed
-    if _model is not None or YOLO is None or _model_load_failed:
-        return
-    with _lock:
-        if _model is not None or _model_load_failed:
-            return
-        try:
-            _model = YOLO(OBJECT_MODEL_PATH)
-            logger.info("YOLO object model pre-loaded from %s", OBJECT_MODEL_PATH)
-        except Exception as exc:
-            logger.warning("Failed to pre-load YOLO object model from %s: %s", OBJECT_MODEL_PATH, exc)
-            _model_load_failed = True
+    # Reuse the same robust loading path as _get_model via a temporary detector
+    ObjectDetector()._get_model()

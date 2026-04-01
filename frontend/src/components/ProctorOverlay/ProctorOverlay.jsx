@@ -366,7 +366,11 @@ export default function ProctorOverlay({
         audioStartedRef.current = true
         startAudioCapture(stream, (b64, sampleRate) => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'audio', data: b64, sample_rate: sampleRate || 16000 }))
+            try {
+              ws.send(JSON.stringify({ type: 'audio', data: b64, sample_rate: sampleRate || 16000 }))
+            } catch (e) {
+              console.warn('ProctorOverlay: ws.send failed:', e?.message)
+            }
           }
         }, audioChunkInterval).then(() => {
           clearInterval(interval)
@@ -450,7 +454,11 @@ export default function ProctorOverlay({
           ctx.drawImage(bitmap, 0, 0)
           const dataUrl = scCanvas.toDataURL('image/jpeg', 0.85)
           const b64 = dataUrl.split(',')[1]
-          ws.send(JSON.stringify({ type: 'screen', data: b64 }))
+          try {
+            ws.send(JSON.stringify({ type: 'screen', data: b64 }))
+          } catch (e) {
+            console.warn('ProctorOverlay: ws.send failed:', e?.message)
+          }
         }).catch(() => {
           emitRateLimitedSystemError('screen_capture', 'Unable to capture shared-screen frames. Re-share your full screen if this continues.')
         })
@@ -509,7 +517,11 @@ export default function ProctorOverlay({
       audioStartedRef.current = true
       startAudioCapture(stream, (b64, sampleRate) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'audio', data: b64, sample_rate: sampleRate || 16000 }))
+          try {
+            ws.send(JSON.stringify({ type: 'audio', data: b64, sample_rate: sampleRate || 16000 }))
+          } catch (e) {
+            console.warn('ProctorOverlay: ws.send failed:', e?.message)
+          }
         }
       }, audioChunkInterval).catch(() => {
         audioStartedRef.current = false
@@ -537,13 +549,21 @@ export default function ProctorOverlay({
         // Register a function so Proctoring.jsx can send browser-level violations
         onRegisterSendClientEvent?.((evType, severity, detail) => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'client_event', event_type: evType, severity, detail }))
+            try {
+              ws.send(JSON.stringify({ type: 'client_event', event_type: evType, severity, detail }))
+            } catch (e) {
+              console.warn('ProctorOverlay: ws.send failed:', e?.message)
+            }
           }
         })
         // Register raw JSON send for answer_timing, keystroke_anomaly etc.
         onRegisterWsRawSend?.((payload) => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(payload))
+            try {
+              ws.send(JSON.stringify(payload))
+            } catch (e) {
+              console.warn('ProctorOverlay: ws.send failed:', e?.message)
+            }
           }
         })
         // Adaptive frame rate: self-rescheduling timer
@@ -569,7 +589,13 @@ export default function ProctorOverlay({
             if (frameTimerRef.stopped) return
             if (ws.readyState === WebSocket.OPEN && videoRef.current) {
               const base64 = analyzeLocalFrame()
-              if (base64) ws.send(JSON.stringify({ type: 'frame', data: base64 }))
+              if (base64) {
+                try {
+                  ws.send(JSON.stringify({ type: 'frame', data: base64 }))
+                } catch (e) {
+                  console.warn('ProctorOverlay: ws.send failed:', e?.message)
+                }
+              }
             }
             scheduleNextFrame()
           }, currentInterval)
@@ -596,6 +622,10 @@ export default function ProctorOverlay({
           startScreenCaptureLoop(screenStreamRef.current)
         }
 
+        // On reconnect, ensure previous audio capture is stopped and flag is reset
+        // so tryStartAudio (and the retry useEffect) can re-establish audio.
+        stopAudioCapture()
+        audioStartedRef.current = false
         // Try to start audio capture (may fail if stream not ready yet — retried in stream useEffect)
         tryStartAudio(ws)
       }
@@ -637,7 +667,11 @@ export default function ProctorOverlay({
             }
           } else if (msg.type === 'ping') {
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'pong' }))
+              try {
+                ws.send(JSON.stringify({ type: 'pong' }))
+              } catch (e) {
+                console.warn('ProctorOverlay: ws.send failed:', e?.message)
+              }
             }
           } else if (msg.type === 'slow_mode') {
             // Server is overloaded — temporarily increase frame interval

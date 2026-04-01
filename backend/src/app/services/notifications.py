@@ -8,15 +8,20 @@ logger = logging.getLogger(__name__)
 
 
 def notify_user(db: Session, user_id, title: str, message: str, link: str = None):
-    try:
-        notif = Notification(user_id=user_id, title=title, message=message, link=link)
-        db.add(notif)
-        db.commit()
-        return True
-    except Exception as exc:
-        db.rollback()
-        logger.warning("Failed to persist notification for user %s: %s", user_id, exc)
-        return False
+    for attempt in range(2):
+        try:
+            notif = Notification(user_id=user_id, title=title, message=message, link=link)
+            db.add(notif)
+            db.commit()
+            return True
+        except Exception as exc:
+            db.rollback()
+            if attempt == 0:
+                logger.warning("Notification persist failed for user %s (retrying): %s", user_id, exc)
+                continue
+            logger.error("Notification persist failed for user %s after retry: %s", user_id, exc)
+            return False
+    return False
 
 
 def notify_proctoring_event(db: Session, attempt_id, event: dict):

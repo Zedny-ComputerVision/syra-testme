@@ -288,12 +288,12 @@ class FaceVerifier:
         self._warned_unavailable = False
 
     def _get_live_embedding(self, frame: np.ndarray) -> Optional[np.ndarray]:
-        if self._use_deepface:
-            emb = _embedding_via_deepface(frame, detector_backend="opencv")
-            if emb is not None:
-                return np.array(emb, dtype=np.float32)
         if self._use_haar:
             emb = _embedding_via_haar(frame)
+            if emb is not None:
+                return np.array(emb, dtype=np.float32)
+        elif self._use_deepface:
+            emb = _embedding_via_deepface(frame, detector_backend="opencv")
             if emb is not None:
                 return np.array(emb, dtype=np.float32)
         if self._mesh is None:
@@ -312,7 +312,12 @@ class FaceVerifier:
                 None if self.baseline is None else tuple(self.baseline.shape),
                 tuple(live_vec.shape),
             )
-            return None
+            return {
+                "event_type": "FACE_MISMATCH",
+                "severity": "HIGH",
+                "detail": f"Embedding dimension mismatch (baseline={self.baseline.shape[0]}, live={live_vec.shape[0]}); identity cannot be verified",
+                "confidence": 0.80,
+            }
         dist = cosine_distance(self.baseline, live_vec)
 
         if dist > self.threshold:
@@ -326,7 +331,7 @@ class FaceVerifier:
                     "event_type": "FACE_MISMATCH",
                     "severity": "HIGH",
                     "detail": f"Live face differs from verified identity (dist={dist:.3f}, method={method})",
-                    "confidence": min(0.99, dist / self.threshold),
+                    "confidence": min(0.99, max(0.5, (dist - self.threshold) / self.threshold + 0.5)),
                     "meta": {"distance": dist, "method": method},
                 }
             return None

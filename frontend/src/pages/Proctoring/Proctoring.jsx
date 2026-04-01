@@ -546,7 +546,12 @@ export default function Proctoring() {
   // we fall back to a local-only toast.
   const sendBrowserViolation = useCallback((eventType, severity, detail) => {
     if (sendClientEventRef.current) {
-      sendClientEventRef.current(eventType, severity, detail)
+      try {
+        sendClientEventRef.current(eventType, severity, detail)
+      } catch (e) {
+        console.warn('sendBrowserViolation: sendClientEvent failed, falling back to local:', e?.message)
+        handleViolation({ event_type: eventType, severity, detail })
+      }
     } else {
       handleViolation({ event_type: eventType, severity, detail })
     }

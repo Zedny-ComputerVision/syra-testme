@@ -315,6 +315,8 @@ class ProctoringEvent(Base):
     __tablename__ = "proctoring_events"
     __table_args__ = (
         Index("ix_event_attempt", "attempt_id"),
+        Index("ix_event_attempt_time", "attempt_id", "occurred_at"),
+        Index("ix_event_type_severity", "event_type", "severity"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
