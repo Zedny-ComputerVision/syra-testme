@@ -473,21 +473,6 @@ export default function Navbar({ onMenuToggle }) {
       <div className={styles.spacer} />
 
       <div className={styles.controls}>
-        {/* Accent chips */}
-        <div className={styles.accentRow} aria-label="Accent color picker">
-          {accents.map(a => (
-            <button
-              key={a.key}
-              className={`${styles.accentChip} ${a.toneClass} ${accent === a.key ? styles.accentChipActive : ''}`}
-              onClick={() => setAccent(a.key)}
-              aria-label={`${t('nav_use_accent')} ${a.key}`}
-              aria-pressed={accent === a.key}
-              title={`${t('nav_use_accent')} ${a.key}`}
-              type="button"
-            />
-          ))}
-        </div>
-
         {/* Language Switcher */}
         <div className={styles.langSwitcher}>
           <select
