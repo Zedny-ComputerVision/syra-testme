@@ -1631,10 +1631,6 @@ async def upload_video_capture(
 ):
     _attempt_or_forbidden(attempt_id, db, current)
 
-    content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > 500 * 1024 * 1024:  # 500MB limit
-        raise HTTPException(status_code=413, detail="Video upload exceeds maximum size (500MB)")
-
     normalized_source = _normalize_video_source(source)
     session_id = str(session_id or "").strip()
     if not session_id:
