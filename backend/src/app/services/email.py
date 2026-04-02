@@ -243,8 +243,8 @@ async def send_password_reset_email(user, token: str):
 
 
 async def send_exam_scheduled_email(user, exam, schedule):
-    name = getattr(user, "name", None) or "there"
-    title = getattr(exam, "title", "Exam")
+    name = html_mod.escape(getattr(user, "name", None) or "there")
+    title = html_mod.escape(getattr(exam, "title", "Exam"))
     scheduled_at = getattr(schedule, "scheduled_at", "")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>
@@ -260,7 +260,7 @@ async def send_exam_scheduled_email(user, exam, schedule):
 
 
 async def send_attempt_submitted_email(user, attempt):
-    name = getattr(user, "name", None) or "there"
+    name = html_mod.escape(getattr(user, "name", None) or "there")
     attempt_id = getattr(attempt, "id", "")
     body = f"""
 <p>Hi <strong>{name}</strong>,</p>

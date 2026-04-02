@@ -99,7 +99,7 @@ export default function DashboardAnalytics({
                 </PieChart>
               </ResponsiveContainer>
               <div className={styles.legendList}>
-                {attemptStatusBreakdown.map((item, index) => (
+                {attemptStatusBreakdown.filter((item) => item.value > 0).map((item, index) => (
                   <div key={item.key} className={styles.legendRow}>
                     <span className={styles.legendSwatch} style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
                     <span>{item.label}</span>

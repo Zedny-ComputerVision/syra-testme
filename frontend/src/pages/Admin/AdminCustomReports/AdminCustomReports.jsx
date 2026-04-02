@@ -45,7 +45,7 @@ export default function AdminCustomReports() {
   const [reloadNonce, setReloadNonce] = useState(0)
 
   const dataset = useMemo(() => DATASETS[datasetKey], [datasetKey])
-  const datasetLabel = t(datasetLabelKey)
+  const datasetLabel = t(dataset.labelKey)
   const noColumnsSelected = selectedCols.length === 0
   const hasCustomFilters = Boolean(search.trim()) || selectedCols.length !== DATASETS[datasetKey].columns.length
 

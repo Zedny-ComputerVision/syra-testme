@@ -519,13 +519,14 @@ class TestService:
     def unarchive_test(self, *, test_id: str, actor: ServiceActor) -> TestResponseDTO:
         exam = self._get_test_for_write_or_raise(test_id, actor=actor)
         now = datetime.now(timezone.utc)
-        exam.status = ExamStatus.OPEN
+        previously_published_at = exam_published_at(exam)
+        if previously_published_at is None:
+            exam.status = ExamStatus.CLOSED
+            mutate_exam_admin_meta(exam, archived_at=None)
+        else:
+            exam.status = ExamStatus.OPEN
+            mutate_exam_admin_meta(exam, archived_at=None, published_at=previously_published_at)
         exam.updated_at = now
-        mutate_exam_admin_meta(
-            exam,
-            archived_at=None,
-            published_at=exam_published_at(exam) or now,
-        )
         self.repository.save(exam)
         self.repository.commit()
         self.repository.refresh(exam)
@@ -613,8 +614,11 @@ class TestService:
         return exam
 
     def _ensure_actor_can_access_exam(self, exam: Exam, actor: ServiceActor) -> None:
-        if actor.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and exam.created_by_id != actor.id:
-            self._raise("NOT_FOUND", "Test not found", status_code=404)
+        if actor.role == RoleEnum.ADMIN:
+            return  # admins see all
+        if actor.role == RoleEnum.INSTRUCTOR and exam.created_by_id == actor.id:
+            return  # instructors see their own
+        self._raise("NOT_FOUND", "Test not found", status_code=404)
 
     def _ensure_node(self, actor: ServiceActor, node_id: uuid.UUID | None):
         actor_proxy = type(

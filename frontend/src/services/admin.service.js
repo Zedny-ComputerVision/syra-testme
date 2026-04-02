@@ -19,7 +19,7 @@ export const adminApi = {
   unarchiveTest: (id) => api.post(`admin/tests/${id}/unarchive`),
   duplicateTest: (id) => api.post(`admin/tests/${id}/duplicate`),
   deleteTest: (id) => api.delete(`admin/tests/${id}`),
-  downloadTestReport: (id) => api.get(`admin/tests/${id}/report`, { responseType: 'text' }),
+  downloadTestReport: (id) => api.get(`admin/tests/${id}/report`, { responseType: 'blob' }),
 
   // Categories
   categories: (opts = {}) => api.get('categories/', opts),
@@ -54,7 +54,7 @@ export const adminApi = {
   createSchedule: (data) => api.post('schedules/', data),
   updateSchedule: (id, data) => api.put(`schedules/${id}`, data),
   deleteSchedule: (id) => api.delete(`schedules/${id}`),
-  assignSchedule: (data) => api.post('schedules/', data),
+  assignSchedule: (data) => api.post('schedules/assign', data),
 
   // Questions
   getQuestions: (examId, opts = {}) => api.get('questions/', { params: { exam_id: examId }, ...opts }),

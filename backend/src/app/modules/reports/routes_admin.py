@@ -49,7 +49,11 @@ def generate_predefined_report(
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
 ):
-    return service.generate_predefined_report(slug=slug, actor_id=getattr(current, "id", None))
+    return service.generate_predefined_report(
+        slug=slug,
+        actor_id=getattr(current, "id", None),
+        actor_role=getattr(current, "role", None),
+    )
 
 
 @router.get("/test/{test_id}")

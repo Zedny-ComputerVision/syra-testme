@@ -79,11 +79,11 @@ class ReportService:
         )
         return self._csv_response(selected_rows, f"{body.dataset}_report_{ts}.csv", columns=requested_columns)
 
-    def generate_predefined_report(self, *, slug: str, actor_id) -> StreamingResponse:
+    def generate_predefined_report(self, *, slug: str, actor_id, actor_role=None) -> StreamingResponse:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
         if slug in {"test-performance", "exam-performance"}:
-            exam_rows = self.repository.execute(
+            query = (
                 select(
                     Exam.title,
                     func.count(Attempt.id).label("attempt_count"),
@@ -106,9 +106,11 @@ class ReportService:
                 .select_from(Exam)
                 .outerjoin(Attempt, Attempt.exam_id == Exam.id)
                 .where(Exam.library_pool_id.is_(None))
-                .group_by(Exam.id, Exam.title, Exam.passing_score, Exam.created_at)
-                .order_by(Exam.created_at.desc())
-            ).all()
+            )
+            if actor_role and actor_role != RoleEnum.ADMIN and actor_id:
+                query = query.where(Exam.created_by_id == actor_id)
+            query = query.group_by(Exam.id, Exam.title, Exam.passing_score, Exam.created_at).order_by(Exam.created_at.desc())
+            exam_rows = self.repository.execute(query).all()
             rows = []
             for title, attempt_count, submitted_count, avg_score, passed_count in exam_rows:
                 submitted_total = int(submitted_count or 0)
@@ -125,7 +127,7 @@ class ReportService:
             return self._csv_response(rows, f"{slug}_{ts}.csv")
 
         if slug == "proctoring-alerts":
-            attempt_rows = self.repository.execute(
+            proctoring_query = (
                 select(
                     Attempt.id,
                     User.name,
@@ -136,9 +138,11 @@ class ReportService:
                 .select_from(Attempt)
                 .outerjoin(User, User.id == Attempt.user_id)
                 .outerjoin(ProctoringEvent, ProctoringEvent.attempt_id == Attempt.id)
-                .group_by(Attempt.id, User.name, User.user_id, Attempt.created_at)
-                .order_by(Attempt.created_at.desc())
-            ).all()
+            )
+            if actor_role and actor_role != RoleEnum.ADMIN and actor_id:
+                proctoring_query = proctoring_query.join(Exam, Exam.id == Attempt.exam_id).where(Exam.created_by_id == actor_id)
+            proctoring_query = proctoring_query.group_by(Attempt.id, User.name, User.user_id, Attempt.created_at).order_by(Attempt.created_at.desc())
+            attempt_rows = self.repository.execute(proctoring_query).all()
             rows = [
                 {
                     "Attempt": str(attempt_id),
@@ -152,18 +156,30 @@ class ReportService:
             return self._csv_response(rows, f"{slug}_{ts}.csv")
 
         if slug == "learner-activity":
-            learner_rows = self.repository.execute(
+            learner_query = (
                 select(
                     User.name,
                     func.count(Attempt.id).label("attempt_count"),
                     func.count(case((Attempt.status != AttemptStatus.IN_PROGRESS, 1))).label("submitted_count"),
                 )
                 .select_from(User)
-                .outerjoin(Attempt, Attempt.user_id == User.id)
-                .where(User.role == RoleEnum.LEARNER)
-                .group_by(User.id, User.name, User.created_at)
-                .order_by(User.created_at.desc())
-            ).all()
+            )
+            if actor_role and actor_role != RoleEnum.ADMIN and actor_id:
+                learner_query = (
+                    learner_query
+                    .outerjoin(Attempt, Attempt.user_id == User.id)
+                    .outerjoin(Exam, Exam.id == Attempt.exam_id)
+                    .where(User.role == RoleEnum.LEARNER)
+                    .where(Exam.created_by_id == actor_id)
+                )
+            else:
+                learner_query = (
+                    learner_query
+                    .outerjoin(Attempt, Attempt.user_id == User.id)
+                    .where(User.role == RoleEnum.LEARNER)
+                )
+            learner_query = learner_query.group_by(User.id, User.name, User.created_at).order_by(User.created_at.desc())
+            learner_rows = self.repository.execute(learner_query).all()
             rows = [
                 {
                     "User": user_name,
@@ -183,7 +199,7 @@ class ReportService:
         self._load_attempt_report_events(attempts)
         rows = self._build_test_report_rows(exam, attempts)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        safe_title = (exam.title or str(exam.id)).replace(" ", "_")
+        safe_title = re.sub(r'[^\w\-]', '_', (exam.title or str(exam.id)))
         write_audit_log(
             self.repository.db,
             actor_id,
@@ -331,7 +347,8 @@ class ReportService:
         doc.build(story)
         buf.seek(0)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = f"test_{(exam.title or str(exam.id)).replace(' ', '_')}_{ts}.pdf"
+        safe_pdf_title = re.sub(r'[^\w\-]', '_', (exam.title or str(exam.id)))
+        filename = f"test_{safe_pdf_title}_{ts}.pdf"
         write_audit_log(
             self.repository.db,
             actor_id,

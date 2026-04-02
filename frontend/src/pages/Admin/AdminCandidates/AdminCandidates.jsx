@@ -617,7 +617,7 @@ export default function AdminCandidates() {
                             {attempt.status || t('admin_candidates_status_unknown')}
                           </span>
                         </td>
-                        <td className={attempt.score != null && attempt.score < 60 ? styles.scoreFail : ''}>
+                        <td className={attempt.score != null && attempt.score < (passingScoreMap[attempt.exam_id] ?? 60) ? styles.scoreFail : ''}>
                           {attempt.score != null ? `${attempt.score}%` : '-'}
                         </td>
                         <td className={styles.mutedCell}>{formatDate(attempt.started_at)}</td>
@@ -689,7 +689,7 @@ export default function AdminCandidates() {
                       <td>{attempt.user_name || attempt.user_id || '-'}</td>
                       <td>{attempt.test_title || attempt.exam_title || '-'}</td>
                       <td className={styles.mutedCell}>{attempt.high_violations || 0} {t('admin_candidates_high')} | {attempt.med_violations || 0} {t('admin_candidates_medium')}</td>
-                      <td className={attempt.score != null && attempt.score < 60 ? styles.scoreFail : ''}>{attempt.score != null ? `${attempt.score}%` : '-'}</td>
+                      <td className={attempt.score != null && attempt.score < (passingScoreMap[attempt.exam_id] ?? 60) ? styles.scoreFail : ''}>{attempt.score != null ? `${attempt.score}%` : '-'}</td>
                       <td className={integrityClassName}>{Math.max(0, integrity)}%</td>
                       <td><span className={styles.severityHigh}>{t('admin_candidates_high_risk_label')}</span></td>
                       <td>
@@ -728,7 +728,7 @@ export default function AdminCandidates() {
                     <tr>
                       <td>{attempt.user_name || attempt.user_id || '-'}</td>
                       <td>{attempt.test_title || attempt.exam_title || '-'}</td>
-                      <td className={attempt.score != null && attempt.score < 60 ? styles.scoreFail : ''}>
+                      <td className={attempt.score != null && attempt.score < (passingScoreMap[attempt.exam_id] ?? 60) ? styles.scoreFail : ''}>
                         {attempt.score != null ? `${attempt.score}%` : '-'}
                       </td>
                       <td className={styles.mutedCell}>{formatDateTime(attempt.submitted_at)}</td>

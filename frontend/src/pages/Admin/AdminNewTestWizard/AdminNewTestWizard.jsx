@@ -863,7 +863,8 @@ export default function AdminNewTestWizard() {
   useEffect(() => {
     if (!wizardReady) return
     wizardBaselineRef.current = wizardSnapshot
-  }, [wizardReady, wizardBaselineVersion, wizardSnapshot])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardReady, wizardBaselineVersion])
 
   const saveExam = useCallback(async () => {
     autosaveGenerationRef.current += 1

@@ -70,6 +70,7 @@ function LiveViewer({ attemptId, token, onClose }) {
             ctx.drawImage(img, 0, 0)
             URL.revokeObjectURL(blobUrl)
           }
+          img.onerror = () => URL.revokeObjectURL(blobUrl)
           img.src = blobUrl
         })
         return

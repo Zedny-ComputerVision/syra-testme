@@ -1188,7 +1188,7 @@ export default function AdminManageTestPage() {
       if (needsUsers) setUsers(resolvedUsers)
 
       const resolvedSessions = payloads.sessions != null
-        ? (payloads.sessions || [])
+        ? readPaginatedItems(payloads.sessions)
         : sessionsRef.current
       if (needsSessions) setSessions(resolvedSessions)
 

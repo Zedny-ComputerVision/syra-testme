@@ -372,8 +372,12 @@ export default function AdminUsers() {
     setBulkDeleting(true)
     setError('')
     setNotice('')
+    const toDelete = selected.filter(id => id !== user?.id)
+    if (toDelete.length !== selected.length) {
+      setError(t('admin_users_err_cannot_delete_self'))
+    }
     let failed = 0
-    for (const id of selected) {
+    for (const id of toDelete) {
       try {
         await adminApi.deleteUser(id)
       } catch {
@@ -381,14 +385,14 @@ export default function AdminUsers() {
       }
     }
     setSelected([])
-    if (page > 1 && selected.length === users.length) {
+    if (page > 1 && toDelete.length === users.length) {
       setPage(page - 1)
     } else {
       await load()
     }
     if (failed > 0) {
       setError(`${failed} ${t('admin_users_err_bulk_delete_partial')}`)
-    } else {
+    } else if (toDelete.length > 0) {
       setNotice(t('admin_users_selected_deleted'))
     }
     setBulkDeleting(false)

@@ -129,6 +129,25 @@ export default function ProctorOverlay({
   const ADAPTIVE_SLOW_MS = 2000   // no violation for 30 s → mild slowdown (was 5000ms)
   const ADAPTIVE_CALM_WINDOW = 30000
 
+  // Refs for callback props to avoid WS teardown/reconnect on identity changes
+  const onForcedSubmitRef = useRef(onForcedSubmit)
+  const onRegisterScreenShareRequestRef = useRef(onRegisterScreenShareRequest)
+  const onRegisterSendClientEventRef = useRef(onRegisterSendClientEvent)
+  const onRegisterWsRawSendRef = useRef(onRegisterWsRawSend)
+  const onScreenStreamReadyRef = useRef(onScreenStreamReady)
+  useEffect(() => { onForcedSubmitRef.current = onForcedSubmit }, [onForcedSubmit])
+  useEffect(() => { onRegisterScreenShareRequestRef.current = onRegisterScreenShareRequest }, [onRegisterScreenShareRequest])
+  useEffect(() => { onRegisterSendClientEventRef.current = onRegisterSendClientEvent }, [onRegisterSendClientEvent])
+  useEffect(() => { onRegisterWsRawSendRef.current = onRegisterWsRawSend }, [onRegisterWsRawSend])
+  useEffect(() => { onScreenStreamReadyRef.current = onScreenStreamReady }, [onScreenStreamReady])
+
+  // Refs for internal callbacks used in the WS effect
+  const pushAlertRef = useRef(null)
+  const triggerForcedSubmitRef = useRef(null)
+  const emitSystemErrorRef = useRef(null)
+  const emitRateLimitedSystemErrorRef = useRef(null)
+  const analyzeLocalFrameRef = useRef(null)
+
   const wsUrl = useMemo(() => {
     const rawBase = import.meta.env.VITE_API_BASE_URL || '/api/'
     let parsed
@@ -320,6 +339,13 @@ export default function ProctorOverlay({
     return canvas.toDataURL('image/jpeg', captureJpegQuality).split(',')[1]
   }, [cameraBlockedHardConsecutiveFrames, cameraBlockedLumaHard, cameraBlockedLumaSoft, cameraBlockedSoftConsecutiveFrames, cameraBlockedStddevMax, captureJpegQuality, captureResolution, emitLocalCameraCoveredAlert, emitRateLimitedSystemError, onCameraStateChange, t])
 
+  // Keep internal callback refs in sync for the WS effect
+  useEffect(() => { pushAlertRef.current = pushAlert }, [pushAlert])
+  useEffect(() => { triggerForcedSubmitRef.current = triggerForcedSubmit }, [triggerForcedSubmit])
+  useEffect(() => { emitSystemErrorRef.current = emitSystemError }, [emitSystemError])
+  useEffect(() => { emitRateLimitedSystemErrorRef.current = emitRateLimitedSystemError }, [emitRateLimitedSystemError])
+  useEffect(() => { analyzeLocalFrameRef.current = analyzeLocalFrame }, [analyzeLocalFrame])
+
   // Start camera
   useEffect(() => {
     if (!videoRequired && !audioRequired) {
@@ -407,9 +433,9 @@ export default function ProctorOverlay({
   useEffect(() => {
     if (!attemptId || !token || !realtimeMonitoring) {
       setStatus('closed')
-      onRegisterScreenShareRequest?.(null)
-      onRegisterSendClientEvent?.(null)
-      onRegisterWsRawSend?.(null)
+      onRegisterScreenShareRequestRef.current?.(null)
+      onRegisterSendClientEventRef.current?.(null)
+      onRegisterWsRawSendRef.current?.(null)
       return undefined
     }
 
@@ -443,14 +469,14 @@ export default function ProctorOverlay({
         const ws = wsRef.current
         if (!ws || ws.readyState !== WebSocket.OPEN || track.readyState !== 'live') return
         if (typeof ImageCapture === 'undefined') {
-          emitRateLimitedSystemError('screen_capture_support', 'This browser cannot read shared-screen frames for proctoring.')
+          emitRateLimitedSystemErrorRef.current('screen_capture_support', 'This browser cannot read shared-screen frames for proctoring.')
           return
         }
         let imageCapture
         try {
           imageCapture = new ImageCapture(track)
         } catch (error) {
-          emitRateLimitedSystemError('screen_capture_support', error?.message || 'This browser cannot read shared-screen frames for proctoring.')
+          emitRateLimitedSystemErrorRef.current('screen_capture_support', error?.message || 'This browser cannot read shared-screen frames for proctoring.')
           return
         }
         imageCapture.grabFrame().then((bitmap) => {
@@ -466,7 +492,7 @@ export default function ProctorOverlay({
             console.warn('ProctorOverlay: ws.send failed:', e?.message)
           }
         }).catch(() => {
-          emitRateLimitedSystemError('screen_capture', 'Unable to capture shared-screen frames. Re-share your full screen if this continues.')
+          emitRateLimitedSystemErrorRef.current('screen_capture', 'Unable to capture shared-screen frames. Re-share your full screen if this continues.')
         })
       }, screenshotIntervalMs)
     }
@@ -474,7 +500,7 @@ export default function ProctorOverlay({
     function bindScreenStream(screenStream) {
       if (!screenStream) return null
       screenStreamRef.current = screenStream
-      onScreenStreamReady?.(screenStream)
+      onScreenStreamReadyRef.current?.(screenStream)
       const track = screenStream.getVideoTracks()[0] || null
       if (track) {
         track.onended = () => {
@@ -484,7 +510,7 @@ export default function ProctorOverlay({
           }
           if (screenStreamRef.current === screenStream) {
             screenStreamRef.current = null
-            onScreenStreamReady?.(null)
+            onScreenStreamReadyRef.current?.(null)
           }
         }
       }
@@ -497,12 +523,12 @@ export default function ProctorOverlay({
     function stopScreenStream() {
       const current = screenStreamRef.current
       if (!current) {
-        onScreenStreamReady?.(null)
+        onScreenStreamReadyRef.current?.(null)
         return
       }
       screenStreamRef.current = null
       current.getTracks().forEach((track) => track.stop())
-      onScreenStreamReady?.(null)
+      onScreenStreamReadyRef.current?.(null)
     }
 
     function ensureScreenStream() {
@@ -513,7 +539,7 @@ export default function ProctorOverlay({
       return requestEntireScreenShare().then(bindScreenStream)
     }
 
-    onRegisterScreenShareRequest?.(() => ensureScreenStream())
+    onRegisterScreenShareRequestRef.current?.(() => ensureScreenStream())
 
     function tryStartAudio(ws) {
       if (audioStartedRef.current) return
@@ -531,7 +557,7 @@ export default function ProctorOverlay({
         }
       }, audioChunkInterval).catch(() => {
         audioStartedRef.current = false
-        emitRateLimitedSystemError('audio_capture', 'Unable to capture microphone audio for proctoring.')
+        emitRateLimitedSystemErrorRef.current('audio_capture', 'Unable to capture microphone audio for proctoring.')
       })
     }
 
@@ -553,7 +579,7 @@ export default function ProctorOverlay({
         lastViolationTimeRef.current = Date.now()
         adaptiveIntervalRef.current = null
         // Register a function so Proctoring.jsx can send browser-level violations
-        onRegisterSendClientEvent?.((evType, severity, detail) => {
+        onRegisterSendClientEventRef.current?.((evType, severity, detail) => {
           if (ws.readyState === WebSocket.OPEN) {
             try {
               ws.send(JSON.stringify({ type: 'client_event', event_type: evType, severity, detail }))
@@ -563,7 +589,7 @@ export default function ProctorOverlay({
           }
         })
         // Register raw JSON send for answer_timing, keystroke_anomaly etc.
-        onRegisterWsRawSend?.((payload) => {
+        onRegisterWsRawSendRef.current?.((payload) => {
           if (ws.readyState === WebSocket.OPEN) {
             try {
               ws.send(JSON.stringify(payload))
@@ -594,7 +620,7 @@ export default function ProctorOverlay({
           frameTimerRef.id = setTimeout(() => {
             if (frameTimerRef.stopped) return
             if (ws.readyState === WebSocket.OPEN && videoRef.current) {
-              const base64 = analyzeLocalFrame()
+              const base64 = analyzeLocalFrameRef.current()
               if (base64) {
                 try {
                   ws.send(JSON.stringify({ type: 'frame', data: base64 }))
@@ -625,7 +651,12 @@ export default function ProctorOverlay({
         }
 
         if (screenCaptureEnabled) {
-          startScreenCaptureLoop(screenStreamRef.current)
+          if (screenStreamRef.current && screenStreamRef.current.getVideoTracks()[0]?.readyState === 'live') {
+            startScreenCaptureLoop(screenStreamRef.current)
+          } else {
+            // Stream was lost - notify user or attempt to re-acquire
+            pushAlertRef.current({ event_type: 'SCREEN_SHARE_LOST', severity: 'HIGH', detail: 'Screen share stream lost during reconnection' })
+          }
         }
 
         // On reconnect, ensure previous audio capture is stopped and flag is reset
@@ -641,7 +672,7 @@ export default function ProctorOverlay({
         try {
           const msg = JSON.parse(ev.data)
           if (msg.type === 'alert') {
-            pushAlert(msg)
+            pushAlertRef.current(msg)
             if (msg.event_type === 'PRECHECK_BYPASS_DENIED') {
               blockingCloseRef.current = true
               intentionalCloseRef.current = true
@@ -656,7 +687,7 @@ export default function ProctorOverlay({
                 setDetectorStatusReady(true)
               }
             }
-            emitSystemError(msg.detail)
+            emitSystemErrorRef.current(msg.detail)
           } else if (msg.type === 'detection_status') {
             setDetectorStatus((prev) => ({ ...prev, ...msg }))
             setDetectorStatusReady(true)
@@ -665,7 +696,7 @@ export default function ProctorOverlay({
               .filter(([k, v]) => k !== 'type' && v === false)
               .map(([k]) => k.replace(/_/g, ' '))
             if (disabled.length > 0) {
-              emitRateLimitedSystemError(
+              emitRateLimitedSystemErrorRef.current(
                 'detection_status',
                 `Some detectors are disabled (model unavailable): ${disabled.join(', ')}`,
                 60000,
@@ -689,10 +720,10 @@ export default function ProctorOverlay({
             // Server is shutting down gracefully — will auto-reconnect via onclose
             intentionalCloseRef.current = false
           } else if (msg.type === 'forced_submit') {
-            triggerForcedSubmit(msg.detail || t('proctor_auto_submitted'))
+            triggerForcedSubmitRef.current(msg.detail || t('proctor_auto_submitted'))
           }
         } catch (error) {
-          emitRateLimitedSystemError('socket_payload', error?.message || 'Received an unexpected proctoring message.', 10000)
+          emitRateLimitedSystemErrorRef.current('socket_payload', error?.message || 'Received an unexpected proctoring message.', 10000)
         }
       }
 
@@ -701,7 +732,7 @@ export default function ProctorOverlay({
         if (reconnectTimerRef.current) return
         if (reconnectAttemptsRef.current >= WS_MAX_ATTEMPTS) {
           setStatus('closed')
-          pushAlert({
+          pushAlertRef.current({
             severity: 'HIGH',
             event_type: 'PROCTORING_OFFLINE',
             detail: 'Proctoring connection could not be restored. Your answers are still being saved.',
@@ -761,13 +792,13 @@ export default function ProctorOverlay({
         screenIntervalRef.current = null
       }
       screenStreamRef.current = null
-      onRegisterScreenShareRequest?.(null)
-      onRegisterSendClientEvent?.(null)
-      onRegisterWsRawSend?.(null)
+      onRegisterScreenShareRequestRef.current?.(null)
+      onRegisterSendClientEventRef.current?.(null)
+      onRegisterWsRawSendRef.current?.(null)
       wsRef.current?.close()
       wsRef.current = null
     }
-  }, [analyzeLocalFrame, attemptId, audioChunkInterval, emitRateLimitedSystemError, emitSystemError, initialScreenStream, onForcedSubmit, onRegisterScreenShareRequest, onRegisterSendClientEvent, onRegisterWsRawSend, onScreenStreamReady, pushAlert, realtimeMonitoring, screenCaptureEnabled, screenshotIntervalMs, token, triggerForcedSubmit, visualFrameInterval, wsUrl])
+  }, [attemptId, audioChunkInterval, initialScreenStream, realtimeMonitoring, screenCaptureEnabled, screenshotIntervalMs, token, visualFrameInterval, wsUrl])
 
   return (
     <div className={styles.overlay}>
