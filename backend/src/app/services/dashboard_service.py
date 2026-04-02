@@ -324,7 +324,7 @@ def _build_privileged_dashboard(*, db: Session, current, now: datetime) -> Dashb
 
 
 def _dashboard_exam_scope(current):
-    return true() if current.role == RoleEnum.ADMIN else Exam.created_by_id == current.id
+    return Exam.created_by_id == current.id
 
 
 def _flagged_attempts_subquery(exam_scope):

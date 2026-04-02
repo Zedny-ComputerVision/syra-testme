@@ -242,9 +242,7 @@ def ensure_exam_owner(
     detail: str = "Test not found",
     status_code: int = status.HTTP_404_NOT_FOUND,
 ) -> None:
-    if user.role == RoleEnum.ADMIN:
-        return
-    if user.role == RoleEnum.INSTRUCTOR and not exam_owned_by_user(exam, user):
+    if user.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and not exam_owned_by_user(exam, user):
         raise HTTPException(status_code=status_code, detail=detail)
 
 
