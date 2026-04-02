@@ -3682,5 +3682,10 @@
   "audit_filter_export": "تصدير",
   "audit_filter_publish": "نشر",
   "audit_filter_archive": "أرشفة",
-  "audit_filter_view": "عرض"
+  "audit_filter_view": "عرض",
+  "cert_block_not_completed": "المحاولة لم تكتمل بعد",
+  "cert_block_awaiting_review": "بانتظار مراجعة الإجابات",
+  "cert_block_score_not_met": "لم يتم تحقيق درجة النجاح",
+  "cert_block_proctoring_failed": "لم يتم تحقيق نتيجة مراقبة إيجابية",
+  "cert_block_pending_review": "بانتظار مراجعة المراقبة من المشرف أو المدرس"
 }

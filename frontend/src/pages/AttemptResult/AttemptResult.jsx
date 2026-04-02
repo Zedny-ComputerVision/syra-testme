@@ -13,6 +13,7 @@ import api from '../../services/api'
 import useLanguage from '../../hooks/useLanguage'
 import { normalizeAttempt, normalizeTest } from '../../utils/assessmentAdapters'
 import { readBlobErrorMessage } from '../../utils/httpErrors'
+import { translateEventType, translateSeverity } from '../../utils/proctoringLabels'
 import styles from './AttemptResult.module.scss'
 
 function formatAnswerValue(value) {
@@ -199,7 +200,15 @@ export default function AttemptResult() {
   const pendingManualReview = attempt.pending_manual_review ?? (attempt.status === 'SUBMITTED' && attempt.score == null)
   const certificateConfigured = Boolean(exam?.certificate)
   const canDownloadCert = Boolean(attempt.certificate_eligible)
-  const certificateBlockReason = attempt.certificate_block_reason || ''
+  const CERT_BLOCK_KEYS = {
+    'Attempt not completed yet': 'cert_block_not_completed',
+    'Awaiting answer review': 'cert_block_awaiting_review',
+    'Passing score not met': 'cert_block_score_not_met',
+    'Positive proctoring result not achieved': 'cert_block_proctoring_failed',
+    'Pending proctoring review by admin or instructor': 'cert_block_pending_review',
+  }
+  const rawBlockReason = attempt.certificate_block_reason || ''
+  const certificateBlockReason = CERT_BLOCK_KEYS[rawBlockReason] ? t(CERT_BLOCK_KEYS[rawBlockReason]) : rawBlockReason
   const searchParams = new URLSearchParams(location.search)
   const openedFromManageTest = searchParams.get('from') === 'manage-test'
   const returnTestId = searchParams.get('testId')
@@ -642,8 +651,8 @@ export default function AttemptResult() {
                 {recentViolations.map((event, index) => (
                   <div key={event.id || `${event.event_type}-${index}`} className={styles.proctoringEvent}>
                     <div className={styles.proctoringEventHeader}>
-                      <span className={styles.proctoringEventType}>{event.event_type?.replace(/_/g, ' ')}</span>
-                      <span className={`${styles.severityBadge} ${getSeverityClass(event.severity)}`}>{event.severity}</span>
+                      <span className={styles.proctoringEventType}>{translateEventType(event.event_type, t)}</span>
+                      <span className={`${styles.severityBadge} ${getSeverityClass(event.severity)}`}>{translateSeverity(event.severity, t)}</span>
                     </div>
                     <div className={styles.proctoringEventDetail}>{event.detail || t('result_auto_proctoring_alert')}</div>
                     <div className={styles.proctoringEventMeta}>

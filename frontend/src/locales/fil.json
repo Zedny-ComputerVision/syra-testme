@@ -3682,5 +3682,10 @@
   "audit_filter_export": "Export",
   "audit_filter_publish": "Publish",
   "audit_filter_archive": "Archive",
-  "audit_filter_view": "View"
+  "audit_filter_view": "View",
+  "cert_block_not_completed": "Attempt not completed yet",
+  "cert_block_awaiting_review": "Awaiting answer review",
+  "cert_block_score_not_met": "Passing score not met",
+  "cert_block_proctoring_failed": "Positive proctoring result not achieved",
+  "cert_block_pending_review": "Pending proctoring review by admin or instructor"
 }
