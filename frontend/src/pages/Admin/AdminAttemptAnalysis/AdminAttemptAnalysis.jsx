@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import useLanguage from '../../../hooks/useLanguage'
 import { adminApi } from '../../../services/admin.service'
-import { certificateIssueRuleLabel } from '../../../utils/certificates'
+import { certificateIssueRuleLabelKey } from '../../../utils/certificates'
 import { fetchAuthenticatedMediaObjectUrl, revokeObjectUrl } from '../../../utils/authenticatedMedia'
 import { translateEventType, translateSeverity } from '../../../utils/proctoringLabels'
 import { readPaginatedItems } from '../../../utils/pagination'
@@ -470,7 +470,7 @@ export default function AdminAttemptAnalysis() {
                 <div>
                   <div className={styles.certificateReviewTitle}>{t('admin_analysis_certificate_release')}</div>
                   <div className={styles.certificateReviewMeta}>
-                    {certificateIssueRuleLabel(attempt.certificate_issue_rule)}
+                    {t(certificateIssueRuleLabelKey(attempt.certificate_issue_rule))}
                   </div>
                 </div>
                 <div className={`${styles.certificateDecisionBadge} ${certificateDecisionToneClass}`}>

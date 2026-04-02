@@ -600,19 +600,19 @@ export default function AdminTestingSessions() {
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="create-session-date">Scheduled Date and Time</label>
+              <label className={styles.label} htmlFor="create-session-date">{t('admin_sessions_scheduled_date_time')}</label>
               <input id="create-session-date" className={styles.input} type="datetime-local" value={form.scheduled_at} onChange={(event) => setForm((currentForm) => ({ ...currentForm, scheduled_at: event.target.value }))} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="create-session-mode">Access Mode</label>
+              <label className={styles.label} htmlFor="create-session-mode">{t('admin_sessions_access_mode')}</label>
               <select id="create-session-mode" className={styles.select} value={form.access_mode} onChange={(event) => setForm((currentForm) => ({ ...currentForm, access_mode: event.target.value }))}>
                 <option value="OPEN">{t('settings_open_anytime')}</option>
                 <option value="RESTRICTED">{t('settings_restricted_by_schedule')}</option>
               </select>
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="create-session-notes">Notes</label>
-              <textarea id="create-session-notes" className={styles.textarea} rows={3} value={form.notes} onChange={(event) => setForm((currentForm) => ({ ...currentForm, notes: event.target.value }))} placeholder="Optional notes..." />
+              <label className={styles.label} htmlFor="create-session-notes">{t('admin_sessions_notes')}</label>
+              <textarea id="create-session-notes" className={styles.textarea} rows={3} value={form.notes} onChange={(event) => setForm((currentForm) => ({ ...currentForm, notes: event.target.value }))} placeholder={t('admin_sessions_optional_notes')} />
             </div>
             <div className={styles.modalActions}>
               <button
@@ -621,7 +621,7 @@ export default function AdminTestingSessions() {
                 onClick={() => { if (!saving) { setModal(false); setModalError('') } }}
                 disabled={saving}
               >
-                Cancel
+                {t('admin_sessions_cancel')}
               </button>
               <button
                 type="button"
@@ -629,7 +629,7 @@ export default function AdminTestingSessions() {
                 onClick={() => void handleCreate()}
                 disabled={!form.exam_id || !form.user_id || !form.scheduled_at || !canCreateSession || saving}
               >
-                {saving ? 'Saving...' : 'Create Session'}
+                {saving ? t('admin_sessions_saving') : t('admin_sessions_create_session')}
               </button>
             </div>
           </div>

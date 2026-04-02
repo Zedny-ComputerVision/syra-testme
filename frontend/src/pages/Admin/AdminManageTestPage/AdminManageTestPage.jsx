@@ -4,7 +4,7 @@ import useUnsavedChanges from '../../../hooks/useUnsavedChanges'
 import { adminApi } from '../../../services/admin.service'
 import {
   CERTIFICATE_ISSUE_RULE_OPTIONS,
-  certificateIssueRuleLabel,
+  certificateIssueRuleLabelKey,
   DEFAULT_CERTIFICATE_ISSUE_RULE,
   normalizeCertificateIssueRule,
 } from '../../../utils/certificates'
@@ -3316,25 +3316,25 @@ export default function AdminManageTestPage() {
                         <span>{t('settings_issue_rule')}</span>
                         <select value={settingsForm.certificate_issue_rule} disabled={lockedExamFields} onChange={setCertificateField('certificate_issue_rule')}>
                           {CERTIFICATE_ISSUE_RULE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
+                            <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
                           ))}
                         </select>
                       </label>
                       <label className={styles.settingsFieldGroup}>
                         <span>{t('settings_certificate_title')}</span>
-                        <input value={settingsForm.certificate_title} disabled={lockedExamFields} onChange={setCertificateField('certificate_title')} placeholder="Certificate of Completion" />
+                        <input value={settingsForm.certificate_title} disabled={lockedExamFields} onChange={setCertificateField('certificate_title')} placeholder={t('admin_certs_title_placeholder')} />
                       </label>
                       <label className={styles.settingsFieldGroup}>
                         <span>{t('settings_subtitle')}</span>
-                        <input value={settingsForm.certificate_subtitle} disabled={lockedExamFields} onChange={setCertificateField('certificate_subtitle')} placeholder="Awarded for successful completion" />
+                        <input value={settingsForm.certificate_subtitle} disabled={lockedExamFields} onChange={setCertificateField('certificate_subtitle')} placeholder={t('admin_certs_subtitle_placeholder')} />
                       </label>
                       <label className={styles.settingsFieldGroup}>
                         <span>{t('settings_issuer')}</span>
-                        <input value={settingsForm.certificate_issuer} disabled={lockedExamFields} onChange={setCertificateField('certificate_issuer')} placeholder="SYRA Learning Institute" />
+                        <input value={settingsForm.certificate_issuer} disabled={lockedExamFields} onChange={setCertificateField('certificate_issuer')} placeholder={t('admin_certs_issuer_placeholder')} />
                       </label>
                       <label className={styles.settingsFieldGroup}>
                         <span>{t('settings_signer')}</span>
-                        <input value={settingsForm.certificate_signer} disabled={lockedExamFields} onChange={setCertificateField('certificate_signer')} placeholder="Dr. Jane Doe" />
+                        <input value={settingsForm.certificate_signer} disabled={lockedExamFields} onChange={setCertificateField('certificate_signer')} placeholder={t('admin_certs_signer_placeholder')} />
                       </label>
                     </div>
                     <div className={styles.inlineActions}>
@@ -3345,8 +3345,8 @@ export default function AdminManageTestPage() {
                   </div>
                   <div className={`${styles.certificatePreviewCard} ${certificateView === 'compact' ? styles.certificatePreviewCompact : ''}`}>
                     <div className={styles.certificatePreviewInner}>
-                      <div className={styles.certificateBadge}>{certificateIssueRuleLabel(certificatePreview?.issue_rule)}</div>
-                      <div className={styles.certificateHeading}>{certificatePreview?.title || 'Certificate of Completion'}</div>
+                      <div className={styles.certificateBadge}>{t(certificateIssueRuleLabelKey(certificatePreview?.issue_rule))}</div>
+                      <div className={styles.certificateHeading}>{certificatePreview?.title || t('admin_certs_title_placeholder')}</div>
                       <div className={styles.certificateSubtitle}>
                         {certificatePreview?.subtitle || `Awarded for successfully completing ${settingsForm.title || exam.title}.`}
                       </div>

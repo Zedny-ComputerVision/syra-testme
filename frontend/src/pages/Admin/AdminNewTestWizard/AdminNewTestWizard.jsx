@@ -7,7 +7,7 @@ import { adminApi } from '../../../services/admin.service'
 import { generateQuestionsAI } from '../../../services/ai.service'
 import {
   CERTIFICATE_ISSUE_RULE_OPTIONS,
-  certificateIssueRuleLabel,
+  certificateIssueRuleLabelKey,
   DEFAULT_CERTIFICATE_ISSUE_RULE,
   normalizeCertificateIssueRule,
 } from '../../../utils/certificates'
@@ -1556,7 +1556,7 @@ export default function AdminNewTestWizard() {
       editStep: 5,
       items: [
         [t('admin_wizard_review_certificate'), certEnabled ? `${certTemplate} (${certOrientation})` : t('admin_wizard_review_disabled')],
-        [t('admin_wizard_review_issue_rule'), certEnabled ? certificateIssueRuleLabel(certIssueRule) : t('admin_wizard_review_disabled')],
+        [t('admin_wizard_review_issue_rule'), certEnabled ? t(certificateIssueRuleLabelKey(certIssueRule)) : t('admin_wizard_review_disabled')],
         [t('admin_wizard_review_cert_title'), certEnabled ? certTitle || t('admin_wizard_review_none') : t('admin_wizard_review_disabled')],
         [t('admin_wizard_review_subtitle'), certEnabled ? certSubtitle || t('admin_wizard_review_none') : t('admin_wizard_review_disabled')],
         [t('admin_wizard_review_issuer'), certEnabled ? certCompany || t('admin_wizard_review_none') : t('admin_wizard_review_disabled')],
@@ -2612,8 +2612,8 @@ export default function AdminNewTestWizard() {
                         onChange={() => { setCertIssueRule(option.value); if (examId) autoPersist() }}
                       />
                       <span className={styles.certRuleBody}>
-                        <span className={styles.certRuleTitle}>{option.label}</span>
-                        <span className={styles.certRuleDescription}>{option.description}</span>
+                        <span className={styles.certRuleTitle}>{t(option.labelKey)}</span>
+                        <span className={styles.certRuleDescription}>{t(option.descriptionKey)}</span>
                       </span>
                     </label>
                   ))}
@@ -2670,7 +2670,7 @@ export default function AdminNewTestWizard() {
               <div className={styles.certPreview}>
                 <div className={styles.certPreviewLabel}>{certTemplate} - {certOrientation}</div>
                 <div className={`${styles.certPreviewBox} ${certOrientation === 'landscape' ? styles.certPreviewLandscape : styles.certPreviewPortrait}`}>
-                  <div className={styles.certPreviewBadge}>{certificateIssueRuleLabel(certIssueRule)}</div>
+                  <div className={styles.certPreviewBadge}>{t(certificateIssueRuleLabelKey(certIssueRule))}</div>
                   <div className={styles.certPreviewTitle}>{certTitle || t('admin_wizard_cert_preview_title')}</div>
                   {certSubtitle && <div className={styles.certPreviewSub}>{certSubtitle}</div>}
                   {certCompany && <div className={styles.certPreviewCompany}>{certCompany}</div>}

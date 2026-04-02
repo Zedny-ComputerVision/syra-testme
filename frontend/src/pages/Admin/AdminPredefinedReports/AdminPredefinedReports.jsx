@@ -5,14 +5,14 @@ import { readBlobErrorMessage } from '../../../utils/httpErrors'
 import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminPredefinedReports.module.scss'
 
-const PREDEFINED = [
-  { key: 'test-performance', title: 'Test Performance Summary', desc: 'Scores, attempts, pass rate by test', columns: ['Test', 'Attempts', 'Avg Score', 'Pass Rate'], audience: 'Admins and instructors', cadence: 'Refreshes from live test results' },
-  { key: 'proctoring-alerts', title: 'Proctoring Alerts', desc: 'Count of HIGH/MEDIUM alerts per attempt', columns: ['Attempt', 'User', 'High Alerts', 'Medium Alerts'], audience: 'Admins and proctoring reviewers', cadence: 'Refreshes from live attempt events' },
-  { key: 'learner-activity', title: 'Learner Activity', desc: 'Attempts started and submissions', columns: ['User', 'Attempts', 'Submitted'], audience: 'Admins and learner-support teams', cadence: 'Refreshes from live learner activity' },
-]
-
 export default function AdminPredefinedReports() {
   const { t } = useLanguage()
+
+  const PREDEFINED = [
+    { key: 'test-performance', title: t('admin_predef_test_performance_title'), desc: t('admin_predef_test_performance_desc'), columns: [t('admin_predef_col_test'), t('admin_predef_col_attempts'), t('admin_predef_col_avg_score'), t('admin_predef_col_pass_rate')], audience: t('admin_predef_test_performance_audience'), cadence: t('admin_predef_test_performance_cadence') },
+    { key: 'proctoring-alerts', title: t('admin_predef_proctoring_title'), desc: t('admin_predef_proctoring_desc'), columns: [t('admin_predef_col_attempt'), t('admin_predef_col_user'), t('admin_predef_col_high_alerts'), t('admin_predef_col_medium_alerts')], audience: t('admin_predef_proctoring_audience'), cadence: t('admin_predef_proctoring_cadence') },
+    { key: 'learner-activity', title: t('admin_predef_learner_title'), desc: t('admin_predef_learner_desc'), columns: [t('admin_predef_col_user'), t('admin_predef_col_attempts'), t('admin_predef_col_submitted')], audience: t('admin_predef_learner_audience'), cadence: t('admin_predef_learner_cadence') },
+  ]
   const [loadingKey, setLoadingKey] = React.useState('')
   const [error, setError] = React.useState('')
   const [notice, setNotice] = React.useState('')

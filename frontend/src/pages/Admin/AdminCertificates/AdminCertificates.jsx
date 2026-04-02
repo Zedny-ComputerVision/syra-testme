@@ -204,7 +204,7 @@ export default function AdminCertificates() {
                     onChange={(e) => setDraft(exam.id, 'issue_rule', e.target.value)}
                   >
                     {CERTIFICATE_ISSUE_RULE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                      <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
                     ))}
                   </select>
                 </label>

@@ -8,17 +8,17 @@ import styles from './AdminLiveMonitor.module.scss'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 const WS_BASE = API_BASE.replace(/^http/, 'ws').replace(/\/api\/?$/, '/api')
 
-function SessionCard({ session, onWatch }) {
+function SessionCard({ session, onWatch, t }) {
   return (
     <div className={styles.sessionCard}>
       <div className={styles.sessionInfo}>
-        <span className={styles.userName}>{session.user_name || 'Unknown'}</span>
-        <span className={styles.examTitle}>{session.exam_title || 'Unknown Test'}</span>
-        <span className={styles.startedAt}>Started: {session.started_at ? new Date(session.started_at).toLocaleTimeString() : '—'}</span>
-        {session.viewers > 0 && <span className={styles.viewers}>{session.viewers} watching</span>}
+        <span className={styles.userName}>{session.user_name || t('admin_monitor_unknown_user')}</span>
+        <span className={styles.examTitle}>{session.exam_title || t('admin_monitor_unknown_test')}</span>
+        <span className={styles.startedAt}>{t('admin_monitor_started_at', { time: session.started_at ? new Date(session.started_at).toLocaleTimeString() : '—' })}</span>
+        {session.viewers > 0 && <span className={styles.viewers}>{t('admin_monitor_viewers_watching', { count: session.viewers })}</span>}
       </div>
       <button className={styles.watchBtn} onClick={() => onWatch(session.attempt_id)}>
-        Watch Live
+        {t('admin_monitor_watch_live')}
       </button>
     </div>
   )
@@ -105,7 +105,7 @@ function LiveViewer({ attemptId, token, onClose }) {
       if (!intentionalClose.current && reconnectCount.current < 5) {
         const delay = Math.min(1000 * 2 ** reconnectCount.current, 10000)
         reconnectCount.current += 1
-        setError(`Disconnected. Reconnecting in ${Math.round(delay / 1000)}s...`)
+        setError(t('admin_monitor_disconnected_reconnecting', { seconds: Math.round(delay / 1000) }))
         reconnectTimer.current = setTimeout(connectWs, delay)
       }
     }
@@ -131,7 +131,7 @@ function LiveViewer({ attemptId, token, onClose }) {
   }, [connectWs])
 
   const handleForceSubmit = async () => {
-    if (!window.confirm('Are you sure you want to force-submit this attempt? This cannot be undone.')) return
+    if (!window.confirm(t('admin_monitor_confirm_force_submit'))) return
     setForceSubmitting(true)
     try {
       await api.post(`/proctoring/admin/sessions/${attemptId}/force-submit`)
@@ -159,10 +159,10 @@ function LiveViewer({ attemptId, token, onClose }) {
               onClick={handleForceSubmit}
               disabled={forceSubmitting}
             >
-              {forceSubmitting ? 'Submitting...' : 'Force Submit'}
+              {forceSubmitting ? t('admin_monitor_submitting') : t('admin_monitor_force_submit')}
             </button>
           )}
-          <button className={styles.closeBtn} onClick={onClose}>Close</button>
+          <button className={styles.closeBtn} onClick={onClose}>{t('admin_monitor_close')}</button>
         </div>
       </div>
 
@@ -255,11 +255,11 @@ export default function AdminLiveMonitor() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1>Live Proctoring Monitor</h1>
+        <h1>{t('admin_monitor_title')}</h1>
         <p className={styles.subtitle}>
           {sessions.length === 0
-            ? 'No active proctoring sessions right now.'
-            : `${sessions.length} active session${sessions.length !== 1 ? 's' : ''}`
+            ? t('admin_monitor_no_sessions')
+            : t('admin_monitor_active_sessions', { count: sessions.length })
           }
         </p>
       </div>
@@ -272,6 +272,7 @@ export default function AdminLiveMonitor() {
             key={session.attempt_id}
             session={session}
             onWatch={setWatchingAttemptId}
+            t={t}
           />
         ))}
       </div>
