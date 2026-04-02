@@ -8,6 +8,49 @@ const PAGE_SIZE = 50
 
 const ACTION_TYPES = ['create', 'update', 'delete', 'login', 'logout', 'export', 'publish', 'archive', 'view']
 
+const ACTION_LABEL_KEYS = {
+  USER_LOGIN: 'audit_action_user_login',
+  USER_LOGOUT: 'audit_action_user_logout',
+  PASSWORD_CHANGED: 'audit_action_password_changed',
+  PASSWORD_RESET: 'audit_action_password_reset',
+  USER_UPDATED: 'audit_action_user_updated',
+  USER_ROLE_CHANGED: 'audit_action_user_role_changed',
+  TEST_CREATED: 'audit_action_test_created',
+  TEST_UPDATED: 'audit_action_test_updated',
+  TEST_PUBLISHED: 'audit_action_test_published',
+  TEST_UNPUBLISHED: 'audit_action_test_unpublished',
+  TEST_ARCHIVED: 'audit_action_test_archived',
+  TEST_UNARCHIVED: 'audit_action_test_unarchived',
+  TEST_DELETED: 'audit_action_test_deleted',
+  TEST_DUPLICATED: 'audit_action_test_duplicated',
+  PROCTORING_CONFIG_UPDATED: 'audit_action_proctoring_config_updated',
+  CATEGORY_CREATED: 'audit_action_category_created',
+  CATEGORY_UPDATED: 'audit_action_category_updated',
+  CATEGORY_DELETED: 'audit_action_category_deleted',
+  GRADING_SCALE_CREATED: 'audit_action_grading_scale_created',
+  GRADING_SCALE_UPDATED: 'audit_action_grading_scale_updated',
+  GRADING_SCALE_DELETED: 'audit_action_grading_scale_deleted',
+  QUESTION_POOL_CREATED: 'audit_action_question_pool_created',
+  QUESTION_POOL_UPDATED: 'audit_action_question_pool_updated',
+  QUESTION_POOL_DELETED: 'audit_action_question_pool_deleted',
+  SCHEDULE_CREATED: 'audit_action_schedule_created',
+  SCHEDULE_UPDATED: 'audit_action_schedule_updated',
+  SCHEDULE_DELETED: 'audit_action_schedule_deleted',
+  CUSTOM_REPORT_EXPORTED: 'audit_action_custom_report_exported',
+  EXAM_REPORT_EXPORTED: 'audit_action_exam_report_exported',
+  REPORT_SCHEDULE_CREATED: 'audit_action_report_schedule_created',
+  REPORT_SCHEDULE_DELETED: 'audit_action_report_schedule_deleted',
+  REPORT_SCHEDULE_RUN: 'audit_action_report_schedule_run',
+  ROLE_PERMISSIONS_UPDATED: 'audit_action_role_permissions_updated',
+}
+
+const DETAIL_LABEL_KEYS = {
+  'Successful login': 'audit_detail_successful_login',
+  'User logged out': 'audit_detail_user_logged_out',
+  'Password changed by authenticated user': 'audit_detail_password_changed',
+  'Password reset via token': 'audit_detail_password_reset',
+}
+
 function formatDate(iso) {
   if (!iso) return '-'
   const d = new Date(iso)
@@ -139,7 +182,7 @@ export default function AdminAuditLog() {
         >
           <option value="">{t('admin_audit_all_actions')}</option>
           {ACTION_TYPES.map((item) => (
-            <option key={item} value={item}>{item}</option>
+            <option key={item} value={item}>{t(`audit_filter_${item}`)}</option>
           ))}
         </select>
         <div className={styles.dateRow}>
@@ -212,14 +255,14 @@ export default function AdminAuditLog() {
                     <td className={styles.userCell}>{log.user?.email || log.user_id?.slice(0, 8) || '-'}</td>
                     <td>
                       <span className={`${styles.actionBadge} ${styles[`action_${log.action?.split('_')[0]}`] || ''}`}>
-                        {log.action}
+                        {ACTION_LABEL_KEYS[log.action] ? t(ACTION_LABEL_KEYS[log.action]) : log.action}
                       </span>
                     </td>
                     <td className={styles.muteCell}>{log.resource_type || '-'}</td>
                     <td className={styles.muteCell}>{log.resource_id ? `${log.resource_id.slice(0, 12)}${log.resource_id.length > 12 ? '...' : ''}` : '-'}</td>
                     <td className={styles.muteCell}>{log.ip_address || '-'}</td>
                     <td className={styles.detailCell}>
-                      <div className={styles.detailPreview}>{log.detail ? `${log.detail.slice(0, 60)}${log.detail.length > 60 ? '...' : ''}` : '-'}</div>
+                      <div className={styles.detailPreview}>{log.detail ? (() => { const translated = DETAIL_LABEL_KEYS[log.detail] ? t(DETAIL_LABEL_KEYS[log.detail]) : log.detail; return `${translated.slice(0, 60)}${translated.length > 60 ? '...' : ''}`; })() : '-'}</div>
                       <button
                         type="button"
                         className={styles.inlineBtn}
@@ -235,7 +278,7 @@ export default function AdminAuditLog() {
                       <td colSpan={7}>
                         <div className={styles.expandedContent}>
                           <strong>{t('admin_audit_full_detail')}</strong>
-                          <pre className={styles.detailPre}>{log.detail || t('admin_audit_no_detail')}</pre>
+                          <pre className={styles.detailPre}>{log.detail ? (DETAIL_LABEL_KEYS[log.detail] ? t(DETAIL_LABEL_KEYS[log.detail]) : log.detail) : t('admin_audit_no_detail')}</pre>
                           <div className={styles.expandedMeta}>
                             <span>{t('admin_audit_user_id')}: {log.user_id || '-'}</span>
                             <span>{t('admin_audit_resource_id')}: {log.resource_id || '-'}</span>
