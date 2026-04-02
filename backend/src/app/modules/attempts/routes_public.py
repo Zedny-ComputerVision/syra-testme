@@ -720,7 +720,7 @@ def _evaluate_answer(question: Question, submitted_answer):
         if actual_pairs is None or expected_pairs is None:
             is_correct = _normalized_text(submitted_answer) == _normalized_text(expected)
         else:
-            is_correct = bool(expected_pairs) and all(
+            is_correct = bool(expected_pairs) and len(actual_pairs) == len(expected_pairs) and all(
                 actual_pairs.get(key) == value
                 for key, value in expected_pairs.items()
             )
@@ -820,6 +820,7 @@ def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
         is_correct, points_earned = _evaluate_answer(question, answer.answer)
         if (
             points_earned == 0.0
+            and is_correct is False
             and negative_marking
             and neg_mark_value > 0
             and has_content
@@ -827,7 +828,8 @@ def _auto_score_attempt(attempt: Attempt, db: Session) -> dict:
             if neg_mark_type == "points":
                 points_earned = -min(neg_mark_value, float(question.points or 0))
             else:
-                points_earned = -(float(question.points or 0) * neg_mark_value)
+                deduction = min(float(question.points or 0) * neg_mark_value, float(question.points or 0))
+                points_earned = -deduction
         answer.is_correct = is_correct
         answer.points_earned = points_earned
         if points_earned is not None:
@@ -882,6 +884,7 @@ def _backfill_auto_graded_answers(attempt: Attempt, db: Session) -> bool:
         is_correct, points_earned = _evaluate_answer(question, answer.answer)
         if (
             points_earned == 0.0
+            and is_correct is False
             and negative_marking
             and neg_mark_value > 0
             and has_content
@@ -889,7 +892,8 @@ def _backfill_auto_graded_answers(attempt: Attempt, db: Session) -> bool:
             if neg_mark_type == "points":
                 points_earned = -min(neg_mark_value, float(question.points or 0))
             else:
-                points_earned = -(float(question.points or 0) * neg_mark_value)
+                deduction = min(float(question.points or 0) * neg_mark_value, float(question.points or 0))
+                points_earned = -deduction
         answer.is_correct = is_correct
         answer.points_earned = points_earned
         db.add(answer)
@@ -1054,9 +1058,9 @@ def _face_present(image_bytes: bytes) -> bool:
     if mp is not None and hasattr(mp, "solutions") and getattr(mp.solutions, "face_detection", None):
         try:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            detector = mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.6)
-            res = detector.process(rgb)
-            return bool(res.detections)
+            with mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.6) as detector:
+                res = detector.process(rgb)
+                return bool(res.detections)
         except Exception:
             pass
     # Fallback when mediapipe is unavailable (e.g. lightweight CI/dev environments).
@@ -1513,6 +1517,8 @@ def grade_attempt(
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
         raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
+    exam = attempt.exam or db.get(Exam, attempt.exam_id)
+    ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
     graded = _apply_admin_grade(attempt, score=score, db=db, graded_by=current)
     _invalidate_attempt_list_cache()
     _notify_attempt_result(db, graded, result_kind="graded")
@@ -1532,6 +1538,8 @@ def review_attempt_answer(
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
         raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
+    exam = attempt.exam or db.get(Exam, attempt.exam_id)
+    ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
     if attempt.status == AttemptStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail=_t("attempt_must_be_submitted_review"))
 
@@ -1575,6 +1583,8 @@ def finalize_attempt_review(
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
         raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
+    exam = attempt.exam or db.get(Exam, attempt.exam_id)
+    ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
     if attempt.status == AttemptStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail=_t("attempt_must_be_submitted_review"))
 
@@ -1609,6 +1619,8 @@ def review_attempt_certificate(
     attempt = db.get(Attempt, attempt_pk)
     if not attempt:
         raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
+    exam = attempt.exam or db.get(Exam, attempt.exam_id)
+    ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
     if attempt.status == AttemptStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail=_t("attempt_must_be_submitted_cert"))
 
@@ -1767,6 +1779,7 @@ def import_attempts(
         exam = db.scalar(select(Exam).where(Exam.title == test_title)) if test_title else None
         if not user or not exam:
             continue
+        ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
         attempt = Attempt(
             exam_id=exam.id,
             user_id=user.id,

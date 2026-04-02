@@ -143,6 +143,12 @@ export function AuthProvider({ children }) {
   const [permissionsError, setPermissionsError] = useState('');
   const [loading, setLoading] = useState(true);
   const refreshPromiseRef = useRef(null);
+  const tokensRef = useRef(tokens);
+
+  // Keep tokensRef in sync with tokens state
+  useEffect(() => {
+    tokensRef.current = tokens;
+  }, [tokens]);
 
   const clearAuthState = useCallback(() => {
     safeRemoveItem(STORAGE_KEY);
@@ -197,11 +203,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Keep session alive across browser refresh by using refresh token when access token is expired.
+  // We use initialTokens to trigger this only on mount (and when key deps change),
+  // and read tokensRef.current inside to avoid re-triggering when setTokens is called.
   useEffect(() => {
     let cancelled = false;
 
     async function syncSession() {
-      if (!tokens) {
+      const currentTokens = tokensRef.current;
+      if (!currentTokens) {
         if (!cancelled) {
           setUser(null);
           setLoading(false);
@@ -209,10 +218,10 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      const decoded = decodeUser(tokens.access_token);
+      const decoded = decodeUser(currentTokens.access_token);
       if (decoded) {
         try {
-          const currentUser = await fetchCurrentUser(tokens.access_token);
+          const currentUser = await fetchCurrentUser(currentTokens.access_token);
           if (!cancelled) {
             setUser(currentUser);
             setLoading(false);
@@ -220,7 +229,7 @@ export function AuthProvider({ children }) {
           return;
         } catch (error) {
           if (isTerminalRefreshError(error)) {
-            if (!tokens.refresh_token) {
+            if (!currentTokens.refresh_token) {
               if (!cancelled) {
                 clearAuthState();
               }
@@ -237,7 +246,7 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const refreshed = await refreshAccessToken(tokens);
+        const refreshed = await refreshAccessToken(currentTokens);
         if (!refreshed) {
           if (!cancelled) {
             clearAuthState();
@@ -258,6 +267,7 @@ export function AuthProvider({ children }) {
         }
         if (!cancelled) {
           setTokens(refreshed);
+          tokensRef.current = refreshed;
           setUser(nextUser);
           setLoading(false);
         }
@@ -267,7 +277,8 @@ export function AuthProvider({ children }) {
           clearAuthState();
           return;
         }
-        setUser(normalizeUser(null, tokens.access_token));
+        const fallbackTokens = tokensRef.current;
+        setUser(normalizeUser(null, fallbackTokens?.access_token));
         setLoading(false);
         return;
       }
@@ -277,7 +288,8 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [clearAuthState, tokens, refreshAccessToken, fetchCurrentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearAuthState, initialTokens, refreshAccessToken, fetchCurrentUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -363,11 +375,14 @@ export function AuthProvider({ children }) {
    * @param {{ access_token: string, refresh_token?: string }} newTokens
    */
   const updateTokens = useCallback((newTokens) => {
-    const merged = { ...(tokens || {}), ...(newTokens || {}) };
-    safeSetItem(STORAGE_KEY, JSON.stringify(merged));
-    setUser(decodeUser(merged.access_token));
-    setTokens(merged);
-  }, [tokens]);
+    setTokens((prev) => {
+      const merged = { ...(prev || {}), ...(newTokens || {}) };
+      safeSetItem(STORAGE_KEY, JSON.stringify(merged));
+      setUser(decodeUser(merged.access_token));
+      tokensRef.current = merged;
+      return merged;
+    });
+  }, []);
 
   /** Whether the user has one of the given roles */
   const hasRole = useCallback(
@@ -386,21 +401,28 @@ export function AuthProvider({ children }) {
     [permissionRows, user]
   );
 
-  // Proactive token refresh: refresh the access token before it expires
+  // Proactive token refresh: refresh the access token before it expires.
+  // Uses tokensRef to avoid re-triggering when setTokens is called after a refresh.
+  // The effect re-runs only when the access_token string itself changes (via accessTokenValue).
+  const accessTokenValue = tokens?.access_token;
   useEffect(() => {
-    if (!tokens?.access_token) return;
+    if (!accessTokenValue) return;
     let timer;
     try {
-      const decoded = jwtDecode(tokens.access_token);
+      const decoded = jwtDecode(accessTokenValue);
       if (!decoded.exp) return;
       // Refresh 2 minutes before expiry (or immediately if less than 2 min left)
       const msUntilExpiry = decoded.exp * 1000 - Date.now();
+      if (msUntilExpiry <= 0) return; // already expired, don't schedule a refresh
       const refreshAt = Math.max(msUntilExpiry - 2 * 60 * 1000, 0);
       timer = setTimeout(async () => {
         try {
-          const refreshed = await refreshAccessToken(tokens);
+          const currentTokens = tokensRef.current;
+          if (!currentTokens?.access_token) return;
+          const refreshed = await refreshAccessToken(currentTokens);
           if (refreshed) {
             safeSetItem(STORAGE_KEY, JSON.stringify(refreshed));
+            tokensRef.current = refreshed;
             setTokens(refreshed);
             setUser(decodeUser(refreshed.access_token));
           }
@@ -414,7 +436,7 @@ export function AuthProvider({ children }) {
       // invalid token, ignore
     }
     return () => clearTimeout(timer);
-  }, [tokens, refreshAccessToken, clearAuthState]);
+  }, [accessTokenValue, refreshAccessToken, clearAuthState]);
 
   useEffect(() => {
     const handleStorage = (event) => {
@@ -452,7 +474,7 @@ export function AuthProvider({ children }) {
       permissionRows,
       hasPermission,
     }),
-    [user, tokens, loading, isAuthenticated, login, logout, updateTokens, hasRole, permissionRows, hasPermission]
+    [user, tokens, loading, permissionsLoading, permissionsError, isAuthenticated, login, logout, updateTokens, hasRole, permissionRows, hasPermission]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

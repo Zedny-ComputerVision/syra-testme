@@ -31,6 +31,8 @@ class FaceDetector:
         self.camera_cover_soft_consecutive_frames = max(1, int(camera_cover_soft_consecutive_frames))
         self._last_seen: float | None = None
         self._disappeared_since: float | None = None
+        self._disappear_alerted: bool = False
+        self._disappear_last_report: float = 0.0
         self._hard_cover_frames = 0
         self._soft_cover_frames = 0
         self._camera_blocked = False
@@ -77,6 +79,7 @@ class FaceDetector:
             self._camera_blocked = False
             if self._disappeared_since is not None:
                 self._disappeared_since = None
+                self._disappear_alerted = False
                 return {
                     "event_type": "FACE_REAPPEARED",
                     "severity": "LOW",
@@ -122,10 +125,24 @@ class FaceDetector:
         elapsed = now - self._disappeared_since
         absence_threshold = min(self.disappeared_threshold, 1.0) if self._camera_blocked else self.disappeared_threshold
         if elapsed >= absence_threshold:
-            return {
-                "event_type": "FACE_DISAPPEARED",
-                "severity": "HIGH",
-                "detail": f"Face not detected for {elapsed:.1f}s",
-                "confidence": 0.9,
-            }
+            # Fire FACE_DISAPPEARED once when threshold is first reached, then only
+            # re-report every 30 s for sustained absence to prevent score inflation.
+            _SUSTAINED_ABSENCE_INTERVAL = 30.0
+            if not self._disappear_alerted:
+                self._disappear_alerted = True
+                self._disappear_last_report = now
+                return {
+                    "event_type": "FACE_DISAPPEARED",
+                    "severity": "HIGH",
+                    "detail": f"Face not detected for {elapsed:.1f}s",
+                    "confidence": 0.9,
+                }
+            elif now - self._disappear_last_report >= _SUSTAINED_ABSENCE_INTERVAL:
+                self._disappear_last_report = now
+                return {
+                    "event_type": "FACE_DISAPPEARED",
+                    "severity": "HIGH",
+                    "detail": f"Face not detected for {elapsed:.1f}s (sustained absence)",
+                    "confidence": 0.9,
+                }
         return None

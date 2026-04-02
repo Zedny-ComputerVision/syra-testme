@@ -394,7 +394,7 @@ function shouldBypassGetDeduping(config = {}) {
   if (config.disableRequestDeduping || config.signal) {
     return true
   }
-  return shouldTrackRouteScopedRequest(config)
+  return false
 }
 
 api.get = (url, config = {}) => {
@@ -410,25 +410,40 @@ api.get = (url, config = {}) => {
 
   const inflightRequest = inflightGetRequests.get(key)
   if (inflightRequest && (Date.now() - inflightRequest.startedAt) < GET_INFLIGHT_DEDUPE_MAX_MS) {
-    return inflightRequest.request.then((response) => cloneAxiosResponse(response))
+    return inflightRequest.settled.then(
+      (response) => cloneAxiosResponse(response),
+      (err) => Promise.reject(err),
+    )
   }
   if (inflightRequest) {
     inflightGetRequests.delete(key)
   }
 
+  let resolveSettled
+  let rejectSettled
+  const settled = new Promise((resolve, reject) => {
+    resolveSettled = resolve
+    rejectSettled = reject
+  })
+
   const request = originalGet(url, config)
     .then((response) => {
       storeRecentGetResponse(key, response)
+      resolveSettled(response)
       return response
     })
+    .catch((err) => {
+      rejectSettled(err)
+      throw err
+    })
     .finally(() => {
-      if (inflightGetRequests.get(key)?.request === request) {
+      if (inflightGetRequests.get(key)?.settled === settled) {
         inflightGetRequests.delete(key)
       }
     })
 
   inflightGetRequests.set(key, {
-    request,
+    settled,
     startedAt: Date.now(),
   })
   return request.then((response) => cloneAxiosResponse(response))

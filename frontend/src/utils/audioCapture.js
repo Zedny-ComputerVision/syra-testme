@@ -1,6 +1,7 @@
 let audioCtx = null
 let processor = null
 let sourceNode = null
+let isCapturing = false
 
 function encodePcm16ToBase64(int16Array) {
   const bytes = new Uint8Array(int16Array.buffer)
@@ -35,6 +36,8 @@ function downsampleLinear(buffer, inputRate) {
 
 export async function startAudioCapture(stream, onChunk, intervalMs = 1000) {
   if (!stream) throw new Error('Stream required')
+  if (isCapturing) return // already active, prevent race condition
+  isCapturing = true
   stopAudioCapture()
 
   try {
@@ -78,6 +81,7 @@ export async function startAudioCapture(stream, onChunk, intervalMs = 1000) {
 }
 
 export function stopAudioCapture() {
+  isCapturing = false
   processor?.disconnect()
   sourceNode?.disconnect()
   audioCtx?.close()

@@ -17,10 +17,27 @@ export function getCapturedDisplaySurface(stream) {
 export function ensureEntireScreenSelection(stream) {
   const surface = getCapturedDisplaySurface(stream)
   if (surface && surface !== 'monitor') {
+    // Known non-monitor surface (tab, window, browser) - reject
     stopCapturedStream(stream)
     const error = new Error('Entire screen required')
     error.code = ENTIRE_SCREEN_REQUIRED
     throw error
+  }
+  if (!surface) {
+    // displaySurface is empty/undefined (common on Firefox).
+    // Use track label heuristic: labels like "screen:0" or "Primary Monitor"
+    // indicate full-screen capture, while "window" or specific app names suggest
+    // tab/window sharing. Reject if the label suggests non-screen capture.
+    const track = stream?.getVideoTracks?.()?.[0]
+    const label = (track?.label || '').toLowerCase()
+    const looksLikeScreen = /screen|monitor|display|entire/.test(label)
+    const looksLikeWindow = /^window:|tab:/.test(label)
+    if (looksLikeWindow || (label && !looksLikeScreen)) {
+      stopCapturedStream(stream)
+      const error = new Error('Entire screen required')
+      error.code = ENTIRE_SCREEN_REQUIRED
+      throw error
+    }
   }
   return stream
 }

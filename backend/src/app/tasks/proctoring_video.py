@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import time
 from collections.abc import Mapping
@@ -17,6 +18,22 @@ from ..models import ProctoringEvent, SeverityEnum
 from ..services.cloudflare_media import get_cloudflare_video_details, upload_video_to_cloudflare
 
 logger = logging.getLogger(__name__)
+
+
+def _run_async(coro):
+    """Run an async coroutine from synchronous Celery task code.
+
+    Falls back to a thread-pool approach if an event loop is already running
+    (e.g. gevent/eventlet worker pools).
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "storage"
 VIDEO_UPLOAD_SPOOL_DIR = BASE_STORAGE_DIR / "video_uploads"
 
@@ -141,7 +158,7 @@ def _refresh_cloudflare_info(file_info: dict[str, Any]) -> dict[str, Any]:
 
     for attempt in range(_CLOUDFLARE_REFRESH_ATTEMPTS):
         try:
-            refreshed = asyncio.run(
+            refreshed = _run_async(
                 get_cloudflare_video_details(
                     uid=uid or None,
                     filename=name or None,
@@ -295,7 +312,7 @@ def upload_proctoring_video_capture(self: Task, attempt_id: str, upload_request:
         raise FileNotFoundError(f"Queued upload file not found: {spool_path}")
 
     try:
-        remote = asyncio.run(
+        remote = _run_async(
             upload_video_to_cloudflare(
                 spool_path,
                 filename=str(normalized_request.get("filename") or spool_path.name),

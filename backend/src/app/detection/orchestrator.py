@@ -52,6 +52,8 @@ from .emotion_detection import EmotionMonitor
 
 # Module-level cached FaceMesh instance — shared across all orchestrator instances
 # to avoid re-loading the model for each new proctoring session.
+# Uses static_image_mode=True so each frame is processed independently (no temporal
+# tracking state), making it safe for concurrent multi-session use.
 _SHARED_FACE_MESH = None
 _SHARED_FACE_MESH_LOCK = threading.Lock()  # MediaPipe FaceMesh is NOT thread-safe
 
@@ -66,7 +68,7 @@ def prewarm_shared_mesh() -> None:
             return  # double-check after acquiring lock
         try:
             mesh = _mp.solutions.face_mesh.FaceMesh(
-                static_image_mode=False,
+                static_image_mode=True,
                 refine_landmarks=True,
                 max_num_faces=1,
                 min_detection_confidence=0.5,
@@ -304,6 +306,7 @@ class ProctoringOrchestrator:
         self.enable_object_detection = bool(cfg.get("object_detection", True))
         self.enable_audio_detection = bool(cfg.get("audio_detection", True))
         self.enable_head_pose = bool(cfg.get("head_pose_detection", True))
+        self.enable_face_verify = bool(cfg.get("face_verify", True))
         self.enable_liveness = bool(cfg.get("liveness_detection", True))
         self.enable_emotion = bool(cfg.get("emotion_detection", True))
         self._gaze_sample_interval = int(cfg.get("gaze_sample_interval", 10))
@@ -387,7 +390,7 @@ class ProctoringOrchestrator:
         if self._shared_mesh is None and _MP_AVAILABLE:
             try:
                 self._shared_mesh = _mp.solutions.face_mesh.FaceMesh(
-                    static_image_mode=False,
+                    static_image_mode=True,
                     refine_landmarks=True,
                     max_num_faces=1,
                     min_detection_confidence=0.5,
@@ -570,10 +573,11 @@ class ProctoringOrchestrator:
                         self.alert_logger.add(ev)
 
             # Face verification — passes landmarks + frame (DeepFace needs raw pixels)
-            if shared_lm is not None:
-                self.alert_logger.add(self.face_verifier.process_landmarks(shared_lm, frame=frame))
-            else:
-                self.alert_logger.add(self.face_verifier.process_ndarray(frame))
+            if self.enable_face_verify and face_count > 0:
+                if shared_lm is not None:
+                    self.alert_logger.add(self.face_verifier.process_landmarks(shared_lm, frame=frame))
+                else:
+                    self.alert_logger.add(self.face_verifier.process_ndarray(frame))
 
         # ── 4. Collect parallel object detection results ──────────────────────
         if obj_future is not None:

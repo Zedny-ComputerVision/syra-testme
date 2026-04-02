@@ -242,7 +242,9 @@ def ensure_exam_owner(
     detail: str = "Test not found",
     status_code: int = status.HTTP_404_NOT_FOUND,
 ) -> None:
-    if user.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and not exam_owned_by_user(exam, user):
+    if user.role == RoleEnum.ADMIN:
+        return
+    if user.role == RoleEnum.INSTRUCTOR and not exam_owned_by_user(exam, user):
         raise HTTPException(status_code=status_code, detail=detail)
 
 
@@ -307,9 +309,16 @@ def _clone_permission_rows(rows) -> list[dict]:
 
 
 def _write_permission_rows_cache(cache_key: str, rows, *, now: float | None = None):
-    expires_at = (now if now is not None else time.monotonic()) + PERMISSION_ROWS_CACHE_TTL_SECONDS
+    global _permission_rows_cache
+    current_now = now if now is not None else time.monotonic()
+    expires_at = current_now + PERMISSION_ROWS_CACHE_TTL_SECONDS
     with _permission_rows_cache_lock:
         _permission_rows_cache[cache_key] = {
             "rows": _clone_permission_rows(rows),
             "expires_at": expires_at,
         }
+        if len(_permission_rows_cache) > 1000:
+            _permission_rows_cache = {
+                k: v for k, v in _permission_rows_cache.items()
+                if float(v.get("expires_at", 0.0) or 0.0) > current_now
+            }

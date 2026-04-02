@@ -2236,7 +2236,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         "exam_id": str(attempt.exam_id),
         "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
     }
-    _release_db_session(db)
 
     # ── Register live monitoring session in Redis ─────────────────────────────
     await live_bus.publish_session_open(attempt_id, live_session_info)
@@ -2344,6 +2343,13 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
         _loop = asyncio.get_running_loop()
         await _loop.run_in_executor(None, db.commit)
 
+    # ── WebSocket payload size limits ──────────────────────────────────
+    _MAX_PAYLOAD_SIZES = {
+        "frame": 5 * 1024 * 1024,   # 5 MB
+        "audio": 512 * 1024,         # 512 KB
+        "screen": 5 * 1024 * 1024,   # 5 MB
+    }
+
     # ── WebSocket rate limiting ──────────────────────────────────────
     _RATE_WINDOW_S = 5.0
     _RATE_GLOBAL_MAX = 30  # max messages per window across all types
@@ -2384,7 +2390,6 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     logger.info("WebSocket no longer connected for attempt %s, exiting loop", attempt_id)
                     break
                 await websocket.send_json({"type": "error", "detail": "Malformed websocket message"})
-                _release_db_session(db)
                 continue
 
             try:
@@ -2400,6 +2405,15 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     logger.warning("Rate limit exceeded for attempt %s, msg_type=%s", attempt_id, msg_type)
                     await websocket.send_json({"type": "error", "detail": "Rate limit exceeded"})
                     continue
+
+                # Reject oversized payloads to prevent abuse
+                _max_size = _MAX_PAYLOAD_SIZES.get(msg_type)
+                if _max_size is not None:
+                    _payload = data.get("data", "")
+                    if _payload and len(_payload) > _max_size:
+                        logger.warning("Oversized %s payload for attempt %s: %d bytes (max %d)", msg_type, attempt_id, len(_payload), _max_size)
+                        await websocket.send_json({"type": "error", "detail": f"Payload too large for {msg_type}"})
+                        continue
 
                 # Skip AI processing while attempt is paused by admin
                 if msg_type in ("frame", "audio", "screen") and _check_pause_state():
@@ -2968,7 +2982,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     except Exception:
                         pass
             finally:
-                _release_db_session(db)
+                pass
 
     except WebSocketDisconnect:
         pass

@@ -158,11 +158,17 @@ class ProctoringInferenceStore:
     def process_screen(self, attempt_id: str, frame_bytes: bytes) -> InferenceResult:
         session = self._require_session(attempt_id)
         started = time.perf_counter()
-        alerts: list[dict[str, Any]] = []
         with session.lock:
             screen_alert = _analyze_screen_frame(frame_bytes)
             if screen_alert:
-                alerts.append(screen_alert)
+                session.orchestrator.alert_logger.add(screen_alert)
+            alerts = session.orchestrator.alert_logger.drain()
+            session.orchestrator.alert_count += len(alerts)
+            for alert in alerts:
+                sev = (alert.get("severity") or "LOW").upper()
+                session.orchestrator.violation_score += session.orchestrator.score_weights.get(sev, 1)
+                et = alert.get("event_type", "UNKNOWN")
+                session.orchestrator.event_counts[et] = session.orchestrator.event_counts.get(et, 0) + 1
             summary = session.orchestrator.get_summary()
         return self._build_result(alerts, summary, started)
 
@@ -275,11 +281,7 @@ class LocalProctoringInferenceGateway(ProctoringInferenceGateway):
         return await asyncio.to_thread(self._store.process_frame, attempt_id, frame_bytes)
 
     async def process_audio(self, attempt_id: str, audio_bytes: bytes, *, sample_rate: int | None = None) -> InferenceResult:
-        # Audio processing is extremely fast (~0.06ms) — run it directly in the
-        # event loop instead of going through the thread pool.  This prevents
-        # audio from being starved when heavy frame processing (YOLO, DeepFace)
-        # saturates the thread pool under high concurrency.
-        return self._store.process_audio(attempt_id, audio_bytes, sample_rate=sample_rate)
+        return await asyncio.to_thread(self._store.process_audio, attempt_id, audio_bytes, sample_rate=sample_rate)
 
     async def process_screen(self, attempt_id: str, frame_bytes: bytes) -> InferenceResult:
         return await asyncio.to_thread(self._store.process_screen, attempt_id, frame_bytes)

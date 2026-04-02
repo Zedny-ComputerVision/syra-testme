@@ -72,7 +72,10 @@ async def publish_session_open(attempt_id: str, session_info: dict) -> None:
     except Exception as exc:
         logger.warning("live_bus: publish_session_open %s: %s", attempt_id, exc)
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 async def publish_session_closed(attempt_id: str) -> None:
@@ -87,7 +90,10 @@ async def publish_session_closed(attempt_id: str) -> None:
     except Exception as exc:
         logger.warning("live_bus: publish_session_closed %s: %s", attempt_id, exc)
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 async def publish_json_event(attempt_id: str, message: dict) -> None:
@@ -101,7 +107,10 @@ async def publish_json_event(attempt_id: str, message: dict) -> None:
     except Exception as exc:
         logger.warning("live_bus: publish_json_event %s: %s", attempt_id, exc)
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 async def publish_thumb(
@@ -127,7 +136,10 @@ async def publish_thumb(
     except Exception as exc:
         logger.warning("live_bus: publish_thumb %s: %s", attempt_id, exc)
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 # ── Read helpers (admin-side) ──────────────────────────────────────────────
@@ -143,7 +155,10 @@ async def get_session_info(attempt_id: str) -> dict | None:
         logger.warning("live_bus: get_session_info %s: %s", attempt_id, exc)
         return None
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 async def get_all_sessions() -> list[dict]:
@@ -152,7 +167,7 @@ async def get_all_sessions() -> list[dict]:
     if r is None:
         return []
     try:
-        keys = await r.keys(_KEY_SESSION.format("*"))
+        keys = [key async for key in r.scan_iter(match=_KEY_SESSION.format("*"))]
         if not keys:
             return []
         vals = await r.mget(*keys)
@@ -166,7 +181,10 @@ async def get_all_sessions() -> list[dict]:
         logger.warning("live_bus: get_all_sessions: %s", exc)
         return []
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 async def get_latest_thumb(attempt_id: str) -> bytes | None:
@@ -179,7 +197,10 @@ async def get_latest_thumb(attempt_id: str) -> bytes | None:
         logger.warning("live_bus: get_latest_thumb %s: %s", attempt_id, exc)
         return None
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 async def get_viewer_count(attempt_id: str) -> int:
@@ -196,7 +217,10 @@ async def get_viewer_count(attempt_id: str) -> int:
     except Exception:
         return 0
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
 
 
 # ── Subscription (admin-side) ──────────────────────────────────────────────
