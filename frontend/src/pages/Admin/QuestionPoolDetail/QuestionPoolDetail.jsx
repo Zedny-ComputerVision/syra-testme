@@ -8,20 +8,28 @@ import styles from './QuestionPoolDetail.module.scss'
 
 const POOL_QUESTION_TYPES = [
   { value: 'MCQ', labelKey: 'question_type_mcq' },
+  { value: 'MULTI', labelKey: 'admin_wizard_qtype_multiple_choice' },
   { value: 'TRUEFALSE', labelKey: 'question_type_truefalse' },
   { value: 'TEXT', labelKey: 'question_type_short_answer' },
+  { value: 'ORDERING', labelKey: 'admin_wizard_qtype_ordering' },
+  { value: 'FILLINBLANK', labelKey: 'admin_wizard_qtype_fill_blanks' },
+  { value: 'MATCHING', labelKey: 'admin_wizard_qtype_matching' },
 ]
+
+const MCQ_TYPES = new Set(['MCQ', 'MULTI'])
 
 const blankQuestion = (questionType = 'MCQ') => ({
   text: '',
   question_type: questionType,
-  options: questionType === 'MCQ' ? ['', '', '', ''] : questionType === 'TRUEFALSE' ? ['True', 'False'] : [],
+  options: MCQ_TYPES.has(questionType) ? ['', '', '', ''] : questionType === 'TRUEFALSE' ? ['True', 'False'] : [],
   correct_answer: questionType === 'TRUEFALSE' ? 'True' : '',
 })
 
 const normalizeQuestionType = (questionType) => {
   if (questionType === 'TRUE_FALSE') return 'TRUEFALSE'
   if (questionType === 'SHORT_ANSWER') return 'TEXT'
+  if (questionType === 'FILL_IN_BLANK') return 'FILLINBLANK'
+  if (questionType === 'MULTIPLE_CHOICE') return 'MULTI'
   return questionType || 'MCQ'
 }
 
@@ -30,7 +38,7 @@ const normalizePoolQuestion = (question) => {
   return {
     text: question?.text || '',
     question_type: questionType,
-    options: questionType === 'MCQ'
+    options: MCQ_TYPES.has(questionType)
       ? (question?.options && question.options.length ? question.options : ['', '', '', ''])
       : questionType === 'TRUEFALSE'
         ? ['True', 'False']
