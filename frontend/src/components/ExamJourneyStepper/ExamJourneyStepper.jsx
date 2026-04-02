@@ -1,9 +1,11 @@
 import React from 'react'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './ExamJourneyStepper.module.scss'
 
 export default function ExamJourneyStepper({ step, currentStep }) {
+  const { t } = useLanguage()
   const activeStep = currentStep ?? step ?? 0
-  const steps = ['Instructions', 'System Check', 'Verify Identity', 'Rules', 'Test', 'Result']
+  const steps = [t('stepper_instructions'), t('stepper_system_check'), t('stepper_verify_identity'), t('stepper_rules'), t('stepper_test'), t('stepper_result')]
   return (
     <div className={styles.stepper}>
       {steps.map((s, idx) => (

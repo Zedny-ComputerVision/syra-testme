@@ -7,12 +7,10 @@ import useLanguage from '../../../hooks/useLanguage'
 import styles from './QuestionPoolDetail.module.scss'
 
 const POOL_QUESTION_TYPES = [
-  { value: 'MCQ', label: 'Multiple Choice' },
-  { value: 'TRUEFALSE', label: 'True / False' },
-  { value: 'TEXT', label: 'Short Answer' },
+  { value: 'MCQ', labelKey: 'question_type_mcq' },
+  { value: 'TRUEFALSE', labelKey: 'question_type_truefalse' },
+  { value: 'TEXT', labelKey: 'question_type_short_answer' },
 ]
-
-const TYPE_LABELS = Object.fromEntries(POOL_QUESTION_TYPES.map((type) => [type.value, type.label]))
 
 const blankQuestion = (questionType = 'MCQ') => ({
   text: '',
@@ -275,7 +273,7 @@ export default function QuestionPoolDetail() {
               }))}
             >
               {POOL_QUESTION_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>{type.label}</option>
+                <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
               ))}
             </select>
 
@@ -327,7 +325,7 @@ export default function QuestionPoolDetail() {
             {questions.map((question, index) => (
               <div key={question.id} className={styles.qCard}>
                 <div className={styles.qHeader}>
-                  <span>Q{index + 1} <span className={styles.typeBadge}>{TYPE_LABELS[normalizeQuestionType(question.question_type)] || normalizeQuestionType(question.question_type)}</span></span>
+                  <span>Q{index + 1} <span className={styles.typeBadge}>{(() => { const qt = normalizeQuestionType(question.question_type); const tp = POOL_QUESTION_TYPES.find((pt) => pt.value === qt); return tp ? t(tp.labelKey) : qt })()}</span></span>
                   {canManagePool && (
                     <div className={styles.qActions}>
                       <button className={styles.btnSecondary} onClick={() => startEdit(question)} disabled={deleteBusyId === question.id} aria-label={`${t('edit')} ${question.text || `${t('question')} ${index + 1}`}`} title={`${t('edit')} ${question.text || `${t('question')} ${index + 1}`}`}>{t('edit')}</button>

@@ -41,7 +41,7 @@ export default function MySurveys() {
       setSubmitted((prev) => ({ ...prev, [surveyId]: true }))
       setNotice(t('surveys_response_submitted'))
     } catch (e) {
-      const detail = e.response?.data?.detail || 'Submit failed'
+      const detail = e.response?.data?.detail || t('survey_submit_failed')
       if (detail === 'Already responded') {
         setSubmitted((prev) => ({ ...prev, [surveyId]: true }))
         setNotice(t('surveys_already_submitted'))
@@ -143,7 +143,7 @@ export default function MySurveys() {
                       </div>
                     ) : qType === 'BOOLEAN' ? (
                       <div className={styles.optionList}>
-                        {['Yes', 'No'].map(opt => (
+                        {[t('yes'), t('no')].map(opt => (
                           <label key={opt} className={styles.optionLabel}>
                             <input type="radio" name={`${s.id}-${i}`} value={opt} checked={val === opt} onChange={() => set(opt)} />
                             {opt}

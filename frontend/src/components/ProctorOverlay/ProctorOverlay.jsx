@@ -3,6 +3,7 @@ import styles from './ProctorOverlay.module.scss'
 import { startAudioCapture, stopAudioCapture } from '../../utils/audioCapture'
 import { proctoringPing } from '../../services/proctoring.service'
 import { requestEntireScreenShare } from '../../utils/screenCapture'
+import useLanguage from '../../hooks/useLanguage'
 
 const MAX_VISIBLE_ALERTS = 5
 const ALERT_DEDUP_WINDOW_MS = 4000
@@ -10,14 +11,14 @@ const VISUAL_FRAME_INTERVAL_FLOOR_MS = 500
 const VISUAL_FRAME_INTERVAL_DEFAULT_MS = 750
 const STANDARD_CAPTURE_RESOLUTION = { width: 640, height: 480 }
 const HIGH_DETAIL_CAPTURE_RESOLUTION = { width: 960, height: 720 }
-const DETECTOR_STATUS_LABELS = {
-  face_detection: 'Face',
-  multi_face: 'Multiple faces',
-  object_detection: 'Forbidden objects',
-  eye_tracking: 'Eye tracking',
-  head_pose_detection: 'Head pose',
-  audio_detection: 'Audio',
-  mouth_detection: 'Mouth movement',
+const DETECTOR_LABEL_KEYS = {
+  face_detection: 'proctor_detector_face',
+  multi_face: 'proctor_detector_multi_face',
+  object_detection: 'proctor_detector_forbidden_obj',
+  eye_tracking: 'proctor_detector_eye_tracking',
+  head_pose_detection: 'proctor_detector_head_pose',
+  audio_detection: 'proctor_detector_audio',
+  mouth_detection: 'proctor_detector_mouth',
 }
 
 function readNumber(value, fallback) {
@@ -72,7 +73,7 @@ function normalizeIncomingAlert(rawAlert) {
     type: 'alert',
     event_type: eventType || 'PROCTORING_ALERT',
     severity: severity || 'LOW',
-    detail: String(rawAlert.detail || 'Automatic proctoring alert detected.').trim(),
+    detail: String(rawAlert.detail || '').trim(),
   }
 }
 
@@ -91,6 +92,8 @@ export default function ProctorOverlay({
   initialScreenStream,
   config = {},
 }) {
+  const { t } = useLanguage()
+
   const WS_MAX_ATTEMPTS = 50
   const WS_BASE_DELAY_MS = 2000
   const WS_MAX_DELAY_MS = 15000
@@ -169,30 +172,33 @@ export default function ProctorOverlay({
   }, [attemptId])
 
   const detectorHealth = useMemo(() => (
-    Object.entries(DETECTOR_STATUS_LABELS)
+    Object.entries(DETECTOR_LABEL_KEYS)
       .filter(([key]) => Boolean(config?.[key]))
-      .map(([key, label]) => {
+      .map(([key, labelKey]) => {
         let state = 'pending'
         if (detectorStatusReady) {
           state = detectorStatus[key] === false ? 'degraded' : 'active'
         }
-        return { key, label, state }
+        return { key, label: t(labelKey), state }
       })
-  ), [config, detectorStatus, detectorStatusReady])
+  ), [config, detectorStatus, detectorStatusReady, t])
   const detectorIssues = useMemo(
     () => detectorHealth.filter((entry) => entry.state === 'degraded'),
     [detectorHealth],
   )
   const detectorSummary = useMemo(() => {
     if (detectorHealth.length === 0) return ''
-    if (!detectorStatusReady) return 'Checking detector availability...'
-    if (detectorIssues.length === 0) return 'All enabled detectors are active.'
-    return `${detectorIssues.length} detector${detectorIssues.length === 1 ? '' : 's'} unavailable: ${detectorIssues.map((entry) => entry.label).join(', ')}.`
-  }, [detectorHealth, detectorIssues, detectorStatusReady])
+    if (!detectorStatusReady) return t('proctor_checking_detectors')
+    if (detectorIssues.length === 0) return t('proctor_all_detectors_active')
+    return t('proctor_detectors_unavailable')
+      .replace('{{count}}', detectorIssues.length)
+      .replace('{{names}}', detectorIssues.map((entry) => entry.label).join(', '))
+  }, [detectorHealth, detectorIssues, detectorStatusReady, t])
 
   const pushAlert = useCallback((rawAlert) => {
     const event = normalizeIncomingAlert(rawAlert)
     if (!event) return
+    if (!event.detail) event.detail = t('proctor_auto_alert')
     const dedupeKey = `${event.event_type}:${event.severity}`
     const now = Date.now()
     const lastSeen = recentAlertRef.current.get(dedupeKey) || 0
@@ -205,21 +211,21 @@ export default function ProctorOverlay({
       lastViolationTimeRef.current = now
       adaptiveIntervalRef.current = null // will reset to base on next interval tick
     }
-  }, [onViolation])
+  }, [onViolation, t])
 
   const triggerForcedSubmit = useCallback((detail) => {
     intentionalCloseRef.current = true
     pushAlert({
       severity: 'HIGH',
       event_type: 'FORCED_SUBMIT',
-      detail: detail || 'Test auto-submitted due to violations.',
+      detail: detail || t('proctor_auto_submitted'),
     })
     if (onForcedSubmit) {
       void onForcedSubmit(detail)
       return
     }
     window.location.href = `/attempts/${attemptId}`
-  }, [attemptId, onForcedSubmit, pushAlert])
+  }, [attemptId, onForcedSubmit, pushAlert, t])
 
   const handleServerPingResult = useCallback((response) => {
     const payload = response?.data ?? response
@@ -227,17 +233,17 @@ export default function ProctorOverlay({
     const serverAlerts = Array.isArray(payload.alerts) ? payload.alerts : []
     serverAlerts.forEach((alert) => pushAlert(alert))
     if (payload.forced_submit) {
-      triggerForcedSubmit(payload.submit_reason || 'Test auto-submitted due to violations.')
+      triggerForcedSubmit(payload.submit_reason || t('proctor_auto_submitted'))
     }
-  }, [pushAlert, triggerForcedSubmit])
+  }, [pushAlert, triggerForcedSubmit, t])
 
   const emitSystemError = useCallback((detail) => {
     pushAlert({
       severity: 'LOW',
       event_type: 'PROCTORING_ERROR',
-      detail: String(detail || 'Proctoring service error.').trim(),
+      detail: String(detail || t('proctor_service_error')).trim(),
     })
-  }, [pushAlert])
+  }, [pushAlert, t])
 
   const emitRateLimitedSystemError = useCallback((key, detail, cooldownMs = 8000) => {
     const now = Date.now()
@@ -255,7 +261,7 @@ export default function ProctorOverlay({
       type: 'alert',
       severity: 'HIGH',
       event_type: 'CAMERA_COVERED',
-      detail: 'Camera view is blocked or too dark',
+      detail: t('proctor_camera_blocked'),
       confidence: 0.95,
     }
     pushAlert(ev)
@@ -266,9 +272,9 @@ export default function ProctorOverlay({
       fullscreen: !!document.fullscreenElement,
       camera_dark: true,
     }).then(handleServerPingResult).catch(() => {
-      emitRateLimitedSystemError('camera_dark_ping', 'Unable to sync the blocked-camera alert with the server.')
+      emitRateLimitedSystemError('camera_dark_ping', t('proctor_sync_camera_error'))
     })
-  }, [attemptId, emitRateLimitedSystemError, handleServerPingResult, pushAlert])
+  }, [attemptId, emitRateLimitedSystemError, handleServerPingResult, pushAlert, t])
 
   const analyzeLocalFrame = useCallback(() => {
     if (!videoRef.current) return null
@@ -309,10 +315,10 @@ export default function ProctorOverlay({
         }
       }
     } catch (error) {
-      emitRateLimitedSystemError('camera_frame_read', error?.message || 'Unable to inspect the current camera frame for proctoring.', 10000)
+      emitRateLimitedSystemError('camera_frame_read', error?.message || t('proctor_inspect_error'), 10000)
     }
     return canvas.toDataURL('image/jpeg', captureJpegQuality).split(',')[1]
-  }, [cameraBlockedHardConsecutiveFrames, cameraBlockedLumaHard, cameraBlockedLumaSoft, cameraBlockedSoftConsecutiveFrames, cameraBlockedStddevMax, captureJpegQuality, captureResolution, emitLocalCameraCoveredAlert, emitRateLimitedSystemError, onCameraStateChange])
+  }, [cameraBlockedHardConsecutiveFrames, cameraBlockedLumaHard, cameraBlockedLumaSoft, cameraBlockedSoftConsecutiveFrames, cameraBlockedStddevMax, captureJpegQuality, captureResolution, emitLocalCameraCoveredAlert, emitRateLimitedSystemError, onCameraStateChange, t])
 
   // Start camera
   useEffect(() => {
@@ -336,13 +342,13 @@ export default function ProctorOverlay({
         if (videoRequired && videoRef.current) {
           videoRef.current.srcObject = stream
           await videoRef.current.play().catch(() => {
-            emitRateLimitedSystemError('camera_preview', 'Camera stream started, but the preview could not begin playing automatically.')
+            emitRateLimitedSystemError('camera_preview', t('proctor_preview_autoplay_error'))
           })
         }
       } catch (error) {
         if (!cancelled) {
           const blocked = error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError'
-          setCameraError(blocked ? 'Camera or microphone access was denied. Proctoring may be incomplete until access is granted.' : 'Unable to start the required camera or microphone stream.')
+          setCameraError(blocked ? t('proctor_camera_denied') : t('proctor_camera_start_error'))
         }
       }
     }
@@ -353,7 +359,7 @@ export default function ProctorOverlay({
       onCameraStateChange?.(false)
       streamRef.current?.getTracks().forEach(t => t.stop())
     }
-  }, [audioRequired, emitRateLimitedSystemError, onCameraStateChange, onStreamReady, videoRequired])
+  }, [audioRequired, emitRateLimitedSystemError, onCameraStateChange, onStreamReady, t, videoRequired])
 
   // Retry audio capture when stream becomes ready (fixes race with WebSocket)
   useEffect(() => {
@@ -683,7 +689,7 @@ export default function ProctorOverlay({
             // Server is shutting down gracefully — will auto-reconnect via onclose
             intentionalCloseRef.current = false
           } else if (msg.type === 'forced_submit') {
-            triggerForcedSubmit(msg.detail || 'Test auto-submitted due to violations.')
+            triggerForcedSubmit(msg.detail || t('proctor_auto_submitted'))
           }
         } catch (error) {
           emitRateLimitedSystemError('socket_payload', error?.message || 'Received an unexpected proctoring message.', 10000)
@@ -785,7 +791,7 @@ export default function ProctorOverlay({
       {detectorHealth.length > 0 && (
         <div className={styles.detectorPanel}>
           <div className={styles.detectorHeader}>
-            <span className={styles.detectorTitle}>Detector Health</span>
+            <span className={styles.detectorTitle}>{t('proctor_detector_health')}</span>
             <span className={`${styles.detectorSummary} ${detectorIssues.length > 0 ? styles.detectorSummaryWarn : ''}`}>
               {detectorSummary}
             </span>
@@ -798,7 +804,7 @@ export default function ProctorOverlay({
               >
                 <span className={styles.detectorChipLabel}>{entry.label}</span>
                 <span className={styles.detectorChipState}>
-                  {entry.state === 'active' ? 'Active' : entry.state === 'degraded' ? 'Unavailable' : 'Checking'}
+                  {entry.state === 'active' ? t('proctor_detector_active') : entry.state === 'degraded' ? t('proctor_detector_unavailable') : t('proctor_detector_checking')}
                 </span>
               </div>
             ))}
@@ -808,7 +814,7 @@ export default function ProctorOverlay({
 
       {alerts.length > 0 && (
         <div className={styles.alerts}>
-          <div className={styles.alertsLabel}>Recent Alerts</div>
+          <div className={styles.alertsLabel}>{t('proctor_recent_alerts')}</div>
           {alerts.map((a, idx) => (
             <div key={idx} className={`${styles.alert} ${styles['alert' + a.severity]}`}>
               <strong>{a.severity}</strong> {a.event_type}

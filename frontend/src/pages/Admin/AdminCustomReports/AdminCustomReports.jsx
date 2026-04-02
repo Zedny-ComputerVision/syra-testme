@@ -7,15 +7,15 @@ import styles from './AdminCustomReports.module.scss'
 
 const DATASETS = {
   attempts: {
-    label: 'Attempts',
+    labelKey: 'admin_custom_reports_dataset_attempts',
     columns: ['id', 'test_title', 'user_name', 'status', 'score', 'started_at', 'submitted_at'],
   },
   tests: {
-    label: 'Tests',
+    labelKey: 'admin_custom_reports_dataset_tests',
     columns: ['id', 'name', 'code', 'status', 'type', 'time_limit_minutes', 'question_count', 'course_title'],
   },
   users: {
-    label: 'Users',
+    labelKey: 'admin_custom_reports_dataset_users',
     columns: ['id', 'user_id', 'name', 'email', 'role', 'is_active', 'created_at'],
   },
 }
@@ -45,6 +45,7 @@ export default function AdminCustomReports() {
   const [reloadNonce, setReloadNonce] = useState(0)
 
   const dataset = useMemo(() => DATASETS[datasetKey], [datasetKey])
+  const datasetLabel = t(datasetLabelKey)
   const noColumnsSelected = selectedCols.length === 0
   const hasCustomFilters = Boolean(search.trim()) || selectedCols.length !== DATASETS[datasetKey].columns.length
 
@@ -122,7 +123,7 @@ export default function AdminCustomReports() {
         search: search.trim() || null,
       })
       downloadBlob(data, `${datasetKey}_report.csv`)
-      setNotice(`${t('admin_custom_reports_exported')} ${totalRows} ${totalRows === 1 ? t('admin_custom_reports_row') : t('admin_custom_reports_rows')} ${t('admin_custom_reports_from')} ${dataset.label.toLowerCase()}.`)
+      setNotice(`${t('admin_custom_reports_exported')} ${totalRows} ${totalRows === 1 ? t('admin_custom_reports_row') : t('admin_custom_reports_rows')} ${t('admin_custom_reports_from')} ${datasetLabel.toLowerCase()}.`)
     } catch (err) {
       setActionError(await readBlobErrorMessage(err, t('admin_custom_reports_failed_export')))
     } finally {
@@ -142,7 +143,7 @@ export default function AdminCustomReports() {
           <label className={styles.label} htmlFor="custom-report-dataset">{t('admin_custom_reports_dataset')}</label>
           <select id="custom-report-dataset" className={styles.select} value={datasetKey} onChange={(e) => setDatasetKey(e.target.value)}>
             {Object.entries(DATASETS).map(([key, value]) => (
-              <option key={key} value={key}>{value.label}</option>
+              <option key={key} value={key}>{t(value.labelKey)}</option>
             ))}
           </select>
         </div>
@@ -155,7 +156,7 @@ export default function AdminCustomReports() {
               className={styles.input}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`${t('admin_custom_reports_filter')} ${dataset.label.toLowerCase()}...`}
+              placeholder={`${t('admin_custom_reports_filter')} ${datasetLabel.toLowerCase()}...`}
             />
             {hasCustomFilters && (
               <button type="button" className={styles.secondaryBtn} onClick={resetFilters} disabled={loading || exporting}>
@@ -167,7 +168,7 @@ export default function AdminCustomReports() {
       </div>
 
       <div className={styles.summaryRow}>
-        <div className={styles.summaryChip}>{t('admin_custom_reports_dataset')}: {dataset.label}</div>
+        <div className={styles.summaryChip}>{t('admin_custom_reports_dataset')}: {datasetLabel}</div>
         <div className={styles.summaryChip}>{t('admin_custom_reports_selected_columns')}: {selectedCols.length} / {availableColumns.length}</div>
         <div className={styles.summaryChip}>{t('admin_custom_reports_matching_rows')}: {loading ? t('admin_custom_reports_loading') : totalRows}</div>
       </div>

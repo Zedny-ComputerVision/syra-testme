@@ -249,7 +249,7 @@ export default function Attempts() {
                 <tr key={attempt.id} data-status={attempt.status}>
                   <td>
                     <span className={styles.testName}>{attempt.test_title || attempt.exam_title || t('attempts_test')}</span>
-                    {attempt.certificate_eligible && <span className={styles.certBadge} title={t('attempts_cert_eligible')}>CERT</span>}
+                    {attempt.certificate_eligible && <span className={styles.certBadge} title={t('attempts_cert_eligible')}>{t('attempts_cert_badge')}</span>}
                   </td>
                   <td>
                     <span className={`${styles.badge} ${STATUS_CLASSES[attempt.status] || ''}`}>

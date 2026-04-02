@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import useLanguage from '../../hooks/useLanguage'
 import styles from './ScrollTopButton.module.scss'
 
 function prefersReducedMotion() {
@@ -9,6 +10,7 @@ function prefersReducedMotion() {
 }
 
 export default function ScrollTopButton() {
+  const { t } = useLanguage()
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -34,8 +36,8 @@ export default function ScrollTopButton() {
       type="button"
       className={`${styles.button} ${visible ? styles.visible : ''}`}
       onClick={handleClick}
-      aria-label="Back to top"
-      title="Back to top"
+      aria-label={t('scroll_back_to_top')}
+      title={t('scroll_back_to_top')}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
         <path d="M12 19V5" />

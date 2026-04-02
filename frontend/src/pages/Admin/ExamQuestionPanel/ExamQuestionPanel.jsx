@@ -8,8 +8,8 @@ const EMPTY_TEXT = { text: '', question_type: 'TEXT', correct_answer: '', points
 
 const MCQ_TYPES = new Set(['MCQ', 'MULTI'])
 const DEFAULT_TYPES = [
-  { value: 'MCQ', label: 'Multiple Choice' },
-  { value: 'TEXT', label: 'Text / Essay' },
+  { value: 'MCQ', labelKey: 'question_type_mcq' },
+  { value: 'TEXT', labelKey: 'question_type_text' },
 ]
 
 function createEmptyQuestion(type) {
@@ -368,8 +368,8 @@ export default function ExamQuestionPanel({ examId, questions = [], onUpdate, qu
                 onChange={(e) => setForm((current) => ({ ...current, correct_answer: e.target.value }))}
                 disabled={saving}
               >
-                <option value="A">True</option>
-                <option value="B">False</option>
+                <option value="A">{t('question_true')}</option>
+                <option value="B">{t('question_false')}</option>
               </select>
             </div>
           )}

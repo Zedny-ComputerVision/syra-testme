@@ -1,4 +1,5 @@
 import React from 'react'
+import useLanguage from '../../../hooks/useLanguage'
 import styles from './Loader.module.scss'
 
 /**
@@ -6,7 +7,9 @@ import styles from './Loader.module.scss'
  *
  * @param {{ size?: number, label?: string, fullPage?: boolean }} props
  */
-export default function Loader({ size = 40, label = 'Loading...', fullPage = false }) {
+export default function Loader({ size = 40, label, fullPage = false }) {
+  const { t } = useLanguage()
+  const resolvedLabel = label === undefined ? t('loader_loading') + '...' : label
   const spinnerStyle = {
     width: `${size}px`,
     height: `${size}px`,
@@ -27,7 +30,7 @@ export default function Loader({ size = 40, label = 'Loading...', fullPage = fal
           <div className={styles.brand}>
             <span className={styles.brandMark}>S</span>
             <span className={styles.brandTextWrap}>
-              <span className={styles.brandKicker}>Secure assessment platform</span>
+              <span className={styles.brandKicker}>{t('loader_brand_tagline')}</span>
               <span className={styles.brandText}>syra</span>
             </span>
           </div>
@@ -43,10 +46,10 @@ export default function Loader({ size = 40, label = 'Loading...', fullPage = fal
             <span />
           </div>
         </div>
-        {label && <span className={styles.label}>{label}</span>}
-        {fullPage && <span className={styles.caption}>Preparing your workspace and loading the latest data.</span>}
+        {resolvedLabel && <span className={styles.label}>{resolvedLabel}</span>}
+        {fullPage && <span className={styles.caption}>{t('loader_preparing')}</span>}
       </div>
-      <span className={styles.srOnly}>Loading</span>
+      <span className={styles.srOnly}>{t('loader_loading')}</span>
     </div>
   )
 }
