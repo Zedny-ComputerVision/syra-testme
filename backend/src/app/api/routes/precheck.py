@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user, get_db_dep, parse_uuid_param
 from ...core.config import get_settings
+from ...core.i18n import translate as _t
 from ...models import Attempt, RoleEnum
 from ...detection.face_verification import compute_face_signature, compute_face_signature_detected, cosine_distance, compute_landmark_signature
 from ...services.normalized_relations import exam_proctoring
