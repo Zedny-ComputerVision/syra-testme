@@ -2984,13 +2984,13 @@ export default function AdminManageTestPage() {
                     <h4>{t('settings_grading_pass_rule')}</h4>
                   </div>
                   <div className={styles.gradingRuleList}>
-                    <p>- Achieve more or equal to {settingsForm.passing_score || '0.00'}% on the entire test.</p>
-                    <p>- Pass the required test sections</p>
+                    <p>{t('admin_manage_grading_overall', { score: settingsForm.passing_score || '0.00' })}</p>
+                    <p>{t('admin_manage_grading_sections')}</p>
                     {sectionCount > 0 ? (
                       <ol>
                         {Array.from({ length: sectionCount }).map((_, index) => (
                           <li key={`grading-section-${index}`}>
-                            Achieve more or equal to {settingsForm.passing_score || '0.00'}% on test section {index + 1}.
+                            {t('admin_manage_grading_section_n', { score: settingsForm.passing_score || '0.00', n: index + 1 })}
                           </li>
                         ))}
                       </ol>
@@ -3460,7 +3460,7 @@ export default function AdminManageTestPage() {
                   </thead>
                   <tbody>
                     <tr className={styles.tableFilterRow}>
-                      <td><input aria-label="Coupon code filter" placeholder="Search" value={couponFilters.code} onChange={setCouponFilterField('code')} /></td>
+                      <td><input aria-label="Coupon code filter" placeholder={t('search')} value={couponFilters.code} onChange={setCouponFilterField('code')} /></td>
                       <td>
                         <select aria-label="Discount type filter" value={couponFilters.discount_type} onChange={setCouponFilterField('discount_type')}>
                           <option value="">{t('settings_all')}</option>
@@ -3468,7 +3468,7 @@ export default function AdminManageTestPage() {
                           <option value="fixed">{t('settings_fixed')}</option>
                         </select>
                       </td>
-                      <td><input aria-label="Amount filter" placeholder="Search" value={couponFilters.amount} onChange={setCouponFilterField('amount')} /></td>
+                      <td><input aria-label="Amount filter" placeholder={t('search')} value={couponFilters.amount} onChange={setCouponFilterField('amount')} /></td>
                       <td>
                         <select aria-label="Status filter" value={couponFilters.status} onChange={setCouponFilterField('status')}>
                           <option value="">{t('settings_all')}</option>
@@ -3477,10 +3477,10 @@ export default function AdminManageTestPage() {
                           ))}
                         </select>
                       </td>
-                      <td><input aria-label="Expiration time filter" placeholder="Search" value={couponFilters.expiration_time} onChange={setCouponFilterField('expiration_time')} /></td>
-                      <td><input aria-label="Used by filter" placeholder="Search" value={couponFilters.used_by} onChange={setCouponFilterField('used_by')} /></td>
-                      <td><input aria-label="Date of use filter" placeholder="Search" value={couponFilters.date_of_use} onChange={setCouponFilterField('date_of_use')} /></td>
-                      <td><input aria-label="Created by filter" placeholder="Search" value={couponFilters.created_by} onChange={setCouponFilterField('created_by')} /></td>
+                      <td><input aria-label="Expiration time filter" placeholder={t('search')} value={couponFilters.expiration_time} onChange={setCouponFilterField('expiration_time')} /></td>
+                      <td><input aria-label="Used by filter" placeholder={t('search')} value={couponFilters.used_by} onChange={setCouponFilterField('used_by')} /></td>
+                      <td><input aria-label="Date of use filter" placeholder={t('search')} value={couponFilters.date_of_use} onChange={setCouponFilterField('date_of_use')} /></td>
+                      <td><input aria-label="Created by filter" placeholder={t('search')} value={couponFilters.created_by} onChange={setCouponFilterField('created_by')} /></td>
                       <td />
                     </tr>
                     {couponRows.length === 0 ? (
@@ -3497,11 +3497,11 @@ export default function AdminManageTestPage() {
                           <td>{row.code}</td>
                           <td>{row.discount_type === 'percentage' ? t('settings_percentage') : t('settings_fixed')}</td>
                           <td>{row.discount_type === 'percentage' ? `${row.amount}%` : row.amount}</td>
-                          <td>{row.status || 'Draft'}</td>
+                          <td>{row.status || t('draft')}</td>
                           <td>{row.expiration_time || '-'}</td>
                           <td>{row.used_by || '-'}</td>
                           <td>{row.date_of_use || '-'}</td>
-                          <td>{row.created_by || 'Admin'}</td>
+                          <td>{row.created_by || t('admin')}</td>
                           <td className={styles.actionsCell}>
                             <button type="button" disabled={lockedExamFields} onClick={() => removeCouponEntry(row.id)}>{t('delete')}</button>
                           </td>
@@ -3948,21 +3948,21 @@ export default function AdminManageTestPage() {
 
         {false && tab === 'sections' && (
           <section className={styles.full}>
-            <h3 className={styles.tabPanelHeader}>Test Sections — Questions <span className={styles.countPill}>{questions.length}</span></h3>
+            <h3 className={styles.tabPanelHeader}>{t('admin_manage_fallback_questions_heading')} <span className={styles.countPill}>{questions.length}</span></h3>
             <div className={styles.row}>
-              <label>Search questions<input placeholder="Search text or type" value={questionSearch} onChange={(e) => setQuestionSearch(e.target.value)} /></label>
-              <label>Total questions<input readOnly value={String(questions.length)} /></label>
+              <label>{t('admin_manage_search_questions')}<input placeholder={t('admin_manage_search_placeholder')} value={questionSearch} onChange={(e) => setQuestionSearch(e.target.value)} /></label>
+              <label>{t('admin_manage_total_questions')}<input readOnly value={String(questions.length)} /></label>
             </div>
             <form className={styles.sectionCard} onSubmit={handleQuestionSubmit}>
-              <div className={styles.sectionHeader}>{editingQuestionId ? 'Edit question' : 'Add question'}</div>
+              <div className={styles.sectionHeader}>{editingQuestionId ? t('admin_manage_edit_question_title') : t('admin_manage_add_question_title')}</div>
               <div className={styles.row}>
-                <label>Type
+                <label>{t('type')}
                   <select value={questionForm.question_type} disabled={lockedExamFields} onChange={(e) => handleQuestionTypeChange(e.target.value)}>
                     {QUESTION_TYPES.map((qt) => <option key={qt} value={qt}>{qt}</option>)}
                   </select>
                 </label>
               </div>
-              <label>Question text<textarea rows={3} value={questionForm.text} disabled={lockedExamFields} onChange={(e) => setQuestionForm((p) => ({ ...p, text: e.target.value }))} /></label>
+              <label>{t('admin_manage_question_text_label')}<textarea rows={3} value={questionForm.text} disabled={lockedExamFields} onChange={(e) => setQuestionForm((p) => ({ ...p, text: e.target.value }))} /></label>
               {questionForm.question_type === 'ORDERING' && (
                 <div className={styles.typeHint}>Enter items in order, one per line. The correct order is top-to-bottom. Leave <em>correct_answer</em> blank (auto-derived).</div>
               )}
@@ -3986,20 +3986,20 @@ export default function AdminManageTestPage() {
                 <input value={questionForm.correct_answer} disabled={lockedExamFields || questionForm.question_type === 'ORDERING'} onChange={(e) => setQuestionForm((p) => ({ ...p, correct_answer: e.target.value }))} />
               </label>
               <div className={styles.row}>
-                <label>Points<input type="number" step="0.5" min="0.5" value={questionForm.points} disabled={lockedExamFields} onChange={(e) => setQuestionForm((p) => ({ ...p, points: e.target.value }))} /></label>
-                <label>Order<input type="number" min="0" value={questionForm.order} disabled={lockedExamFields} onChange={(e) => setQuestionForm((p) => ({ ...p, order: e.target.value }))} /></label>
+                <label>{t('admin_manage_points_label')}<input type="number" step="0.5" min="0.5" value={questionForm.points} disabled={lockedExamFields} onChange={(e) => setQuestionForm((p) => ({ ...p, points: e.target.value }))} /></label>
+                <label>{t('admin_manage_order_label')}<input type="number" min="0" value={questionForm.order} disabled={lockedExamFields} onChange={(e) => setQuestionForm((p) => ({ ...p, order: e.target.value }))} /></label>
               </div>
               <div className={styles.inlineActions}>
-                <button type="submit" className={styles.blueBtn} disabled={questionBusy || lockedExamFields}>{questionBusy ? 'Saving...' : editingQuestionId ? 'Update question' : 'Add question'}</button>
-                <button type="button" className={styles.ghostBtn} onClick={resetQuestionForm}>Reset</button>
+                <button type="submit" className={styles.blueBtn} disabled={questionBusy || lockedExamFields}>{questionBusy ? t('saving') : editingQuestionId ? t('admin_manage_btn_update_question') : t('admin_manage_btn_add_question')}</button>
+                <button type="button" className={styles.ghostBtn} onClick={resetQuestionForm}>{t('reset')}</button>
               </div>
             </form>
             <div className={styles.tableCard}>
               <table className={styles.table}>
-                <thead><tr><th>Order</th><th>Type</th><th>Question</th><th>Points</th><th>Actions</th></tr></thead>
+                <thead><tr><th>{t('admin_manage_th_order')}</th><th>{t('admin_manage_th_type')}</th><th>{t('admin_manage_th_question')}</th><th>{t('admin_manage_th_points')}</th><th>{t('admin_manage_th_actions')}</th></tr></thead>
                 <tbody>
                   {filteredQuestions.length === 0 ? (
-                    <tr><td colSpan={5}>No questions found.</td></tr>
+                    <tr><td colSpan={5}>{t('admin_manage_no_questions')}</td></tr>
                   ) : filteredQuestions.map((q) => (
                     <tr key={q.id}>
                       <td>{q.order ?? 0}</td>
@@ -4007,7 +4007,7 @@ export default function AdminManageTestPage() {
                       <td>{q.text}</td>
                       <td>{q.points ?? 1}</td>
                       <td className={styles.actionsCell}>
-                        <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => startEditQuestion(q)}>Edit</button>
+                        <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => startEditQuestion(q)}>{t('edit')}</button>
                         {deleteQuestionId === q.id ? (
                           <>
                             <button
@@ -4016,12 +4016,12 @@ export default function AdminManageTestPage() {
                               disabled={lockedExamFields || deletingQuestionBusyId === q.id}
                               onClick={() => handleDeleteQuestion(q.id)}
                             >
-                              {deletingQuestionBusyId === q.id ? 'Deleting...' : 'Confirm delete'}
+                              {deletingQuestionBusyId === q.id ? t('admin_manage_deleting') : t('confirm_delete')}
                             </button>
-                            <button type="button" disabled={deletingQuestionBusyId === q.id} onClick={() => setDeleteQuestionId(null)}>Cancel</button>
+                            <button type="button" disabled={deletingQuestionBusyId === q.id} onClick={() => setDeleteQuestionId(null)}>{t('cancel')}</button>
                           </>
                         ) : (
-                          <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => handleDeleteQuestion(q.id)}>Delete</button>
+                          <button type="button" disabled={lockedExamFields || deletingQuestionBusyId === q.id} onClick={() => handleDeleteQuestion(q.id)}>{t('delete')}</button>
                         )}
                       </td>
                     </tr>
@@ -4052,38 +4052,38 @@ export default function AdminManageTestPage() {
 
         {false && tab === 'sessions' && (
           <section className={styles.full}>
-            <h3 className={styles.tabPanelHeader}>Testing Sessions <span className={styles.countPill}>{sessions.length}</span></h3>
+            <h3 className={styles.tabPanelHeader}>{t('admin_manage_fallback_sessions_heading')} <span className={styles.countPill}>{sessions.length}</span></h3>
             <form className={styles.sectionCard} onSubmit={handleCreateSession}>
               <div className={styles.row}>
-                <label>Learner
+                <label>{t('admin_manage_learner_label')}
                   <select value={sessionForm.user_id} disabled={isArchived} onChange={(e) => setSessionForm((p) => ({ ...p, user_id: e.target.value }))}>
-                    <option value="">Select learner</option>
+                    <option value="">{t('admin_manage_select_learner')}</option>
                     {learners.map((u) => <option key={u.id} value={u.id}>{u.user_id} - {u.name}</option>)}
                   </select>
                 </label>
-                <label>Schedule date/time<input type="datetime-local" disabled={isArchived} value={sessionForm.scheduled_at} onChange={(e) => setSessionForm((p) => ({ ...p, scheduled_at: e.target.value }))} /></label>
+                <label>{t('admin_manage_schedule_datetime')}<input type="datetime-local" disabled={isArchived} value={sessionForm.scheduled_at} onChange={(e) => setSessionForm((p) => ({ ...p, scheduled_at: e.target.value }))} /></label>
               </div>
               <div className={styles.row}>
-                <label>Access mode
+                <label>{t('admin_manage_th_access_mode')}
                   <select value={sessionForm.access_mode} disabled={isArchived} onChange={(e) => setSessionForm((p) => ({ ...p, access_mode: e.target.value }))}>
-                    <option value="OPEN">OPEN</option><option value="RESTRICTED">RESTRICTED</option>
+                    <option value="OPEN">{t('admin_manage_access_open')}</option><option value="RESTRICTED">{t('admin_manage_access_restricted')}</option>
                   </select>
                 </label>
-                <label>Notes<input value={sessionForm.notes} disabled={isArchived} onChange={(e) => setSessionForm((p) => ({ ...p, notes: e.target.value }))} /></label>
+                <label>{t('admin_manage_notes_label')}<input value={sessionForm.notes} disabled={isArchived} onChange={(e) => setSessionForm((p) => ({ ...p, notes: e.target.value }))} /></label>
               </div>
               <p className={styles.muted}>Every testing session requires both a learner and a scheduled date/time.</p>
               <div className={styles.inlineActions}>
                 <button type="submit" className={styles.blueBtn} disabled={sessionBusy || isArchived || !sessionFormReady}>
-                  {sessionBusy ? 'Saving...' : 'Assign / Update session'}
+                  {sessionBusy ? t('saving') : t('admin_manage_btn_assign_session')}
                 </button>
               </div>
             </form>
             <div className={styles.tableCard}>
               <table className={styles.table}>
-                <thead><tr><th>Session ID</th><th>User</th><th>Scheduled at</th><th>Access mode</th><th>Notes</th><th>Actions</th></tr></thead>
+                <thead><tr><th>{t('admin_manage_th_session_id')}</th><th>{t('admin_manage_th_user')}</th><th>{t('admin_manage_th_scheduled_at')}</th><th>{t('admin_manage_th_access_mode')}</th><th>{t('admin_manage_th_notes')}</th><th>{t('admin_manage_th_actions')}</th></tr></thead>
                 <tbody>
                   {sessions.length === 0 ? (
-                    <tr><td colSpan={6}>No sessions assigned yet.</td></tr>
+                    <tr><td colSpan={6}>{t('admin_manage_no_sessions')}</td></tr>
                   ) : sessions.map((s) => (
                     <tr key={s.id}>
                       <td>{String(s.id).slice(0, 8)}</td>
@@ -4100,12 +4100,12 @@ export default function AdminManageTestPage() {
                               disabled={isArchived || deletingSessionBusyId === s.id}
                               onClick={() => handleDeleteSession(s.id)}
                             >
-                              {deletingSessionBusyId === s.id ? 'Deleting...' : 'Confirm delete'}
+                              {deletingSessionBusyId === s.id ? t('admin_manage_deleting') : t('confirm_delete')}
                             </button>
-                            <button type="button" disabled={deletingSessionBusyId === s.id} onClick={() => setDeleteSessionId(null)}>Cancel</button>
+                            <button type="button" disabled={deletingSessionBusyId === s.id} onClick={() => setDeleteSessionId(null)}>{t('cancel')}</button>
                           </>
                         ) : (
-                          <button type="button" disabled={isArchived || deletingSessionBusyId === s.id} onClick={() => handleDeleteSession(s.id)}>Delete</button>
+                          <button type="button" disabled={isArchived || deletingSessionBusyId === s.id} onClick={() => handleDeleteSession(s.id)}>{t('delete')}</button>
                         )}
                       </td>
                     </tr>
@@ -4135,16 +4135,16 @@ export default function AdminManageTestPage() {
 
         {false && tab === 'candidates' && (
           <section className={styles.full}>
-            <h3 className={styles.tabPanelHeader}>Candidates <span className={styles.countPill}>{candidateRows.length}</span></h3>
+            <h3 className={styles.tabPanelHeader}>{t('admin_manage_fallback_candidates_heading')} <span className={styles.countPill}>{candidateRows.length}</span></h3>
             <p className={styles.sectionDescription}>
               Assigned learners stay visible here even before they start the test, so the roster and attempt activity are tracked in one place.
             </p>
             <div className={styles.tableCard}>
               <table className={styles.table}>
-                <thead><tr><th>Attempt</th><th>User</th><th>Status</th><th>Started</th><th>Score</th><th>Review</th><th>High</th><th>Medium</th><th>Actions</th></tr></thead>
+                <thead><tr><th>{t('admin_manage_th_attempt')}</th><th>{t('admin_manage_th_user')}</th><th>{t('admin_manage_th_status')}</th><th>{t('admin_manage_th_started')}</th><th>{t('admin_manage_th_score')}</th><th>{t('admin_manage_th_review')}</th><th>{t('admin_manage_th_high')}</th><th>{t('admin_manage_th_medium')}</th><th>{t('admin_manage_th_actions')}</th></tr></thead>
                 <tbody>
                   {candidateRows.length === 0 ? (
-                    <tr><td colSpan={9}>No learners or attempts are assigned to this test yet.</td></tr>
+                    <tr><td colSpan={9}>{t('admin_manage_no_candidates')}</td></tr>
                   ) : candidateRows.map((r) => (
                     <tr key={r.id}>
                       <td>{r.attemptId}</td>
@@ -4159,7 +4159,7 @@ export default function AdminManageTestPage() {
                       <td>
                         <div className={styles.reviewCell}>
                           <div className={styles.reviewState}>{r.reviewState}</div>
-                          {r.submittedAt && <div className={styles.reviewMeta}>Submitted {new Date(r.submittedAt).toLocaleString()}</div>}
+                          {r.submittedAt && <div className={styles.reviewMeta}>{t('status_submitted')} {new Date(r.submittedAt).toLocaleString()}</div>}
                           {r.attemptIdFull && r.status !== 'IN_PROGRESS' ? (
                             <div className={styles.scoreEditor}>
                               <input
@@ -4173,7 +4173,7 @@ export default function AdminManageTestPage() {
                                 onChange={(e) => setGradeDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
                               />
                               <button type="button" className={styles.blueBtn} disabled={rowBusy[r.id]} onClick={() => handleSaveGrade(r)}>
-                                {rowBusy[r.id] ? 'Saving...' : r.status === 'GRADED' ? 'Update grade' : 'Save grade'}
+                                {rowBusy[r.id] ? t('saving') : r.status === 'GRADED' ? t('admin_manage_btn_update_grade') : t('admin_manage_btn_save_grade')}
                               </button>
                             </div>
                           ) : (
@@ -4186,11 +4186,11 @@ export default function AdminManageTestPage() {
                       <td>{r.highAlerts}</td>
                       <td>{r.mediumAlerts}</td>
                       <td className={styles.actionsCell}>
-                        <button type="button" disabled={rowBusy[r.id] || !r.attemptIdFull} onClick={() => handleOpenResult(r)}>Result</button>
-                        <button type="button" disabled={rowBusy[r.id] || !r.attemptIdFull} onClick={() => navigate(`/admin/attempt-analysis?id=${r.attemptIdFull}`)}>Analyze</button>
-                        <button type="button" onClick={() => handlePauseResume(r)} disabled={rowBusy[r.id] || !r.attemptIdFull}>{r.paused ? 'Resume' : 'Pause'}</button>
-                        <button type="button" onClick={() => handleOpenVideo(r)} disabled={rowBusy[r.id] || !r.attemptIdFull}>Video</button>
-                        <button type="button" onClick={() => handleOpenReport(r)} disabled={rowBusy[r.id] || !r.attemptIdFull}>{rowBusy[r.id] ? 'Opening...' : 'Report'}</button>
+                        <button type="button" disabled={rowBusy[r.id] || !r.attemptIdFull} onClick={() => handleOpenResult(r)}>{t('admin_manage_btn_result')}</button>
+                        <button type="button" disabled={rowBusy[r.id] || !r.attemptIdFull} onClick={() => navigate(`/admin/attempt-analysis?id=${r.attemptIdFull}`)}>{t('admin_manage_btn_analyze')}</button>
+                        <button type="button" onClick={() => handlePauseResume(r)} disabled={rowBusy[r.id] || !r.attemptIdFull}>{r.paused ? t('admin_manage_btn_resume') : t('admin_manage_btn_pause')}</button>
+                        <button type="button" onClick={() => handleOpenVideo(r)} disabled={rowBusy[r.id] || !r.attemptIdFull}>{t('admin_manage_btn_video')}</button>
+                        <button type="button" onClick={() => handleOpenReport(r)} disabled={rowBusy[r.id] || !r.attemptIdFull}>{rowBusy[r.id] ? t('admin_manage_btn_opening') : t('admin_manage_btn_report')}</button>
                       </td>
                     </tr>
                   ))}
@@ -4242,13 +4242,13 @@ export default function AdminManageTestPage() {
 
         {false && tab === 'proctoring' && (
           <section className={styles.full}>
-            <h3 className={styles.tabPanelHeader}>Proctoring</h3>
+            <h3 className={styles.tabPanelHeader}>{t('admin_manage_fallback_proctoring_heading')}</h3>
             <p className={styles.sectionDescription}>Review monitored attempts, special accommodations, and flagged activity for this test.</p>
             <div className={styles.row}>
-              <label>Test<input value={exam.title || ''} readOnly /></label>
-              <label>Testing session
+              <label>{t('admin_manage_test_label')}<input value={exam.title || ''} readOnly /></label>
+              <label>{t('admin_manage_testing_session_label')}
                 <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}>
-                  <option value="">All testing sessions</option>
+                  <option value="">{t('admin_manage_all_testing_sessions')}</option>
                   {sessions.map((s) => <option key={s.id} value={s.id}>{`Session ${String(s.id).slice(0, 6)}`}</option>)}
                 </select>
               </label>
@@ -4282,13 +4282,13 @@ export default function AdminManageTestPage() {
                       {bulkBusy && bulkAction === 'resume' ? 'Resuming...' : 'Resume session'}
                     </button>
                     <button type="button" onClick={() => void loadAll(false)} disabled={loading}>
-                      {loading ? 'Refreshing...' : 'Refresh'}
+                      {loading ? t('admin_manage_btn_refreshing') : t('admin_manage_btn_refresh')}
                     </button>
                     <button type="button" onClick={clearMonitoringFilters} disabled={!monitoringHasFilters}>
-                      Clear filters
+                      {t('admin_manage_btn_clear_filters')}
                     </button>
-                    <button type="button" className={styles.blueBtn} onClick={() => navigate(`/admin/videos?exam_id=${id}`)}>Open supervision mode</button>
-                    <button type="button" onClick={() => setShowFilters((s) => !s)}>{showFilters ? 'Hide filters' : 'Filter'}</button>
+                    <button type="button" className={styles.blueBtn} onClick={() => navigate(`/admin/videos?exam_id=${id}`)}>{t('admin_manage_btn_open_supervision')}</button>
+                    <button type="button" onClick={() => setShowFilters((s) => !s)}>{showFilters ? t('admin_manage_btn_hide_filters') : t('admin_manage_btn_filter')}</button>
                   </div>
                 </div>
                 {filteredRows.length === 0 ? (
@@ -4303,7 +4303,7 @@ export default function AdminManageTestPage() {
                     </div>
                     {monitoringHasFilters && (
                       <button type="button" className={styles.ghostBtn} onClick={clearMonitoringFilters}>
-                        Clear filters
+                        {t('admin_manage_btn_clear_filters')}
                       </button>
                     )}
                   </div>
@@ -4311,17 +4311,17 @@ export default function AdminManageTestPage() {
                   <div className={styles.tableCard}>
                   <table className={styles.table}>
                     <thead>
-                      <tr><th>Actions</th><th>Attempt ID</th><th>Username</th><th>Testing session</th><th>Status</th><th>Started</th><th>Access</th><th>Comment</th><th>Proctor rate</th></tr>
+                      <tr><th>{t('admin_manage_th_actions')}</th><th>{t('admin_manage_th_attempt_id')}</th><th>{t('admin_manage_th_username')}</th><th>{t('admin_manage_th_testing_session')}</th><th>{t('admin_manage_th_status')}</th><th>{t('admin_manage_th_started')}</th><th>{t('admin_manage_th_access')}</th><th>{t('admin_manage_th_comment')}</th><th>{t('admin_manage_th_proctor_rate')}</th></tr>
                       {showFilters && (
                         <tr>
                           <th></th>
-                          <th><input placeholder="Search" value={search.attempt} onChange={(e) => setSearch((p) => ({ ...p, attempt: e.target.value }))} /></th>
-                          <th><input placeholder="Search" value={search.user} onChange={(e) => setSearch((p) => ({ ...p, user: e.target.value }))} /></th>
-                          <th><input placeholder="Search" value={search.session} onChange={(e) => setSearch((p) => ({ ...p, session: e.target.value }))} /></th>
-                          <th><select value={search.status} onChange={(e) => setSearch((p) => ({ ...p, status: e.target.value }))}><option value="">Select one</option><option value="IN_PROGRESS">IN_PROGRESS</option><option value="PAUSED">PAUSED</option><option value="SUBMITTED">SUBMITTED</option><option value="GRADED">GRADED</option></select></th>
+                          <th><input placeholder={t('search')} value={search.attempt} onChange={(e) => setSearch((p) => ({ ...p, attempt: e.target.value }))} /></th>
+                          <th><input placeholder={t('search')} value={search.user} onChange={(e) => setSearch((p) => ({ ...p, user: e.target.value }))} /></th>
+                          <th><input placeholder={t('search')} value={search.session} onChange={(e) => setSearch((p) => ({ ...p, session: e.target.value }))} /></th>
+                          <th><select value={search.status} onChange={(e) => setSearch((p) => ({ ...p, status: e.target.value }))}><option value="">{t('admin_manage_select_one')}</option><option value="IN_PROGRESS">{t('status_in_progress')}</option><option value="PAUSED">{t('status_paused')}</option><option value="SUBMITTED">{t('status_submitted')}</option><option value="GRADED">{t('status_graded')}</option></select></th>
                           <th></th>
-                          <th><input placeholder="Search" value={search.group} onChange={(e) => setSearch((p) => ({ ...p, group: e.target.value }))} /></th>
-                          <th><input placeholder="Search" value={search.comment} onChange={(e) => setSearch((p) => ({ ...p, comment: e.target.value }))} /></th>
+                          <th><input placeholder={t('search')} value={search.group} onChange={(e) => setSearch((p) => ({ ...p, group: e.target.value }))} /></th>
+                          <th><input placeholder={t('search')} value={search.comment} onChange={(e) => setSearch((p) => ({ ...p, comment: e.target.value }))} /></th>
                           <th></th>
                         </tr>
                       )}
@@ -4330,11 +4330,11 @@ export default function AdminManageTestPage() {
                       {filteredRows.map((r) => (
                         <tr key={r.id}>
                           <td className={styles.actionsCell}>
-                            <button type="button" onClick={() => handlePauseResume(r)} disabled={rowBusy[r.id]}>{r.paused ? 'Resume' : 'Pause'}</button>
-                            <button type="button" onClick={() => handleOpenReport(r)} disabled={rowBusy[r.id]}>{rowBusy[r.id] ? 'Opening...' : 'Report'}</button>
-                            <button type="button" onClick={() => handleOpenVideo(r)} disabled={rowBusy[r.id]} className={r.hasVideo ? styles.videoBtnGreen : styles.videoBtnRed}>Video</button>
+                            <button type="button" onClick={() => handlePauseResume(r)} disabled={rowBusy[r.id]}>{r.paused ? t('admin_manage_btn_resume') : t('admin_manage_btn_pause')}</button>
+                            <button type="button" onClick={() => handleOpenReport(r)} disabled={rowBusy[r.id]}>{rowBusy[r.id] ? t('admin_manage_btn_opening') : t('admin_manage_btn_report')}</button>
+                            <button type="button" onClick={() => handleOpenVideo(r)} disabled={rowBusy[r.id]} className={r.hasVideo ? styles.videoBtnGreen : styles.videoBtnRed}>{t('admin_manage_btn_video')}</button>
                           </td>
-                          <td>{r.attemptId}</td><td>{r.username}</td><td>{r.sessionName}</td><td>{r.paused ? 'PAUSED' : r.status}</td>
+                          <td>{r.attemptId}</td><td>{r.username}</td><td>{r.sessionName}</td><td>{r.paused ? t('status_paused') : r.status}</td>
                           <td>{r.startedAt ? new Date(r.startedAt).toLocaleString() : '-'}</td><td>{r.userGroup}</td><td>{r.comment || '-'}</td><td>{r.proctorRate}</td>
                         </tr>
                       ))}
@@ -4348,9 +4348,9 @@ export default function AdminManageTestPage() {
             {view === 'special_accommodations' && (
               <div className={styles.tableCard}>
                 <table className={styles.table}>
-                  <thead><tr><th>Session</th><th>User</th><th>Access mode</th><th>Notes</th><th>Scheduled at</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>{t('admin_manage_th_session')}</th><th>{t('admin_manage_th_user')}</th><th>{t('admin_manage_th_access_mode')}</th><th>{t('admin_manage_th_notes')}</th><th>{t('admin_manage_th_scheduled_at')}</th><th>{t('admin_manage_th_actions')}</th></tr></thead>
                   <tbody>
-                    {sessions.length === 0 ? <tr><td colSpan={6}>No session accommodations configured.</td></tr> : sessions.map((s) => (
+                    {sessions.length === 0 ? <tr><td colSpan={6}>{t('admin_manage_no_accommodations')}</td></tr> : sessions.map((s) => (
                       <tr key={s.id}>
                         <td>{String(s.id).slice(0, 8)}</td>
                         <td>{users.find((u) => String(u.id) === String(s.user_id))?.user_id || String(s.user_id).slice(0, 8)}</td>
@@ -4358,11 +4358,11 @@ export default function AdminManageTestPage() {
                           <>
                             <td>
                               <select value={editingAccomForm.access_mode} onChange={(e) => setEditingAccomForm((p) => ({ ...p, access_mode: e.target.value }))}>
-                                <option value="OPEN">OPEN</option>
-                                <option value="RESTRICTED">RESTRICTED</option>
+                                <option value="OPEN">{t('admin_manage_access_open')}</option>
+                                <option value="RESTRICTED">{t('admin_manage_access_restricted')}</option>
                               </select>
                             </td>
-                            <td><input value={editingAccomForm.notes} onChange={(e) => setEditingAccomForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" /></td>
+                            <td><input value={editingAccomForm.notes} onChange={(e) => setEditingAccomForm((p) => ({ ...p, notes: e.target.value }))} placeholder={t('admin_manage_notes_placeholder')} /></td>
                             <td><input type="datetime-local" value={editingAccomForm.scheduled_at} onChange={(e) => setEditingAccomForm((p) => ({ ...p, scheduled_at: e.target.value }))} /></td>
                             <td className={styles.actionsCell}>
                               <button
@@ -4371,9 +4371,9 @@ export default function AdminManageTestPage() {
                                 disabled={savingAccomId === s.id || !editingAccomForm.scheduled_at}
                                 onClick={() => handleSaveAccom(s.id)}
                               >
-                                {savingAccomId === s.id ? 'Saving...' : 'Save'}
+                                {savingAccomId === s.id ? t('saving') : t('save')}
                               </button>
-                              <button type="button" disabled={savingAccomId === s.id} onClick={() => setEditingAccomId(null)}>Cancel</button>
+                              <button type="button" disabled={savingAccomId === s.id} onClick={() => setEditingAccomId(null)}>{t('cancel')}</button>
                             </td>
                           </>
                         ) : (
@@ -4382,7 +4382,7 @@ export default function AdminManageTestPage() {
                             <td>{s.notes || '-'}</td>
                             <td>{new Date(s.scheduled_at).toLocaleString()}</td>
                             <td className={styles.actionsCell}>
-                              <button type="button" disabled={isArchived} onClick={() => startEditAccom(s)}>Edit</button>
+                              <button type="button" disabled={isArchived} onClick={() => startEditAccom(s)}>{t('edit')}</button>
                             </td>
                           </>
                         )}
@@ -4396,16 +4396,16 @@ export default function AdminManageTestPage() {
             {view === 'special_requests' && (
               <div className={styles.tableCard}>
                 <table className={styles.table}>
-                  <thead><tr><th>Attempt</th><th>User</th><th>High alerts</th><th>Medium alerts</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>{t('admin_manage_th_attempt')}</th><th>{t('admin_manage_th_user')}</th><th>{t('admin_manage_th_high_alerts')}</th><th>{t('admin_manage_th_medium_alerts')}</th><th>{t('admin_manage_th_actions')}</th></tr></thead>
                   <tbody>
-                    {attemptRows.filter((r) => r.highAlerts > 0 || r.mediumAlerts > 0).length === 0 ? <tr><td colSpan={5}>No flagged requests available.</td></tr> : attemptRows.filter((r) => r.highAlerts > 0 || r.mediumAlerts > 0).map((r) => (
+                    {attemptRows.filter((r) => r.highAlerts > 0 || r.mediumAlerts > 0).length === 0 ? <tr><td colSpan={5}>{t('admin_manage_no_flagged')}</td></tr> : attemptRows.filter((r) => r.highAlerts > 0 || r.mediumAlerts > 0).map((r) => (
                       <tr key={r.id}>
                         <td>{r.attemptId}</td><td>{r.username}</td><td>{r.highAlerts}</td><td>{r.mediumAlerts}</td>
                         <td className={styles.actionsCell}>
-                          <button type="button" disabled={rowBusy[r.id]} onClick={() => navigate(`/admin/attempt-analysis?id=${r.id}`)}>Analyze</button>
-                          <button type="button" disabled={rowBusy[r.id]} onClick={() => handleOpenVideo(r)}>Inspect video</button>
+                          <button type="button" disabled={rowBusy[r.id]} onClick={() => navigate(`/admin/attempt-analysis?id=${r.id}`)}>{t('admin_manage_btn_analyze')}</button>
+                          <button type="button" disabled={rowBusy[r.id]} onClick={() => handleOpenVideo(r)}>{t('admin_manage_btn_inspect_video')}</button>
                           <button type="button" disabled={rowBusy[r.id]} onClick={() => handleOpenReport(r)}>
-                            {rowBusy[r.id] ? 'Opening...' : 'Open report'}
+                            {rowBusy[r.id] ? t('admin_manage_btn_opening') : t('admin_manage_btn_report')}
                           </button>
                         </td>
                       </tr>
@@ -4437,26 +4437,26 @@ export default function AdminManageTestPage() {
 
         {false && tab === 'administration' && (
           <section className={styles.full}>
-            <h3 className={styles.tabPanelHeader}>Test Administration</h3>
+            <h3 className={styles.tabPanelHeader}>{t('admin_manage_fallback_admin_heading')}</h3>
             <div className={styles.sectionCard}>
               <div className={styles.row}>
-                <label>Current status<input value={exam.status || ''} readOnly /></label>
-                <label>Total attempts<input value={String(attemptRows.length)} readOnly /></label>
+                <label>{t('admin_manage_current_status')}<input value={exam.status || ''} readOnly /></label>
+                <label>{t('admin_manage_total_attempts')}<input value={String(attemptRows.length)} readOnly /></label>
               </div>
               <div className={styles.inlineActions}>
-                <button type="button" className={styles.blueBtn} disabled={isArchived || deletingExamBusy} onClick={handleSettingsSave}>Save settings</button>
-                {!isPublished && !isArchived ? <button type="button" className={styles.greenBtn} disabled={deletingExamBusy} onClick={handlePublish}>Open / Publish</button> : null}
-                <button type="button" className={styles.ghostBtn} disabled={deletingExamBusy} onClick={handleClose}>{isArchived ? 'Unarchive' : 'Archive'}</button>
-                <button type="button" className={styles.ghostBtn} disabled={lockedExamFields || deletingExamBusy} onClick={() => navigate(`/admin/tests/${exam.id}/edit`)}>Open full editor</button>
+                <button type="button" className={styles.blueBtn} disabled={isArchived || deletingExamBusy} onClick={handleSettingsSave}>{t('admin_manage_btn_save_settings')}</button>
+                {!isPublished && !isArchived ? <button type="button" className={styles.greenBtn} disabled={deletingExamBusy} onClick={handlePublish}>{t('admin_manage_btn_publish')}</button> : null}
+                <button type="button" className={styles.ghostBtn} disabled={deletingExamBusy} onClick={handleClose}>{isArchived ? t('admin_manage_btn_unarchive') : t('admin_manage_btn_archive')}</button>
+                <button type="button" className={styles.ghostBtn} disabled={lockedExamFields || deletingExamBusy} onClick={() => navigate(`/admin/tests/${exam.id}/edit`)}>{t('admin_manage_btn_open_editor')}</button>
                 {deleteExamConfirm ? (
                   <>
                     <button type="button" className={styles.dangerBtn} disabled={deletingExamBusy} onClick={handleDeleteExam}>
-                      {deletingExamBusy ? 'Deleting...' : 'Confirm delete'}
+                      {deletingExamBusy ? t('admin_manage_deleting') : t('confirm_delete')}
                     </button>
-                    <button type="button" className={styles.ghostBtn} disabled={deletingExamBusy} onClick={() => setDeleteExamConfirm(false)}>Cancel</button>
+                    <button type="button" className={styles.ghostBtn} disabled={deletingExamBusy} onClick={() => setDeleteExamConfirm(false)}>{t('cancel')}</button>
                   </>
                 ) : (
-                  <button type="button" className={styles.dangerBtn} disabled={deletingExamBusy} onClick={handleDeleteExam}>Delete test</button>
+                  <button type="button" className={styles.dangerBtn} disabled={deletingExamBusy} onClick={handleDeleteExam}>{t('admin_manage_btn_delete_test')}</button>
                 )}
               </div>
             </div>
@@ -4477,7 +4477,7 @@ export default function AdminManageTestPage() {
 
         {false && tab === 'reports' && (
           <section className={styles.full}>
-            <h3 className={styles.tabPanelHeader}>Reports</h3>
+            <h3 className={styles.tabPanelHeader}>{t('admin_manage_fallback_reports_heading')}</h3>
             <div className={styles.sectionCard}>
               <div className={styles.inlineActions}>
                 <button type="button" className={styles.blueBtn} disabled={reportsBusy} onClick={downloadExamCsv}>Download Test CSV</button>
@@ -4486,16 +4486,16 @@ export default function AdminManageTestPage() {
             </div>
             <div className={styles.tableCard}>
               <table className={styles.table}>
-                <thead><tr><th>Attempt</th><th>User</th><th>Status</th><th>High</th><th>Medium</th><th>Actions</th></tr></thead>
+                <thead><tr><th>{t('admin_manage_th_attempt')}</th><th>{t('admin_manage_th_user')}</th><th>{t('admin_manage_th_status')}</th><th>{t('admin_manage_th_high')}</th><th>{t('admin_manage_th_medium')}</th><th>{t('admin_manage_th_actions')}</th></tr></thead>
                 <tbody>
-                  {attemptRows.length === 0 ? <tr><td colSpan={6}>No attempts available for reporting.</td></tr> : attemptRows.map((r) => (
+                  {attemptRows.length === 0 ? <tr><td colSpan={6}>{t('admin_manage_no_attempts_reporting')}</td></tr> : attemptRows.map((r) => (
                     <tr key={r.id}>
-                      <td>{r.attemptId}</td><td>{r.username}</td><td>{r.paused ? 'PAUSED' : r.status}</td><td>{r.highAlerts}</td><td>{r.mediumAlerts}</td>
+                      <td>{r.attemptId}</td><td>{r.username}</td><td>{r.paused ? t('status_paused') : r.status}</td><td>{r.highAlerts}</td><td>{r.mediumAlerts}</td>
                       <td className={styles.actionsCell}>
                         <button type="button" disabled={rowBusy[r.id]} onClick={() => handleOpenReport(r)}>
-                          {rowBusy[r.id] ? 'Opening...' : 'Attempt report'}
+                          {rowBusy[r.id] ? t('admin_manage_btn_opening') : t('admin_manage_btn_report')}
                         </button>
-                        <button type="button" disabled={rowBusy[r.id]} onClick={() => handleOpenVideo(r)}>Video</button>
+                        <button type="button" disabled={rowBusy[r.id]} onClick={() => handleOpenVideo(r)}>{t('admin_manage_btn_video')}</button>
                       </td>
                     </tr>
                   ))}
