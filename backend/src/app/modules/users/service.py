@@ -215,14 +215,14 @@ class UserService:
         return user
 
     def update_user(self, *, user_id: str, body: UserUpdate, current: User) -> User:
-        user = self.get_user(user_id)
+        user = self.get_user(user_id, actor_id=current.id)
         payload = self._normalize_user_payload(body.model_dump(exclude_unset=True), partial=True)
         self._ensure_unique_email(payload.get("email"), existing_user_id=user.id)
         self._ensure_unique_user_id(payload.get("user_id"), existing_user_id=user.id)
         return self._update_user_record(user=user, payload=payload, current=current)
 
     def patch_user(self, *, user_id: str, body: AdminUserPatch, current: User) -> User:
-        user = self.get_user(user_id)
+        user = self.get_user(user_id, actor_id=current.id)
         payload = body.model_dump(exclude_unset=True)
         if "email" in payload:
             payload["email"] = self._clean_required_text(payload.get("email"), "Email")
@@ -271,7 +271,7 @@ class UserService:
         return pref
 
     def reset_user_password(self, *, user_id: str, body: AdminPasswordResetRequest, current: User) -> Message:
-        user = self.get_user(user_id)
+        user = self.get_user(user_id, actor_id=current.id)
         if not body.new_password or len(body.new_password) < 8:
             raise HTTPException(status_code=422, detail=_t("password_min_length"))
         now = datetime.now(timezone.utc)
@@ -292,7 +292,7 @@ class UserService:
         return Message(detail=_t("password_reset"))
 
     def delete_user(self, *, user_id: str, current: User) -> Message:
-        user = self.get_user(user_id)
+        user = self.get_user(user_id, actor_id=current.id)
         if user.id == current.id:
             raise HTTPException(status_code=400, detail=_t("cannot_delete_own_account"))
         attempt_count = int(
@@ -303,6 +303,15 @@ class UserService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=_t("cannot_delete_user_attempts"),
+            )
+        exam_count = int(
+            self.repository.db.scalar(select(func.count(Exam.id)).where(Exam.created_by_id == user.id))
+            or 0
+        )
+        if exam_count:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_t("cannot_delete_user_with_exams"),
             )
         self.repository.delete(user)
         self.repository.commit()

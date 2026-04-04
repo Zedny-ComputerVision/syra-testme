@@ -232,7 +232,11 @@ def ensure_permission(db: Session, user: User, feature: str):
 def exam_owned_by_user(exam: Exam | None, user: User | None) -> bool:
     if not exam or not user or user.role not in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
         return False
-    return getattr(exam, "created_by_id", None) == getattr(user, "id", None)
+    exam_owner = getattr(exam, "created_by_id", None)
+    user_id = getattr(user, "id", None)
+    if exam_owner is None or user_id is None:
+        return False
+    return exam_owner == user_id
 
 
 def ensure_exam_owner(
