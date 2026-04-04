@@ -54,9 +54,14 @@ class ReportService:
     def __init__(self, repository: ReportRepository):
         self.repository = repository
 
-    def preview_custom_report(self, body: CustomReportExportRequest) -> CustomReportPreview:
+    def _require_actor(self, actor_id):
+        if not actor_id:
+            raise HTTPException(status_code=403, detail=_t("not_allowed"))
+
+    def preview_custom_report(self, body: CustomReportExportRequest, *, actor_id=None, actor_role=None) -> CustomReportPreview:
+        self._require_actor(actor_id)
         requested_columns, available_columns = self._validate_custom_report_columns(body.dataset, body.columns)
-        rows, _ = self._build_custom_report_rows(body.dataset, body.search)
+        rows, _ = self._build_custom_report_rows(body.dataset, body.search, actor_id=actor_id, actor_role=actor_role)
         selected_rows = self._select_custom_report_columns(rows, requested_columns)
         return CustomReportPreview(
             rows=selected_rows[:10],
@@ -64,9 +69,10 @@ class ReportService:
             available_columns=available_columns,
         )
 
-    def export_custom_report(self, *, body: CustomReportExportRequest, actor_id) -> StreamingResponse:
+    def export_custom_report(self, *, body: CustomReportExportRequest, actor_id, actor_role=None) -> StreamingResponse:
+        self._require_actor(actor_id)
         requested_columns, _ = self._validate_custom_report_columns(body.dataset, body.columns)
-        rows, _ = self._build_custom_report_rows(body.dataset, body.search)
+        rows, _ = self._build_custom_report_rows(body.dataset, body.search, actor_id=actor_id, actor_role=actor_role)
         selected_rows = self._select_custom_report_columns(rows, requested_columns)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         write_audit_log(
@@ -80,6 +86,7 @@ class ReportService:
         return self._csv_response(selected_rows, f"{body.dataset}_report_{ts}.csv", columns=requested_columns)
 
     def generate_predefined_report(self, *, slug: str, actor_id, actor_role=None) -> StreamingResponse:
+        self._require_actor(actor_id)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
         if slug in {"test-performance", "exam-performance"}:
@@ -107,7 +114,7 @@ class ReportService:
                 .outerjoin(Attempt, Attempt.exam_id == Exam.id)
                 .where(Exam.library_pool_id.is_(None))
             )
-            if actor_role and actor_role != RoleEnum.ADMIN and actor_id:
+            if actor_id:
                 query = query.where(Exam.created_by_id == actor_id)
             query = query.group_by(Exam.id, Exam.title, Exam.passing_score, Exam.created_at).order_by(Exam.created_at.desc())
             exam_rows = self.repository.execute(query).all()
@@ -139,7 +146,7 @@ class ReportService:
                 .outerjoin(User, User.id == Attempt.user_id)
                 .outerjoin(ProctoringEvent, ProctoringEvent.attempt_id == Attempt.id)
             )
-            if actor_role and actor_role != RoleEnum.ADMIN and actor_id:
+            if actor_id:
                 proctoring_query = proctoring_query.join(Exam, Exam.id == Attempt.exam_id).where(Exam.created_by_id == actor_id)
             proctoring_query = proctoring_query.group_by(Attempt.id, User.name, User.user_id, Attempt.created_at).order_by(Attempt.created_at.desc())
             attempt_rows = self.repository.execute(proctoring_query).all()
@@ -164,7 +171,7 @@ class ReportService:
                 )
                 .select_from(User)
             )
-            if actor_role and actor_role != RoleEnum.ADMIN and actor_id:
+            if actor_id:
                 learner_query = (
                     learner_query
                     .outerjoin(Attempt, Attempt.user_id == User.id)
@@ -194,7 +201,8 @@ class ReportService:
         raise HTTPException(status_code=404, detail=_t("unknown_report_slug"))
 
     def generate_test_report_csv(self, *, test_id: str, actor_id) -> StreamingResponse:
-        _, exam = self._get_test_or_404(test_id)
+        self._require_actor(actor_id)
+        _, exam = self._get_test_or_404(test_id, actor_id=actor_id)
         attempts = self.repository.scalars(select(Attempt).where(Attempt.exam_id == exam.id)).all()
         self._load_attempt_report_events(attempts)
         rows = self._build_test_report_rows(exam, attempts)
@@ -235,7 +243,8 @@ class ReportService:
         )
 
     def generate_test_report_pdf(self, *, test_id: str, actor_id) -> StreamingResponse:
-        _, exam = self._get_test_or_404(test_id)
+        self._require_actor(actor_id)
+        _, exam = self._get_test_or_404(test_id, actor_id=actor_id)
         attempts = self.repository.scalars(select(Attempt).where(Attempt.exam_id == exam.id)).all()
         buf = BytesIO()
         doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=32, rightMargin=32, topMargin=32, bottomMargin=32)
@@ -386,18 +395,23 @@ class ReportService:
         )
         return schedule
 
-    def list_report_schedules(self) -> list[ReportSchedule]:
-        return self.repository.scalars(select(ReportSchedule).order_by(ReportSchedule.created_at.desc())).all()
+    def list_report_schedules(self, *, actor_id=None) -> list[ReportSchedule]:
+        query = select(ReportSchedule).order_by(ReportSchedule.created_at.desc())
+        if actor_id:
+            query = query.where(ReportSchedule.created_by_id == actor_id)
+        return self.repository.scalars(query).all()
 
-    def get_report_schedule(self, schedule_id: str) -> ReportSchedule:
+    def get_report_schedule(self, schedule_id: str, *, actor_id=None) -> ReportSchedule:
         schedule_pk = parse_uuid_param(schedule_id, detail=_t("not_found"))
         schedule = self.repository.get(ReportSchedule, schedule_pk)
         if not schedule:
             raise HTTPException(status_code=404, detail=_t("not_found"))
+        if actor_id and schedule.created_by_id != actor_id:
+            raise HTTPException(status_code=403, detail=_t("not_allowed"))
         return schedule
 
     def delete_report_schedule(self, *, schedule_id: str, actor_id) -> Message:
-        schedule = self.get_report_schedule(schedule_id)
+        schedule = self.get_report_schedule(schedule_id, actor_id=actor_id)
         schedule_name = schedule.name
         self.repository.delete(schedule)
         self.repository.commit()
@@ -412,7 +426,7 @@ class ReportService:
         return Message(detail=_t("deleted"))
 
     async def run_schedule_now(self, *, schedule_id: str, actor_id) -> ReportScheduleRunResult:
-        schedule = self.get_report_schedule(schedule_id)
+        schedule = self.get_report_schedule(schedule_id, actor_id=actor_id)
         artifact = await self._run_report_schedule(schedule)
         report_url = artifact["report_url"]
         subscribers = self._load_subscribers()
@@ -496,10 +510,17 @@ class ReportService:
             raise HTTPException(status_code=400, detail=_t("unsupported_columns", dataset=dataset, invalid=", ".join(invalid)))
         return normalized, allowed
 
-    def _build_custom_report_rows(self, dataset: str, search: str | None = None) -> tuple[list[dict], list[str]]:
+    def _build_custom_report_rows(self, dataset: str, search: str | None = None, *, actor_id=None, actor_role=None) -> tuple[list[dict], list[str]]:
         dataset = dataset or ""
         if dataset == "attempts":
-            attempts = self.repository.scalars(select(Attempt).order_by(Attempt.created_at.desc())).all()
+            query = (
+                select(Attempt)
+                .options(joinedload(Attempt.exam), joinedload(Attempt.user))
+                .order_by(Attempt.created_at.desc())
+            )
+            if actor_id:
+                query = query.where(Attempt.exam_id.in_(select(Exam.id).where(Exam.created_by_id == actor_id)))
+            attempts = self.repository.scalars(query).unique().all()
             rows = [
                 {
                     "id": str(attempt.id),
@@ -514,7 +535,15 @@ class ReportService:
                 for attempt in attempts
             ]
         elif dataset == "tests":
-            exams = self.repository.scalars(select(Exam).order_by(Exam.created_at.desc())).all()
+            from ...models import Node, Course
+            test_query = (
+                select(Exam)
+                .options(joinedload(Exam.node).joinedload(Node.course))
+                .order_by(Exam.created_at.desc())
+            )
+            if actor_id:
+                test_query = test_query.where(Exam.created_by_id == actor_id)
+            exams = self.repository.scalars(test_query).unique().all()
             rows = []
             for exam in exams:
                 if is_exam_pool_library(exam):
@@ -533,7 +562,17 @@ class ReportService:
                     }
                 )
         elif dataset == "users":
-            users = self.repository.scalars(select(User).order_by(User.created_at.desc())).all()
+            user_query = select(User).order_by(User.created_at.desc())
+            if actor_id:
+                # Only show users who have attempted exams created by this actor
+                user_query = user_query.where(
+                    User.id.in_(
+                        select(Attempt.user_id).where(
+                            Attempt.exam_id.in_(select(Exam.id).where(Exam.created_by_id == actor_id))
+                        )
+                    )
+                )
+            users = self.repository.scalars(user_query).all()
             rows = [
                 {
                     "id": str(user.id),
@@ -559,11 +598,13 @@ class ReportService:
     def _select_custom_report_columns(self, rows: list[dict], columns: list[str]) -> list[dict]:
         return [{column: row.get(column, "") for column in columns} for row in rows]
 
-    def _get_test_or_404(self, exam_id: str) -> tuple[str, Exam]:
+    def _get_test_or_404(self, exam_id: str, *, actor_id=None) -> tuple[str, Exam]:
         exam_pk = parse_uuid_param(exam_id, detail=_t("test_not_found"))
         exam = self.repository.get(Exam, exam_pk)
         if not exam:
             raise HTTPException(status_code=404, detail=_t("test_not_found"))
+        if actor_id and exam.created_by_id != actor_id:
+            raise HTTPException(status_code=403, detail=_t("not_allowed"))
         return exam_pk, exam
 
     def _load_attempt_report_events(self, attempts: list[Attempt]) -> None:

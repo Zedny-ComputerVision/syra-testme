@@ -41,7 +41,6 @@ def list_users(
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: UserService = Depends(_service_from_db),
 ):
-    del current
     pagination = normalize_pagination(
         page=page,
         page_size=page_size,
@@ -53,7 +52,7 @@ def list_users(
         default_sort="created_at",
         default_page_size=50,
     )
-    return service.list_users(pagination=pagination, role=role, is_active=is_active)
+    return service.list_users(pagination=pagination, role=role, is_active=is_active, actor_id=current.id)
 
 
 @router.post("/", response_model=UserRead)
@@ -72,8 +71,7 @@ def get_user(
     current: User = Depends(require_permission("Manage Users", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR)),
     service: UserService = Depends(_service_from_db),
 ):
-    del current
-    return service.get_user(user_id)
+    return service.get_user(user_id, actor_id=current.id)
 
 
 @router.put("/{user_id}", response_model=UserRead)

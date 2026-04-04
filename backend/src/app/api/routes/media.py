@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 
 from ...core.config import get_settings
 from ...core.security import verify_token
-from ...models import Attempt, RoleEnum, User
+from ...models import Attempt, Exam, ReportSchedule, RoleEnum, User
 from ...services.crypto_utils import decrypt_bytes
 from ...services.supabase_storage import create_signed_url as create_supabase_signed_url
 from ...core.i18n import translate as _t
-from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_role
+from ..deps import ensure_permission, get_current_user, get_db_dep, parse_uuid_param, require_permission, require_role
 
 router = APIRouter()
 settings = get_settings()
@@ -45,9 +45,11 @@ def _enforce_media_access(attempt: Attempt, current_user: User, db: Session) -> 
         if attempt.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("not_allowed"))
         return
-    if current_user.role == RoleEnum.ADMIN:
-        return
     ensure_permission(db, current_user, "View Attempt Analysis")
+    # Verify the actor owns the exam this attempt belongs to
+    exam = attempt.exam or db.get(Exam, attempt.exam_id)
+    if exam and exam.created_by_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("not_allowed"))
 
 
 def _serve_media_file(directory: Path, filename: str, db: Session, current_user: User) -> FileResponse:
@@ -125,11 +127,25 @@ async def get_public_report(token: str):
 @router.get("/reports/{filename}")
 async def get_report(
     filename: str,
-    _: User = Depends(require_role(RoleEnum.ADMIN)),
+    db: Session = Depends(get_db_dep),
+    current: User = Depends(require_role(RoleEnum.ADMIN)),
 ):
+    # Report filenames are "{schedule_id}_{timestamp}.html" — verify the
+    # schedule that generated this report belongs to the requesting admin.
+    cleaned = _sanitize_filename(filename)
+    schedule_id_part = cleaned.split("_", 1)[0]
+    try:
+        schedule_pk = parse_uuid_param(schedule_id_part, detail=_t("media_not_found"))
+        schedule = db.get(ReportSchedule, schedule_pk)
+        if not schedule or schedule.created_by_id != current.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_t("not_allowed"))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_t("media_not_found"))
     if settings.MEDIA_STORAGE_PROVIDER == "supabase":
-        return await _redirect_supabase_media("reports", filename)
-    return _serve_admin_media_file(REPORTS_DIR, filename)
+        return await _redirect_supabase_media("reports", cleaned)
+    return _serve_admin_media_file(REPORTS_DIR, cleaned)
 
 
 @router.get("/identity/{attempt_id}/{photo_type}")

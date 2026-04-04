@@ -83,6 +83,7 @@ def list_courses(db: Session = Depends(get_db_dep), current=Depends(get_current_
         )
     else:
         ensure_permission(db, current, "Edit Tests")
+        query = query.where(Course.created_by_id == current.id)
     courses = db.scalars(query.order_by(Course.created_at.desc())).all()
     return courses
 
@@ -120,6 +121,8 @@ def get_course(course_id: str, db: Session = Depends(get_db_dep), current=Depend
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_t("course_not_found"))
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
+        if course.created_by_id != current.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_t("course_not_found"))
     return course
 
 
@@ -129,7 +132,7 @@ def update_course(course_id: str, body: CourseBase, db: Session = Depends(get_db
     course = db.get(Course, course_pk)
     if not course:
         raise HTTPException(status_code=404, detail=_t("course_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and course.created_by_id != current.id:
+    if course.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     payload = _normalize_course_payload(body)
     _ensure_unique_course_title(db, payload["title"], existing_course_id=course.id)
@@ -152,6 +155,8 @@ def delete_course(course_id: str, db: Session = Depends(get_db_dep), current=Dep
     course = db.get(Course, course_pk)
     if not course:
         raise HTTPException(status_code=404, detail=_t("course_not_found"))
+    if course.created_by_id != current.id:
+        raise HTTPException(status_code=403, detail=_t("not_allowed"))
     attempt_count = int(
         db.scalar(
             select(func.count(Attempt.id))

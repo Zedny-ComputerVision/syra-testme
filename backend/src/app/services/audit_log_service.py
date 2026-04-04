@@ -24,6 +24,7 @@ def list_audit_logs(
     from_date: datetime | None,
     to_date: datetime | None,
     user_id: str | None,
+    actor_id: str | None = None,
 ):
     pagination = normalize_pagination(
         page=page,
@@ -41,6 +42,8 @@ def list_audit_logs(
     order_column = order_column.asc() if pagination.order == "asc" else order_column.desc()
 
     query = select(AuditLog)
+    if actor_id:
+        query = query.where(AuditLog.user_id == actor_id)
     if pagination.search:
         query = query.where(
             or_(

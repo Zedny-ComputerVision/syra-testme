@@ -9,7 +9,7 @@ from sqlalchemy.orm import load_only
 
 from ...api.deps import load_permission_rows, parse_uuid_param, permission_allowed
 from ...core.security import hash_password
-from ...models import Attempt, RoleEnum, User, UserPreference
+from ...models import Attempt, Exam, RoleEnum, User, UserPreference
 from ...schemas import (
     AdminPasswordResetRequest,
     AdminUserPatch,
@@ -42,6 +42,7 @@ class UserService:
         pagination: PaginationParams,
         role: str | None,
         is_active: bool | None,
+        actor_id=None,
     ) -> dict:
         resolved_sort = clamp_sort_field(pagination.sort, {"name", "email", "role", "created_at"}, "created_at")
         cache_key = json.dumps(
@@ -53,6 +54,7 @@ class UserService:
                 "order": pagination.order,
                 "role": role,
                 "is_active": is_active,
+                "actor_id": str(actor_id) if actor_id else None,
             },
             sort_keys=True,
             default=str,
@@ -71,6 +73,19 @@ class UserService:
                     User.updated_at,
                 )
             )
+            if actor_id:
+                # Show users who have attempted exams created by this actor,
+                # plus the actor themselves.
+                query = query.where(
+                    or_(
+                        User.id == actor_id,
+                        User.id.in_(
+                            select(Attempt.user_id).where(
+                                Attempt.exam_id.in_(select(Exam.id).where(Exam.created_by_id == actor_id))
+                            )
+                        ),
+                    )
+                )
             if role:
                 try:
                     query = query.where(User.role == RoleEnum(role))
@@ -183,10 +198,20 @@ class UserService:
         self._invalidate_user_caches()
         return user
 
-    def get_user(self, user_id: str) -> User:
+    def get_user(self, user_id: str, *, actor_id=None) -> User:
         user = self.repository.get_user(parse_uuid_param(user_id, detail=_t("user_not_found")))
         if not user:
             raise HTTPException(status_code=404, detail=_t("user_not_found"))
+        if actor_id and user.id != actor_id:
+            # Verify this user has attempted an exam created by the actor
+            has_connection = self.repository.db.scalar(
+                select(func.count(Attempt.id)).where(
+                    Attempt.user_id == user.id,
+                    Attempt.exam_id.in_(select(Exam.id).where(Exam.created_by_id == actor_id)),
+                )
+            )
+            if not has_connection:
+                raise HTTPException(status_code=404, detail=_t("user_not_found"))
         return user
 
     def update_user(self, *, user_id: str, body: UserUpdate, current: User) -> User:

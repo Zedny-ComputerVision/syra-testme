@@ -30,8 +30,7 @@ def preview_custom_report(
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
 ):
-    del current
-    return service.preview_custom_report(body)
+    return service.preview_custom_report(body, actor_id=getattr(current, "id", None), actor_role=getattr(current, "role", None))
 
 
 @router.post("/export")
@@ -40,7 +39,7 @@ def export_custom_report(
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
 ):
-    return service.export_custom_report(body=body, actor_id=getattr(current, "id", None))
+    return service.export_custom_report(body=body, actor_id=getattr(current, "id", None), actor_role=getattr(current, "role", None))
 
 
 @router.post("/predefined/{slug}")
@@ -106,8 +105,7 @@ def list_report_schedules(
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
 ):
-    del current
-    return service.list_report_schedules()
+    return service.list_report_schedules(actor_id=getattr(current, "id", None))
 
 
 @schedule_router.get("/{schedule_id}", response_model=ReportScheduleRead)
@@ -116,8 +114,7 @@ def get_report_schedule(
     current=Depends(require_permission("Generate Reports", RoleEnum.ADMIN)),
     service: ReportService = Depends(_service_from_db),
 ):
-    del current
-    return service.get_report_schedule(schedule_id)
+    return service.get_report_schedule(schedule_id, actor_id=getattr(current, "id", None))
 
 
 @schedule_router.delete("/{schedule_id}", response_model=Message)

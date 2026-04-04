@@ -132,6 +132,7 @@ function useAutoSave(attemptId, t, delay = 2000) {
   const pending = useRef({})
   const timer = useRef(null)
   const saveGeneration = useRef(0)
+  const inflightPromise = useRef(null)
   const [saveState, setSaveState] = useState('idle')
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [saveError, setSaveError] = useState('')
@@ -141,37 +142,51 @@ function useAutoSave(attemptId, t, delay = 2000) {
     setSaveState('pending')
     setSaveError('')
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
+    timer.current = setTimeout(() => {
       const gen = ++saveGeneration.current
       const entries = { ...pending.current }
       pending.current = {}
-      const failedEntries = {}
-      let hadFailure = false
-      setSaveState('saving')
-      for (const [qId, ans] of Object.entries(entries)) {
-        try {
-          await submitAnswer(attemptId, qId, serializeAnswer(ans))
-        } catch {
-          failedEntries[qId] = ans
-          hadFailure = true
+      const doSave = async () => {
+        const failedEntries = {}
+        let hadFailure = false
+        setSaveState('saving')
+        for (const [qId, ans] of Object.entries(entries)) {
+          try {
+            await submitAnswer(attemptId, qId, serializeAnswer(ans))
+          } catch {
+            failedEntries[qId] = ans
+            hadFailure = true
+          }
         }
+        // If flush() ran while we were saving, put unsaved entries back for
+        // flush to pick up instead of silently discarding them.
+        if (gen !== saveGeneration.current) {
+          if (hadFailure) {
+            pending.current = { ...failedEntries, ...pending.current }
+          }
+          return
+        }
+        if (hadFailure) {
+          pending.current = { ...failedEntries, ...pending.current }
+          setSaveState('error')
+          setSaveError(t('proctor_answers_not_saved'))
+          return
+        }
+        setSaveState('saved')
+        setLastSavedAt(new Date())
       }
-      // If flush() ran while we were saving, discard our stale results
-      if (gen !== saveGeneration.current) return
-      if (hadFailure) {
-        pending.current = { ...failedEntries, ...pending.current }
-        setSaveState('error')
-        setSaveError(t('proctor_answers_not_saved'))
-        return
-      }
-      setSaveState('saved')
-      setLastSavedAt(new Date())
+      inflightPromise.current = doSave().finally(() => { inflightPromise.current = null })
     }, delay)
   }, [attemptId, delay, t])
 
   const flush = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current)
     ++saveGeneration.current  // invalidate any in-flight save() callback
+
+    // Wait for any in-flight save to finish (it will re-queue failed entries)
+    if (inflightPromise.current) {
+      await inflightPromise.current
+    }
 
     // Loop to drain pending answers: new answers may arrive via save() while
     // we are awaiting the API calls, so re-check after each batch.

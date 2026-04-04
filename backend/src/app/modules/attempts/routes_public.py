@@ -1673,8 +1673,12 @@ async def verify_identity(
     if not attempt:
         raise HTTPException(status_code=404, detail=_t("attempt_not_found"))
 
-    if current.role == RoleEnum.LEARNER and attempt.user_id != current.id:
-        raise HTTPException(status_code=403, detail=_t("not_allowed"))
+    if current.role == RoleEnum.LEARNER:
+        if attempt.user_id != current.id:
+            raise HTTPException(status_code=403, detail=_t("not_allowed"))
+    else:
+        exam = attempt.exam or db.get(Exam, attempt.exam_id)
+        ensure_exam_owner(exam, current, detail=_t("not_allowed"), status_code=status.HTTP_403_FORBIDDEN)
 
     try:
         raw_bytes = base64.b64decode(photo_base64.split(",", 1)[1] if "," in photo_base64 else photo_base64)

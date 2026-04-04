@@ -28,7 +28,6 @@ def list_audit_logs(
     db=Depends(get_db_dep),
     current=Depends(require_permission("View Audit Log", RoleEnum.ADMIN)),
 ):
-    del current
     return list_audit_logs_service(
         db=db,
         page=page,
@@ -43,4 +42,5 @@ def list_audit_logs(
         from_date=from_date,
         to_date=to_date,
         user_id=user_id,
+        actor_id=str(current.id),
     )
