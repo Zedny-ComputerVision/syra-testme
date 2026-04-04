@@ -10,8 +10,6 @@ const EVENT_TYPE_KEY_MAP = {
   'TAB_SWITCH': 'admin_wizard_alert_tab_switch',
   'FOCUS_LOSS': 'admin_wizard_alert_focus_loss',
   'NO_FACE': 'admin_wizard_alert_no_face',
-  'FACE_DISAPPEARED': 'admin_wizard_alert_no_face',
-  'FACE_REAPPEARED': 'admin_wizard_alert_no_face',
   'MULTIPLE_FACES': 'admin_wizard_alert_multiple_faces',
   'LOUD_AUDIO': 'admin_wizard_alert_loud_audio',
   'AUDIO_ANOMALY': 'admin_wizard_alert_audio_anomaly',

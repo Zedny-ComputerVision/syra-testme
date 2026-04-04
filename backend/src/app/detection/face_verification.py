@@ -308,7 +308,7 @@ class FaceVerifier:
     def _compare_embedding(self, live_vec: np.ndarray) -> dict | None:
         if self.baseline is None or self.baseline.shape != live_vec.shape:
             logger.warning(
-                "Skipping face verification because enrolled/live embedding shapes differ: baseline=%s live=%s",
+                "Embedding dimension mismatch — flagging as unverifiable: baseline=%s live=%s",
                 None if self.baseline is None else tuple(self.baseline.shape),
                 tuple(live_vec.shape),
             )
