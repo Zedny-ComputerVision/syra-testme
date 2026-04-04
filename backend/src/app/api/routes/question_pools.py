@@ -274,9 +274,7 @@ def create_pool(
 
 @router.get("/", response_model=list[QuestionPoolRead])
 def list_pools(db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    query = select(QuestionPool).order_by(QuestionPool.name.asc())
-    if current.role == RoleEnum.INSTRUCTOR:
-        query = query.where(QuestionPool.created_by_id == current.id)
+    query = select(QuestionPool).where(QuestionPool.created_by_id == current.id).order_by(QuestionPool.name.asc())
     pools = db.scalars(query).all()
     return [_serialize_pool(pool, db) for pool in pools]
 
@@ -285,7 +283,7 @@ def list_pools(db: Session = Depends(get_db_dep), current=Depends(require_permis
 def get_pool(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     pool_pk = parse_uuid_param(pool_id, detail=_t("not_found"))
     pool = db.get(QuestionPool, pool_pk)
-    if not pool:
+    if not pool or pool.created_by_id != current.id:
         raise HTTPException(status_code=404, detail=_t("not_found"))
     return _serialize_pool(pool, db)
 
@@ -302,7 +300,7 @@ def update_pool(
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
         raise HTTPException(status_code=404, detail=_t("not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
+    if pool.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     pool.name = body.name
     pool.description = body.description
@@ -326,7 +324,7 @@ def update_pool(
 def list_pool_questions(pool_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Manage Question Pools", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     pool_pk = parse_uuid_param(pool_id, detail=_t("pool_not_found"))
     pool = db.get(QuestionPool, pool_pk)
-    if not pool:
+    if not pool or pool.created_by_id != current.id:
         raise HTTPException(status_code=404, detail=_t("pool_not_found"))
     return _load_pool_questions(db, pool_pk)
 
@@ -342,7 +340,7 @@ def create_pool_question(
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
         raise HTTPException(status_code=404, detail=_t("pool_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
+    if pool.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
     library_exam = _ensure_pool_library_exam(db, current, pool)
@@ -379,7 +377,7 @@ def update_pool_question(
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
         raise HTTPException(status_code=404, detail=_t("pool_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
+    if pool.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
     question_pk = parse_uuid_param(question_id, detail=_t("question_not_found"))
@@ -411,7 +409,7 @@ def delete_pool_question(
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
         raise HTTPException(status_code=404, detail=_t("pool_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
+    if pool.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
 
     question_pk = parse_uuid_param(question_id, detail=_t("question_not_found"))
@@ -439,7 +437,7 @@ def seed_exam_from_pool(
     exam = db.get(Exam, exam_pk)
     if not exam:
         raise HTTPException(status_code=404, detail=_t("test_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and exam.created_by_id != current.id:
+    if exam.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     if exam.status == ExamStatus.OPEN:
         raise HTTPException(status_code=409, detail=_t("cannot_seed_published"))
@@ -472,7 +470,7 @@ def delete_pool(
     pool = db.get(QuestionPool, pool_pk)
     if not pool:
         raise HTTPException(status_code=404, detail=_t("not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and pool.created_by_id != current.id:
+    if pool.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     pool_name = pool.name
     pool_pk_str = str(pool.id)

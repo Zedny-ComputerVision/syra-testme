@@ -18,7 +18,7 @@ def create_node(body: NodeCreate, db: Session = Depends(get_db_dep), current=Dep
     course = db.get(Course, body.course_id)
     if not course:
         raise HTTPException(status_code=404, detail=_t("course_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and course.created_by_id != current.id:
+    if course.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     now = datetime.now(timezone.utc)
     node = Node(course_id=body.course_id, title=sanitize_plain_text(body.title) or body.title, order=body.order, created_at=now, updated_at=now)
@@ -38,6 +38,7 @@ def list_nodes(course_id: str | None = None, db: Session = Depends(get_db_dep), 
         query = query.join(Course, Node.course_id == Course.id).where(Course.status == CourseStatus.PUBLISHED)
     else:
         ensure_permission(db, current, "Edit Tests")
+        query = query.join(Course, Node.course_id == Course.id).where(Course.created_by_id == current.id)
     query = query.order_by(Node.order)
     return db.scalars(query).all()
 
@@ -52,6 +53,9 @@ def get_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends(ge
         raise HTTPException(status_code=404, detail=_t("node_not_found"))
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
+        course = node.course or db.get(Course, node.course_id)
+        if not course or course.created_by_id != current.id:
+            raise HTTPException(status_code=404, detail=_t("node_not_found"))
     return node
 
 
@@ -61,7 +65,7 @@ def update_node(node_id: str, body: NodeBase, db: Session = Depends(get_db_dep),
     node = db.get(Node, node_pk)
     if not node:
         raise HTTPException(status_code=404, detail=_t("node_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and (not node.course or node.course.created_by_id != current.id):
+    if not node.course or node.course.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     node.title = sanitize_plain_text(body.title) or body.title
     node.order = body.order
@@ -78,7 +82,7 @@ def delete_node(node_id: str, db: Session = Depends(get_db_dep), current=Depends
     node = db.get(Node, node_pk)
     if not node:
         raise HTTPException(status_code=404, detail=_t("node_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and (not node.course or node.course.created_by_id != current.id):
+    if not node.course or node.course.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     attempt_count = int(
         db.scalar(

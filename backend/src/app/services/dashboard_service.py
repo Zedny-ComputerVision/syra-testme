@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, case, func, select, true
+from sqlalchemy import and_, case, func, or_, select, true
 from sqlalchemy.orm import Session, joinedload, load_only
 
 from ..api.deps import ensure_permission
@@ -199,8 +199,17 @@ def _build_privileged_dashboard(*, db: Session, current, now: datetime) -> Dashb
     role_distribution: list[DashboardSeriesPointRead] = []
 
     if current.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR}:
+        # Scope user counts to users who have attempted the admin's exams
+        own_exam_users = (
+            select(User.id)
+            .join(Attempt, Attempt.user_id == User.id)
+            .join(Exam, Attempt.exam_id == Exam.id)
+            .where(exam_scope)
+        ).correlate(None)
+        scoped_user_filter = or_(User.id == current.id, User.id.in_(own_exam_users))
         role_rows = db.execute(
             select(User.role, func.count(User.id))
+            .where(scoped_user_filter)
             .group_by(User.role)
             .order_by(User.role.asc())
         ).all()
@@ -210,7 +219,7 @@ def _build_privileged_dashboard(*, db: Session, current, now: datetime) -> Dashb
         total_learners = role_counts.get(RoleEnum.LEARNER, 0)
         total_users = total_admins + total_instructors + total_learners
         active_users = int(
-            db.scalar(select(func.count(User.id)).where(User.is_active.is_(True)))
+            db.scalar(select(func.count(User.id)).where(User.is_active.is_(True), scoped_user_filter))
             or 0
         )
         role_distribution = [

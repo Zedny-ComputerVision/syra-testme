@@ -123,6 +123,7 @@ def list_surveys(db: Session = Depends(get_db_dep), current=Depends(get_current_
         query = query.where(Survey.is_active.is_(True))
     else:
         ensure_permission(db, current, "Edit Tests")
+        query = query.where(Survey.created_by_id == current.id)
     surveys = db.scalars(query.order_by(Survey.created_at.desc())).all()
     return [_build_survey_read(survey) for survey in surveys]
 
@@ -137,6 +138,8 @@ def get_survey(survey_id: str, db: Session = Depends(get_db_dep), current=Depend
         raise HTTPException(status_code=404, detail=_t("survey_not_found"))
     if current.role != RoleEnum.LEARNER:
         ensure_permission(db, current, "Edit Tests")
+        if survey.created_by_id != current.id:
+            raise HTTPException(status_code=404, detail=_t("survey_not_found"))
     return _build_survey_read(survey)
 
 
@@ -151,7 +154,7 @@ def update_survey(
     survey = db.get(Survey, survey_pk)
     if not survey:
         raise HTTPException(status_code=404, detail=_t("survey_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and survey.created_by_id != current.id:
+    if survey.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     payload = _normalize_survey_payload(body.model_dump(exclude_unset=True), partial=True)
     questions = payload.pop("questions", None)
@@ -173,7 +176,7 @@ def update_survey(
 def delete_survey(survey_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
     survey_pk = parse_uuid_param(survey_id, detail=_t("survey_not_found"))
     survey = db.get(Survey, survey_pk)
-    if not survey:
+    if not survey or survey.created_by_id != current.id:
         raise HTTPException(status_code=404, detail=_t("survey_not_found"))
     db.delete(survey)
     db.commit()
@@ -211,6 +214,6 @@ def list_responses(survey_id: str, db: Session = Depends(get_db_dep), current=De
     survey = db.get(Survey, survey_pk)
     if not survey:
         raise HTTPException(status_code=404, detail=_t("survey_not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and survey.created_by_id != current.id:
+    if survey.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     return db.scalars(select(SurveyResponse).where(SurveyResponse.survey_id == survey_pk)).all()

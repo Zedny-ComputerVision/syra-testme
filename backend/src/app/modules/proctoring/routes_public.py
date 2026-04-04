@@ -18,7 +18,7 @@ from starlette.websockets import WebSocketState
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, load_only
 
-from ...api.deps import ensure_permission, get_current_user, get_db_dep, require_permission, parse_uuid_param
+from ...api.deps import ensure_exam_owner, ensure_permission, get_current_user, get_db_dep, require_permission, parse_uuid_param
 from ...core.security import verify_token
 from ...core.config import get_settings
 from ...models import Attempt, AttemptStatus, Exam, Notification, ProctoringEvent, RoleEnum, SeverityEnum, SystemSettings, User
@@ -2175,6 +2175,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
             if not actor:
                 raise HTTPException(status_code=403, detail=_t("insufficient_permissions"))
             ensure_permission(db, actor, "View Attempt Analysis")
+            exam = attempt.exam or db.get(Exam, attempt.exam_id)
+            ensure_exam_owner(exam, actor, detail=_t("not_allowed"), status_code=403)
         except HTTPException:
             await websocket.close(code=4403)
             db.close()

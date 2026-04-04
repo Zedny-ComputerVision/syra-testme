@@ -614,10 +614,8 @@ class TestService:
         return exam
 
     def _ensure_actor_can_access_exam(self, exam: Exam, actor: ServiceActor) -> None:
-        if actor.role == RoleEnum.ADMIN:
-            return  # admins see all
-        if actor.role == RoleEnum.INSTRUCTOR and exam.created_by_id == actor.id:
-            return  # instructors see their own
+        if actor.role in {RoleEnum.ADMIN, RoleEnum.INSTRUCTOR} and exam.created_by_id == actor.id:
+            return
         self._raise("NOT_FOUND", "Test not found", status_code=404)
 
     def _ensure_node(self, actor: ServiceActor, node_id: uuid.UUID | None):

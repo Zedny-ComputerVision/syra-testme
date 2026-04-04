@@ -71,9 +71,7 @@ def create_template(body: ExamTemplateCreate, db: Session = Depends(get_db_dep),
 
 @router.get("/", response_model=list[ExamTemplateRead])
 def list_templates(db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
-    query = select(ExamTemplate).order_by(ExamTemplate.created_at.desc())
-    if current.role == RoleEnum.INSTRUCTOR:
-        query = query.where(ExamTemplate.created_by_id == current.id)
+    query = select(ExamTemplate).where(ExamTemplate.created_by_id == current.id).order_by(ExamTemplate.created_at.desc())
     return db.scalars(query).all()
 
 
@@ -81,7 +79,7 @@ def list_templates(db: Session = Depends(get_db_dep), current=Depends(require_pe
 def get_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN, RoleEnum.INSTRUCTOR))):
     template_pk = parse_uuid_param(template_id, detail=_t("not_found"))
     tpl = db.get(ExamTemplate, template_pk)
-    if not tpl:
+    if not tpl or tpl.created_by_id != current.id:
         raise HTTPException(status_code=404, detail=_t("not_found"))
     return tpl
 
@@ -92,7 +90,7 @@ def update_template(template_id: str, body: ExamTemplateCreate, db: Session = De
     tpl = db.get(ExamTemplate, template_pk)
     if not tpl:
         raise HTTPException(status_code=404, detail=_t("not_found"))
-    if current.role == RoleEnum.INSTRUCTOR and tpl.created_by_id != current.id:
+    if tpl.created_by_id != current.id:
         raise HTTPException(status_code=403, detail=_t("not_allowed"))
     payload = _normalize_template_payload(body)
     _ensure_unique_template_name(db, payload["name"], existing_template_id=tpl.id)
@@ -109,7 +107,7 @@ def update_template(template_id: str, body: ExamTemplateCreate, db: Session = De
 def delete_template(template_id: str, db: Session = Depends(get_db_dep), current=Depends(require_permission("Edit Tests", RoleEnum.ADMIN))):
     template_pk = parse_uuid_param(template_id, detail=_t("not_found"))
     tpl = db.get(ExamTemplate, template_pk)
-    if not tpl:
+    if not tpl or tpl.created_by_id != current.id:
         raise HTTPException(status_code=404, detail=_t("not_found"))
     db.delete(tpl)
     db.commit()
