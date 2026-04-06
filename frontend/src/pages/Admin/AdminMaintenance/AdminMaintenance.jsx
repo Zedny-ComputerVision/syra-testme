@@ -7,7 +7,16 @@ import styles from './AdminMaintenance.module.scss'
 export default function AdminMaintenance() {
   const { t } = useLanguage()
 
-  const MODES = [
+  const [mode, setMode] = useState('off')
+  const [banner, setBanner] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [ready, setReady] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+  const [baseline, setBaseline] = useState({ mode: 'off', banner: '' })
+
+  const MODES = useMemo(() => [
     {
       value: 'off',
       label: t('admin_maint_mode_off'),
@@ -29,20 +38,11 @@ export default function AdminMaintenance() {
       impact: t('admin_maint_mode_down_impact'),
       defaultBanner: t('admin_maint_banner_down_default'),
     },
-  ]
-
-  const [mode, setMode] = useState('off')
-  const [banner, setBanner] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [ready, setReady] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [notice, setNotice] = useState('')
-  const [error, setError] = useState('')
-  const [baseline, setBaseline] = useState({ mode: 'off', banner: '' })
+  ], [t])
 
   const modeMeta = useMemo(
     () => MODES.find((entry) => entry.value === mode) || MODES[0],
-    [mode],
+    [mode, MODES],
   )
   const trimmedBanner = banner.trim()
   const effectiveBanner = trimmedBanner || modeMeta.defaultBanner
