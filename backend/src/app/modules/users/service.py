@@ -9,7 +9,7 @@ from sqlalchemy.orm import load_only
 
 from ...api.deps import load_permission_rows, parse_uuid_param, permission_allowed
 from ...core.security import hash_password
-from ...models import Attempt, Exam, RoleEnum, User, UserPreference
+from ...models import Attempt, Exam, RoleEnum, Schedule, User, UserPreference
 from ...schemas import (
     AdminPasswordResetRequest,
     AdminUserPatch,
@@ -74,15 +74,15 @@ class UserService:
                 )
             )
             if actor_id:
-                # Show users who have attempted exams created by this actor,
-                # plus the actor themselves.
+                actor_exam_ids = select(Exam.id).where(Exam.created_by_id == actor_id)
                 query = query.where(
                     or_(
                         User.id == actor_id,
                         User.id.in_(
-                            select(Attempt.user_id).where(
-                                Attempt.exam_id.in_(select(Exam.id).where(Exam.created_by_id == actor_id))
-                            )
+                            select(Attempt.user_id).where(Attempt.exam_id.in_(actor_exam_ids))
+                        ),
+                        User.id.in_(
+                            select(Schedule.user_id).where(Schedule.exam_id.in_(actor_exam_ids))
                         ),
                     )
                 )
