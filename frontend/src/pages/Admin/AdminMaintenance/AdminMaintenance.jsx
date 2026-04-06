@@ -126,7 +126,7 @@ export default function AdminMaintenance() {
       <AdminPageHeader title={t('admin_maint_title')} subtitle={t('admin_maint_subtitle')} />
 
       <div className={styles.summaryRow}>
-        <span className={styles.summaryChip}>{t('admin_maint_mode_chip', { mode: modeMeta.label })}</span>
+        <span className={styles.summaryChip}>{t('admin_maint_mode_label')}: {modeMeta.label}</span>
         <span className={styles.summaryChip}>{dirty ? t('admin_maint_unsaved_changes') : t('admin_maint_saved_state')}</span>
         <span className={styles.summaryChip}>{ready ? t('admin_maint_settings_loaded') : t('admin_maint_retry_required')}</span>
       </div>

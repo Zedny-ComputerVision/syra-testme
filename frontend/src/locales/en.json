@@ -3421,6 +3421,7 @@
   "admin_maint_saved_notice": "Maintenance settings saved successfully.",
   "admin_maint_save_error": "Failed to save maintenance settings.",
   "admin_maint_mode_chip": "Mode: {{mode}}",
+  "admin_maint_mode_label": "Mode",
   "admin_maint_unsaved_changes": "Unsaved changes",
   "admin_maint_saved_state": "All changes saved",
   "admin_maint_settings_loaded": "Settings loaded",
