@@ -29,6 +29,7 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true)
   const [savingKey, setSavingKey] = useState('')
   const [savedKey, setSavedKey] = useState('')
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [saveErrors, setSaveErrors] = useState({})
@@ -95,7 +96,8 @@ export default function AdminSettings() {
       await adminApi.updateSetting('allow_signup', signupAllowed ? 'true' : 'false')
       setSavedSignupAllowed(signupAllowed)
       setSavedKey('allow_signup')
-      setTimeout(() => setSavedKey(''), 2000)
+      setNotice(t('admin_settings_saved'))
+      setTimeout(() => { setSavedKey(''); setNotice('') }, 2500)
     } catch (err) {
       setError(err.response?.data?.detail || t('admin_settings_signup_save_error'))
     } finally {
@@ -117,6 +119,7 @@ export default function AdminSettings() {
         </div>
       )}
       {error && <div className={styles.errorBanner}>{error}</div>}
+      {notice && <div className={styles.successBanner}>{notice}</div>}
       {loading && <div className={styles.loadingText}>{t('admin_settings_loading')}</div>}
 
       <div className={styles.grid}>

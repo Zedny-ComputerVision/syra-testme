@@ -688,6 +688,8 @@ class TestService:
                 "proctoring_config": exam_proctoring(exam),
                 "certificate": exam_certificate(exam),
                 "question_count": len(exam.questions or []),
+                "created_by_id": exam.created_by_id,
+                "created_by_name": exam.creator.name if exam.creator else None,
                 "created_at": exam.created_at,
                 "updated_at": exam.updated_at,
                 "published_at": exam_published_at(exam),

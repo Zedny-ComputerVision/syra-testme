@@ -179,6 +179,7 @@ class TestRepository:
                 joinedload(Exam.runtime_config_rel),
                 joinedload(Exam.proctoring_config_rel),
                 joinedload(Exam.certificate_config_rel),
+                joinedload(Exam.creator),
             )
             .where(Exam.id == test_id)
         )
@@ -200,6 +201,7 @@ class TestRepository:
                 joinedload(Exam.runtime_config_rel),
                 joinedload(Exam.proctoring_config_rel),
                 joinedload(Exam.certificate_config_rel),
+                joinedload(Exam.creator),
             )
             .where(Exam.id == test_id)
         )

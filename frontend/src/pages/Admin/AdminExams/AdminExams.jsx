@@ -563,7 +563,7 @@ export default function AdminExams() {
                                 {busyId === test.id && busyAction === 'unarchive' ? t('admin_exams_unarchiving') : t('admin_exams_unarchive')}
                               </button>
                             )}
-                            {deleteConfirmId === test.id ? (
+                            {test.status === 'DRAFT' && (deleteConfirmId === test.id ? (
                               <>
                                 <button type="button" className={`${styles.menuItem} ${styles.menuDanger}`} disabled={busyId === test.id} onClick={() => handleDelete(test)}>
                                   {busyId === test.id && busyAction === 'delete' ? t('admin_exams_deleting') : t('confirm_delete')}
@@ -581,7 +581,7 @@ export default function AdminExams() {
                               >
                                 {t('delete')}
                               </button>
-                            )}
+                            ))}
                           </div>
                         )}
                       </div>

@@ -311,7 +311,15 @@ function isCanceledRequest(error) {
 function readRequestError(error, fallback) {
   const detail = error?.response?.data?.detail
   if (typeof detail === 'string' && detail.trim()) return detail.trim()
-  return fallback
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail.map((item) => {
+      if (typeof item === 'string') return item
+      if (item && typeof item === 'object') return item.msg || item.message || 'Validation error'
+      return 'Validation error'
+    }).join('; ')
+  }
+  if (detail && typeof detail === 'object') return detail.msg || detail.message || fallback
+  return error?.message || fallback
 }
 
 const EMPTY_QUESTION_FORM = {
@@ -1521,7 +1529,7 @@ export default function AdminManageTestPage() {
   }, [attemptRows, sessions, users])
 
   const withNotice = (msg) => { setNotice(msg); setTimeout(() => setNotice(''), 2600) }
-  const withError = (msg) => { setError(msg); setTimeout(() => setError(''), 4200) }
+  const withError = (msg) => { const safe = typeof msg === 'string' ? msg : (msg && typeof msg === 'object' ? JSON.stringify(msg) : String(msg || 'An error occurred')); setError(safe); setTimeout(() => setError(''), 4200) }
 
   const withRowBusy = async (rowId, fn) => {
     setRowBusy((prev) => ({ ...prev, [rowId]: true }))
@@ -1540,7 +1548,7 @@ export default function AdminManageTestPage() {
       })
       await loadAll(false)
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_pause_resume'))
+      withError(readRequestError(e, t('admin_manage_err_pause_resume')))
     }
   }
 
@@ -1558,7 +1566,7 @@ export default function AdminManageTestPage() {
         setTimeout(() => URL.revokeObjectURL(url), 30000)
       })
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_open_report'))
+      withError(readRequestError(e, t('admin_manage_err_open_report')))
     }
   }
 
@@ -1602,7 +1610,7 @@ export default function AdminManageTestPage() {
       await loadAll(false)
       withNotice(row.status === 'GRADED' ? t('admin_manage_grade_updated') : t('admin_manage_attempt_graded'))
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_save_grade'))
+      withError(readRequestError(e, t('admin_manage_err_save_grade')))
     }
   }
 
@@ -1619,7 +1627,7 @@ export default function AdminManageTestPage() {
       await loadAll(false)
       withNotice(toPause ? t('admin_manage_filtered_paused') : t('admin_manage_filtered_resumed'))
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_bulk_action'))
+      withError(readRequestError(e, t('admin_manage_err_bulk_action')))
     } finally {
       setBulkBusy(false)
       setBulkAction('')
@@ -1801,7 +1809,7 @@ export default function AdminManageTestPage() {
       saved = true
       withNotice(t('admin_manage_settings_saved'))
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_save_settings'))
+      withError(readRequestError(e, t('admin_manage_err_save_settings')))
     } finally {
       setSavingSettings(false)
     }
@@ -1817,7 +1825,7 @@ export default function AdminManageTestPage() {
       await loadAll(false)
       withNotice(t('admin_manage_test_published'))
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_publish'))
+      withError(readRequestError(e, t('admin_manage_err_publish')))
     }
   }
 
@@ -1833,7 +1841,7 @@ export default function AdminManageTestPage() {
       }
       await loadAll(false)
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_status_change'))
+      withError(readRequestError(e, t('admin_manage_err_status_change')))
     }
   }
 
@@ -1850,7 +1858,7 @@ export default function AdminManageTestPage() {
       withNotice(t('admin_manage_test_duplicated'))
       navigate(`/admin/tests/${newExam.id}/manage`)
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_duplicate'))
+      withError(readRequestError(e, t('admin_manage_err_duplicate')))
     }
   }
 
@@ -1863,7 +1871,7 @@ export default function AdminManageTestPage() {
       await adminApi.deleteTest(exam.id)
       navigate('/admin/tests')
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_delete_test'))
+      withError(readRequestError(e, t('admin_manage_err_delete_test')))
     } finally {
       setDeletingExamBusy(false)
     }
@@ -1896,7 +1904,7 @@ export default function AdminManageTestPage() {
       await loadAll(false)
       withNotice(t('admin_manage_accommodation_updated'))
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_update_accommodation'))
+      withError(readRequestError(e, t('admin_manage_err_update_accommodation')))
     } finally {
       setSavingAccomId(null)
     }
@@ -1956,7 +1964,7 @@ export default function AdminManageTestPage() {
       setQuestions(data || [])
       resetQuestionForm()
     } catch (e2) {
-      withError(e2.response?.data?.detail || e2.message || t('admin_manage_err_save_question'))
+      withError(readRequestError(e2, t('admin_manage_err_save_question')))
     } finally {
       setQuestionBusy(false)
     }
@@ -1973,7 +1981,7 @@ export default function AdminManageTestPage() {
       setDeleteQuestionId(null)
       withNotice(t('admin_manage_question_deleted'))
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_delete_question'))
+      withError(readRequestError(e, t('admin_manage_err_delete_question')))
     } finally {
       setDeletingQuestionBusyId(null)
     }
@@ -2004,7 +2012,7 @@ export default function AdminManageTestPage() {
       await loadAll(false)
       withNotice(existing?.id ? t('admin_manage_session_updated') : t('admin_manage_session_created'))
     } catch (e2) {
-      withError(e2.response?.data?.detail || t('admin_manage_err_save_session'))
+      withError(readRequestError(e2, t('admin_manage_err_save_session')))
     } finally {
       setSessionBusy(false)
     }
@@ -2019,7 +2027,7 @@ export default function AdminManageTestPage() {
       await loadAll(false)
       withNotice(t('admin_manage_session_deleted'))
     } catch (e) {
-      withError(e.response?.data?.detail || t('admin_manage_err_delete_session'))
+      withError(readRequestError(e, t('admin_manage_err_delete_session')))
     } finally {
       setDeletingSessionBusyId(null)
     }
@@ -2145,10 +2153,9 @@ export default function AdminManageTestPage() {
       helper: flaggedRows.length > 0 ? t('admin_manage_lifecycle_flagged_need_review') : t('admin_manage_lifecycle_no_flagged'),
     },
   ]
-  const createdByUser = users.find((user) => String(user.id) === String(exam.created_by_id || ''))
-  const createdByLabel = createdByUser?.user_id || createdByUser?.name || 'Unavailable'
+  const createdByLabel = exam.created_by_name || 'Unavailable'
   const couponCreatedBy = createdByLabel !== 'Unavailable' ? createdByLabel : 'Admin'
-  const updatedByLabel = createdByUser?.user_id || createdByUser?.name || 'Unavailable'
+  const updatedByLabel = createdByLabel
   const basicPageInitials = getBrandInitials(settingsForm.title || exam.title)
   const basicPageStatus = isPublished ? t('published') : isArchived ? t('archived') : t('draft')
   const openCycleTab = (nextTab, nextSection = null) => {
@@ -2483,7 +2490,7 @@ export default function AdminManageTestPage() {
         setCertificateSyncError(t('admin_manage_err_no_cert_sources'))
       }
     } catch (e) {
-      setCertificateSyncError(e.response?.data?.detail || t('admin_manage_err_cert_sources'))
+      setCertificateSyncError(readRequestError(e, t('admin_manage_err_cert_sources')))
     } finally {
       setCertificateSyncLoading(false)
     }
@@ -2537,7 +2544,7 @@ export default function AdminManageTestPage() {
       setCategoryDraft(EMPTY_CATEGORY_DRAFT)
       withNotice(t('admin_manage_category_created'))
     } catch (e) {
-      setCategoryError(e.response?.data?.detail || t('admin_manage_err_create_category'))
+      setCategoryError(readRequestError(e, t('admin_manage_err_create_category')))
     } finally {
       setCategoryBusy(false)
     }
@@ -3759,8 +3766,19 @@ export default function AdminManageTestPage() {
               <div className={styles.basicInfoMain}>
                 <div className={styles.basicInfoTopRow}>
                   <label className={styles.basicInfoWideField}>{t('settings_test_name')}<input value={settingsForm.title} disabled={isArchived} onChange={(e) => setSettingsForm((p) => ({ ...p, title: e.target.value }))} /></label>
-                  <label>{t('settings_test_status')}<input value={basicPageStatus} readOnly /></label>
-                  <label>{t('settings_test_id')}<input value={settingsForm.code || String(exam.id).slice(0, 6)} readOnly /></label>
+                  <label>{t('settings_test_status')}
+                    <span className={`${styles.statusBadge} ${isPublished ? styles.statusPublished : isArchived ? styles.statusArchived : styles.statusDraft}`} style={{ marginTop: '0.45rem', display: 'inline-block' }}>
+                      {basicPageStatus}
+                    </span>
+                  </label>
+                  <label>{t('settings_test_id')}
+                    <span className={styles.testIdField} title={String(exam.id)} onClick={() => { navigator.clipboard.writeText(String(exam.id)) }} style={{ cursor: 'pointer', marginTop: '0.45rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <input value={settingsForm.code || String(exam.id)} readOnly style={{ cursor: 'pointer' }} title="Click to copy full ID" />
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </span>
+                  </label>
                 </div>
 
                 <label>{t('settings_test_desc')}<textarea className={styles.basicDescriptionField} value={settingsForm.description} disabled={isArchived} onChange={(e) => setSettingsForm((p) => ({ ...p, description: e.target.value }))} rows={8} /></label>

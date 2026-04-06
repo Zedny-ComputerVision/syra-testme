@@ -605,6 +605,23 @@
   grid-column: 1;
 }
 
+.testIdField {
+  input {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.82rem;
+    letter-spacing: -0.01em;
+  }
+
+  svg {
+    color: var(--color-muted);
+    transition: color 0.15s;
+  }
+
+  &:hover svg {
+    color: var(--color-primary);
+  }
+}
+
 .basicDescriptionField {
   min-height: 220px;
   resize: vertical;

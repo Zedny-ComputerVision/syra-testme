@@ -856,7 +856,7 @@ export default function AdminNewTestWizard() {
       scheduledAt,
     },
   }), [testPayload, selectedUsers, accessMode, scheduledAt])
-  const wizardDirty = wizardReady && wizardSnapshot !== wizardBaselineRef.current
+  const wizardDirty = wizardReady && wizardBaselineRef.current !== '' && wizardSnapshot !== wizardBaselineRef.current
 
   useUnsavedChanges(wizardDirty && !saving && !exitingWizard)
 
@@ -1791,7 +1791,7 @@ export default function AdminNewTestWizard() {
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label} htmlFor="wizard-node">{t('admin_wizard_module_label')}</label>
-              <select id="wizard-node" name="node" className={styles.select} value={nodeId} onChange={e => setNodeId(e.target.value)}>
+              <select id="wizard-node" name="node" className={styles.select} value={nodeId} onChange={e => setNodeId(e.target.value)} disabled={!courseId}>
                 <option value="">{t('admin_wizard_select_module')}</option>
                 {nodes.map(n => <option key={n.id} value={n.id}>{n.title}</option>)}
               </select>

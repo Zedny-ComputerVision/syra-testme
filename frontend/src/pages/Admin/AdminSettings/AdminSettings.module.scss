@@ -151,6 +151,16 @@
   font-weight: 600;
 }
 
+.successBanner {
+  color: var(--color-success-text);
+  padding: 0.6rem 1rem;
+  background: color-mix(in srgb, var(--color-success-text) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success-text) 30%, transparent);
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
 .errorBanner {
   color: var(--color-danger-text-muted);
   padding: 0.6rem 1rem;

@@ -175,6 +175,8 @@ class TestResponseDTO(BaseModel):
     proctoring_config: dict[str, Any] | None = None
     certificate: dict[str, Any] | None = None
     question_count: int = 0
+    created_by_id: UUID | None = None
+    created_by_name: str | None = None
     created_at: datetime
     updated_at: datetime
     published_at: datetime | None = None
