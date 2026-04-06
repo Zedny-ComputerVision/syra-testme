@@ -12,13 +12,13 @@ const COURSE_STATUS_KEYS = [
   { value: 'PUBLISHED', labelKey: 'published' },
 ]
 
-function resolveError(err) {
+function resolveError(err, fallback) {
   return (
-    err.response?.data?.detail ||
-    err.response?.data?.error?.message ||
-    err.response?.data?.error?.detail ||
-    err.message ||
-    ''
+    err?.response?.data?.detail ||
+    err?.response?.data?.error?.message ||
+    err?.response?.data?.error?.detail ||
+    err?.message ||
+    fallback
   )
 }
 
@@ -28,24 +28,41 @@ export default function AdminCourses() {
   const { t } = useLanguage()
   const isAdmin = user?.role === 'ADMIN'
   const currentUserId = String(user?.id || '')
+
   const [courses, setCourses] = useState([])
   const [nodes, setNodes] = useState({})
   const [allTests, setAllTests] = useState([])
-  const [expandedCourse, setExpandedCourse] = useState(null)
-  const [form, setForm] = useState({ title: '', description: '', status: 'DRAFT' })
-  const [editingCourse, setEditingCourse] = useState(null)
-  const [nodeTitles, setNodeTitles] = useState({})
-  const [editingNode, setEditingNode] = useState(null)
-  const [editNodeTitle, setEditNodeTitle] = useState('')
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [warning, setWarning] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [savingCourseForm, setSavingCourseForm] = useState(false)
+
+  // Modal state
+  const [modal, setModal] = useState(false)
+  const [form, setForm] = useState({ title: '', description: '', status: 'DRAFT' })
+  const [modalError, setModalError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // Inline edit state
+  const [editingCourse, setEditingCourse] = useState(null)
   const [savingCourseId, setSavingCourseId] = useState(null)
+
+  // Module state
+  const [nodeTitles, setNodeTitles] = useState({})
+  const [editingNode, setEditingNode] = useState(null)
+  const [editNodeTitle, setEditNodeTitle] = useState('')
   const [busyNodeId, setBusyNodeId] = useState(null)
-  const [deleteCourseConfirmId, setDeleteCourseConfirmId] = useState(null)
   const [deleteNodeConfirmId, setDeleteNodeConfirmId] = useState(null)
+
+  // Delete confirm
+  const [deleteCourseConfirmId, setDeleteCourseConfirmId] = useState(null)
+
+  // Expanded course tests
+  const [expandedCourse, setExpandedCourse] = useState(null)
+
+  // Toolbar
+  const [search, setSearch] = useState('')
+  const [sortDir, setSortDir] = useState('asc')
 
   const load = async () => {
     setLoading(true)
@@ -61,7 +78,7 @@ export default function AdminCourses() {
         setCourses([])
         setNodes({})
         setAllTests([])
-        setError(resolveError(coursesRes.reason) || t('admin_courses_load_error'))
+        setError(resolveError(coursesRes.reason, t('admin_courses_load_error')))
         return
       }
 
@@ -99,43 +116,93 @@ export default function AdminCourses() {
       setCourses([])
       setNodes({})
       setAllTests([])
-      setError(resolveError(err) || t('admin_courses_load_error'))
+      setError(resolveError(err, t('admin_courses_load_error')))
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => { void load() }, [isAdmin])
+
+  const canManageCourse = (course) => isAdmin || String(course?.created_by_id || '') === currentUserId
 
   const getTestsForCourse = (courseId) => {
     const courseNodeIds = new Set((nodes[courseId] || []).map((node) => String(node.id)))
     return allTests.filter((test) => courseNodeIds.has(String(test.node_id)))
   }
 
-  const canManageCourse = (course) => isAdmin || String(course?.created_by_id || '') === currentUserId
+  // Filtering and sorting
+  const normalizedSearch = search.trim().toLowerCase()
+  const filtered = [...courses]
+    .filter((course) => !normalizedSearch
+      || course.title.toLowerCase().includes(normalizedSearch)
+      || (course.description || '').toLowerCase().includes(normalizedSearch))
+    .sort((left, right) => (sortDir === 'asc'
+      ? left.title.localeCompare(right.title)
+      : right.title.localeCompare(left.title)))
+  const hasActiveFilters = Boolean(normalizedSearch) || sortDir !== 'asc'
 
-  useEffect(() => { void load() }, [isAdmin])
+  // Summary card data
+  const publishedCount = courses.filter((c) => c.status === 'PUBLISHED').length
+  const draftCount = courses.filter((c) => c.status === 'DRAFT').length
+  const summaryCards = [
+    {
+      label: t('admin_courses_total'),
+      value: courses.length,
+      helper: t('admin_courses_total_helper'),
+    },
+    {
+      label: t('admin_courses_visible_now'),
+      value: filtered.length,
+      helper: hasActiveFilters ? t('admin_courses_visible_now_filtered') : t('admin_courses_visible_now_all'),
+    },
+    {
+      label: t('admin_courses_summary_published'),
+      value: publishedCount,
+      helper: t('admin_courses_summary_published_helper'),
+    },
+    {
+      label: t('admin_courses_summary_draft'),
+      value: draftCount,
+      helper: t('admin_courses_summary_draft_helper'),
+    },
+  ]
 
-  const createCourse = async (event) => {
-    event.preventDefault()
-    if (!form.title.trim()) {
-      setError(t('admin_courses_title_required'))
+  const clearFilters = () => {
+    setSearch('')
+    setSortDir('asc')
+  }
+
+  // Modal helpers
+  const resetModal = () => {
+    if (saving) return
+    setModal(false)
+    setForm({ title: '', description: '', status: 'DRAFT' })
+    setModalError('')
+  }
+
+  const handleCreate = async () => {
+    const trimmedTitle = form.title.trim()
+    if (!trimmedTitle) {
+      setModalError(t('admin_courses_title_required'))
       return
     }
-    setSavingCourseForm(true)
-    setError('')
+    setSaving(true)
+    setModalError('')
     setNotice('')
     try {
       await adminApi.createCourse({
-        title: form.title.trim(),
+        title: trimmedTitle,
         description: form.description.trim() || null,
         status: form.status,
       })
-      setForm({ title: '', description: '', status: 'DRAFT' })
       setNotice(t('admin_courses_created'))
+      resetModal()
       await load()
     } catch (err) {
-      setError(resolveError(err) || t('admin_courses_create_error'))
+      setModalError(resolveError(err, t('admin_courses_create_error')))
     } finally {
-      setSavingCourseForm(false)
+      setSaving(false)
     }
   }
 
@@ -158,7 +225,7 @@ export default function AdminCourses() {
       setNotice(t('admin_courses_updated'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || t('admin_courses_update_error'))
+      setError(resolveError(err, t('admin_courses_update_error')))
     } finally {
       setSavingCourseId(null)
     }
@@ -177,7 +244,7 @@ export default function AdminCourses() {
       setNotice(course.status === 'PUBLISHED' ? t('admin_courses_moved_draft') : t('admin_courses_published'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || t('admin_courses_status_error'))
+      setError(resolveError(err, t('admin_courses_status_error')))
     } finally {
       setSavingCourseId(null)
     }
@@ -197,7 +264,7 @@ export default function AdminCourses() {
       setNotice(t('admin_courses_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || t('admin_courses_delete_error'))
+      setError(resolveError(err, t('admin_courses_delete_error')))
     } finally {
       setSavingCourseId(null)
     }
@@ -218,7 +285,7 @@ export default function AdminCourses() {
       setNotice(t('admin_courses_module_added'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || t('admin_courses_add_module_error'))
+      setError(resolveError(err, t('admin_courses_add_module_error')))
     } finally {
       setBusyNodeId(null)
     }
@@ -238,7 +305,7 @@ export default function AdminCourses() {
       setNotice(t('admin_courses_module_updated'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || t('admin_courses_update_module_error'))
+      setError(resolveError(err, t('admin_courses_update_module_error')))
     } finally {
       setBusyNodeId(null)
     }
@@ -258,7 +325,7 @@ export default function AdminCourses() {
       setNotice(t('admin_courses_module_deleted'))
       await load()
     } catch (err) {
-      setError(resolveError(err) || t('admin_courses_delete_module_error'))
+      setError(resolveError(err, t('admin_courses_delete_module_error')))
     } finally {
       setBusyNodeId(null)
     }
@@ -266,167 +333,263 @@ export default function AdminCourses() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title={t('admin_courses_title')} subtitle={t('admin_courses_subtitle')} />
+      <AdminPageHeader title={t('admin_courses_title')} subtitle={t('admin_courses_subtitle')}>
+        <button
+          type="button"
+          className={styles.btnPrimary}
+          onClick={() => {
+            setModal(true)
+            setModalError('')
+          }}
+        >
+          {t('admin_courses_new_course')}
+        </button>
+      </AdminPageHeader>
+
+      {notice && <div className={styles.noticeBanner}>{notice}</div>}
+      {warning && <div className={styles.warningBanner}>{warning}</div>}
       {error && (
         <div className={styles.helperRow}>
-          <div className={styles.errorMsg}>{error}</div>
-          <button className={styles.btnSecondary} onClick={() => void load()}>{t('retry')}</button>
+          <div className={styles.errorBanner}>{error}</div>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
-      {warning && <div className={styles.warningMsg}>{warning}</div>}
-      {notice && <div className={styles.noticeMsg}>{notice}</div>}
 
-      <div className={styles.grid}>
-        <form className={styles.card} onSubmit={createCourse}>
-          <div className={styles.sectionTitle}>{t('admin_courses_new_course')}</div>
-          <label className={styles.label} htmlFor="course-form-title">{t('title')}</label>
-          <input id="course-form-title" className={styles.input} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} required />
-          <label className={styles.label} htmlFor="course-form-description">{t('description')}</label>
-          <textarea id="course-form-description" className={styles.textarea} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} />
-          <label className={styles.label} htmlFor="course-form-status">{t('status')}</label>
-          <select id="course-form-status" className={styles.input} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-            {COURSE_STATUS_KEYS.map((statusOption) => (
-              <option key={statusOption.value} value={statusOption.value}>{t(statusOption.labelKey)}</option>
-            ))}
-          </select>
-          <button className={styles.btnPrimary} type="submit" disabled={savingCourseForm}>{savingCourseForm ? t('saving') : t('admin_courses_save_course')}</button>
-        </form>
+      <div className={styles.summaryGrid}>
+        {summaryCards.map((card) => (
+          <div key={card.label} className={styles.summaryCard}>
+            <div className={styles.summaryLabel}>{card.label}</div>
+            <div className={styles.summaryValue}>{card.value}</div>
+            <div className={styles.summarySub}>{card.helper}</div>
+          </div>
+        ))}
+      </div>
 
-        <div className={styles.card}>
-          <div className={styles.sectionTitle}>{t('admin_courses_courses')}</div>
-          {loading && <div className={styles.empty}>{t('loading')}</div>}
-          {!loading && courses.length === 0 && <div className={styles.empty}>{t('admin_courses_no_courses')}</div>}
-          {!loading && courses.map((course) => (
-            <div key={course.id} className={styles.courseCard}>
-              {!canManageCourse(course) && (
-                <div className={`${styles.courseSub} ${styles.courseHint}`}>
-                  {t('admin_courses_read_only')}
-                </div>
-              )}
-              {editingCourse?.id === course.id ? (
-                <form onSubmit={saveCourseEdit} className={styles.editForm}>
-                  <input className={styles.input} value={editingCourse.title} onChange={(event) => setEditingCourse((current) => ({ ...current, title: event.target.value }))} required />
-                  <textarea className={styles.textarea} rows={2} value={editingCourse.description || ''} onChange={(event) => setEditingCourse((current) => ({ ...current, description: event.target.value }))} />
-                  <select className={styles.input} value={editingCourse.status || 'DRAFT'} onChange={(event) => setEditingCourse((current) => ({ ...current, status: event.target.value }))}>
-                    {COURSE_STATUS_KEYS.map((statusOption) => (
-                      <option key={statusOption.value} value={statusOption.value}>{t(statusOption.labelKey)}</option>
-                    ))}
-                  </select>
-                  <div className={styles.editActions}>
-                    <button className={styles.btnPrimary} type="submit" disabled={savingCourseId === course.id}>{savingCourseId === course.id ? t('saving') : t('save')}</button>
-                    <button className={styles.btnSecondary} type="button" onClick={() => setEditingCourse(null)} disabled={savingCourseId === course.id}>{t('cancel')}</button>
-                  </div>
-                </form>
-              ) : (
-                <div className={styles.courseHeader}>
-                  <div>
-                    <div className={styles.courseTitle}>{course.title}</div>
-                    <div className={styles.courseSub}>{course.description}</div>
-                    <div className={styles.courseSub}>{t('status')}: {course.status === 'PUBLISHED' ? t('published') : t('draft')}</div>
-                  </div>
-                  <div className={styles.courseActions}>
-                    {canManageCourse(course) && (
-                      <>
-                        <button className={styles.btnSecondary} onClick={() => void toggleCourseStatus(course)} disabled={savingCourseId === course.id} aria-label={`${course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')} ${t('admin_courses_course')} ${course.title || t('admin_courses_this_course')}`} title={`${course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')} ${t('admin_courses_course')} ${course.title || t('admin_courses_this_course')}`}>
-                          {savingCourseId === course.id ? t('saving') : course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')}
-                        </button>
-                        <button className={styles.btnSecondary} onClick={() => setEditingCourse({ ...course })} disabled={savingCourseId === course.id} aria-label={`${t('edit')} ${course.title || t('admin_courses_this_course')}`} title={`${t('edit')} ${course.title || t('admin_courses_this_course')}`}>{t('edit')}</button>
-                      </>
-                    )}
-                    {isAdmin && (deleteCourseConfirmId === course.id ? (
-                      <>
-                        <button className={styles.dangerBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`${t('confirm_delete')} ${course.title || t('admin_courses_this_course')}`}>
-                          {savingCourseId === course.id ? t('admin_courses_deleting') : t('confirm')}
-                        </button>
-                        <button className={styles.btnSecondary} onClick={() => setDeleteCourseConfirmId(null)} disabled={savingCourseId === course.id} aria-label={`${t('cancel_delete')} ${course.title || t('admin_courses_this_course')}`}>{t('cancel')}</button>
-                      </>
-                    ) : (
-                      <button className={styles.deleteBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`${t('delete')} ${course.title || t('admin_courses_this_course')}`} title={`${t('delete')} ${course.title || t('admin_courses_this_course')}`}>{t('delete')}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className={styles.modules}>
-                {(nodes[course.id] || []).map((node) => (
-                  <div key={node.id} className={styles.moduleRow}>
-                    {editingNode === node.id ? (
-                      <>
-                        <input className={styles.input} value={editNodeTitle} onChange={(event) => setEditNodeTitle(event.target.value)} autoFocus />
-                        <button type="button" className={styles.btnPrimary} onClick={() => void saveNodeEdit(node)} disabled={busyNodeId === node.id} aria-label={`${t('save')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{busyNodeId === node.id ? t('saving') : t('save')}</button>
-                        <button type="button" className={styles.btnSecondary} onClick={() => setEditingNode(null)} disabled={busyNodeId === node.id} aria-label={`${t('cancel')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('cancel')}</button>
-                      </>
-                    ) : (
-                      <>
-                        <span className={styles.moduleChip}>{node.title}</span>
-                        {canManageCourse(course) && (
-                          <>
-                            <button type="button" className={styles.iconBtn} onClick={() => { setEditingNode(node.id); setEditNodeTitle(node.title) }} disabled={busyNodeId === node.id} aria-label={`${t('edit')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`} title={`${t('edit')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('edit')}</button>
-                            {deleteNodeConfirmId === node.id ? (
-                              <>
-                                <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`${t('confirm_delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{busyNodeId === node.id ? t('admin_courses_deleting') : t('confirm')}</button>
-                                <button type="button" className={styles.iconBtn} onClick={() => setDeleteNodeConfirmId(null)} disabled={busyNodeId === node.id} aria-label={`${t('cancel_delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('cancel')}</button>
-                              </>
-                            ) : (
-                              <button type="button" className={styles.iconBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`${t('delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`} title={`${t('delete')} ${node.title || t('admin_courses_this_module')} ${course.title || t('admin_courses_this_course')}`}>{t('delete')}</button>
-                            )}
-                          </>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
-                {canManageCourse(course) && (
-                  <div className={styles.addModule}>
-                    <input
-                      className={styles.input}
-                      placeholder={t('admin_courses_new_module_title')}
-                      value={nodeTitles[course.id] || ''}
-                      onChange={(event) => setNodeTitles((prev) => ({ ...prev, [course.id]: event.target.value }))}
-                    />
-                    <button type="button" className={styles.btnSecondary} onClick={() => void addNode(course.id)} disabled={busyNodeId === course.id}>{busyNodeId === course.id ? t('admin_courses_adding') : t('add')}</button>
-                  </div>
-                )}
-              </div>
-
-              <div className={styles.courseExams}>
-                <button
-                  type="button"
-                  className={styles.examsToggle}
-                  onClick={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
-                >
-                  {expandedCourse === course.id ? t('admin_courses_hide') : t('admin_courses_show')} {t('admin_courses_linked_tests')} ({getTestsForCourse(course.id).length})
-                </button>
-                {expandedCourse === course.id && (
-                  <div className={styles.examsTable}>
-                    {getTestsForCourse(course.id).length === 0 ? (
-                      <div className={styles.empty}>{t('admin_courses_no_linked_tests')}</div>
-                    ) : (
-                      <table className={styles.examListTable}>
-                        <thead><tr><th>{t('title')}</th><th>{t('status')}</th><th>{t('type')}</th>{isAdmin && <th></th>}</tr></thead>
-                        <tbody>
-                          {getTestsForCourse(course.id).map((test) => (
-                            <tr key={test.id}>
-                              <td>{test.title}</td>
-                              <td>{test.status || '-'}</td>
-                              <td>{test.type || '-'}</td>
-                              {isAdmin && (
-                                <td>
-                                  <button type="button" className={styles.compactBtn} onClick={() => navigate(`/admin/tests/${test.id}/manage`)} aria-label={`${t('admin_courses_manage_test')} ${test.title || t('admin_courses_test')} ${t('admin_courses_from_course')} ${course.title || t('admin_courses_this_course')}`} title={`${t('admin_courses_manage_test')} ${test.title || t('admin_courses_test')} ${t('admin_courses_from_course')} ${course.title || t('admin_courses_this_course')}`}>{t('admin_courses_manage_test')}</button>
-                                </td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+      <div className={styles.toolbarPanel}>
+        <div className={styles.toolbar}>
+          <input
+            type="text"
+            className={styles.searchInput}
+            placeholder={t('admin_courses_search_placeholder')}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <button
+            type="button"
+            className={styles.sortBtn}
+            onClick={() => setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))}
+          >
+            {sortDir === 'asc' ? t('sort_name_az') : t('sort_name_za')}
+          </button>
+          <div className={styles.toolbarActions}>
+            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>{t('refresh')}</button>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>{t('clear_filters')}</button>
+          </div>
+        </div>
+        <div className={styles.filterMeta}>
+          {t('admin_courses_showing_count', { filtered: filtered.length, total: courses.length })}
         </div>
       </div>
+
+      {loading ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_courses_loading')}</div>
+          <div className={styles.emptyText}>{t('admin_courses_loading_sub')}</div>
+        </div>
+      ) : filtered.length === 0 && hasActiveFilters ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_courses_no_match')}</div>
+          <div className={styles.emptyText}>{t('admin_courses_no_match_hint')}</div>
+          <button type="button" className={styles.actionBtn} onClick={clearFilters}>{t('clear_filters')}</button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_courses_empty')}</div>
+          <div className={styles.emptyText}>{t('admin_courses_empty_hint')}</div>
+        </div>
+      ) : (
+        <div className={styles.grid}>
+          {filtered.map((course) => {
+            const courseLabel = course.title || t('admin_courses_this_course')
+            const moduleCount = (nodes[course.id] || []).length
+
+            return (
+              <div key={course.id} className={styles.card}>
+                {!canManageCourse(course) && (
+                  <div className={styles.readOnlyNote}>{t('admin_courses_read_only')}</div>
+                )}
+
+                {editingCourse?.id === course.id ? (
+                  <form onSubmit={saveCourseEdit} className={styles.editForm}>
+                    <input className={styles.input} value={editingCourse.title} onChange={(event) => setEditingCourse((current) => ({ ...current, title: event.target.value }))} required />
+                    <textarea className={styles.input} rows={2} value={editingCourse.description || ''} onChange={(event) => setEditingCourse((current) => ({ ...current, description: event.target.value }))} />
+                    <select className={styles.input} value={editingCourse.status || 'DRAFT'} onChange={(event) => setEditingCourse((current) => ({ ...current, status: event.target.value }))}>
+                      {COURSE_STATUS_KEYS.map((statusOption) => (
+                        <option key={statusOption.value} value={statusOption.value}>{t(statusOption.labelKey)}</option>
+                      ))}
+                    </select>
+                    <div className={styles.modalActions}>
+                      <button className={styles.btnCancel} type="button" onClick={() => setEditingCourse(null)} disabled={savingCourseId === course.id}>{t('cancel')}</button>
+                      <button className={styles.btnPrimary} type="submit" disabled={savingCourseId === course.id}>{savingCourseId === course.id ? t('saving') : t('save')}</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className={styles.cardHeader}>
+                      <div>
+                        <span className={styles.cardTitle}>{course.title}</span>
+                        <span className={course.status === 'PUBLISHED' ? styles.statusBadgePublished : styles.statusBadgeDraft}>
+                          {course.status === 'PUBLISHED' ? t('published') : t('draft')}
+                        </span>
+                      </div>
+                      <div className={styles.actionBtns}>
+                        {canManageCourse(course) && (
+                          <>
+                            <button type="button" className={styles.actionBtn} onClick={() => void toggleCourseStatus(course)} disabled={savingCourseId === course.id} aria-label={`${course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')} ${courseLabel}`} title={`${course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')} ${courseLabel}`}>
+                              {savingCourseId === course.id ? t('saving') : course.status === 'PUBLISHED' ? t('admin_courses_unpublish') : t('admin_courses_publish')}
+                            </button>
+                            <button type="button" className={styles.actionBtn} onClick={() => setEditingCourse({ ...course })} disabled={savingCourseId === course.id} aria-label={`${t('edit')} ${courseLabel}`} title={`${t('edit')} ${courseLabel}`}>{t('edit')}</button>
+                          </>
+                        )}
+                        {canManageCourse(course) && (
+                          deleteCourseConfirmId === course.id ? (
+                            <>
+                              <button type="button" className={styles.actionBtnDanger} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`${t('confirm_delete')} ${courseLabel}`}>
+                                {savingCourseId === course.id ? t('admin_courses_deleting') : t('confirm')}
+                              </button>
+                              <button type="button" className={styles.actionBtn} onClick={() => setDeleteCourseConfirmId(null)} disabled={savingCourseId === course.id} aria-label={`${t('cancel_delete')} ${courseLabel}`}>
+                                {t('cancel')}
+                              </button>
+                            </>
+                          ) : (
+                            <button type="button" className={styles.actionBtn} onClick={() => void deleteCourse(course.id)} disabled={savingCourseId === course.id} aria-label={`${t('delete')} ${courseLabel}`} title={`${t('delete')} ${courseLabel}`}>
+                              {t('delete')}
+                            </button>
+                          )
+                        )}
+                      </div>
+                    </div>
+
+                    <div className={course.description ? styles.cardMeta : styles.cardMetaMuted}>
+                      {course.description || t('admin_courses_no_description')}
+                    </div>
+
+                    {moduleCount > 0 && (
+                      <div className={styles.moduleCountBadge}>
+                        {moduleCount} {moduleCount === 1 ? t('admin_courses_module_singular') : t('admin_courses_module_plural')}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Modules section */}
+                <div className={styles.modules}>
+                  {(nodes[course.id] || []).map((node) => (
+                    <div key={node.id} className={styles.moduleRow}>
+                      {editingNode === node.id ? (
+                        <>
+                          <input className={styles.input} value={editNodeTitle} onChange={(event) => setEditNodeTitle(event.target.value)} autoFocus />
+                          <button type="button" className={styles.actionBtn} onClick={() => void saveNodeEdit(node)} disabled={busyNodeId === node.id} aria-label={`${t('save')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`}>{busyNodeId === node.id ? t('saving') : t('save')}</button>
+                          <button type="button" className={styles.actionBtn} onClick={() => setEditingNode(null)} disabled={busyNodeId === node.id} aria-label={`${t('cancel')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`}>{t('cancel')}</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className={styles.moduleChip}>{node.title}</span>
+                          {canManageCourse(course) && (
+                            <>
+                              <button type="button" className={styles.actionBtn} onClick={() => { setEditingNode(node.id); setEditNodeTitle(node.title) }} disabled={busyNodeId === node.id} aria-label={`${t('edit')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`} title={`${t('edit')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`}>{t('edit')}</button>
+                              {deleteNodeConfirmId === node.id ? (
+                                <>
+                                  <button type="button" className={styles.actionBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`${t('confirm_delete')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`}>{busyNodeId === node.id ? t('admin_courses_deleting') : t('confirm')}</button>
+                                  <button type="button" className={styles.actionBtn} onClick={() => setDeleteNodeConfirmId(null)} disabled={busyNodeId === node.id} aria-label={`${t('cancel_delete')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`}>{t('cancel')}</button>
+                                </>
+                              ) : (
+                                <button type="button" className={styles.actionBtnDanger} onClick={() => void deleteNode(node.id)} disabled={busyNodeId === node.id} aria-label={`${t('delete')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`} title={`${t('delete')} ${node.title || t('admin_courses_this_module')} ${courseLabel}`}>{t('delete')}</button>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {canManageCourse(course) && (
+                    <div className={styles.addModule}>
+                      <input
+                        className={styles.input}
+                        placeholder={t('admin_courses_new_module_title')}
+                        value={nodeTitles[course.id] || ''}
+                        onChange={(event) => setNodeTitles((prev) => ({ ...prev, [course.id]: event.target.value }))}
+                      />
+                      <button type="button" className={styles.actionBtn} onClick={() => void addNode(course.id)} disabled={busyNodeId === course.id}>{busyNodeId === course.id ? t('admin_courses_adding') : t('add')}</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Linked tests toggle */}
+                <div className={styles.courseExams}>
+                  <button
+                    type="button"
+                    className={styles.expandBtn}
+                    onClick={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                  >
+                    {expandedCourse === course.id ? t('admin_courses_hide') : t('admin_courses_show')} {t('admin_courses_linked_tests')} ({getTestsForCourse(course.id).length})
+                  </button>
+                  {expandedCourse === course.id && (
+                    <div className={styles.examsTable}>
+                      {getTestsForCourse(course.id).length === 0 ? (
+                        <div className={styles.questionEmpty}>{t('admin_courses_no_linked_tests')}</div>
+                      ) : (
+                        getTestsForCourse(course.id).map((test) => (
+                          <div key={test.id} className={styles.testItem}>
+                            <span className={styles.testTitle}>{test.title}</span>
+                            <span className={styles.testMeta}>{test.status || '-'}</span>
+                            <span className={styles.testMeta}>{test.type || '-'}</span>
+                            {isAdmin && (
+                              <button type="button" className={styles.actionBtn} onClick={() => navigate(`/admin/tests/${test.id}/manage`)} aria-label={`${t('admin_courses_manage_test')} ${test.title || t('admin_courses_test')} ${t('admin_courses_from_course')} ${courseLabel}`} title={`${t('admin_courses_manage_test')} ${test.title || t('admin_courses_test')} ${t('admin_courses_from_course')} ${courseLabel}`}>{t('admin_courses_manage_test')}</button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Create course modal */}
+      {modal && (
+        <div className={styles.modalOverlay} onClick={resetModal}>
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="course-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="course-dialog-title" className={styles.modalTitle}>{t('admin_courses_new_course_title')}</h3>
+            {modalError && <div className={styles.modalError}>{modalError}</div>}
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="course-title">{t('title')}</label>
+              <input id="course-title" className={styles.input} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+            </div>
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="course-description">{t('description')}</label>
+              <textarea id="course-description" className={styles.input} rows={3} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+            </div>
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="course-status">{t('status')}</label>
+              <select id="course-status" className={styles.input} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+                {COURSE_STATUS_KEYS.map((statusOption) => (
+                  <option key={statusOption.value} value={statusOption.value}>{t(statusOption.labelKey)}</option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.btnCancel} onClick={resetModal} disabled={saving}>{t('cancel')}</button>
+              <button type="button" className={styles.btnPrimary} onClick={() => void handleCreate()} disabled={saving || !form.title.trim()}>
+                {saving ? t('admin_courses_creating') : t('admin_courses_save_course')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -30,7 +30,9 @@ export default function AdminTemplates() {
   const [config, setConfig] = useState('{}')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [modal, setModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
+  const [modalError, setModalError] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)
   const [search, setSearch] = useState('')
   const [ownershipFilter, setOwnershipFilter] = useState('ALL')
@@ -103,21 +105,32 @@ export default function AdminTemplates() {
     },
   ]
 
-  const resetForm = () => {
+  const resetModal = () => {
+    if (saving) return
+    setModal(false)
     setName('')
     setDescription('')
     setConfig('{}')
     setEditingId(null)
-    setError('')
+    setModalError('')
   }
 
-  const startEdit = (template) => {
+  const openCreateModal = () => {
+    setName('')
+    setDescription('')
+    setConfig('{}')
+    setEditingId(null)
+    setModalError('')
+    setModal(true)
+  }
+
+  const openEditModal = (template) => {
     setEditingId(template.id)
     setName(template.name || '')
     setDescription(template.description || '')
     setConfig(template.config ? JSON.stringify(template.config, null, 2) : '{}')
-    setError('')
-    setNotice('')
+    setModalError('')
+    setModal(true)
   }
 
   const clearFilters = () => {
@@ -125,14 +138,13 @@ export default function AdminTemplates() {
     setOwnershipFilter('ALL')
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
+  const handleSubmit = async () => {
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setError(t('admin_templates_name_required'))
+      setModalError(t('admin_templates_name_required'))
       return
     }
-    setError('')
+    setModalError('')
     setNotice('')
     setSaving(true)
     try {
@@ -155,10 +167,10 @@ export default function AdminTemplates() {
         })
         setNotice(t('admin_templates_created_notice'))
       }
-      resetForm()
+      resetModal()
       await load()
     } catch (err) {
-      setError(resolveError(err) || err.message || t('admin_templates_save_failed'))
+      setModalError(resolveError(err) || err.message || t('admin_templates_save_failed'))
     } finally {
       setSaving(false)
     }
@@ -170,157 +182,251 @@ export default function AdminTemplates() {
       return
     }
     setDeletingId(id)
-    if (editingId === id) resetForm()
+    setDeleteConfirmId(null)
     setError('')
     setNotice('')
     try {
       await adminApi.deleteExamTemplate(id)
-      setDeleteConfirmId(null)
       setNotice(t('admin_templates_deleted_notice'))
       await load()
     } catch (err) {
       setError(resolveError(err) || t('admin_templates_delete_failed'))
-      setDeleteConfirmId(null)
     } finally {
       setDeletingId(null)
     }
   }
 
   return (
-    <section className={styles.page}>
-      <AdminPageHeader title={t('admin_templates_page_title')} subtitle={t('admin_templates_page_subtitle')} />
+    <div className={styles.page}>
+      <AdminPageHeader title={t('admin_templates_page_title')} subtitle={t('admin_templates_page_subtitle')}>
+        <button
+          type="button"
+          className={styles.btnPrimary}
+          onClick={openCreateModal}
+        >
+          {t('admin_templates_new_template')}
+        </button>
+      </AdminPageHeader>
+
+      {notice && <div className={styles.noticeBanner}>{notice}</div>}
+      {error && (
+        <div className={styles.helperRow}>
+          <div className={styles.errorBanner}>{error}</div>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>{t('retry')}</button>
+        </div>
+      )}
       {loadError && (
         <div className={styles.helperRow}>
-          <div className={styles.error}>{loadError}</div>
-          <button className={styles.editBtn} type="button" onClick={() => void load()}>{t('retry')}</button>
+          <div className={styles.errorBanner}>{loadError}</div>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>{t('retry')}</button>
         </div>
       )}
 
-      <section className={styles.summaryGrid}>
+      <div className={styles.summaryGrid}>
         {summaryCards.map((card) => (
-          <article key={card.label} className={styles.summaryCard}>
+          <div key={card.label} className={styles.summaryCard}>
             <div className={styles.summaryLabel}>{card.label}</div>
             <div className={styles.summaryValue}>{card.value}</div>
             <div className={styles.summarySub}>{card.helper}</div>
-          </article>
+          </div>
         ))}
-      </section>
+      </div>
 
-      <section className={styles.grid}>
-        <form className={styles.card} onSubmit={handleSubmit}>
-          <div className={styles.sectionTitle}>{editingId ? t('admin_templates_edit_template') : t('admin_templates_new_template')}</div>
-          {error && <div className={styles.error}>{error}</div>}
-          {notice && <div className={styles.notice}>{notice}</div>}
-          <label className={styles.label}>{t('admin_templates_name_label')}</label>
-          <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} required />
-
-          <label className={styles.label}>{t('admin_templates_description_label')}</label>
-          <input className={styles.input} value={description} onChange={(event) => setDescription(event.target.value)} />
-
-          <label className={styles.label}>{t('admin_templates_config_json_label')}</label>
-          <textarea className={styles.textarea} value={config} onChange={(event) => setConfig(event.target.value)} rows={6} />
-
-          <div className={styles.formActions}>
-            <button type="submit" className={styles.btnPrimary} disabled={saving}>{saving ? t('saving') : editingId ? t('admin_templates_update_template') : t('admin_templates_save_template')}</button>
-            {editingId && <button type="button" className={styles.btnCancel} onClick={resetForm}>{t('cancel')}</button>}
+      <div className={styles.toolbarPanel}>
+        <div className={styles.toolbar}>
+          <input
+            type="text"
+            className={styles.searchInput}
+            placeholder={t('admin_templates_search_placeholder')}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <select
+            className={styles.sortBtn}
+            value={ownershipFilter}
+            onChange={(event) => setOwnershipFilter(event.target.value)}
+          >
+            <option value="ALL">{t('admin_templates_filter_all')}</option>
+            <option value="MINE">{t('admin_templates_owned_by_you')}</option>
+            <option value="READ_ONLY">{t('admin_templates_filter_read_only')}</option>
+          </select>
+          <button
+            type="button"
+            className={styles.sortBtn}
+            onClick={() => setSortDir((current) => (current === 'ASC' ? 'DESC' : 'ASC'))}
+          >
+            {sortDir === 'ASC' ? t('sort_name_az') : t('sort_name_za')}
+          </button>
+          <div className={styles.toolbarActions}>
+            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>{t('refresh')}</button>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>{t('clear_filters')}</button>
           </div>
-        </form>
+        </div>
+        <div className={styles.filterMeta}>
+          {t('admin_templates_showing_count', { filtered: filteredTemplates.length, total: templates.length })}
+        </div>
+      </div>
 
-        <section className={styles.card}>
-          <div className={styles.sectionTitle}>{t('admin_templates_saved_section')}</div>
-          <div className={styles.toolbar}>
-            <div className={styles.toolbarFilters}>
-              <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="template-search">{t('admin_templates_search_label')}</label>
-                <input
-                  id="template-search"
-                  className={styles.input}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={t('admin_templates_search_placeholder')}
-                />
-              </div>
-              <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="template-ownership-filter">{t('admin_templates_ownership_label')}</label>
-                <select
-                  id="template-ownership-filter"
-                  className={styles.input}
-                  value={ownershipFilter}
-                  onChange={(event) => setOwnershipFilter(event.target.value)}
-                >
-                  <option value="ALL">{t('admin_templates_filter_all')}</option>
-                  <option value="MINE">{t('admin_templates_owned_by_you')}</option>
-                  <option value="READ_ONLY">{t('admin_templates_filter_read_only')}</option>
-                </select>
-              </div>
-            </div>
-            <div className={styles.toolbarActions}>
-              <button type="button" className={styles.editBtn} onClick={() => setSortDir((current) => (current === 'ASC' ? 'DESC' : 'ASC'))}>
-                {t('admin_sort_name')} {sortDir === 'ASC' ? 'A-Z' : 'Z-A'}
-              </button>
-              <button type="button" className={styles.editBtn} onClick={() => void load()} disabled={loading}>
-                {loading ? t('admin_refreshing') : t('admin_refresh')}
-              </button>
-              <button type="button" className={styles.editBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-                {t('admin_clear_filters')}
-              </button>
-            </div>
-          </div>
-          <div className={styles.filterMeta}>
-            {t('admin_templates_showing_count', { filtered: filteredTemplates.length, total: templates.length })}
-          </div>
-          {loading && <div className={styles.muted}>{t('loading')}</div>}
-          {!loading && !loadError && filteredTemplates.length === 0 && (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_templates_no_match') : t('admin_templates_none_yet')}</div>
-              <div className={styles.emptyText}>
-                {hasActiveFilters
-                  ? t('admin_templates_clear_filters_hint')
-                  : t('admin_templates_empty_state')}
-              </div>
-              {hasActiveFilters && <button type="button" className={styles.editBtn} onClick={clearFilters}>{t('admin_clear_filters')}</button>}
-            </div>
-          )}
+      {loading ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_templates_loading')}</div>
+          <div className={styles.emptyText}>{t('admin_templates_loading_sub')}</div>
+        </div>
+      ) : filteredTemplates.length === 0 && hasActiveFilters ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_templates_no_match')}</div>
+          <div className={styles.emptyText}>{t('admin_templates_clear_filters_hint')}</div>
+          <button type="button" className={styles.actionBtn} onClick={clearFilters}>{t('clear_filters')}</button>
+        </div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_templates_none_yet')}</div>
+          <div className={styles.emptyText}>{t('admin_templates_empty_state')}</div>
+        </div>
+      ) : (
+        <div className={styles.grid}>
+          {filteredTemplates.map((template) => {
+            const templateLabel = template.name || t('admin_templates_this_template')
 
-          <section className={styles.list}>
-            {filteredTemplates.map((template) => (
-              <div
-                key={template.id}
-                data-template-row="true"
-                className={`${styles.row} ${editingId === template.id ? styles.rowActive : ''}`}
-              >
-                <div>
-                  <div className={styles.rowTitle}>{template.name}</div>
-                  <div className={styles.rowSub}>{template.description}</div>
-                  <div className={styles.rowMeta}>
-                    {canManageTemplate(template)
-                      ? String(template?.created_by_id || '') === currentUserId
-                        ? t('admin_templates_owned_by_you')
-                        : t('admin_templates_editable_as_admin')
-                      : t('admin_templates_read_only_shared')}
-                    {' · '}
-                    {t('admin_templates_config_fields_count', { count: Object.keys(template?.config || {}).length })}
+            return (
+              <div key={template.id} className={styles.card}>
+                {!canManageTemplate(template) && (
+                  <div className={styles.readOnlyNote}>{t('admin_templates_read_only_notice')}</div>
+                )}
+                <div className={styles.cardHeader}>
+                  <div>
+                    <span className={styles.cardTitle}>{template.name}</span>
+                    <span className={styles.configBadge}>
+                      {t('admin_templates_config_fields_count', { count: Object.keys(template?.config || {}).length })}
+                    </span>
                   </div>
-                  {!canManageTemplate(template) && <div className={styles.rowSub}>{t('admin_templates_read_only_notice')}</div>}
-                </div>
-                <div className={styles.rowBtns}>
-                  {canManageTemplate(template) && <button className={styles.editBtn} type="button" onClick={() => startEdit(template)} aria-label={`${t('edit')} ${template.name || t('admin_templates_this_template')}`} title={`${t('edit')} ${template.name || t('admin_templates_this_template')}`}>{t('edit')}</button>}
-                  {isAdmin && (deleteConfirmId === template.id ? (
-                    <>
-                      <button className={`${styles.deleteBtn} ${styles.dangerBtn}`} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`${t('confirm')} ${t('delete')} ${template.name || t('admin_templates_this_template')}`}>
-                        {deletingId === template.id ? t('admin_deleting') : t('confirm')}
+                  <div className={styles.actionBtns}>
+                    {canManageTemplate(template) && (
+                      <button
+                        type="button"
+                        className={styles.actionBtn}
+                        onClick={() => openEditModal(template)}
+                        disabled={deletingId === template.id}
+                        aria-label={`${t('edit')} ${templateLabel}`}
+                        title={`${t('edit')} ${templateLabel}`}
+                      >
+                        {t('edit')}
                       </button>
-                      <button className={styles.editBtn} type="button" onClick={() => setDeleteConfirmId(null)} disabled={deletingId === template.id} aria-label={`${t('admin_templates_keep')} ${template.name || t('admin_templates_this_template')}`}>{t('cancel')}</button>
-                    </>
-                  ) : (
-                    <button className={styles.deleteBtn} type="button" onClick={() => handleDelete(template.id)} disabled={deletingId === template.id} aria-label={`${t('delete')} ${template.name || t('admin_templates_this_template')}`} title={`${t('delete')} ${template.name || t('admin_templates_this_template')}`}>{t('delete')}</button>
-                  ))}
+                    )}
+                    {isAdmin && (
+                      deleteConfirmId === template.id ? (
+                        <>
+                          <button
+                            type="button"
+                            className={styles.actionBtnDanger}
+                            onClick={() => void handleDelete(template.id)}
+                            disabled={deletingId === template.id}
+                            aria-label={`${t('confirm')} ${t('delete')} ${templateLabel}`}
+                          >
+                            {deletingId === template.id ? t('admin_deleting') : t('confirm')}
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.actionBtn}
+                            onClick={() => setDeleteConfirmId(null)}
+                            disabled={deletingId === template.id}
+                            aria-label={`${t('admin_templates_keep')} ${templateLabel}`}
+                          >
+                            {t('cancel')}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.actionBtn}
+                          onClick={() => void handleDelete(template.id)}
+                          disabled={deletingId === template.id}
+                          aria-label={`${t('delete')} ${templateLabel}`}
+                          title={`${t('delete')} ${templateLabel}`}
+                        >
+                          {t('delete')}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+                <div className={template.description ? styles.cardMeta : styles.cardMetaMuted}>
+                  {template.description || t('admin_templates_no_description')}
+                </div>
+                <div className={styles.cardFooter}>
+                  {canManageTemplate(template)
+                    ? String(template?.created_by_id || '') === currentUserId
+                      ? t('admin_templates_owned_by_you')
+                      : t('admin_templates_editable_as_admin')
+                    : t('admin_templates_read_only_shared')}
                 </div>
               </div>
-            ))}
-          </section>
-        </section>
-      </section>
-    </section>
+            )
+          })}
+        </div>
+      )}
+
+      {modal && (
+        <div className={styles.modalOverlay} onClick={resetModal}>
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="template-dialog-title" className={styles.modalTitle}>
+              {editingId ? t('admin_templates_edit_template') : t('admin_templates_new_template')}
+            </h3>
+            {modalError && <div className={styles.modalError}>{modalError}</div>}
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="template-name">{t('admin_templates_name_label')}</label>
+              <input
+                id="template-name"
+                className={styles.input}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="template-description">{t('admin_templates_description_label')}</label>
+              <input
+                id="template-description"
+                className={styles.input}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="template-config">{t('admin_templates_config_json_label')}</label>
+              <textarea
+                id="template-config"
+                className={styles.textarea}
+                value={config}
+                onChange={(event) => setConfig(event.target.value)}
+                rows={6}
+              />
+            </div>
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.btnCancel} onClick={resetModal} disabled={saving}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                onClick={() => void handleSubmit()}
+                disabled={saving || !name.trim()}
+              >
+                {saving
+                  ? t('saving')
+                  : editingId
+                    ? t('admin_templates_update_template')
+                    : t('admin_templates_save_template')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

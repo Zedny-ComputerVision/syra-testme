@@ -41,6 +41,8 @@ export default function AdminReports() {
   const [openingNoticeLink, setOpeningNoticeLink] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('ALL')
+  const [modal, setModal] = useState(false)
+  const [modalError, setModalError] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -60,31 +62,36 @@ export default function AdminReports() {
 
   const validateForm = () => {
     if (!form.name.trim()) {
-      setError(t('admin_reports_name_required'))
+      setModalError(t('admin_reports_name_required'))
       return null
     }
     if (!REPORT_TYPES.has(form.report_type)) {
-      setError(t('admin_reports_select_valid_type'))
+      setModalError(t('admin_reports_select_valid_type'))
       return null
     }
     if (!form.schedule_cron.trim()) {
-      setError(t('admin_reports_cron_required'))
+      setModalError(t('admin_reports_cron_required'))
       return null
     }
     const recipients = parseRecipients(form.recipients)
     const invalidRecipient = recipients.find((entry) => !EMAIL_RE.test(entry))
     if (invalidRecipient) {
-      setError(`${t('admin_reports_invalid_recipient_email')}: ${invalidRecipient}`)
+      setModalError(`${t('admin_reports_invalid_recipient_email')}: ${invalidRecipient}`)
       return null
     }
     return recipients
   }
 
+  const resetModal = () => {
+    if (creating) return
+    setModal(false)
+    setForm({ name: '', report_type: 'attempt-summary', schedule_cron: '0 8 * * *', recipients: '' })
+    setModalError('')
+  }
+
   const handleCreate = async (e) => {
     e.preventDefault()
-    setError('')
-    setNotice('')
-    setNoticeLink('')
+    setModalError('')
     const recipients = validateForm()
     if (!recipients) return
 
@@ -97,11 +104,11 @@ export default function AdminReports() {
         recipients,
         is_active: true,
       })
-      setForm({ name: '', report_type: 'attempt-summary', schedule_cron: '0 8 * * *', recipients: '' })
       setNotice(t('admin_reports_schedule_created'))
+      resetModal()
       await load()
     } catch (err) {
-      setError(err.response?.data?.detail || t('admin_reports_could_not_create'))
+      setModalError(err.response?.data?.detail || t('admin_reports_could_not_create'))
     } finally {
       setCreating(false)
     }
@@ -179,25 +186,17 @@ export default function AdminReports() {
         subscribers = []
       }
       if (subscribers.length === 0) {
-        setError(t('admin_reports_no_subscribers'))
-        setNoticeLink('')
+        setModalError(t('admin_reports_no_subscribers'))
         return
       }
       const merged = [...new Set([...parseRecipients(form.recipients), ...subscribers])]
       setForm((current) => ({ ...current, recipients: merged.join(', ') }))
-      setError('')
+      setModalError('')
     } catch {
-      setError(t('admin_reports_could_not_load_subscribers'))
+      setModalError(t('admin_reports_could_not_load_subscribers'))
     } finally {
       setLoadingSubs(false)
     }
-  }
-
-  const resetForm = () => {
-    setForm({ name: '', report_type: 'attempt-summary', schedule_cron: '0 8 * * *', recipients: '' })
-    setError('')
-    setNotice('')
-    setNoticeLink('')
   }
 
   const filteredSchedules = useMemo(() => {
@@ -250,145 +249,125 @@ export default function AdminReports() {
 
   return (
     <div className={styles.page}>
-      <AdminPageHeader title={t('admin_reports_title')} subtitle={t('admin_reports_subtitle')} />
-      <section className={styles.summaryGrid}>
+      <AdminPageHeader title={t('admin_reports_title')} subtitle={t('admin_reports_subtitle')}>
+        <button
+          type="button"
+          className={styles.btnPrimary}
+          onClick={() => {
+            setModal(true)
+            setModalError('')
+          }}
+        >
+          {t('admin_report_schedules_new_schedule')}
+        </button>
+      </AdminPageHeader>
+
+      {notice && (
+        <div className={styles.noticeBanner}>
+          <div>{notice}</div>
+          {noticeLink && (
+            <a
+              href={noticeLink}
+              className={styles.noticeLink}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleOpenGeneratedReport()
+              }}
+              aria-disabled={openingNoticeLink ? 'true' : 'false'}
+            >
+              {openingNoticeLink ? t('admin_reports_opening_report') : t('admin_reports_open_generated_report')}
+            </a>
+          )}
+        </div>
+      )}
+      {error && (
+        <div className={styles.helperRow}>
+          <div className={styles.errorBanner}>{error}</div>
+          <button type="button" className={styles.actionBtn} onClick={() => void load()}>{t('admin_reports_retry')}</button>
+        </div>
+      )}
+
+      <div className={styles.summaryGrid}>
         {summaryCards.map((card) => (
-          <article key={card.label} className={styles.summaryCard}>
+          <div key={card.label} className={styles.summaryCard}>
             <div className={styles.summaryLabel}>{card.label}</div>
             <div className={styles.summaryValue}>{card.value}</div>
             <div className={styles.summarySub}>{card.helper}</div>
-          </article>
+          </div>
         ))}
-      </section>
+      </div>
 
-      <div className={styles.grid}>
-        <form className={styles.card} onSubmit={handleCreate}>
-          <div className={styles.sectionTitle}>{t('admin_reports_create_schedule')}</div>
-          {error && <div className={styles.error}>{error}</div>}
-          {notice && (
-            <div className={styles.notice}>
-              <div>{notice}</div>
-              {noticeLink && (
-                <a
-                  href={noticeLink}
-                  className={styles.hintBtn}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    void handleOpenGeneratedReport()
-                  }}
-                  aria-disabled={openingNoticeLink ? 'true' : 'false'}
-                >
-                  {openingNoticeLink ? t('admin_reports_opening_report') : t('admin_reports_open_generated_report')}
-                </a>
-              )}
-            </div>
-          )}
-          <label className={styles.label} htmlFor="report-schedule-name">{t('admin_reports_name')}</label>
-          <input id="report-schedule-name" className={styles.input} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} required />
-
-          <label className={styles.label} htmlFor="report-schedule-type">{t('admin_reports_report_type')}</label>
-          <select id="report-schedule-type" className={styles.input} value={form.report_type} onChange={(e) => setForm((current) => ({ ...current, report_type: e.target.value }))}>
+      <div className={styles.toolbarPanel}>
+        <div className={styles.toolbar}>
+          <input
+            type="text"
+            className={styles.searchInput}
+            placeholder={t('admin_reports_search_placeholder')}
+            aria-label={t('admin_reports_search_schedules')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className={styles.filterSelect}
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
+            <option value="ALL">{t('admin_reports_all_types')}</option>
             <option value="attempt-summary">{t('admin_reports_attempt_summary')}</option>
             <option value="risk-alerts">{t('admin_reports_risk_alerts')}</option>
             <option value="usage">{t('admin_reports_usage')}</option>
           </select>
+          <div className={styles.toolbarActions}>
+            <button type="button" className={styles.actionBtn} onClick={() => void load()} disabled={loading}>
+              {loading ? t('admin_reports_refreshing') : t('admin_reports_refresh')}
+            </button>
+            <button type="button" className={styles.actionBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
+              {t('admin_reports_clear_filters')}
+            </button>
+          </div>
+        </div>
+        <div className={styles.filterMeta}>
+          {t('admin_reports_showing')} {filteredSchedules.length} {filteredSchedules.length !== 1 ? t('admin_reports_schedules') : t('admin_reports_schedule')} {t('admin_reports_across')} {schedules.length} {t('admin_reports_loaded')}.
+        </div>
+      </div>
 
-          <label className={styles.label} htmlFor="report-schedule-cron">{t('admin_reports_cron')}</label>
-          <input id="report-schedule-cron" className={styles.input} value={form.schedule_cron} onChange={(e) => setForm((current) => ({ ...current, schedule_cron: e.target.value }))} />
-          <div className={styles.hint}>{t('admin_reports_cron_example')}</div>
-
-          <label className={styles.label} htmlFor="report-schedule-recipients">{t('admin_reports_recipients_label')}</label>
-          <input id="report-schedule-recipients" className={styles.input} value={form.recipients} onChange={(e) => setForm((current) => ({ ...current, recipients: e.target.value }))} />
-          <button type="button" className={styles.hintBtn} onClick={loadSubscribers} disabled={loadingSubs}>
-            {loadingSubs ? t('admin_reports_loading') : t('admin_reports_load_from_subscribers')}
+      {listError && (
+        <div className={styles.helperRow}>
+          <span className={styles.errorBanner}>{listError}</span>
+          <button type="button" className={styles.actionBtn} onClick={load} disabled={loading}>
+            {t('admin_reports_retry')}
           </button>
-          <div className={styles.hint}>{t('admin_reports_subscribers_tip')}</div>
+        </div>
+      )}
 
-          <div className={styles.formActions}>
-            <button type="button" className={styles.secondaryBtn} onClick={resetForm} disabled={creating || loadingSubs}>
-              {t('admin_reports_reset')}
-            </button>
-            <button type="submit" className={styles.btnPrimary} disabled={creating}>
-              {creating ? t('admin_reports_saving') : t('admin_reports_save_schedule')}
-            </button>
-          </div>
-        </form>
-
-        <div className={styles.card}>
-          <div className={styles.sectionTitle}>{t('admin_reports_scheduled_reports')}</div>
-          <div className={styles.toolbar}>
-            <div className={styles.toolbarFilters}>
-              <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="report-schedule-search">{t('admin_reports_search_schedules')}</label>
-                <input
-                  id="report-schedule-search"
-                  className={styles.input}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('admin_reports_search_placeholder')}
-                />
-              </div>
-              <div className={styles.filterGroup}>
-                <label className={styles.label} htmlFor="report-type-filter">{t('admin_reports_report_type')}</label>
-                <select
-                  id="report-type-filter"
-                  className={styles.input}
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                >
-                  <option value="ALL">{t('admin_reports_all_types')}</option>
-                  <option value="attempt-summary">{t('admin_reports_attempt_summary')}</option>
-                  <option value="risk-alerts">{t('admin_reports_risk_alerts')}</option>
-                  <option value="usage">{t('admin_reports_usage')}</option>
-                </select>
-              </div>
-            </div>
-            <div className={styles.toolbarActions}>
-              <button type="button" className={styles.secondaryBtn} onClick={load} disabled={loading}>
-                {loading ? t('admin_reports_refreshing') : t('admin_reports_refresh')}
-              </button>
-              <button type="button" className={styles.secondaryBtn} onClick={clearFilters} disabled={!hasActiveFilters}>
-                {t('admin_reports_clear_filters')}
-              </button>
-            </div>
-          </div>
-          <div className={styles.filterMeta}>
-            {t('admin_reports_showing')} {filteredSchedules.length} {filteredSchedules.length !== 1 ? t('admin_reports_schedules') : t('admin_reports_schedule')} {t('admin_reports_across')} {schedules.length} {t('admin_reports_loaded')}.
-          </div>
-          {listError && (
-            <div className={styles.retryRow}>
-              <span className={styles.muted}>{listError}</span>
-              <button type="button" className={styles.secondaryBtn} onClick={load} disabled={loading}>
-                {t('admin_reports_retry')}
-              </button>
-            </div>
-          )}
-          {loading && <div className={styles.muted}>{t('admin_reports_loading')}</div>}
-          {!loading && !listError && filteredSchedules.length === 0 && (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyTitle}>{hasActiveFilters ? t('admin_reports_no_match_filters') : t('admin_reports_no_schedules_yet')}</div>
-              <div className={styles.emptyText}>
-                {hasActiveFilters
-                  ? t('admin_reports_clear_filters_hint')
-                  : t('admin_reports_empty_hint')}
-              </div>
-              {hasActiveFilters && <button type="button" className={styles.secondaryBtn} onClick={clearFilters}>{t('admin_reports_clear_filters')}</button>}
-            </div>
-          )}
-          <div className={styles.list}>
-            {filteredSchedules.map((schedule) => (
-              <div className={styles.row} key={schedule.id} data-testid="report-schedule-row">
+      {loading ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_reports_loading')}</div>
+        </div>
+      ) : filteredSchedules.length === 0 && hasActiveFilters ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_reports_no_match_filters')}</div>
+          <div className={styles.emptyText}>{t('admin_reports_clear_filters_hint')}</div>
+          <button type="button" className={styles.actionBtn} onClick={clearFilters}>{t('admin_reports_clear_filters')}</button>
+        </div>
+      ) : filteredSchedules.length === 0 ? (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyTitle}>{t('admin_reports_no_schedules_yet')}</div>
+          <div className={styles.emptyText}>{t('admin_reports_empty_hint')}</div>
+        </div>
+      ) : (
+        <div className={styles.grid}>
+          {filteredSchedules.map((schedule) => (
+            <div className={styles.card} key={schedule.id} data-testid="report-schedule-row">
+              <div className={styles.cardHeader}>
                 <div>
-                  <div className={styles.rowTitle}>{schedule.name}</div>
-                  <div className={styles.rowSub}>{schedule.report_type} - {schedule.schedule_cron}</div>
-                  <div className={styles.rowSub}>{t('admin_reports_recipients')}: {(schedule.recipients || []).join(', ')}</div>
-                  <div className={styles.rowMeta}>{t('admin_reports_last_run')}: {formatDate(schedule.last_run_at, t)}</div>
-                  <div className={styles.rowMeta}>{t('admin_reports_created')}: {formatDate(schedule.created_at, t)}</div>
+                  <span className={styles.cardTitle}>{schedule.name}</span>
+                  <span className={styles.typeBadge}>{schedule.report_type}</span>
                 </div>
-                <div className={styles.rowActions}>
+                <div className={styles.actionBtns}>
                   <button
                     type="button"
-                    className={styles.secondaryBtn}
+                    className={styles.actionBtn}
                     onClick={() => handleRun(schedule.id)}
                     disabled={runningId === schedule.id || deletingId === schedule.id}
                   >
@@ -398,7 +377,7 @@ export default function AdminReports() {
                     <>
                       <button
                         type="button"
-                        className={styles.deleteBtn}
+                        className={styles.actionBtnDanger}
                         onClick={() => handleDelete(schedule.id)}
                         disabled={runningId === schedule.id || deletingId === schedule.id}
                       >
@@ -406,7 +385,7 @@ export default function AdminReports() {
                       </button>
                       <button
                         type="button"
-                        className={styles.secondaryBtn}
+                        className={styles.actionBtn}
                         onClick={() => setDeleteConfirmId('')}
                         disabled={deletingId === schedule.id}
                       >
@@ -416,7 +395,7 @@ export default function AdminReports() {
                   ) : (
                     <button
                       type="button"
-                      className={styles.deleteBtn}
+                      className={styles.actionBtn}
                       onClick={() => handleDelete(schedule.id)}
                       disabled={runningId === schedule.id || deletingId === schedule.id}
                     >
@@ -425,10 +404,73 @@ export default function AdminReports() {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
+              <div className={styles.cardMeta}>
+                {t('admin_report_schedules_cron_label')}: {schedule.schedule_cron}
+              </div>
+              <div className={styles.cardMeta}>
+                {t('admin_reports_recipients')}: {(schedule.recipients || []).join(', ')}
+              </div>
+              <div className={styles.cardMetaMuted}>
+                {t('admin_reports_last_run')}: {formatDate(schedule.last_run_at, t)} &middot; {t('admin_reports_created')}: {formatDate(schedule.created_at, t)}
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
+
+      {modal && (
+        <div className={styles.modalOverlay} onClick={resetModal}>
+          <form
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-schedule-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={handleCreate}
+          >
+            <h3 id="report-schedule-dialog-title" className={styles.modalTitle}>{t('admin_report_schedules_new_schedule_title')}</h3>
+            {modalError && <div className={styles.modalError}>{modalError}</div>}
+
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="report-schedule-name">{t('admin_reports_name')}</label>
+              <input id="report-schedule-name" className={styles.input} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} required />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="report-schedule-type">{t('admin_reports_report_type')}</label>
+              <select id="report-schedule-type" className={styles.input} value={form.report_type} onChange={(e) => setForm((current) => ({ ...current, report_type: e.target.value }))}>
+                <option value="attempt-summary">{t('admin_reports_attempt_summary')}</option>
+                <option value="risk-alerts">{t('admin_reports_risk_alerts')}</option>
+                <option value="usage">{t('admin_reports_usage')}</option>
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="report-schedule-cron">{t('admin_reports_cron')}</label>
+              <input id="report-schedule-cron" className={styles.input} value={form.schedule_cron} onChange={(e) => setForm((current) => ({ ...current, schedule_cron: e.target.value }))} />
+              <div className={styles.hint}>{t('admin_reports_cron_example')}</div>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label} htmlFor="report-schedule-recipients">{t('admin_reports_recipients_label')}</label>
+              <input id="report-schedule-recipients" className={styles.input} value={form.recipients} onChange={(e) => setForm((current) => ({ ...current, recipients: e.target.value }))} />
+              <button type="button" className={styles.hintBtn} onClick={loadSubscribers} disabled={loadingSubs}>
+                {loadingSubs ? t('admin_reports_loading') : t('admin_reports_load_from_subscribers')}
+              </button>
+              <div className={styles.hint}>{t('admin_reports_subscribers_tip')}</div>
+            </div>
+
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.btnCancel} onClick={resetModal} disabled={creating}>
+                {t('admin_reports_cancel')}
+              </button>
+              <button type="submit" className={styles.btnPrimary} disabled={creating || !form.name.trim()}>
+                {creating ? t('admin_reports_saving') : t('admin_reports_save_schedule')}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
