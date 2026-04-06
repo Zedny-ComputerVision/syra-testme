@@ -39,7 +39,15 @@ export function LanguageProvider({ children }) {
   });
 
   const t = useCallback(
-    (key) => translations[lang]?.[key] ?? translations.en?.[key] ?? key,
+    (key, vars) => {
+      let str = translations[lang]?.[key] ?? translations.en?.[key] ?? key;
+      if (vars && typeof vars === 'object') {
+        Object.entries(vars).forEach(([k, v]) => {
+          str = str.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v ?? ''));
+        });
+      }
+      return str;
+    },
     [lang]
   );
 
