@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..models import AuditLog
 from ..utils.pagination import build_page_response, clamp_sort_field, normalize_pagination
@@ -61,6 +61,6 @@ def list_audit_logs(
         query = query.where(AuditLog.user_id == user_id)
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     logs = db.scalars(
-        query.order_by(order_column, AuditLog.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
+        query.options(selectinload(AuditLog.user)).order_by(order_column, AuditLog.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
     ).all()
     return build_page_response(items=logs, total=total, pagination=pagination, extended=False)

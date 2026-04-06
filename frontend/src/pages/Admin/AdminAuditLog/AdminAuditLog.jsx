@@ -252,7 +252,7 @@ export default function AdminAuditLog() {
                 <Fragment key={log.id}>
                   <tr className={styles.row}>
                     <td className={styles.tsCell}>{formatDate(log.created_at)}</td>
-                    <td className={styles.userCell}>{log.user?.email || log.user_id?.slice(0, 8) || '-'}</td>
+                    <td className={styles.userCell} title={log.user?.email || log.user_id || ''}>{log.user?.name || log.user?.email || log.user_id?.slice(0, 8) || '-'}</td>
                     <td>
                       <span className={`${styles.actionBadge} ${styles[`action_${log.action?.split('_')[0]}`] || ''}`}>
                         {ACTION_LABEL_KEYS[log.action] ? t(ACTION_LABEL_KEYS[log.action]) : log.action}

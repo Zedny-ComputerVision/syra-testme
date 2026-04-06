@@ -3539,6 +3539,7 @@
   "admin_roles_feature_view_audit_log": "View Audit Log",
   "admin_roles_feature_manage_roles": "Manage Roles",
   "admin_roles_feature_system_settings": "System Settings",
+  "admin_roles_feature_proctoring_admin": "Proctoring Admin",
   "cert_rule_issue_upon_passing": "Issue upon passing",
   "cert_rule_issue_upon_passing_desc": "Certificate becomes available as soon as the learner completes the test and meets the passing score",
   "cert_rule_positive_proctoring": "Issue only if positive proctoring",

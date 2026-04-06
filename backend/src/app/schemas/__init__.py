@@ -713,6 +713,13 @@ class NotificationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AuditLogUserInfo(BaseModel):
+    email: str
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AuditLogRead(BaseModel):
     id: UUID
     user_id: Optional[UUID]
@@ -722,6 +729,7 @@ class AuditLogRead(BaseModel):
     detail: Optional[str]
     ip_address: Optional[str]
     created_at: datetime
+    user: Optional[AuditLogUserInfo] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -778,6 +786,7 @@ class UserGroupRead(BaseModel):
     name: str
     description: Optional[str]
     member_ids: Optional[list]
+    member_count: int = 0
     created_at: datetime
     updated_at: datetime
 

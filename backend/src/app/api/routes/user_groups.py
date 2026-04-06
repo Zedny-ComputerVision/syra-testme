@@ -73,11 +73,13 @@ def _normalize_group_payload(db: Session, body: UserGroupCreate) -> dict:
 
 
 def _build_group_read(group: UserGroup) -> UserGroupRead:
+    member_ids = serialize_user_group_member_ids(group)
     return UserGroupRead(
         id=group.id,
         name=group.name,
         description=group.description,
-        member_ids=serialize_user_group_member_ids(group),
+        member_ids=member_ids,
+        member_count=len(member_ids),
         created_at=group.created_at,
         updated_at=group.updated_at,
     )

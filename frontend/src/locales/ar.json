@@ -3516,6 +3516,7 @@
   "admin_roles_feature_view_audit_log": "عرض سجل التدقيق",
   "admin_roles_feature_manage_roles": "إدارة الأدوار",
   "admin_roles_feature_system_settings": "إعدادات النظام",
+  "admin_roles_feature_proctoring_admin": "إدارة المراقبة",
   "cert_rule_issue_upon_passing": "إصدار عند النجاح",
   "cert_rule_issue_upon_passing_desc": "تصبح الشهادة متاحة بمجرد إكمال المتعلم الاختبار وتحقيق درجة النجاح",
   "cert_rule_positive_proctoring": "إصدار فقط عند مراقبة إيجابية",

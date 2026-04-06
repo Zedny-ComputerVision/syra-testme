@@ -171,7 +171,7 @@ export default function AdminRolesPermissions() {
             <tbody>
               {permissions.map((permission, idx) => (
                 <tr key={permission.feature}>
-                  <td>{t('admin_roles_feature_' + permission.feature.toLowerCase().replace(/\s+/g, '_'))}</td>
+                  <td>{t('admin_roles_feature_' + permission.feature.toLowerCase().replace(/[\s.]+/g, '_'))}</td>
                   {['admin', 'instructor', 'learner'].map((role) => (
                     <td key={role}>
                       <input
