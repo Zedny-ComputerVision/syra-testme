@@ -315,7 +315,7 @@ class FaceVerifier:
             return {
                 "event_type": "FACE_MISMATCH",
                 "severity": "HIGH",
-                "detail": f"Embedding dimension mismatch (baseline={self.baseline.shape[0]}, live={live_vec.shape[0]}); identity cannot be verified",
+                "detail": f"Embedding dimension mismatch (baseline={'None' if self.baseline is None else self.baseline.shape[0]}, live={live_vec.shape[0]}); identity cannot be verified",
                 "confidence": 0.80,
             }
         dist = cosine_distance(self.baseline, live_vec)

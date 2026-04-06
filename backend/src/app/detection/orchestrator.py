@@ -471,27 +471,33 @@ class ProctoringOrchestrator:
             logger.info("Frame %d: YOLO detected %d face(s), confidences=%s", self._frame_count, face_count, [round(c, 2) for c in face_confidences])
 
         if self.enable_face_detection and face_model_available:
-            self.alert_logger.add(
-                self.face_detector.process_detections(
-                    face_count,
-                    face_confidences,
-                    camera_cover=camera_cover,
+            try:
+                self.alert_logger.add(
+                    self.face_detector.process_detections(
+                        face_count,
+                        face_confidences,
+                        camera_cover=camera_cover,
+                    )
                 )
-            )
+            except Exception:
+                logger.exception("Frame %d: face_detection detector failed", self._frame_count)
         # Pre-compute grayscale only when multi-face needs optical-flow
         if self.enable_multi_face and face_model_available:
-            curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            self.alert_logger.add(
-                self.multi_detector.process_detections(
-                    face_count,
-                    face_confidences,
-                    boxes=face_boxes,
-                    frame_shape=frame.shape,
-                    curr_gray=curr_gray,
+            try:
+                curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                self.alert_logger.add(
+                    self.multi_detector.process_detections(
+                        face_count,
+                        face_confidences,
+                        boxes=face_boxes,
+                        frame_shape=frame.shape,
+                        curr_gray=curr_gray,
+                    )
                 )
-            )
-            # Update multi-detector's previous frame for next iteration
-            self.multi_detector._prev_gray = curr_gray
+                # Update multi-detector's previous frame for next iteration
+                self.multi_detector._prev_gray = curr_gray
+            except Exception:
+                logger.exception("Frame %d: multi_face detector failed", self._frame_count)
 
         # ── 3. MediaPipe detectors — skip when no face visible ───────────────
         # Run shared FaceMesh ONCE, pass landmarks to all detectors.
@@ -513,71 +519,89 @@ class ProctoringOrchestrator:
 
             # 3a. Head pose (must come before eye tracking for compensation)
             if self.enable_head_pose:
-                if shared_lm is not None:
-                    self.alert_logger.add(self.head_pose.process_landmarks(shared_lm, frame.shape))
-                else:
-                    self.alert_logger.add(self.head_pose.process_ndarray(frame))
+                try:
+                    if shared_lm is not None:
+                        self.alert_logger.add(self.head_pose.process_landmarks(shared_lm, frame.shape))
+                    else:
+                        self.alert_logger.add(self.head_pose.process_ndarray(frame))
+                except Exception:
+                    logger.exception("Frame %d: head_pose detector failed", self._frame_count)
 
             # 3b. Eye tracking with head-pose compensation
             if self.enable_eye_tracking:
-                if shared_lm is not None:
-                    eye_alert = self.eye_tracker.process_landmarks(
-                        shared_lm,
-                        head_yaw_rad=self.head_pose.last_yaw_rad if self.enable_head_pose else None,
-                        head_pitch_rad=self.head_pose.last_pitch_rad if self.enable_head_pose else None,
-                    )
-                else:
-                    eye_alert = self.eye_tracker.process_ndarray(
-                        frame,
-                        head_yaw_rad=self.head_pose.last_yaw_rad if self.enable_head_pose else None,
-                        head_pitch_rad=self.head_pose.last_pitch_rad if self.enable_head_pose else None,
-                    )
-                self.alert_logger.add(eye_alert)
-                if eye_alert is not None:
-                    eye_away_this_frame = True
-                    self._frames_eye_away += 1
+                try:
+                    if shared_lm is not None:
+                        eye_alert = self.eye_tracker.process_landmarks(
+                            shared_lm,
+                            head_yaw_rad=self.head_pose.last_yaw_rad if self.enable_head_pose else None,
+                            head_pitch_rad=self.head_pose.last_pitch_rad if self.enable_head_pose else None,
+                        )
+                    else:
+                        eye_alert = self.eye_tracker.process_ndarray(
+                            frame,
+                            head_yaw_rad=self.head_pose.last_yaw_rad if self.enable_head_pose else None,
+                            head_pitch_rad=self.head_pose.last_pitch_rad if self.enable_head_pose else None,
+                        )
+                    self.alert_logger.add(eye_alert)
+                    if eye_alert is not None:
+                        eye_away_this_frame = True
+                        self._frames_eye_away += 1
 
-                # Accumulate gaze heatmap sample every N frames (only when attentive)
-                if (
-                    self._frame_count % self._gaze_sample_interval == 0
-                    and self.eye_tracker.last_gaze_normalized is not None
-                    and not eye_away_this_frame
-                ):
-                    self._gaze_samples.append(self.eye_tracker.last_gaze_normalized)
+                    # Accumulate gaze heatmap sample every N frames (only when attentive)
+                    if (
+                        self._frame_count % self._gaze_sample_interval == 0
+                        and self.eye_tracker.last_gaze_normalized is not None
+                        and not eye_away_this_frame
+                    ):
+                        self._gaze_samples.append(self.eye_tracker.last_gaze_normalized)
+                except Exception:
+                    logger.exception("Frame %d: eye_tracking detector failed", self._frame_count)
 
             if not eye_away_this_frame:
                 self._frames_attentive += 1
 
             if self.enable_mouth_detection:
-                if shared_lm is not None:
-                    self.alert_logger.add(self.mouth_monitor.process_landmarks(shared_lm))
-                else:
-                    self.alert_logger.add(self.mouth_monitor.process_ndarray(frame))
+                try:
+                    if shared_lm is not None:
+                        self.alert_logger.add(self.mouth_monitor.process_landmarks(shared_lm))
+                    else:
+                        self.alert_logger.add(self.mouth_monitor.process_ndarray(frame))
+                except Exception:
+                    logger.exception("Frame %d: mouth_detection detector failed", self._frame_count)
 
             # 3c. Liveness — blink detection + anti-replay
             if self.enable_liveness:
-                if shared_lm is not None:
-                    for ev in self.liveness_detector.process_landmarks(shared_lm):
-                        self.alert_logger.add(ev)
-                else:
-                    for ev in self.liveness_detector.process_ndarray(frame):
-                        self.alert_logger.add(ev)
+                try:
+                    if shared_lm is not None:
+                        for ev in self.liveness_detector.process_landmarks(shared_lm):
+                            self.alert_logger.add(ev)
+                    else:
+                        for ev in self.liveness_detector.process_ndarray(frame):
+                            self.alert_logger.add(ev)
+                except Exception:
+                    logger.exception("Frame %d: liveness detector failed", self._frame_count)
 
             # 3d. Emotion / stress detection
             if self.enable_emotion:
-                if shared_lm is not None:
-                    for ev in self.emotion_monitor.process_landmarks(shared_lm):
-                        self.alert_logger.add(ev)
-                else:
-                    for ev in self.emotion_monitor.process_ndarray(frame):
-                        self.alert_logger.add(ev)
+                try:
+                    if shared_lm is not None:
+                        for ev in self.emotion_monitor.process_landmarks(shared_lm):
+                            self.alert_logger.add(ev)
+                    else:
+                        for ev in self.emotion_monitor.process_ndarray(frame):
+                            self.alert_logger.add(ev)
+                except Exception:
+                    logger.exception("Frame %d: emotion detector failed", self._frame_count)
 
             # Face verification — passes landmarks + frame (DeepFace needs raw pixels)
             if self.enable_face_verify and face_count > 0:
-                if shared_lm is not None:
-                    self.alert_logger.add(self.face_verifier.process_landmarks(shared_lm, frame=frame))
-                else:
-                    self.alert_logger.add(self.face_verifier.process_ndarray(frame))
+                try:
+                    if shared_lm is not None:
+                        self.alert_logger.add(self.face_verifier.process_landmarks(shared_lm, frame=frame))
+                    else:
+                        self.alert_logger.add(self.face_verifier.process_ndarray(frame))
+                except Exception:
+                    logger.exception("Frame %d: face_verification detector failed", self._frame_count)
 
         # ── 4. Collect parallel object detection results ──────────────────────
         if obj_future is not None:

@@ -88,7 +88,8 @@ function normalizeAlertRules(rawRules) {
 
 function hasRecordedVideoJourney(config) {
   if (!config || typeof config !== 'object') return false
-  if (Array.isArray(config.alert_rules) && config.alert_rules.length > 0) return true
+  // Only check actual recording config flags — alert_rules alone should not
+  // force screenRequired=true if the admin didn't enable screen capture.
   return RECORDED_VIDEO_KEYS.some((key) => (
     Object.prototype.hasOwnProperty.call(config, key) && asBool(config[key], false)
   ))

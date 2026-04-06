@@ -1037,7 +1037,7 @@ export default function Proctoring() {
     navigate(`/attempts/${attemptId}`)
   }, [attemptId, emitProctoringNotice, navigate])
 
-  const runSubmissionFlow = useCallback(async ({ skipFlush = false } = {}) => {
+  const runSubmissionFlow = useCallback(async ({ skipFlush = false, forceSubmit = false } = {}) => {
     if (submittingRef.current) return
     submittingRef.current = true
     setAutoSubmitState(null)
@@ -1056,9 +1056,15 @@ export default function Proctoring() {
       }
       const uploadSucceeded = await finishRequiredRecordingUploads()
       if (!uploadSucceeded) {
-        setSubmitting(false)
-        submittingRef.current = false
-        return
+        if (!forceSubmit) {
+          // Manual submit — let the student retry the upload
+          setSubmitting(false)
+          submittingRef.current = false
+          return
+        }
+        // Auto-submit (timer expired / forced) — proceed despite upload failure
+        // so the student is not stranded with an unsubmittable exam.
+        console.warn('Recording upload failed but proceeding with submission (auto-submit)')
       }
       await finalizeAttemptSubmission()
     } catch (e) {
@@ -1074,7 +1080,7 @@ export default function Proctoring() {
   }, [runSubmissionFlow])
 
   const handleRetryUpload = useCallback(async () => {
-    void runSubmissionFlow({ skipFlush: true })
+    void runSubmissionFlow({ skipFlush: true, forceSubmit: true })
   }, [runSubmissionFlow])
 
   const handleForcedSubmit = useCallback((detail) => {
@@ -1250,8 +1256,8 @@ export default function Proctoring() {
   useEffect(() => {
     if (!autoSubmitState || autoSubmitState.secondsLeft !== 0) return
     setAutoSubmitState(null)
-    void handleSubmit()
-  }, [autoSubmitState, handleSubmit])
+    void runSubmissionFlow({ forceSubmit: true })
+  }, [autoSubmitState, runSubmissionFlow])
 
   const formatTime = (secs) => {
     if (secs === null) return '--:--'
@@ -1320,12 +1326,12 @@ export default function Proctoring() {
     if (max && tabBlurs >= max) {
       setToast({ severity: 'HIGH', event_type: 'TAB_SWITCH', detail: t('proctor_too_many_tabs') })
       lastToastBlursRef.current = tabBlurs
-      void handleSubmit()
+      void runSubmissionFlow({ forceSubmit: true })
     } else if (tabBlurs > 0 && tabBlurs !== lastToastBlursRef.current && proctorCfg.tab_switch_detect) {
       lastToastBlursRef.current = tabBlurs
       setToast({ severity: 'MEDIUM', event_type: 'TAB_SWITCH', detail: t('proctor_tab_count', { count: tabBlurs }) })
     }
-  }, [handleSubmit, tabBlurs, proctorCfg.max_tab_blurs, proctorCfg.tab_switch_detect])
+  }, [runSubmissionFlow, tabBlurs, proctorCfg.max_tab_blurs, proctorCfg.tab_switch_detect])
 
   // ── Copy / cut / paste blocking ────────────────────────────────────────────
   useEffect(() => {

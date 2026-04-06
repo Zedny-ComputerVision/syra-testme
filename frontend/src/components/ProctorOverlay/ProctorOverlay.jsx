@@ -223,6 +223,14 @@ export default function ProctorOverlay({
     const lastSeen = recentAlertRef.current.get(dedupeKey) || 0
     if (now - lastSeen < ALERT_DEDUP_WINDOW_MS) return
     recentAlertRef.current.set(dedupeKey, now)
+    // Prune stale entries to prevent unbounded Map growth during long exams
+    if (recentAlertRef.current.size > 20) {
+      for (const [key, ts] of recentAlertRef.current) {
+        if (now - ts > ALERT_DEDUP_WINDOW_MS * 2.5) {
+          recentAlertRef.current.delete(key)
+        }
+      }
+    }
     setAlerts((prev) => [event, ...prev].slice(0, MAX_VISIBLE_ALERTS))
     onViolation?.(event)
     // Adaptive frame rate: reset to fast interval on any violation
@@ -760,6 +768,8 @@ export default function ProctorOverlay({
           }
           setStatus('closed')
         } else if (intentionalCloseRef.current || ev.code === 1000) {
+          clearFrameIntervals()
+          stopAudioCapture()
           setStatus('closed')
         } else {
           scheduleReconnect()

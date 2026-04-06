@@ -1036,7 +1036,11 @@ def _notify_admin_monitors_for_event(db: Session, attempt: Attempt, event: Proct
     title = f"Proctoring Alert: {_event_label(event_type)}"
     message = f"High-severity proctoring event on '{exam_title}': {event.detail or _event_label(event_type)}"
     logger.warning("High-severity proctoring event for attempt %s: %s", attempt.id, message)
-    admin_ids = db.scalars(select(User.id).where(User.role == RoleEnum.ADMIN)).all()
+    owner_id = attempt.exam.created_by_id if attempt.exam else None
+    if not owner_id:
+        logger.debug("No exam owner found for attempt %s; skipping admin notification", attempt.id)
+        return
+    admin_ids = [owner_id]
     for admin_id in admin_ids:
         existing = db.scalar(
             select(Notification.id)
@@ -2640,6 +2644,8 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                     history_events = _get_cached_events()
 
                     _audio_serious: list[ProctoringEvent] = []
+                    _audio_ws_messages: list[dict] = []
+                    _audio_forced_submit_msg: dict | None = None
 
                     for alert in alerts:
                         severity = SEVERITY_MAP.get(alert.get("severity", "LOW"), SeverityEnum.LOW)
@@ -2671,7 +2677,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         for escalated_event in rule_result["created_events"]:
                             _audio_serious.append(escalated_event)
 
-                        await websocket.send_json({
+                        _audio_ws_messages.append({
                             "type": "alert",
                             "event_type": alert["event_type"],
                             "severity": alert["severity"],
@@ -2679,7 +2685,7 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                             "confidence": alert.get("confidence", 0),
                         })
                         for rule_alert in rule_result["alerts"]:
-                            await websocket.send_json({
+                            _audio_ws_messages.append({
                                 "type": "alert",
                                 "event_type": rule_alert["event_type"],
                                 "severity": rule_alert["severity"].value,
@@ -2688,23 +2694,36 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                                 "rule_id": rule_alert["rule_id"],
                             })
                         if rule_result["forced_submit"]:
-                            await websocket.send_json({"type": "forced_submit", "detail": rule_result["submit_reason"] or ""})
+                            _audio_forced_submit_msg = {"type": "forced_submit", "detail": rule_result["submit_reason"] or ""}
                             break
 
+                    # Commit to DB BEFORE sending alerts to client
+                    _commit_ok = True
                     if alerts:
                         try:
                             await _async_db_commit()
                         except Exception as commit_err:
+                            _commit_ok = False
                             logger.warning("DB commit failed for audio alerts (attempt %s): %s", attempt_id, commit_err)
                             try:
                                 db.rollback()
                             except Exception:
                                 pass
+
+                    # Only send alerts to client after successful DB commit
+                    if _commit_ok:
+                        for _ws_msg in _audio_ws_messages:
+                            await websocket.send_json(_ws_msg)
+                        if _audio_forced_submit_msg:
+                            await websocket.send_json(_audio_forced_submit_msg)
+
                     for _evt in _audio_serious:
                         _handle_serious_proctoring_event(db, attempt, _evt)
 
                     await websocket.send_json({"type": "summary", **session_summary})
                     if attempt.status == AttemptStatus.SUBMITTED:
+                        break
+                    if _audio_forced_submit_msg:
                         break
                     reason = _maybe_auto_submit_from_history(
                         db,
@@ -2737,49 +2756,114 @@ async def proctoring_ws(websocket: WebSocket, attempt_id: str, token: str):
                         screen_result = await inference_gateway.process_screen(attempt_id, frame_bytes)
                         session_summary = dict(screen_result.summary or {})
                         session_violation_score = float(screen_result.violation_score or session_violation_score)
-                        screen_alert = screen_result.alerts[0] if screen_result.alerts else None
-                        if screen_alert:
-                            severity = SEVERITY_MAP.get(screen_alert.get("severity", "HIGH"), SeverityEnum.HIGH)
+                        alerts = screen_result.alerts or []
+                        history_events = _get_cached_events()
+
+                        _screen_serious: list[ProctoringEvent] = []
+                        _screen_ws_messages: list[dict] = []
+                        _screen_forced_submit_msg: dict | None = None
+
+                        for alert in alerts:
+                            severity = SEVERITY_MAP.get(alert.get("severity", "HIGH"), SeverityEnum.HIGH)
                             event_time = datetime.now(timezone.utc)
                             event = ProctoringEvent(
                                 attempt_id=attempt_id,
-                                event_type=screen_alert["event_type"],
+                                event_type=alert["event_type"],
                                 severity=severity,
-                                detail=screen_alert.get("detail"),
-                                ai_confidence=screen_alert.get("confidence"),
-                                meta=screen_alert.get("meta"),
+                                detail=alert.get("detail"),
+                                ai_confidence=alert.get("confidence"),
+                                meta=alert.get("meta"),
                                 occurred_at=event_time,
                             )
                             db.add(event)
                             _append_cached_event(event)
+                            history_events.append(event)
+                            rule_result = _apply_alert_rules(
+                                db,
+                                attempt,
+                                exam_cfg,
+                                event,
+                                history_events,
+                                event_time,
+                                request_ip=get_websocket_ip(websocket),
+                            )
+
+                            if _is_serious_alert(alert.get("severity"), severity):
+                                _screen_serious.append(event)
+                            for escalated_event in rule_result["created_events"]:
+                                _screen_serious.append(escalated_event)
+
+                            _screen_ws_messages.append({
+                                "type": "alert",
+                                "event_type": alert["event_type"],
+                                "severity": alert["severity"],
+                                "detail": alert.get("detail", ""),
+                                "confidence": alert.get("confidence", 0),
+                            })
+                            for rule_alert in rule_result["alerts"]:
+                                _screen_ws_messages.append({
+                                    "type": "alert",
+                                    "event_type": rule_alert["event_type"],
+                                    "severity": rule_alert["severity"].value,
+                                    "detail": rule_alert["detail"],
+                                    "action": rule_alert["action"],
+                                    "rule_id": rule_alert["rule_id"],
+                                })
+                            if rule_result["forced_submit"]:
+                                _screen_forced_submit_msg = {"type": "forced_submit", "detail": rule_result["submit_reason"] or ""}
+                                break
+
+                        # Commit to DB BEFORE sending alerts to client
+                        _commit_ok = True
+                        if alerts:
                             try:
                                 await _async_db_commit()
                             except Exception as commit_err:
-                                logger.warning("DB commit failed for screen alert (attempt %s): %s", attempt_id, commit_err)
+                                _commit_ok = False
+                                logger.warning("DB commit failed for screen alerts (attempt %s): %s", attempt_id, commit_err)
                                 try:
                                     db.rollback()
                                 except Exception:
                                     pass
-                            await websocket.send_json({
+
+                        # Only send alerts to client after successful DB commit
+                        if _commit_ok:
+                            for _ws_msg in _screen_ws_messages:
+                                await websocket.send_json(_ws_msg)
+                            if _screen_forced_submit_msg:
+                                await websocket.send_json(_screen_forced_submit_msg)
+
+                        # Broadcast screen alerts to live admin viewers via Redis
+                        for alert in alerts:
+                            await live_bus.publish_json_event(attempt_id, {
                                 "type": "alert",
-                                "event_type": screen_alert["event_type"],
-                                "severity": screen_alert["severity"],
-                                "detail": screen_alert.get("detail", ""),
-                                "confidence": screen_alert.get("confidence", 0),
+                                "attempt_id": attempt_id,
+                                "event_type": alert["event_type"],
+                                "severity": alert["severity"],
+                                "detail": alert.get("detail", ""),
+                                "confidence": alert.get("confidence", 0),
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
                             })
-                            screen_history = _get_cached_events()
-                            reason = _maybe_auto_submit_from_history(
-                                db,
-                                attempt,
-                                exam_cfg,
-                                screen_history,
-                                occurred_at=event_time,
-                                request_ip=get_websocket_ip(websocket),
-                                violation_score=session_violation_score,
-                            )
-                            if reason:
-                                await websocket.send_json({"type": "forced_submit", "detail": reason})
-                                break
+
+                        # Post-commit: serious event notifications
+                        for _evt in _screen_serious:
+                            _handle_serious_proctoring_event(db, attempt, _evt)
+
+                        screen_history = _get_cached_events()
+                        reason = _maybe_auto_submit_from_history(
+                            db,
+                            attempt,
+                            exam_cfg,
+                            screen_history,
+                            occurred_at=datetime.now(timezone.utc),
+                            request_ip=get_websocket_ip(websocket),
+                            violation_score=session_violation_score,
+                        )
+                        if reason:
+                            await websocket.send_json({"type": "forced_submit", "detail": reason})
+                            break
+                        if _screen_forced_submit_msg:
+                            break
                     except Exception as _se:
                         logger.debug("Screen OCR analysis error for attempt %s: %s", attempt_id, _se)
                     continue
