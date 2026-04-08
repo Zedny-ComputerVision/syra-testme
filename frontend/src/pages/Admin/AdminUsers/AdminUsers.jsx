@@ -23,13 +23,10 @@ const SORT_OPTIONS = [
 const SUMMARY_ROLES = ['ADMIN', 'INSTRUCTOR', 'LEARNER']
 
 function resolveError(err) {
-  return (
-    err.response?.data?.detail
-    || err.response?.data?.error?.message
-    || err.response?.data?.error?.detail
-    || err.message
-    || 'Action failed.'
-  )
+  if (err?.userMessage) return err.userMessage
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  return 'Action failed.'
 }
 
 function validateUserForm(form, isCreate, t) {

@@ -19,7 +19,10 @@ const EMPTY_CERTIFICATE = {
 }
 
 function resolveError(err, fallback) {
-  return err?.response?.data?.detail || fallback
+  if (err?.userMessage) return err.userMessage
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  return fallback
 }
 
 function normalizeCertificate(value) {

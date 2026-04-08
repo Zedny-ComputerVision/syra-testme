@@ -33,13 +33,10 @@ const normalizeQuestion = (question = {}) => {
 }
 
 function resolveError(err) {
-  return (
-    err.response?.data?.detail ||
-    err.response?.data?.error?.message ||
-    err.response?.data?.error?.detail ||
-    err.message ||
-    null
-  )
+  if (err?.userMessage) return err.userMessage
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  return null
 }
 
 export default function AdminSurveys() {

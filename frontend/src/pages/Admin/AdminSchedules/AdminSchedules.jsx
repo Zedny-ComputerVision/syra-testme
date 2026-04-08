@@ -9,7 +9,10 @@ import styles from './AdminSchedules.module.scss'
 const EMPTY_FORM = { user_id: '', exam_id: '', scheduled_at: '', access_mode: 'OPEN', notes: '' }
 
 function resolveError(err, fallback) {
-  return err?.response?.data?.detail || fallback
+  if (err?.userMessage) return err.userMessage
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  return fallback
 }
 
 export default function AdminSchedules() {

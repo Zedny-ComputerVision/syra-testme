@@ -6,13 +6,10 @@ import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminTemplates.module.scss'
 
 function resolveError(err) {
-  return (
-    err.response?.data?.detail ||
-    err.response?.data?.error?.message ||
-    err.response?.data?.error?.detail ||
-    err.message ||
-    'Action failed.'
-  )
+  if (err?.userMessage) return err.userMessage
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  return 'Action failed.'
 }
 
 export default function AdminTemplates() {

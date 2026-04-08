@@ -7,7 +7,10 @@ import useLanguage from '../../../hooks/useLanguage'
 import styles from './AdminQuestionPools.module.scss'
 
 function resolveError(err, fallback) {
-  return err?.response?.data?.detail || fallback
+  if (err?.userMessage) return err.userMessage
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  return fallback
 }
 
 export default function AdminQuestionPools() {

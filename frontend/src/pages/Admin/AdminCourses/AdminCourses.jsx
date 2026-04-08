@@ -13,13 +13,10 @@ const COURSE_STATUS_KEYS = [
 ]
 
 function resolveError(err, fallback) {
-  return (
-    err?.response?.data?.detail ||
-    err?.response?.data?.error?.message ||
-    err?.response?.data?.error?.detail ||
-    err?.message ||
-    fallback
-  )
+  if (err?.userMessage) return err.userMessage
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  return fallback
 }
 
 export default function AdminCourses() {
