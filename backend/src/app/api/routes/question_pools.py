@@ -444,10 +444,21 @@ def seed_exam_from_pool(
     pool_questions = _load_pool_questions(db, pool_pk)
     if not pool_questions:
         raise HTTPException(status_code=400, detail=_t("pool_no_questions"))
+    already_seeded_texts = set(
+        db.scalars(
+            select(Question.text).where(
+                Question.exam_id == exam_pk,
+                Question.pool_id == pool_pk,
+            )
+        ).all()
+    )
+    candidates = [pq for pq in pool_questions if pq.text not in already_seeded_texts]
+    if not candidates:
+        return Message(detail=_t("seeded_questions", count=0))
     existing_max = db.scalar(
         select(func.max(Question.order)).where(Question.exam_id == exam_pk)
     ) or 0
-    selected = random.sample(pool_questions, min(count, len(pool_questions)))
+    selected = random.sample(candidates, min(count, len(candidates)))
     for i, pq in enumerate(selected):
         q = Question(
             exam_id=exam_pk, text=pq.text, type=pq.type, options=pq.options,
