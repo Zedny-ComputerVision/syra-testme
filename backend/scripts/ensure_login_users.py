@@ -161,7 +161,7 @@ def main() -> None:
             ),
             ensure_user(
                 db,
-                email="syrafrancphone_admin@syrafrancphone.com",
+                email="emp_admin@syrafrancphone.com",
                 name="syrafrancphone",
                 preferred_user_id="SYRA_ADMIN",
                 role=RoleEnum.ADMIN,
@@ -170,7 +170,7 @@ def main() -> None:
             ),
             ensure_user(
                 db,
-                email="syrafrancphone_instructor@syrafrancphone.com",
+                email="emp_instructor@syrafrancphone.com",
                 name="syrafrancphone",
                 preferred_user_id="SYRA_INSTRUCTOR",
                 role=RoleEnum.INSTRUCTOR,
@@ -179,7 +179,7 @@ def main() -> None:
             ),
             ensure_user(
                 db,
-                email="syrafrancphone_learner@syrafrancphone.com",
+                email="emp_learner@syrafrancphone.com",
                 name="syrafrancphone",
                 preferred_user_id="SYRA_LEARNER",
                 role=RoleEnum.LEARNER,
@@ -194,9 +194,9 @@ def main() -> None:
             "instructor@example.com": instructor_password,
             "student1@example.com": student_password,
             "student2@example.com": student_password,
-            "syrafrancphone_admin@syrafrancphone.com": syra_password,
-            "syrafrancphone_instructor@syrafrancphone.com": syra_password,
-            "syrafrancphone_learner@syrafrancphone.com": syra_password,
+            "emp_admin@syrafrancphone.com": syra_password,
+            "emp_instructor@syrafrancphone.com": syra_password,
+            "emp_learner@syrafrancphone.com": syra_password,
         }
 
         for user, created, password_reset in seeded:
