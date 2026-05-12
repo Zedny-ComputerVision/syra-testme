@@ -119,6 +119,8 @@ def main() -> None:
     instructor_password = os.getenv("SYRA_INSTRUCTOR_PASSWORD", "Instructor1234!")
     student_password = os.getenv("SYRA_STUDENT_PASSWORD", "Student1234!")
 
+    syra_password = os.getenv("SYRA_FRANCPHONE_PASSWORD", "syra1234")
+
     try:
         seeded = [
             ensure_user(
@@ -157,6 +159,33 @@ def main() -> None:
                 password=student_password,
                 reset_passwords=reset_passwords,
             ),
+            ensure_user(
+                db,
+                email="syrafrancphone_admin@syra.local",
+                name="syrafrancphone",
+                preferred_user_id="SYRA_ADMIN",
+                role=RoleEnum.ADMIN,
+                password=syra_password,
+                reset_passwords=reset_passwords,
+            ),
+            ensure_user(
+                db,
+                email="syrafrancphone_instructor@syra.local",
+                name="syrafrancphone",
+                preferred_user_id="SYRA_INSTRUCTOR",
+                role=RoleEnum.INSTRUCTOR,
+                password=syra_password,
+                reset_passwords=reset_passwords,
+            ),
+            ensure_user(
+                db,
+                email="syrafrancphone_learner@syra.local",
+                name="syrafrancphone",
+                preferred_user_id="SYRA_LEARNER",
+                role=RoleEnum.LEARNER,
+                password=syra_password,
+                reset_passwords=reset_passwords,
+            ),
         ]
         db.commit()
 
@@ -165,6 +194,9 @@ def main() -> None:
             "instructor@example.com": instructor_password,
             "student1@example.com": student_password,
             "student2@example.com": student_password,
+            "syrafrancphone_admin@syra.local": syra_password,
+            "syrafrancphone_instructor@syra.local": syra_password,
+            "syrafrancphone_learner@syra.local": syra_password,
         }
 
         for user, created, password_reset in seeded:
